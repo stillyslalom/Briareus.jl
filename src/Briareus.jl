@@ -119,6 +119,7 @@ export CapsuleDrive, capsule_drive
 export PointingSummary, pointing_summary, shift_objective
 export PhasedScenario, Phase, PhasedPointing, PerPhase, in_phase, phase_beams
 export drive_ceiling, shift_modes, power_scales, phase_powers, power_scale_table, PowerScaleTable
+export power_scale_objective
 export PulseShapeGroups, pulse_shape_groups, scaled_pulse, shape_pulses
 export port_basis, visible
 export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,

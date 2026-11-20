@@ -782,6 +782,61 @@ phase_powers(ps::PhasedScenario, phase::Symbol) = phase_powers(ps.param, phase)
 power_scale_table(ps::PhasedScenario, v) = power_scale_table(ps.param, v)
 
 """
+    power_scale_objective(scenario::PhasedScenario; reference = 1, weight = b -> 1.0)
+
+An objective term for [`optimize_pointing`](@ref) on a phased scenario: the
+beam-weighted mean squared relative change of the power scales from `reference`,
+
+    Σ_j W_j (s_j / s0_j - 1)² / Σ_j W_j,
+
+over the scales `s_j` of [`power_scales`](@ref) (one per `(key, phase)` of
+`scenario.param.keys`), with `W_j` the summed `weight` of the beams the scale governs
+(by default their number). With unit weights it is the mean over every beam and scaled
+phase of the beam's squared relative change of scale, so a scale shared by a cone
+counts as many times as it has beams and one per quad as its quad's beams: the
+regularization of a re-pointing whose powers should stay near a reference drive, added
+to an objective, `ev -> J(ev) + w * reg(ev)` with `reg = power_scale_objective(ps;
+reference = s0)`.
+
+`reference` is one scale for every key, a vector in the order of the keys (e.g.
+`power_scales(ps, x0)` of a start), or a function `(key, phase) -> scale`; its values
+must be positive and finite. `weight`, a function of a beam of the pointing (its group,
+quad or name), is evaluated once at construction on the pointing's beams; the weights
+must be finite and non-negative with a positive sum. The scales are read from the
+evaluations as [`power_scales`](@ref) reads them, so every scaled phase needs its own
+powers (a `power` or `pulses` in its [`Phase`](@ref)). Generic in the number type and
+thread-safe (it reads only its tables).
+"""
+function power_scale_objective(ps::PhasedScenario; reference = 1, weight = b -> 1.0)
+    p = ps.param
+    nk = length(p.keys)
+    nk > 0 || throw(ArgumentError("the phased scenario has no power scales (no scaled phase)"))
+    s0 = reference isa Real ? fill(Float64(reference), nk) :
+         reference isa AbstractVector ? collect(Float64, reference) :
+         Float64[reference(k, ph) for (k, ph) in p.keys]
+    length(s0) == nk || throw(DimensionMismatch("$(length(s0)) reference scales for $nk keys"))
+    all(s -> isfinite(s) && s > 0, s0) || throw(ArgumentError("the reference scales must be positive and finite"))
+    beams = apply(p.pointing, initial_parameters(p.pointing))
+    wb = Float64[weight(b) for b in beams]
+    all(w -> isfinite(w) && w >= 0, wb) || throw(ArgumentError("the beams' weights must be finite and non-negative"))
+    W = zeros(nk)
+    for g in p.group, i in eachindex(g)
+        W[g[i]] += wb[i]
+    end
+    sum(W) > 0 || throw(ArgumentError("the beams' weights sum to zero"))
+    return _ScaleObjective(p, s0, W, sum(W))
+end
+
+struct _ScaleObjective{P<:PhasedPointing}
+    param::P
+    s0::Vector{Float64}
+    w::Vector{Float64}   # per scale: the summed weight of its beams
+    W::Float64
+end
+
+(o::_ScaleObjective)(ev::PerPhase) = sum(o.w .* abs2.(power_scales(o.param, ev) ./ o.s0 .- 1)) / o.W
+
+"""
     remake(scenario::PhasedScenario; pointing, by, scaled) -> PhasedScenario
 
 Copy of a phased scenario with another `pointing` (a parameterization of the same beams,

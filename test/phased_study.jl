@@ -1,14 +1,14 @@
 # What a multi-phase re-pointing study writes on the phased scenario: a drive band, gates
 # at a fraction of the noise floor (or physical gates above it), a shifted target shape,
-# keep-outs over every phase, the power scales inside an objective and in a table, a
-# phase from a drive history, the summary against gates and floors, and a picket ceiling
-# whose reference sits on another target.
+# keep-outs over every phase, the power scales inside an objective and in a table, their
+# beam-weighted regularization, a phase from a drive history, the summary against gates
+# and floors, and a picket ceiling whose reference sits on another target.
 #
 # References: the quantities by hand (mean flux, keep-out clearances per phase, the
-# pulses' powers, per-degree gates, the history's state and the scenario remade from
-# it); the Legendre moments against the spherical-harmonic coefficients on the same
-# sub-triangles for the shift's units; the closed-form gradient of a quadratic in the
-# scales.
+# pulses' powers, per-degree gates, beam counts per scale, the history's state and the
+# scenario remade from it); the Legendre moments against the spherical-harmonic
+# coefficients on the same sub-triangles for the shift's units; the closed-form gradient
+# of a quadratic in the scales.
 
 @testset "phased study API" begin
     geom = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 1.2, capsule_h = 0.9)
@@ -154,6 +154,37 @@
         @test power_scale_table(ps, ev).scales ≈ tb.scales rtol = 1e-14
         txt = sprint(show, MIME("text/plain"), tb)
         @test occursin("step", txt) && occursin("mean", txt) && occursin(quads[1].quad, txt)
+    end
+
+    @testset "a beam-weighted regularization of the scales" begin
+        # one scale per cone and phase: 16 inner and 32 outer quads in each scaled phase
+        pc = remake(ps; by = b -> inner(b) ? :inner : :outer)
+        @test length(pc.param.keys) == 4 && last.(pc.param.keys) == [:picket, :picket, :step, :step]
+        nb = [first(k) === :inner ? 16 : 32 for k in pc.param.keys]
+        sv = [1.05, 0.97, 1.1, 0.92]
+        xc = vcat(y[1:nq], sv)
+        ec = evaluate(pc, xc)
+        s0(k, ph) = ph === :picket ? 1.1 : 0.9
+        r0 = [s0(k...) for k in pc.param.keys]
+        reg = power_scale_objective(pc; reference = s0)
+        J = sum(nb .* (sv ./ r0 .- 1) .^ 2) / 96          # the mean over beams and scaled phases
+        @test reg(ec) ≈ J rtol = 1e-12
+        @test power_scale_objective(pc; reference = r0)(ec) == reg(ec)
+        @test power_scale_objective(pc)(ec) ≈ sum(nb .* (sv .- 1) .^ 2) / 96 rtol = 1e-12
+        # a weight per beam: the inner quads' scales three times dearer
+        w3 = [first(k) === :inner ? 48 : 32 for k in pc.param.keys]
+        r3 = power_scale_objective(pc; reference = 1.2, weight = b -> inner(b) ? 3.0 : 1.0)
+        @test r3(ec) ≈ sum(w3 .* (sv ./ 1.2 .- 1) .^ 2) / 160 rtol = 1e-12
+        # the gradient in closed form: 2 W_j (s_j/s0_j - 1) / s0_j / ΣW, none in the aims
+        G = Briareus._scenario_gradient(pc, reg, xc)
+        @test all(iszero, G[1:nq]) && isapprox(G[nq+1:end], 2 .* nb .* (sv ./ r0 .- 1) ./ r0 ./ 96; rtol = 1e-12)
+        # one scale per quad: unit weights, the plain mean
+        @test power_scale_objective(ps)(ev) ≈ sum(abs2, power_scales(ps, ev) .- 1) / length(pp.keys) rtol = 1e-12
+        @test_throws ArgumentError power_scale_objective(pc; reference = 0.0)
+        @test_throws DimensionMismatch power_scale_objective(pc; reference = [1.0, 1.0])
+        @test_throws ArgumentError power_scale_objective(pc; weight = b -> -1.0)
+        @test_throws ArgumentError power_scale_objective(pc; weight = b -> 0.0)
+        @test_throws ArgumentError power_scale_objective(remake(ps; scaled = Symbol[]))
     end
 
     @testset "the summary against gates and floors" begin

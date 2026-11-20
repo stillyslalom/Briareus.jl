@@ -176,6 +176,7 @@ end
     pph2 = PhasedScenario(p, Phase(:a, s; power = 4.0), Phase(:b, s; power = 6.0, scaled = false))
     xph2 = initial_parameters(pph2.param) .+ 0.01
     regph = ev -> sum(abs2, power_scales(pph2, ev) .- 1)
+    regw = power_scale_objective(pph2; reference = 1.1, weight = b -> b.group === :outer44 ? 2.0 : 1.0)
     augph2 = Briareus._Augmented(regph, (clf, in_phase(:a, dcl)), (fill(0.1, length(quads)), [0.2]), 3.0)
     clfa = clearance_floor(keepout[1])     # an aperture keep-out over the phases (one skipped)
     sw = Scenario(tw, p)
@@ -400,6 +401,7 @@ end
             @test (@inferred clf.f(ev)) isa Vector{T} && (@inferred clfa.f(ev)) isa Vector{T}
             @test (@inferred augph2(ev)) isa T
             @test (@inferred dcl.f(ev[:a])) isa T && (@inferred gsh.f(ev[:a])) isa Vector{T}
+            @test (@inferred regw(ev)) isa T
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -645,6 +647,7 @@ end
                 @test _inf_jet_clean(JET.report_call, clfa.f, ev)
                 VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, clfa.f, ev)
                 @test _inf_jet_clean(JET.report_call, dcl.f, ev[:a]) && _inf_jet_clean(JET.report_call, gsh.f, ev[:a])
+                @test _inf_jet_clean(JET.report_call, regw, ev) && _inf_jet_clean(JET.report_opt, regw, ev)
             end
             # a warm restart from a constrained result
             r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))

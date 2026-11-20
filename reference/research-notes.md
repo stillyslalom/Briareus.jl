@@ -14701,3 +14701,24 @@ the same product as the script's. In the script the floor of each reference and 
 gates (`mode_gate(reference, GATES .* floor)`) became `u.floor` and
 `mode_gate(reference, u; fraction = GATES)`: the 16 gate rows and the 24 gate limits
 agree to 17 digits.
+
+### 2. The beam-weighted regularization of the power scales
+
+The script's objective held the early phases' power scales near a uniform start,
+`Σ_j n_j (s_j/s0_j − 1)² / Σ_j n_j`, each scale weighted by the number of beams it
+governs, which it counted by reading the internal field `ps.param.by`.
+`power_scale_objective(ps; reference, weight)` is that term: the scales of
+`power_scales` (so generic in the number type and differentiable), `reference` one
+scale, a vector in the order of the keys or a function `(key, phase) -> s0`, and per
+scale the summed `weight` of its beams (default 1 each: the mean over beams and scaled
+phases). Chosen over a public accessor of the counts: it sits beside `shift_objective`
+(the mean squared aim shift, also a mean over beams), composes as a term of an
+objective function of the `PerPhase` evaluation as every other term does, and keeps the
+grouping internal; the counts alone serve no other use in the script. A plain
+`Scenario` with `PowerScales` has no phase powers to read its scales against from an
+evaluation (its scales are parameters), so the term is for phased scenarios only.
+`test/phased_study.jl` checks it against the hand count (16 inner and 32 outer quads
+per scale of a cone), a per-beam weight and the closed-form gradient
+`2 W_j (s_j/s0_j − 1)/s0_j / Σ W`. In the script the objective's three lines of counts
+and reference scales became `power_scale_objective(ps; reference = (key, phase) ->
+S0[phase])`: the start's objective agrees to 17 digits.

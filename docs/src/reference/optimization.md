@@ -87,9 +87,11 @@ time come from a drive history with `Phase(name, scenario; history, time)`, and 
 reference at the same time from `remake(scenario; history, time)`.
 `bounds(scenario.param; power_max)` caps every beam in every phase at the laser's
 limit, [`phase_beams`](@ref) puts reference beams at each phase's powers,
-[`power_scales`](@ref) reads the scales inside an objective (differentiable) and
-[`power_scale_table`](@ref) tabulates them per key and phase, and
-[`pointing_summary`](@ref) reports each phase, against its gates and pointing floor.
+[`power_scales`](@ref) reads the scales inside an objective (differentiable),
+[`power_scale_objective`](@ref) holds them near a reference drive (each scale weighted
+by the beams it governs) and [`power_scale_table`](@ref) tabulates them per key and
+phase, and [`pointing_summary`](@ref) reports each phase, against its gates and
+pointing floor.
 
 ```@autodocs
 Modules = [Briareus]
