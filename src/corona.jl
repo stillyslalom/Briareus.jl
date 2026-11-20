@@ -1,15 +1,16 @@
-# Laser absorption in a static, spherically symmetric corona (polar direct drive, Stage 1;
-# reference/litreview/polar_direct_drive.md, decision 3 (b); research notes "Corona
+# Laser absorption in a static, spherically symmetric corona, for Stage 1 of polar direct
+# drive (reference/litreview/polar_direct_drive.md, decision 3b; research notes, "Corona
 # absorption operator"). Rays are refracted and absorbed by inverse bremsstrahlung; the
 # ray paths depend only on the profile and the impact parameter, so they are integrated
 # once per profile, by radial quadrature, as harmonic kernels. A pointing change then
 # only reweights a fixed lattice of rays per beam and f-cone direction.
 
-# Kruer, The Physics of Laser Plasma Interactions, ch. 5: the electron–ion collision
-# frequency ν_ei = 4√(2π) Z e⁴ n_e lnΛ / (3 m_e^{1/2} T_e^{3/2}) (Gaussian units), written
-# ν_ei = _NU_EI Z n_e lnΛ / T_e^{3/2} with n_e in cm⁻³ and T_e in eV (s⁻¹; 2.91e-6, the
-# NRL Plasma Formulary's electron collision rate), and the critical density
-# n_c = π m_e c² / (e² λ²) (cm⁻³). CODATA 2018 constants, cgs.
+# The electron–ion collision frequency is that of Kruer, The Physics of Laser Plasma
+# Interactions, ch. 5: ν_ei = 4√(2π) Z e⁴ n_e lnΛ / (3 m_e^{1/2} T_e^{3/2}) in Gaussian
+# units. It is written ν_ei = _NU_EI Z n_e lnΛ / T_e^{3/2} (s⁻¹) with n_e in cm⁻³ and T_e
+# in eV; the coefficient 2.91e-6 is the electron collision rate of the NRL Plasma
+# Formulary. The critical density is n_c = π m_e c² / (e² λ²) (cm⁻³). The constants are
+# CODATA 2018 values in cgs units.
 const _E_ESU = 4.80320471e-10                 # elementary charge (statC)
 const _ME_G = 9.1093837015e-28                # electron mass (g)
 const _EV_ERG = 1.602176634e-12               # 1 eV (erg)
@@ -22,33 +23,34 @@ _critical_density(λ_µm) = π * _ME_G * _C_CM^2 / (_E_ESU^2 * (1e-4λ_µm)^2)
     CoronaProfile(; critical_radius, scale_length, absorption,
                   outer_radius = critical_radius + 14scale_length)
 
-A static, spherically symmetric laser corona for [`CoronaOperator`](@ref), given by the
-electron density as a fraction ``n_e/n_c`` of the light's critical density (not in cm⁻³):
-that ratio and the inverse-bremsstrahlung absorption rate as functions of the radius from
-the target center.
+A static, spherically symmetric laser corona for [`CoronaOperator`](@ref). It is given by
+the electron density as a fraction ``n_e/n_c`` of the critical density of the light (not
+in cm⁻³) and by the inverse-bremsstrahlung absorption rate, both as functions of the
+radius from the target center.
 
 The first form tabulates a snapshot, such as a 1-D hydrodynamics output: radii `r` (mm,
 increasing, not necessarily uniform), `ne_over_nc` (``n_e/n_c``, positive), electron
 temperature `Te` (eV), and the mean ionization `Z` and Coulomb logarithm `lnΛ` (each a
-number or a vector over `r`; no defaults). `wavelength` is the laser's vacuum wavelength
+number or a vector over `r`; no defaults). `wavelength` is the vacuum laser wavelength
 (µm), which sets ``n_c``. The absorption rate per unit length of a ray, divided by its
 refractive index, is `(ν_ei/c)(n_e/n_c)` with ``ν_{ei}`` the electron–ion collision
 frequency of Kruer (*The Physics of Laser Plasma Interactions*, ch. 5),
-`2.91e-6 Z n_e lnΛ / T_e^{3/2}` s⁻¹ (``n_e`` in cm⁻³, ``T_e`` in eV). Both `ln(n_e/n_c)` and the logarithm of
-that rate are interpolated by cubic Hermite polynomials (three-point slopes), so an
-exponential profile is represented exactly; the profile is zero beyond `r[end]`.
-`ne_over_nc[1] ≥ 1` is required: every ray must turn before the innermost radius (the
-light never reaches a hard surface, whose absorption the corona model does not include).
+`2.91e-6 Z n_e lnΛ / T_e^{3/2}` s⁻¹ (``n_e`` in cm⁻³, ``T_e`` in eV). Both `ln(n_e/n_c)`
+and the logarithm of that rate are interpolated by cubic Hermite polynomials (three-point
+slopes), so an exponential profile is represented exactly; the profile is zero beyond
+`r[end]`. `ne_over_nc[1] ≥ 1` is required: every ray must turn before the innermost radius
+(the light never reaches a hard surface, whose absorption the corona model does not
+include).
 
 The second form is the analytic isothermal corona `n_e/n_c = exp(-(r - r_c)/L)` with
 `critical_radius` ``r_c`` and `scale_length` L (mm), truncated at `outer_radius`, whose
-absorption rate is set by `absorption`, the fraction η⊥ that a planar profile of the
-same scale length absorbs at normal incidence: η⊥ = 1 - exp(-8``ν_c`` L/3c) (Kruer; the
-η⊥ of `deposit(op, beams; absorption)`, Murakami & Nishi 2017, Eq. 29). It is also the exact
+absorption rate is set by `absorption`, the fraction η⊥ that a planar profile of the same
+scale length absorbs at normal incidence: η⊥ = 1 - exp(-8``ν_c`` L/3c) (Kruer; the η⊥ of
+`deposit(op, beams; absorption)`, Murakami & Nishi 2017, Eq. 29). It is also the exact
 absorption of a radial ray when the truncation is far out (e⁻¹⁴ of ``n_c`` by default).
 
-Not calibrated: a profile is the user's input (a snapshot or an engineering estimate),
-and `Z`, `lnΛ` and `absorption` have no defaults.
+The model is not calibrated: the profile is a user input (a snapshot or an engineering
+estimate), and `Z`, `lnΛ` and `absorption` have no defaults.
 """
 struct CoronaProfile
     r::Vector{Float64}
@@ -83,7 +85,7 @@ function CoronaProfile(; critical_radius::Real, scale_length::Real, absorption::
     outer_radius > rc || throw(ArgumentError("outer_radius must exceed critical_radius"))
     νc = -3log1p(-absorption) / (8L)                     # ν_c/c (mm⁻¹)
     r = [rc - L, Float64(outer_radius)]
-    lne = @. -(r - rc) / L                               # linear: the table is exact
+    lne = @. -(r - rc) / L                               # linear, so the table is exact
     return _corona_profile(r, lne, log(νc) .+ 2 .* lne)
 end
 
@@ -124,21 +126,24 @@ end
            (t3 - t2) * h * dy[i+1]
 end
 
-# n_e/n_c and the absorption rate (ν_ei/c)(n_e/n_c) (mm⁻¹) at radius x; zero outside.
+# n_e/n_c and the absorption rate (ν_ei/c)(n_e/n_c) (mm⁻¹) at radius x; both are zero
+# outside the table.
 _corona_ne(p::CoronaProfile, x) = x > p.r[end] ? 0.0 : exp(_hermite(p.r, p.lne, p.dlne, x))
 _corona_rate(p::CoronaProfile, x) = x > p.r[end] ? 0.0 : exp(_hermite(p.r, p.lrate, p.dlrate, x))
 
 # ---------------------------------------------------------------------------------------
-# Ray kernels: one ray of impact parameter b by radial quadrature (no ray integration).
-# Geometric optics in a cold plasma, refractive index n² = 1 - n_e/n_c: the ray stays in
-# its plane, turns where r n(r) = b, sweeps the angle ∫ b dr / (r √(r²n² - b²)) and
-# accumulates the optical depth ∫ κ r dr / √(r²n² - b²) per pass (κ the rate above).
+# Ray kernels. Each ray of impact parameter b is integrated by radial quadrature, without
+# tracing the ray path. In geometric optics in a cold plasma, with refractive index
+# n² = 1 - n_e/n_c, the ray stays in its plane and turns where r n(r) = b. Per pass it
+# sweeps the angle ∫ b dr / (r √(r²n² - b²)) and accumulates the optical depth
+# ∫ κ r dr / √(r²n² - b²), with κ the rate above.
 # ---------------------------------------------------------------------------------------
 
 const _GL4 = ((-0.8611363115940526, 0.3478548451374538), (-0.3399810435848563, 0.6521451548625461),
               (0.3399810435848563, 0.6521451548625461), (0.8611363115940526, 0.3478548451374538))
 
-# The outermost turning radius in [rmin, R): r² (1 - n_e/n_c) = b² (n_e(rmin) ≥ n_c).
+# The outermost turning radius in [rmin, R), where r² (1 - n_e/n_c) = b². It requires
+# n_e(rmin) ≥ n_c.
 function _turning_radius(ne::F, R, rmin, b) where {F}
     h(r) = r^2 * (1 - ne(r)) - b^2
     hi = R * (1 - 1e-12)
@@ -157,14 +162,18 @@ function _turning_radius(ne::F, R, rmin, b) where {F}
     return hi
 end
 
-# Deposits of a ray with impact parameter b entering the sphere of radius R: angles α
-# (from the incoming side, -d, toward the impact vector) and absorbed fractions f of 2N
-# panels (N in and N out, on r = r_t + (R - r_t) t² with uniform t, which removes the
-# 1/√ singularity at the turning point; 4-point Gauss each), each panel's deposit at its
-# mid angle; the escaping fraction (Σ f + escaped = 1); and the exit angle. With `edges`
-# (increasing radii, covering [rmin, R]), every edge inside (r_t, R) is also a panel
-# boundary, so each panel lies in one shell, and the fifth result is each deposit's shell
-# (`edges[s] ≤ r < edges[s+1]`; zeros without edges, whose panels are as above).
+# Deposits of a ray with impact parameter b that enters the sphere of radius R. The path
+# is split into 2N panels, N inward and N outward, on r = r_t + (R - r_t) t² with uniform
+# t. This substitution removes the 1/√ singularity at the turning point, and each panel
+# is integrated with a 4-point Gauss rule. The function returns five values:
+# - the angle α of each panel deposit, taken at the panel mid angle and measured from the
+#   incoming side -d toward the impact vector;
+# - the absorbed fraction f of each panel;
+# - the escaping fraction, with Σ f + escaped = 1;
+# - the exit angle;
+# - the shell of each deposit, `edges[s] ≤ r < edges[s+1]`, or zeros without `edges`.
+# With `edges`, increasing radii that cover [rmin, R], every edge inside (r_t, R) is also
+# a panel boundary, so each panel lies in one shell.
 function _ray_deposits(ne::F, rate::G, R, rmin, b, N, edges = nothing) where {F,G}
     rt = _turning_radius(ne, R, rmin, b)
     Δ = R - rt
@@ -213,7 +222,7 @@ end
 _ray_deposits(p::CoronaProfile, b, N, edges = nothing) =
     _ray_deposits(x -> _corona_ne(p, x), x -> _corona_rate(p, x), p.r[end], p.r[1], b, N, edges)
 
-# The critical radius of a profile: the outermost radius where n_e/n_c = 1 (ln = 0).
+# The critical radius of a profile, the outermost radius where n_e/n_c = 1 (ln = 0).
 function _critical_radius(p::CoronaProfile)
     i = something(findlast(>=(0), p.lne), 1)    # p.lne[1] ≥ 0 by construction
     i == length(p.r) && return p.r[end]
@@ -229,10 +238,10 @@ end
 # Position of (l, m ≥ 0) in the zonal-kernel ordering (m-major, l = m…L).
 @inline _zonal_index(l, m, L) = m * (L + 1) - (m * (m - 1)) ÷ 2 + (l - m) + 1
 
-# Harmonic kernel of a ray in the ray frame (pole -d, azimuth 0 along the impact vector):
-# κ[(l, m)] = Σ f Ȳ_lm(α), so that a ray at impact azimuth ψ contributes κ cos mψ to the
-# frame coefficient (l, m) and κ sin mψ to (l, -m). A deposit past the antipode (α > π)
-# lies at polar angle 2π - α and azimuth π.
+# Harmonic kernel of a ray in the ray frame, with the pole at -d and azimuth 0 along the
+# impact vector. It is κ[(l, m)] = Σ f Ȳ_lm(α), so that a ray at impact azimuth ψ
+# contributes κ cos mψ to the frame coefficient (l, m) and κ sin mψ to (l, -m). A deposit
+# past the antipode (α > π) lies at polar angle 2π - α and azimuth π.
 function _ray_kernel!(κ, Y, P, L, α, f)
     for (a, w) in zip(α, f)
         w > 0 || continue
@@ -270,9 +279,10 @@ function _gauss_legendre(n)
     return x, w
 end
 
-# Blocks D_l of the rotation Q acting on real-harmonic coefficients: a field g in frame
-# coordinates becomes f(x) = g(Qᵀx) in the lab, with lab coefficients D_l c_l (m = -l…l).
-# D_ab = ∫ Y_a(Qx) Y_b(x) dΩ by a product quadrature exact to degree 2L.
+# Blocks D_l of the rotation Q acting on real-harmonic coefficients. A field g in frame
+# coordinates becomes f(x) = g(Qᵀx) in the lab, with lab coefficients D_l c_l
+# (m = -l…l). D_ab = ∫ Y_a(Qx) Y_b(x) dΩ is computed by a product quadrature exact to
+# degree 2L.
 function _rotation_blocks(Q, L)
     xg, wg = _gauss_legendre(L + 2)
     nφ = 2L + 2
@@ -321,20 +331,20 @@ the point where it is absorbed (projected radially). In a spherical corona every
 stays in its plane and is fixed by its impact parameter, so the paths are integrated
 once, by radial quadrature (`panels` per pass), into harmonic kernels at the impact
 parameters of a square lattice of rays (`spacing`, mm) across each sub-beam, out to the
-profile's outer radius. These depend on the profile, the lattice and the ports only, so
-the operator serves every aim, defocus, spot and power: the beams' ports and f-numbers
-must not change after construction.
+outer radius of the profile. These depend on the profile, the lattice and the ports
+only, so one operator is valid for every aim, defocus, spot and power; the beam ports
+and f-numbers must not change after construction.
 
-`shells`, increasing radii (mm) from at most the profile's first radius to at least its
-outer radius, resolves the absorption in radius as well: `deposit` then also gives the
+`shells`, increasing radii (mm) from at most the first radius of the profile to at least
+its outer radius, resolves the absorption in radius as well: `deposit` then also gives the
 absorbed power per steradian in each shell `shells[s] ≤ r < shells[s+1]` and the
 absorbed power per shell (a radial deposition profile), which sum to the totals. Each
 shell edge is then also a panel boundary of every ray, so every panel lies in one shell
 and the partition is exact; the totals then come from these refined panels (on an OMEGA
-case the absorbed power equals the operator's without shells to round-off and the
-harmonics by 1e-7 to 1e-6 of the mean, the panels' angular placement). A shell's
-harmonics cost as much as the totals' in each evaluation, so the evaluation time grows
-in proportion to the number of shells.
+case the absorbed power equals that of the operator without shells within round-off,
+and the harmonics differ by 1e-7 to 1e-6 of the mean, from the angular placement of the
+panels). The harmonics of a shell cost as much as those of the totals in each
+evaluation, so the evaluation time grows in proportion to the number of shells.
 [`ablation_pressure_proxy`](@ref) sums the shells with a density weight.
 
 Scope and limits:
@@ -342,13 +352,13 @@ Scope and limits:
   the critical radius moves σ₂ by about 3% of its value and the absorption by 1 point
   (measured by 3-D ray tracing; research notes, "Corona model prototype").
 - **Bare sphere only.** Nothing but the corona interacts with the light: no other target
-  parts, stalks or shields, which would need their own shadowing; the profile must reach
+  parts, stalks or shields, which would need separate shadowing; the profile must reach
   ``n_c`` (`CoronaProfile`), so no light reaches the surface inside.
-- **No cross-beam energy transfer** (decision 8 of the review; deferred): results are
-  CBET-free, and optimistic where CBET matters (the PDD equator).
+- **No cross-beam energy transfer** (decision 8 of the review; deferred). The results
+  are CBET-free, and optimistic where CBET matters (the PDD equator).
 
-`deposit(op, beams; absorption = η⊥)` on a hard sphere is this model's limit for a
-thin corona; oblique and grazing rays depart from it at finite scale lengths (research
+`deposit(op, beams; absorption = η⊥)` on a hard sphere is the limit of this model for
+a thin corona; oblique and grazing rays depart from it at finite scale lengths (research
 notes, "Corona model prototype").
 """
 struct CoronaOperator
@@ -366,7 +376,7 @@ struct CoronaOperator
     kernel::Matrix{Float64}                    # zonal kernels (l, m ≥ 0) × class
     absorbed::Vector{Float64}                  # absorbed fraction of each class
     J::Vector{Matrix{Float64}}                 # rotation blocks of R_x(-90°)
-    shells::Vector{Float64}                    # shell edges (mm); empty: no shells
+    shells::Vector{Float64}                    # shell edges (mm), empty without shells
     shell_kernel::Array{Float64,3}             # zonal kernels × class × shell
     radial::Matrix{Float64}                    # absorbed fraction of each class per shell
 end
@@ -388,7 +398,7 @@ function CoronaOperator(profile::CoronaProfile, beams::AbstractVector{<:Beam};
         0.1 * minimum(b -> ForwardDiff.value(min(b.spot.a, b.spot.b)), beams) : Float64(spacing)
     0 < h < R || throw(ArgumentError("spacing must be in (0, outer radius)"))
     n = floor(Int, R / h)
-    # lattice rays that enter the corona (b < R), classed by i² + j²
+    # The lattice rays that enter the corona (b < R) are classed by i² + j².
     ks = sort!(unique!([i^2 + j^2 for i in -n:n for j in -n:n if h^2 * (i^2 + j^2) < R^2]))
     rank = Dict(k => Int32(q) for (q, k) in enumerate(ks))
     class = [h^2 * (i^2 + j^2) < R^2 ? rank[i^2+j^2] : Int32(0) for i in -n:n, j in -n:n]
@@ -438,24 +448,25 @@ end
 """
     deposit(op::CoronaOperator, beams) -> (; ylm, per_beam, delivered, shell_ylm, radial)
 
-Laser absorption in the corona of `op` for `beams` (same ports and order as at
-construction): `ylm`, the flat real-harmonic coefficients (`mode_index` order, l ≤
-`op.lmax`, polar axis ẑ, about the operator's `center`) of the absorbed power per
-steradian `F(Ω) = Σ ylm[mode_index(l, m)] Y_lm(Ω)` (TW/sr); `per_beam`, each beam's
-absorbed power (TW); and `delivered`, the beams' total power. The absorbed fraction is
-`sum(per_beam) / delivered` (equal to `√(4π) ylm[1] / delivered`), the nonuniformity
-`mode_rms(ylm, lmax)` and its spectrum `mode_power(ylm_matrix(ylm, lmax))`. No
-cross-beam energy transfer: results are CBET-free.
+Laser absorption in the corona of `op` for `beams`, which have the same ports and order as
+at construction. The result contains `ylm`, the flat real-harmonic coefficients
+(`mode_index` order, l ≤ `op.lmax`, polar axis ẑ, about the operator's `center`) of the
+absorbed power per steradian `F(Ω) = Σ ylm[mode_index(l, m)] Y_lm(Ω)` (TW/sr); `per_beam`,
+the absorbed power of each beam (TW); and `delivered`, the total power of the beams. The
+absorbed fraction is `sum(per_beam) / delivered` (equal to `√(4π) ylm[1] / delivered`),
+the nonuniformity `mode_rms(ylm, lmax)` and its spectrum
+`mode_power(ylm_matrix(ylm, lmax))`. Cross-beam energy transfer is not modeled, so the
+results are CBET-free.
 
-For an operator with `shells`, `shell_ylm[:, s]` holds the same coefficients for the
+For an operator with `shells`, `shell_ylm[:, s]` contains the same coefficients for the
 power absorbed in shell `s` (TW/sr; a `(lmax + 1)² × nshells` matrix, the absorbed power
 per steradian and radius) and `radial[s]` the power absorbed in it (TW, the radial
 deposition profile); `sum(eachcol(shell_ylm)) ≈ ylm` and `sum(radial) ≈ sum(per_beam)`
-to round-off, and `√(4π) shell_ylm[1, s] ≈ radial[s]`. Without shells both are empty.
+within round-off, and `√(4π) shell_ylm[1, s] ≈ radial[s]`. Without shells both are empty.
 
-Generic in the beams' number type (aims, powers, defocus and spot axes may be
-ForwardDiff duals); threads share the beams and the sums are taken in a fixed order, so
-the result does not depend on the number of threads.
+The function is generic in the number type of the beams (aims, powers, defocus and spot
+axes may be ForwardDiff duals); threads share the beams and the sums are taken in a fixed
+order, so the result does not depend on the number of threads.
 """
 function deposit(op::CoronaOperator, beams::AbstractVector{<:Beam})
     length(beams) == length(op.ports) || throw(DimensionMismatch("beam count changed"))
@@ -490,7 +501,8 @@ function deposit(op::CoronaOperator, beams::AbstractVector{<:Beam})
             shell_ylm, radial)
 end
 
-# Function barrier for the threads: each takes beams in turn and writes their columns.
+# Function barrier for the threads. Each thread takes beams in turn and writes their
+# columns.
 function _corona_beams!(C::Matrix{T}, A, Cs, As, op, frames, screens, slopes) where {T}
     nb = length(frames)
     nt = min(Threads.nthreads(), nb)
@@ -518,11 +530,11 @@ function _corona_worker!(C::Matrix{T}, A, Cs, As, op, frames, screens, slopes, n
     return nothing
 end
 
-# Lattice index range on one axis that can reach the spot: a ray through lattice point
+# Lattice index range on one axis that can reach the spot. A ray through lattice point
 # (i, j) crosses the focal plane at (u, v), with h i = c₁ + u (e₁·e₁′) + v (e₂·e₁′), and
-# the profile is zero beyond (u/a)² + (v/b)² = qcut, so |h i - c₁| ≤ √qcut ‖(a e₁·e₁′,
-# b e₂·e₁′)‖ (Cauchy–Schwarz) for every live ray; one more index on each side for
-# rounding. An exact screen: the rays outside contribute exact zeros.
+# the profile is zero beyond (u/a)² + (v/b)² = qcut. By Cauchy–Schwarz, every live ray
+# has |h i - c₁| ≤ √qcut ‖(a e₁·e₁′, b e₂·e₁′)‖, and one more index is added on each side
+# for rounding. The screen is exact: the rays outside contribute exact zeros.
 function _lattice_range(f::BeamFrame{Float64}, c1, ep, h, n)
     p1, p2 = dot(f.e1, ep), dot(f.e2, ep)
     reach(s) = sqrt(s.qcut * (s.a2 * p1^2 + s.b2 * p2^2))
@@ -530,12 +542,15 @@ function _lattice_range(f::BeamFrame{Float64}, c1, ep, h, n)
     return max(-n, floor(Int, (c1 - ρ) / h) - 1), min(n, ceil(Int, (c1 + ρ) / h) + 1)
 end
 
-# One beam: for each f-cone direction, the lattice rays' weights (best-focus profile at
-# their focal-plane crossing × spacing² / (k·d) / ncone, the power of the collimated
-# sub-beam per lattice cell normal to d) binned with cos mψ, sin mψ by impact-parameter
-# class, contracted with the kernels into frame coefficients and rotated to the lab
-# (D = Z(α) J Z(β) Jᵀ). Adds into `c`, and per shell into the columns of `cs` and the
-# entries of `as`; returns the beam's absorbed power.
+# Adds the absorption of one beam into `c`, and per shell into the columns of `cs` and
+# the entries of `as`, and returns the absorbed power of the beam. For each f-cone
+# direction:
+# - each lattice ray is weighted by the best-focus profile at its focal-plane crossing
+#   times spacing² / (k·d) / ncone, the power of the collimated sub-beam per lattice
+#   cell normal to d;
+# - the weights are binned with cos mψ and sin mψ by impact-parameter class;
+# - the bins are contracted with the kernels into frame coefficients;
+# - the frame coefficients are rotated to the lab with D = Z(α) J Z(β) Jᵀ.
 function _corona_beam!(c::AbstractVector{T}, cs, as, ws, op::CoronaOperator, bi, f::BeamFrame,
                        fv::BeamFrame{Float64}, (κ, α, β)) where {T}
     (; Sc, Ss, cf, cfs, t1, t2, cosα, sinα, cosβ, sinβ) = ws
@@ -556,7 +571,7 @@ function _corona_beam!(c::AbstractVector{T}, cs, as, ws, op::CoronaOperator, bi,
             q = cls[ii+n+1, jj+n+1]
             q == 0 && continue
             x = ctr + (h * ii) * e1p + (h * jj) * e2p
-            if T !== Float64           # screen on values: rays off the spot add exact zeros
+            if T !== Float64           # screen on values; rays off the spot add exact zeros
                 d = x - fv.focus
                 s = dot(d, fv.k)
                 u, v = dot(d, fv.e1) - s * α[j], dot(d, fv.e2) - s * β[j]
@@ -594,7 +609,7 @@ function _corona_beam!(c::AbstractVector{T}, cs, as, ws, op::CoronaOperator, bi,
                 end
             end
         end
-        # frame coefficients: Σ over classes of kernel × azimuthal moments
+        # frame coefficients as Σ over classes of kernel × azimuthal moments
         fill!(cf, zero(T))
         @inbounds for q in lo:hi
             absorbed += Sc[1, q] * op.absorbed[q]
@@ -624,8 +639,8 @@ function _corona_beam!(c::AbstractVector{T}, cs, as, ws, op::CoronaOperator, bi,
     return absorbed
 end
 
-# c += Z(α) J Z(β) Jᵀ cf, block by block (Z: rotation about ẑ, which mixes the
-# cos mφ and sin mφ coefficients of each m).
+# c += Z(α) J Z(β) Jᵀ cf, block by block. Z is the rotation about ẑ, which mixes the
+# cos mφ and sin mφ coefficients of each m.
 function _rotate_add!(c::AbstractVector{T}, cf, J, cosα, sinα, cosβ, sinβ, L, t1, t2) where {T}
     @inbounds for l in 0:L
         o = l^2
@@ -666,18 +681,19 @@ end
 end
 
 # ---------------------------------------------------------------------------------------
-# Drive proxies (review decision 4): published, empirical transforms of the absorbed power
-# per steradian into a drive. Each is nonlinear in the field, so it is applied on a
-# product quadrature and projected back to harmonics.
+# Drive proxies (review decision 4). These are published, empirical transforms of the
+# absorbed power per steradian into a drive. Each is nonlinear in the field, so it is
+# applied on a product quadrature and projected back to harmonics.
 # ---------------------------------------------------------------------------------------
 
 # Applies `g(values, μ)` ring by ring to the band-limited field with coefficients `c`
-# (l ≤ L) and returns the coefficients (l ≤ Lout ≤ L) of the result. Gauss–Legendre in μ
-# with 2L + 2 nodes and 4L + 4 uniform azimuths: the projection is exact for results up
-# to degree 3L + 3 (higher degrees alias), and a ring's azimuthal mean is exact. The grid
-# depends on L only, so the output for Lout < L is the first (Lout + 1)² coefficients of
-# the output for Lout = L, bitwise (the map acts on the whole field, then the result
-# is filtered).
+# (l ≤ L) and returns the coefficients (l ≤ Lout ≤ L) of the result. The grid is
+# Gauss–Legendre in μ with 2L + 2 nodes and 4L + 4 uniform azimuths, so the projection is
+# exact for results up to degree 3L + 3 (higher degrees alias), and the azimuthal mean of a
+# ring is exact. The grid
+# depends on L only, so the output for Lout < L is bitwise identical to the first
+# (Lout + 1)² coefficients of the output for Lout = L: the map acts on the whole field,
+# and the result is filtered afterward.
 function _sphere_transform(g::G, c::AbstractVector, L::Integer, Lout::Integer = L) where {G}
     T = eltype(c)
     nθ, nφ = 2L + 2, 4L + 4
@@ -728,36 +744,37 @@ end
 
 The ablation-pressure proxy of Barlow et al. (PRL 133, 175101, 2024, Eqs. 2a–2b of the
 published Letter's appendix; Eqs. 1a–1b of arXiv:2311.18342v2) from a corona deposition
-`dep = deposit(op, beams)` of an operator with `shells`: the flat real-harmonic
-coefficients (`mode_index` order, l ≤ `lmax`) of the pressure map (Mbar)
+`dep = deposit(op, beams)` of an operator with `shells`. The result is the flat
+real-harmonic coefficients (`mode_index` order, l ≤ `lmax`) of the pressure map (Mbar)
 
 ``P_{abl}(Ω) = 24.7\\,\\mathrm{Mbar}\\, (F(Ω) / 10^{14}\\,\\mathrm{W\\,cm^{-2}})^{2/3}``,
 ``F(Ω) = r_c^{-2} Σ_s (n_s/n_c)^{2/3}\\, dP_s/dΩ``,
 
 with ``dP_s/dΩ`` the absorbed power per steradian in shell `s` (`dep.shell_ylm`), ``n_s``
-the profile's electron density at the middle of the part of the shell inside the
-profile, and ``r_c`` the profile's critical radius (outermost ``n_e = n_c``). Ba24 write
-the sum over their hydrodynamic cells, ``Σ_r r^2 n_r^{2/3} I_r / (R_{351}^2 n_{351}^{2/3})``
-with ``r^2 I_r`` the cell's absorbed power per steradian, so with a snapshot's cell edges
-as `shells` this is their sum; finer shells converge to the radial integral, with an
-error of second order in the shell width (on an OMEGA case, shells of an eighth of the
-density scale length L out to 4L past the critical radius put σ₂ within 0.1% of its
-converged value, a quarter of L within 1%; research notes). ``n_c`` is the critical
-density of the profile's wavelength, Ba24's ``n_{351}`` at 351 nm. `exponent` replaces the outer 2/3
-and `density_exponent` the density weight's 2/3.
+the electron density of the profile at the middle of the part of the shell inside it, and
+``r_c`` the critical radius of the profile (outermost ``n_e = n_c``). Ba24 write the sum
+over their hydrodynamic cells, ``Σ_r r^2 n_r^{2/3} I_r / (R_{351}^2 n_{351}^{2/3})`` with
+``r^2 I_r`` the absorbed power per steradian of a cell, so with the cell edges of a snapshot
+as `shells` this is their sum; finer shells converge to the radial integral, with an error
+of second order in the shell width (on an OMEGA case, shells of an eighth of the density
+scale length L out to 4L past the critical radius put σ₂ within 0.1% of its converged value,
+a quarter of L within 1%; research notes). ``n_c`` is the critical density at the wavelength
+of the profile, Ba24's ``n_{351}`` at 351 nm. `exponent` replaces the outer 2/3 and
+`density_exponent` the 2/3 of the density weight.
 
 The angular mean, Ba24's ``\\bar P_{abl}``, is `c[1] / √(4π)` and their ``σ_2`` is
-`mode_rms(c, 30)`. ``F`` is formed at the deposition's full degree `op.lmax`, the map on
-a Gauss–Legendre product grid for that degree, and the result projected back to degree
-`lmax`, so it is ``F^{2/3}`` filtered to l ≤ `lmax` (as Ba24's σ₂ is; a smaller `lmax`
-returns the leading coefficients of the full-degree result), and ``F`` must be positive
-everywhere (an `ArgumentError` otherwise).
+`mode_rms(c, 30)`. ``F`` is formed at the full degree `op.lmax` of the deposition, the map
+is formed on a Gauss–Legendre product grid for that degree, and the result is projected
+back to degree `lmax`. The result is therefore ``F^{2/3}`` filtered to l ≤ `lmax`, as
+Ba24's σ₂ is; with a smaller `lmax` the leading coefficients of the full-degree result are
+returned. ``F`` must be positive everywhere (an `ArgumentError` otherwise).
 
-An engineering proxy with no facility criterion behind it. The 2/3 power follows
-Manheimer et al. (Phys. Fluids 25, 1644, 1982; Ba24's Ref. 33); the density weight is
-empirical, chosen by Ba24 to match pressures and asymmetries of their 3-D
-radiation-hydrodynamics runs; the prefactor 24.7 Mbar is Ba24's. CBET-free, as the
-deposition. Generic in the number type (for ForwardDiff through `deposit`).
+The proxy is an engineering estimate and is not a facility criterion. The 2/3 power
+follows Manheimer et al. (Phys. Fluids 25, 1644, 1982; Ba24's Ref. 33). The density
+weight is empirical, chosen by Ba24 to match pressures and asymmetries of their 3-D
+radiation-hydrodynamics runs, and the prefactor 24.7 Mbar is Ba24's. The proxy is
+CBET-free, as the deposition is, and generic in the number type (for ForwardDiff through
+`deposit`).
 """
 function ablation_pressure_proxy(op::CoronaOperator, dep; lmax::Integer = op.lmax,
                                  exponent::Real = 2 / 3, density_exponent::Real = 2 / 3)
@@ -775,7 +792,7 @@ function ablation_pressure_proxy(op::CoronaOperator, dep; lmax::Integer = op.lma
     F = zeros(eltype(S), nlm)
     for s in 1:ns
         a, b = max(op.shells[s], p.r[1]), min(op.shells[s+1], p.r[end])
-        a < b || continue                    # outside the profile: nothing absorbed
+        a < b || continue                    # nothing is absorbed outside the profile
         w = _corona_ne(p, (a + b) / 2)^density_exponent / rc^2
         for k in 1:nlm
             F[k] += w * S[k, s]
@@ -793,8 +810,8 @@ end
 
 The azimuthal shell-displacement model of Yeamans et al. (Nucl. Fusion 61, 046031, 2021,
 Eq. 3) from the absorbed power per steradian `ylm` (flat real-harmonic coefficients,
-`mode_index` order, polar axis ẑ; e.g. `deposit(op::CoronaOperator, beams).ylm`): the
-coefficients (l ≤ `lmax`) of
+`mode_index` order, polar axis ẑ; e.g. `deposit(op::CoronaOperator, beams).ylm`). The
+result is the coefficients (l ≤ `lmax`) of
 
 ``d(θ, φ) = \\bar d(θ)\\, (E(θ, φ) / \\bar E(θ))^{0.72}``,
 
@@ -804,24 +821,23 @@ absorbed power per steradian), ``\\bar E(θ)`` its mean over φ at each polar an
 degrees) or 1 when `nothing`. Ye21 take ``\\bar d(θ)`` from a 2-D (axisymmetric)
 hydrodynamics run; with ``\\bar d = 1`` the m ≠ 0 part, `mode_rms(d, lmax; m = :nonzero)`,
 is the azimuthal nonuniformity of the shell velocity (their ``ΔV_{m≠0}``, which adds in
-quadrature to the 2-D run's ``ΔV_{m=0}``). `exponent` replaces 0.72.
+quadrature to the ``ΔV_{m=0}`` of the 2-D run). `exponent` replaces 0.72.
 
-The printed Eq. 3 sets the factor 0.72 beside ``E/\\bar E`` without marking it as an
+Eq. 3 as published sets the factor 0.72 beside ``E/\\bar E`` without marking it as an
 exponent; the text defines it as the power with which the shell velocity scales with
 laser energy, which this function follows. The linear reading
 ``\\bar d\\,(1 + 0.72 (E/\\bar E - 1))`` agrees with it to first order in ``E/\\bar E - 1``,
-and Ye21's statement that their velocity modes are 0.72 times the energy's holds
+and Ye21's statement that their velocity modes are 0.72 times those of the energy holds
 exactly for that reading and to first order for this one (research notes, "Corona
 deposition per radius and drive proxies"). ``E`` is the field of all of `ylm` (its full
 degree; `length(ylm)` must be a square), the map is formed on a Gauss–Legendre product
 grid for that degree, and the result is projected back to degree `lmax`, so it is ``d``
-filtered to l ≤ `lmax` (a smaller `lmax` returns the leading coefficients of the
-full-degree result). ``E`` must be positive everywhere (an `ArgumentError` otherwise).
+filtered to l ≤ `lmax`; with a smaller `lmax` the leading coefficients of the full-degree
+result are returned. ``E`` must be positive everywhere (an `ArgumentError` otherwise).
 
-An engineering proxy with no facility criterion behind it: the 0.72 power is from
-implosion simulations (Ye21's Ref. 47, an LLE report), close to an experimental 0.71
-that Ye21 cite.
-Generic in the number type of `ylm`.
+The proxy is an engineering estimate and is not a facility criterion. The 0.72 power
+comes from implosion simulations (Ye21's Ref. 47, an LLE report) and is close to an
+experimental 0.71 that Ye21 cite. The function is generic in the number type of `ylm`.
 """
 function shell_displacement_proxy(ylm::AbstractVector, lmax::Integer; exponent::Real = 0.72,
                                   mean_displacement = nothing)

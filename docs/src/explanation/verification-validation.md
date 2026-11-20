@@ -5,7 +5,7 @@ results mean different things.
 
 - **Code verification** checks whether the implementation solves the intended discrete
   equations. Examples are exact view factors of catalog geometries, power conservation
-  of the ray trace, symmetry selection rules that must hold to round-off, and
+  of the ray trace, symmetry selection rules that must hold within round-off, and
   derivatives checked against finite differences.
 - **Solution verification** measures how large the discretization error of a given
   calculation is. Examples are the closure error of a view-factor matrix and its
@@ -30,7 +30,7 @@ out.
 | BVH ray casting against brute force | code verification | `test/runtests.jl`, "ray casting" |
 | Coaxial-disk view factor, occlusion, point-to-polygon kernel | code verification | "view factors" |
 | Integrating sphere, energy balance, closure enforcement | validation, code verification | "radiosity"; [Integrating sphere](@ref) |
-| LEH escape and capsule fractions against a Monte Carlo photon walk over LEH size (N210808 hohlraum); peak-power saving 3.64 → 3.1 mm against N210307/N210808 | code verification, approximate validation | `test/leh_power_balance.jl`; [Entrance-hole size and the power balance](@ref) |
+| LEH escape and capsule fractions against a Monte Carlo photon walk over LEH size (N210808 hohlraum); peak-power saving from 3.64 to 3.1 mm against N210307/N210808 | code verification, approximate validation | `test/leh_power_balance.jl`; [Entrance-hole size and the power balance](@ref) |
 | Beam power at any defocus; defocus second moments; oblique-incidence correction | code verification | "beam profile"; [Laser spot on a foil](@ref) |
 | Defocused footprint against the exact f-cone convolution | validation | [Laser spot on a foil](@ref) |
 | Fast deposition against the ray trace, with shadowing and at grazing incidence far from focus | solution verification | "deposition vs ray trace"; [Laser spot on a foil](@ref); [Freeing a bundle for radiography](@ref) |
@@ -61,19 +61,22 @@ direct laser source VisRad wrote into the file.
 The beam profile away from focus is the one piece taken from VisRad.
 [`VisRadProfile`](@ref) is the law VisRad uses. Its semi-axes, exponent, square blend and
 square half-width follow the parameters VisRad exports at each beam–target hit. Two
-constants, the square's exponent and the cut-off, were fitted to VisRad's deposition on
-48 plates normal to single beams, each plate within 0.22% rms per element. Against
-VisRad's deposition on surfaces that played no part in the fit, per element (elements
-above 1% of VisRad's peak):
+constants, the exponent of the square and the cut-off, were fitted to VisRad's deposition on
+48 plates normal to single beams, each plate within 0.22% rms per element. On
+surfaces that played no part in the fit, the law matches VisRad's deposition per element
+(elements above 1% of VisRad's peak) as follows:
 
-- 32 plates tilted up to 53° and normal plates up to 15 mm past focus: 0.12–0.27% rms;
-- hohlraum walls: 0.62% rms (N210808-like, reference pointing), 0.69% (re-pointing)
-  and 0.45% on a 38 000-element wall; window patches 0.20%; a foil 0.55%;
-- total wall power is 0.07% below VisRad's.
+- on 32 plates tilted up to 53° and normal plates up to 15 mm past focus, to 0.12–0.27%
+  rms;
+- on hohlraum walls, to 0.62% rms (N210808-like, reference pointing), 0.69%
+  (re-pointing) and 0.45% on a 38 000-element wall; on window patches to 0.20%, and on a
+  foil to 0.55%;
+- in total wall power, which is 0.07% below VisRad's.
 
 With the tabulated profile this law replaced, the absolute capsule P2 and P4 from the
-two codes' depositions, through the same Briareus radiosity, agreed to 0.014 and 0.004
-percentage points. The re-pointing's change of P2 was 0.104% against VisRad's 0.092%.
+depositions of the two codes, through the same Briareus radiosity, agreed to 0.014 and
+0.004 percentage points. The change of P2 from the re-pointing was 0.104% against
+VisRad's 0.092%.
 
 The numbers, the setup and what remains open (VisRad's per-beam renormalization, and its
 shadowing, which is not along the beam axis) are in
@@ -83,14 +86,14 @@ set up the same kind of comparison for any case.
 ## The N221204 benchmark
 
 `examples/n221204.jl` runs the time-dependent drive of NIF shot N221204 (Kritcher et
-al., Phys. Rev. E 109, 025204 (2024)) on a mock-up of the HYBRID-E pointing, with
-the two-zone CBET model calibrated to that paper's Fig. 9, and the wall motion, LEH
-closure and inner-beam bubble calibrated to other published data. Neither the paper's
-Fig. 10 (the capsule flux P2/P0 against time) nor the measured Dante history is a fit
-target. On the default settings (coarse mesh, measured backscatter), the P2 swing reaches
-−0.181 at 5.25 ns and turns positive at 6.19 ns, against −0.170 at 5.6 ns and 6.67 ns
-in Fig. 10; the synthetic Dante 1 at 8 ns reads 290.9 and 314.2 eV over the initial and
-open LEH areas, against the measured 310.1 eV. After the laser falls, the synthetic Dante
-reads 37–54 eV low at 9 ns on three shots: the quasi-static radiosity has no plasma
+al., Phys. Rev. E 109, 025204 (2024)) on a mock-up of the HYBRID-E pointing, with the
+two-zone CBET model calibrated to Fig. 9 of that paper, and the wall motion, LEH closure
+and inner-beam bubble calibrated to other published data. Neither Fig. 10 of the paper
+(the capsule flux P2/P0 against time) nor the measured Dante history is a fit target. On
+the default settings (coarse mesh, measured backscatter), the P2 swing reaches −0.181 at
+5.25 ns and turns positive at 6.19 ns, against −0.170 at 5.6 ns and 6.67 ns in Fig. 10.
+The synthetic Dante 1 at 8 ns gives 290.9 and 314.2 eV over the initial and open LEH
+areas, against the measured 310.1 eV. After the laser falls, the synthetic Dante is
+37–54 eV low at 9 ns on three shots, because the quasi-static radiosity has no plasma
 energy store. The research notes record each run and the inputs that remain
 unconstrained.

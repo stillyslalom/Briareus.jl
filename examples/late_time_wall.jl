@@ -18,13 +18,14 @@
 # `release`: the release factor (`WallLossAlbedo`'s `release`) the ablating wall needs
 # under prescribed drive drops, the closure given the constant-T scaling of the
 # ablating wall (as `wall_reemission.jl` does for the static wall).
-# `hohlraum`: a 0-D hohlraum on the shot's measured pulse (`n191118`, `n210601`: Zylstra
-# 2022 Fig. 2; `n221204`: Pak 2024 Fig. 1), ηP = A_w F_wall(T) + A_open σT⁴ solved for T
-# every step, with the static wall, the ablating wall and `drive_history`'s closure
-# (Lindl's gold loss, the default release). The hohlraum is HYBRID-E's 6.4 × 11.24 mm,
-# η = 0.75, the capsule a 0.7-absorbing sphere of its initial radius (`capsule=0` drops
-# it and closes the LEHs to 0.857 r₀, the most favorable case for the wall). Dante is
-# printed beside it for the shape of the fall only: nothing here is fitted to it.
+# `hohlraum`: a 0-D hohlraum on the measured pulse of the shot, from Zylstra 2022 Fig. 2 for
+# `n191118` and `n210601` and from Pak 2024 Fig. 1 for `n221204`. ηP = A_w F_wall(T) +
+# A_open σT⁴ is solved for T every step with the static wall, the ablating wall and the
+# closure of `drive_history` (Lindl's gold loss, the default release). The hohlraum is the
+# 6.4 × 11.24 mm HYBRID-E hohlraum with η = 0.75, and the capsule is a 0.7-absorbing sphere
+# of its initial radius. `capsule=0` drops the capsule and closes the LEHs to 0.857 r₀, the
+# most favorable case for the wall. Dante is printed beside the result only for the shape of
+# the fall; nothing in this study is fitted to it.
 
 using Briareus, Printf, LinearAlgebra
 
@@ -83,10 +84,11 @@ function hydro!(w, dt)
     end
 end
 
-# backward-Euler diffusion in y = T⁴ (Picard; sum flux limiter), Marshak boundary at the
-# incident T_D; returns the net flux into the wall (MJ/(ns cm²)). `surface = true` holds
-# the surface temperature at T_D instead (the boundary condition of Hammer & Rosen's
-# self-similar solution); `limiter = false` drops the flux limiter (their pure diffusion).
+# Backward-Euler diffusion in y = T⁴ with Picard iteration and a sum flux limiter, with a
+# Marshak boundary at the incident T_D. Returns the net flux into the wall in MJ/(ns cm²).
+# `surface = true` holds the surface temperature at T_D instead, the boundary condition of
+# the self-similar solution of Hammer & Rosen. `limiter = false` drops the flux limiter, as
+# in their pure diffusion.
 function rad!(w, TD, dt; tol = 1e-9, surface = false, limiter = true)
     n = length(w.dm)
     T, V, dm = w.T, w.V, w.dm
@@ -154,8 +156,8 @@ function driven(TD, tend; hydro = true, dtmax = 2e-3, out = 0.05, limiter = true
     return ts, Fs, Es
 end
 
-# `drive_history`'s per-element wall bookkeeping (as in `wall_reemission.jl`): the net
-# flux into the wall (MJ/(ns cm²)) at T (eV), and the state update after the step
+# The per-element wall bookkeeping of `drive_history`, as in `wall_reemission.jl`: the net
+# flux into the wall in MJ/(ns cm²) at T in eV, and the state update after the step.
 mutable struct Closure
     m::WallLossAlbedo
     Iw::Float64; rate::Float64; Tmax::Float64; Dw::Float64

@@ -1,11 +1,12 @@
-# NIF Dante 2: θ 64°, φ 350°, a shallow view of the upper entrance hole (Rubery et al.,
+# NIF Dante 2 at θ 64°, φ 350° has a shallow view of the upper entrance hole (Rubery et al.,
 # RSI 2023 §II; port P64-350, NIF User Guide 2024-09 Table 5-1). Its channel set and solid
-# angles are not public (16 channels set up like Dante 1 in 2009, Fournier et al. 2010; "like
-# Dante 1 but missing several 3–5 keV channels" in 2012–14, May et al. 2015; normalized
-# responses only in Opachich et al. 2021 Fig. 5): supply [[channel]] tables in a file that
-# extends this one. Its fields of view are not public either: it looks through the hole.
-# dante2() builds this definition with Dante 1's channels (dante1_channels(), without
-# their per-channel fields), an assumption made in code, not a value of this file.
+# angles are not public. In 2009 it had 16 channels set up like Dante 1 (Fournier et al.
+# 2010); in 2012–14 it was "like Dante 1 but missing several 3–5 keV channels" (May et al.
+# 2015); and Opachich et al. 2021 Fig. 5 gives only normalized responses. Supply [[channel]]
+# tables in a file that extends this one. Its fields of view are not public either, and it
+# looks through the hole. dante2() builds this definition with the Dante 1 channels
+# (dante1_channels(), without their per-channel fields). That is an assumption made in code;
+# this file does not hold such a value.
 
 schema = 1
 id = "nif_dante2"

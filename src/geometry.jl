@@ -1,13 +1,14 @@
-# Patch-structured triangle meshes and the geometric primitives targets are built from.
+# This file defines patch-structured triangle meshes and the geometric primitives that
+# targets are built from.
 #
 # A *patch* is a planar convex polygon stored as a fan of triangles; patches become the
-# radiosity elements of a `Target`. Triangle winding defines the patch's front side:
-# the front normal is (v2 - v1) × (v3 - v1).
+# radiosity elements of a `Target`. The triangle winding defines the front side of the
+# patch, with front normal (v2 - v1) × (v3 - v1).
 
 """
     Vec3
 
-A point or direction in 3D, in mm for positions: `SVector{3,Float64}`.
+A point or direction in 3D, in mm for positions, stored as `SVector{3,Float64}`.
 """
 const Vec3 = SVector{3,Float64}
 
@@ -50,8 +51,8 @@ end
 """
     add_polygon!(mesh, poly; facing = nothing)
 
-Append the convex planar polygon `poly` as one patch (fan-triangulated). If `facing` is
-a vector, the winding is reversed when needed so the patch's front normal points along
+Appends the convex planar polygon `poly` as one fan-triangulated patch. If `facing` is
+a vector, the winding is reversed when needed so the front normal of the patch points along
 `facing`.
 """
 function add_polygon!(m::Mesh, poly::AbstractVector; facing = nothing)
@@ -72,7 +73,7 @@ end
 """
     merge_meshes(meshes...)
 
-Concatenate meshes into one, preserving patch structure and order.
+Concatenates meshes into one, preserving patch structure and order.
 """
 function merge_meshes(ms::Mesh...)
     out = Mesh()
@@ -89,11 +90,10 @@ end
 """
     CurvedSurface
 
-Exact surface that a faceted component approximates: `SphereSurface`,
-`CylinderSurface`, `ConeSurface`, `TorusSurface` or `DiskSurface`. When a component
-carries one, the radiation model integrates over the true surface (points, normals and
-areas of the curved patches), while ray casting and visibility keep using the flat
-facets. On a
+The exact surface that a faceted component approximates, one of `SphereSurface`,
+`CylinderSurface`, `ConeSurface`, `TorusSurface` and `DiskSurface`. When a component has
+one, the radiation model integrates over the true surface, using the points, normals and
+areas of the curved patches. Ray casting and visibility still use the flat facets. On a
 curved concave surface the view-factor kernel stays bounded, and flat facets would
 misrepresent the exchange between nearby elements.
 """
@@ -124,12 +124,13 @@ CylinderSurface(radius::Real; origin = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) 
 """
     ConeSurface(half_angle; apex = (0, 0, 0), axis = (0, 0, 1))
 
-One nappe of a right circular cone: the points seen from `apex` at `half_angle` degrees
-(0 < θ < 90) from `axis`, at distance z tan θ from the axis a distance z along it (an
-entrance-hole cone, a conical shield, a tapered bore). As on a cylinder, points are
-projected onto it radially, keeping their height along the axis, so the chords of a
-circle about the axis (the rims of a faceted cone) land on the circle and a faceted
-frustum covers the true one exactly; facets' patches have exact areas.
+One nappe of a right circular cone. Its points are seen from `apex` at `half_angle`
+degrees (0 < θ < 90) from `axis`, at distance z tan θ from the axis a distance z along
+it. Entrance-hole cones, conical shields and tapered bores have this shape. As on a
+cylinder, points are projected onto the cone radially, keeping their height along the
+axis. The chords of a circle about the axis, such as the rims of a faceted cone,
+therefore land on the circle, and a faceted frustum covers the true one exactly. The
+facet patches have exact areas.
 """
 struct ConeSurface <: CurvedSurface
     apex::Vec3
@@ -145,21 +146,26 @@ ConeSurface(half_angle::Real; apex = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) = 
 """
     TorusSurface(major_radius, minor_radius; center = (0, 0, 0), axis = (0, 0, 1))
 
-Torus: the points at `minor_radius` r from its spine, the circle of `major_radius` R
-about `axis` through `center` (a CAD fillet: a quarter of the tube where a wall meets a
-cap). In its meridian half-plane a point inside the tube circle is projected to the
-nearest point of the circle (for a ring torus, R > r, the nearest point of the torus),
-and a point outside it, as on a cone, radially from the axis at its height, onto the
-side of the tube it is on (to the pole above or below the tube); normals point away
-from the spine. A faceted fillet's rims are chords of circles about the axis, which
-lie at the rim's height toward the axis: outside the tube for rims on the poles (where
-a quarter fillet meets a cap) and on the inner half, inside it and along the radius on
-the outer equator (where it meets a wall), so on all of these the chords land on the
-rim circle and a fillet's elements cover the torus band exactly. Elsewhere on the outer
-half (a fillet meeting a cone) the rim's chords stay off the circle by their sag, and
-the band is covered to second order in the facet size: no projection of points alone
-can do both there and keep facets near the poles second order. Facets' patches have
-exact areas under the projection.
+A torus, the points at `minor_radius` r from its spine. The spine is the circle of
+`major_radius` R about `axis` through `center`. A CAD fillet is a quarter of the tube,
+where a wall meets a cap. Points are projected in their meridian half-plane:
+
+- A point inside the tube circle is projected to the nearest point of the circle. For a
+  ring torus, with R > r, this is the nearest point of the torus.
+- A point outside the tube circle is projected as on a cone, radially from the axis at
+  its height, onto the side of the tube it is on. Beyond the top or bottom of the tube
+  it goes to the pole.
+
+Normals point away from the spine. The rims of a faceted fillet are chords of circles
+about the axis, which lie at the rim height toward the axis. The chords lie outside the
+tube for rims on the poles, where a quarter fillet meets a cap, and on the inner half.
+They lie inside the tube, along the radius, on the outer equator, where a fillet meets a
+wall. On all of these rims the chords land on the rim circle, and the elements of a
+fillet cover the torus band exactly. Elsewhere on the outer half, where a fillet meets a
+cone, the rim chords stay off the circle by their sag. The band is then covered to
+second order in the facet size. A projection of points cannot both cover those rims
+exactly and keep facets near the poles second order. The facet patches have exact
+areas under the projection.
 """
 struct TorusSurface <: CurvedSurface
     center::Vec3
@@ -177,9 +183,9 @@ TorusSurface(R::Real, r::Real; center = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0))
     DiskSurface(; center = (0, 0, 0), normal = (0, 0, 1))
 
 Plane through `center` whose elements are polar sectors about `center`, as produced by
-`annulus_mesh` and `disk_mesh`: each element's exact shape is the annular sector spanned
-by its vertices, with circular arcs where the mesh has chords. Giving a hohlraum's end
-caps and laser entrance holes this surface makes them meet a `CylinderSurface` wall
+`annulus_mesh` and `disk_mesh`: the exact shape of each element is the annular sector
+spanned by its vertices, with circular arcs where the mesh has chords. Giving the end caps
+and laser entrance holes of a hohlraum this surface makes them meet a `CylinderSurface` wall
 exactly at the rim.
 """
 struct DiskSurface <: CurvedSurface
@@ -192,9 +198,10 @@ DiskSurface(; center = (0.0, 0.0, 0.0), normal = (0.0, 0.0, 1.0)) =
 """
     surface_point(surface, p) -> (point, normal)
 
-Projection of `p` onto the surface (radially from the center or the axis; on a torus
-from the spine inside the tube, from the axis outside it) and the outward unit normal
-there (away from the center, the axis or the spine).
+Returns the projection of `p` onto the surface and the outward unit normal at that
+point. The projection is radial from the center or the axis. On a torus it is radial
+from the spine inside the tube and from the axis outside it. The normal points away from
+the center, the axis or the spine.
 """
 function surface_point(s::SphereSurface, p)
     d = normalize(p - s.center)
@@ -207,8 +214,9 @@ function surface_point(s::CylinderSurface, p)
     return s.origin + a * s.axis + s.radius * n, n
 end
 
-# A point's height z along the cone's axis from its apex, its distance ρ from the axis
-# and the unit vector toward it (any perpendicular on the axis).
+# Returns the height z of a point along the cone axis from the apex, its distance ρ from
+# the axis, and the unit vector from the axis toward it. A point on the axis gets an
+# arbitrary perpendicular.
 function _cone_coordinates(s::ConeSurface, p)
     d = p - s.apex
     z = dot(d, s.axis)
@@ -227,8 +235,8 @@ function surface_point(s::ConeSurface, p)
     return s.apex + max(z, 0.0) * (s.axis + (sα / cα) * ρ̂), cα * ρ̂ - sα * s.axis
 end
 
-# A point's offset w from the spine point in its meridian half-plane (along ρ̂, the unit
-# vector from the axis toward it) and that spine point.
+# Returns the offset w of a point from the spine point in its meridian half-plane, that
+# spine point, and ρ̂, the unit vector from the axis toward the point.
 function _torus_coordinates(s::TorusSurface, p)
     d = p - s.center
     z = dot(d, s.axis)
@@ -240,17 +248,20 @@ function _torus_coordinates(s::TorusSurface, p)
     return p - c, c, ρ̂
 end
 
-# (cos ψ, sin ψ) of the tube point that a point at (x, z) from the spine point in its
-# meridian half-plane projects to: inside the tube circle (x² + z² < r²) the nearest
-# point, radially from the spine point; on or outside it the point at the same height z
-# on its side of the spine (x' = ±√(r² − z²) with the sign of x; the pole when |z| ≥ r).
-# The two agree on the circle, so the map is continuous. A rim (a circle ψ = ψ0 about the
-# axis) has its chords at the rim's height, displaced from it toward the axis, which is
-# outside the tube for ψ0 in [π/2, 3π/2] (the poles ψ0 = ±π/2 included: a quarter
-# fillet's rim on a cap): there the chords map onto the rim. On the outer equator (ψ0 = 0)
-# the chords are inside and on the rim's radius from the spine point. Facet points
-# outside the tube lie within the chords' sag of it horizontally, so the horizontal map
-# moves them by no more than that sag: second order like the nearest point.
+# Returns (cos ψ, sin ψ) of the tube point onto which a point is projected. The point
+# lies at (x, z) from the spine point in its meridian half-plane.
+# - Inside the tube circle, x² + z² < r², the result is the nearest point, radially from
+#   the spine point.
+# - On or outside the circle, the result is the point at the same height z on the same
+#   side of the spine, x' = ±√(r² − z²) with the sign of x. When |z| ≥ r it is the pole.
+# The two maps agree on the circle, so the map is continuous. A rim is a circle ψ = ψ0
+# about the axis. Its chords lie at the rim height, displaced from it toward the axis.
+# For ψ0 in [π/2, 3π/2] that is outside the tube, and the chords map onto the rim. This
+# range includes the poles ψ0 = ±π/2, where the rim of a quarter fillet meets a cap. On
+# the outer equator, ψ0 = 0, the chords are inside the tube on the rim radius from the
+# spine point. Facet points outside the tube lie horizontally within the chord sag of it,
+# so the horizontal map moves them by at most that sag. The error is therefore second
+# order, as for the nearest point.
 function _torus_foot(r, x, z)
     l = hypot(x, z)
     l < r && return x / l, z / l
@@ -288,9 +299,9 @@ end
 """
     _sector(s::DiskSurface, vertices) -> (r0, r1, φa, φb)
 
-Polar sector spanned by an element's vertices: radii from the smallest to the largest
+Polar sector spanned by the vertices of an element: radii from the smallest to the largest
 vertex radius (zero when a vertex sits at the center), angles from the first to the last
-vertex angle, unwrapped about the element's mean direction.
+vertex angle, unwrapped about the mean direction of the element.
 """
 function _sector(s::DiskSurface, verts)
     e1, e2 = _disk_basis(s)
@@ -311,7 +322,7 @@ end
 _sector_area((r0, r1, a, b)) = (r1^2 - r0^2) / 2 * (b - a)
 _sector_point(s::DiskSurface, r, φ) = (e = _disk_basis(s); s.center + r * (cos(φ) * e[1] + sin(φ) * e[2]))
 
-# Triangles of the sector with its arcs divided into `m` straight segments each.
+# Returns the triangles of the sector, with each arc divided into `m` straight segments.
 function _sector_triangles(s::DiskSurface, (r0, r1, a, b); m = 16)
     φs = range(a, b; length = m + 1)
     tris = NTuple{3,Vec3}[]
@@ -327,7 +338,8 @@ function _sector_triangles(s::DiskSurface, (r0, r1, a, b); m = 16)
     return tris
 end
 
-# Area of the patch obtained by projecting the flat triangle (a, b, c) onto the surface.
+# Returns the area of the patch obtained by projecting the flat triangle (a, b, c) onto
+# the surface.
 # Radial projection maps a flat triangle onto a spherical triangle exactly, whose area is
 # its solid angle times R².
 function _curved_area(s::SphereSurface, a, b, c)
@@ -339,29 +351,31 @@ function _curved_area(s::SphereSurface, a, b, c)
 end
 
 # On a cylinder the projection keeps the axial coordinate z and maps each point to its
-# azimuth φ about the axis, so the patch has area R ∬ dφ dz = R |∮ z dφ| (Green's theorem
-# around the projected edges). Along a straight edge P → Q, with u(t) = u_P + tΔ the part
-# of the point perpendicular to the axis, dφ/dt = C/|u|² where C = (u_P × u_Q)·axis, and
-# z is linear in t, so
+# azimuth φ about the axis. By Green's theorem around the projected edges, the patch has
+# area R ∬ dφ dz = R |∮ z dφ|. Along a straight edge from P to Q, let u(t) = u_P + tΔ be
+# the part of the point perpendicular to the axis. Then dφ/dt = C/|u|² with
+# C = (u_P × u_Q)·axis, and z is linear in t, so
 #     ∫ z dφ = z_P Δφ + (z_Q - z_P) T,   T = ∫₀¹ t C dt / (E + Bt + At²),
 # with A = |Δ|², B = 2u_P·Δ, E = |u_P|² and Δφ the angle from u_P to u_Q. In closed form,
 # with G = |u_Q|² - |u_P|² = Δ·(u_Q + u_P) = A + B,
 #     T = Δφ/2 + [C log(1 + G/E) - G Δφ] / 2A.
-# For a chord of the circle (both ends on the surface, as in `cylinder_mesh`) G = 0 and
-# ∫ z dφ is the trapezoid (z_P + z_Q)Δφ/2: the curved patch of a triangle with its
-# vertices on the cylinder has R times the area of the straight triangle in (φ, z).
-# Writing B through G avoids the cancellation in 2u_P·Δ (terms of size R|Δ| summing to
-# |Δ|²) that would cost a short chord ε R/|Δ| of relative accuracy. The bracket still
-# loses digits ~|B|/A for short edges seen obliquely from the axis; there the poles of
-# the integrand lie far from [0, 1] and Gauss–Legendre is exact to round-off.
+# For a chord of the circle, with both ends on the surface as in `cylinder_mesh`, G = 0
+# and ∫ z dφ is the trapezoid (z_P + z_Q)Δφ/2. The curved patch of a triangle with its
+# vertices on the cylinder therefore has R times the area of the straight triangle in
+# (φ, z). Writing B through G avoids the cancellation in 2u_P·Δ, where terms of size R|Δ|
+# sum to |Δ|². That cancellation would cost a short chord ε R/|Δ| of relative accuracy.
+# The bracket still loses digits ~|B|/A for short edges seen obliquely from the axis. For
+# those edges the poles of the integrand lie far from [0, 1], and Gauss–Legendre is exact
+# within round-off.
 const _GL16 = let n = 16
     F = eigen(SymTridiagonal(zeros(n), [k / sqrt(4k^2 - 1) for k in 1:n-1]))
     (; x = (F.values .+ 1) ./ 2, w = F.vectors[1, :] .^ 2)          # on [0, 1], Σw = 1
 end
 
-# ∫ z dφ along the edge P → Q: perpendicular parts u_P, u_Q, the edge's perpendicular
-# part Δ and axial rise dz (taken from Q - P directly, which is exact for nearby points;
-# differencing u_Q - u_P would carry the ε R rounding of each projection), z_P.
+# Returns ∫ z dφ along the edge from P to Q. The arguments are the perpendicular parts
+# u_P and u_Q, the perpendicular part Δ of the edge, z_P, and the axial rise dz. Δ and dz
+# are taken from Q - P directly, which is exact for nearby points; differencing u_Q - u_P
+# would carry the ε R rounding of each projection.
 function _cylinder_edge_integral(uP, uQ, Δ, zP, dz, ax)
     C = dot(cross(uP, Δ), ax)          # = (u_P × u_Q)·axis, without its cancellation
     Δφ = atan(C, dot(uP, uQ))
@@ -388,8 +402,8 @@ function _curved_area(s::CylinderSurface, a, b, c)
     perp(d) = d - dot(d, ax) * ax
     ua, ub, uc = perp(a - s.origin), perp(b - s.origin), perp(c - s.origin)
     ab, bc, ca = b - a, c - b, a - c
-    # Σ Δφ = 0 around the patch, so z may be measured from its first vertex; that keeps
-    # a small patch far from z = 0 from canceling z Δφ terms of size |z| Δφ
+    # Σ Δφ = 0 around the patch, so z may be measured from its first vertex. This keeps a
+    # small patch far from z = 0 from canceling z Δφ terms of size |z| Δφ.
     zb, zc = dot(ab, ax), dot(c - a, ax)
     acc = _cylinder_edge_integral(ua, ub, perp(ab), 0.0, zb, ax) +
           _cylinder_edge_integral(ub, uc, perp(bc), zb, dot(bc, ax), ax) +
@@ -397,18 +411,19 @@ function _curved_area(s::CylinderSurface, a, b, c)
     return s.radius * abs(acc)
 end
 
-# On a cone the projection keeps the height z along the axis (from the apex) and the
-# azimuth φ, and the surface element is ρ dφ dz / cos θ = (sin θ / cos²θ) z dz dφ, so the
-# patch has area (sin θ / 2cos²θ) |∮ z² dφ| (Green's theorem). Along a straight edge
-# P → Q, z is linear and dφ/dt = C/|u|² as on the cylinder; ∫ z^k dφ is done by
-# Gauss–Legendre, the edge halved until the poles of 1/|u|² (t = (−B ± 2i|C|)/2A) lie
-# outside the Bernstein ellipse of parameter 5 of each piece, where 16 points converge to
-# round-off (8 beyond parameter 20; a chord short against its distance from the axis
-# needs no halving). With z = z₀ + ζ, z₀ the lowest vertex, and ∮ dφ = 0 around the patch,
-#     ∮ z² dφ = ∮ ζ² dφ + 2 z₀ ∮ ζ dφ,
-# which keeps a small patch far from the apex (a slightly tapered cone, z₀ tan θ = ρ₀ its
-# radius) from canceling terms of size z₀² Δφ; as θ → 0 the area tends to the
-# cylinder's ρ₀ ∮ ζ dφ.
+# On a cone the projection keeps the height z along the axis from the apex and the
+# azimuth φ. The surface element is ρ dφ dz / cos θ = (sin θ / cos²θ) z dz dφ, so by
+# Green's theorem the patch has area (sin θ / 2cos²θ) |∮ z² dφ|. Along a straight edge
+# from P to Q, z is linear and dφ/dt = C/|u|² as on the cylinder. ∫ z^k dφ is computed by
+# Gauss–Legendre. The edge is halved until the poles of 1/|u|², at t = (−B ± 2i|C|)/2A,
+# lie outside the Bernstein ellipse of parameter 5 of each piece. On such pieces 16 points
+# converge to rounding level, and 8 points do beyond parameter 20. A chord that is short
+# compared with its distance from the axis does not need halving. With z = z₀ + ζ, z₀ the
+# lowest vertex, and ∮ dφ = 0 around the patch,
+#     ∮ z² dφ = ∮ ζ² dφ + 2 z₀ ∮ ζ dφ.
+# This keeps a small patch far from the apex from canceling terms of size z₀² Δφ. Such a
+# patch lies on a slightly tapered cone of radius ρ₀ = z₀ tan θ. As θ → 0 the area tends
+# to the cylinder area ρ₀ ∮ ζ dφ.
 const _GL8 = let n = 8
     F = eigen(SymTridiagonal(zeros(n), [k / sqrt(4k^2 - 1) for k in 1:n-1]))
     (; x = (F.values .+ 1) ./ 2, w = F.vectors[1, :] .^ 2)
@@ -437,11 +452,12 @@ function _curved_area(s::ConeSurface, a, b, c)
     return abs(sα / (2cα^2) * acc2 + (z0 * sα / cα^2) * acc1)
 end
 
-# (∫ ζ dφ, ∫ ζ² dφ) over t ∈ [t0, t1] of the edge u(t) = u_P + tΔ, ζ(t) = ζP + dz t.
+# Returns (∫ ζ dφ, ∫ ζ² dφ) over t ∈ [t0, t1] of the edge u(t) = u_P + tΔ,
+# ζ(t) = ζP + dz t.
 function _cone_edge_integral(uP, Δ, C, ζP, dz, t0, t1, depth)
     A = dot(Δ, Δ)
     B = 2dot(uP, Δ)
-    # a pole of 1/|u|², mapped to [-1, 1], and the Bernstein ellipse through it
+    # Map a pole of 1/|u|² to [-1, 1] and find the Bernstein ellipse through it.
     x = (2 * complex(-B / 2A, abs(C) / A) - t0 - t1) / (t1 - t0)
     ρB = abs(x + sqrt(x - 1) * sqrt(x + 1))
     ρB = max(ρB, 1 / ρB)
@@ -464,17 +480,17 @@ function _cone_edge_integral(uP, Δ, C, ζP, dz, t0, t1, depth)
     return (t1 - t0) * i1, (t1 - t0) * i2
 end
 
-# On a torus the projection keeps the azimuth φ and maps the point to a tube angle ψ
-# (from the equator outward; `_torus_foot`), and the surface element is
-# r (R + r cos ψ) dψ dφ, so the patch has area r |∮ (R ψ + r sin ψ) dφ| (Green's
-# theorem). Along a straight edge dφ/dt = C/|u|² as on the cylinder and ψ is smooth
-# wherever the edge stays off the spine and the axis and on one side of the tube circle
-# (pieces are split where it crosses); ∮ is done by Gauss–Legendre
-# on pieces no longer than half the smaller of r and the edge's distance from the axis,
-# within which the nearest singularity lies outside the Bernstein ellipse of parameter
-# ~4, so 16 points converge to round-off. ψ is measured from the first vertex's (and
-# ∮ dφ = 0 around the patch), which keeps a small patch from canceling terms of size
-# R ψ Δφ.
+# On a torus the projection keeps the azimuth φ and maps the point to a tube angle ψ,
+# measured from the equator outward (`_torus_foot`). The surface element is
+# r (R + r cos ψ) dψ dφ, so by Green's theorem the patch has area
+# r |∮ (R ψ + r sin ψ) dφ|. Along a straight edge, dφ/dt = C/|u|² as on the cylinder. ψ is
+# smooth wherever the edge stays off the spine and the axis and on one side of the tube
+# circle, and pieces are split where the edge crosses it. ∮ is computed by Gauss–Legendre
+# on pieces no longer than half the smaller of r and the distance of the edge from the
+# axis. On such a piece the nearest singularity lies outside the Bernstein ellipse of
+# parameter ~4, so 16 points converge to rounding level. ψ is measured from its value at
+# the first vertex, and ∮ dφ = 0 around the patch. This keeps a small patch from
+# canceling terms of size R ψ Δφ.
 function _curved_area(s::TorusSurface, a, b, c)
     ax, R, r = s.axis, s.major_radius, s.minor_radius
     perp(d) = d - dot(d, ax) * ax
@@ -499,8 +515,8 @@ function _curved_area(s::TorusSurface, a, b, c)
     return r * abs(acc)
 end
 
-# The integrand (R ψ + r sin ψ) dφ/dt at t on the edge (ψ relative to ψa, sin ψ to sa),
-# and whether the point is inside the tube circle.
+# Returns the integrand (R ψ + r sin ψ) dφ/dt at t on the edge, with ψ relative to ψa and
+# sin ψ relative to sa, and whether the point is inside the tube circle.
 @inline function _torus_integrand(uP, Δ, C, zP, dz, R, r, ψa, sa, t)
     u = uP + t * Δ
     z = zP + t * dz
@@ -510,10 +526,11 @@ end
     return (R * ψ + r * (sψ - sa)) * C / dot(u, u), hypot(x, z) < r
 end
 
-# ∫ over t ∈ [t0, t1] by Gauss–Legendre, split where the edge crosses the tube circle
-# (the projection switches there from the nearest point to the horizontal one: a kink in
-# the integrand, which would cost Gauss–Legendre its round-off convergence). Crossings
-# between neighboring nodes are located by bisection.
+# Integrates over t ∈ [t0, t1] by Gauss–Legendre, split where the edge crosses the tube
+# circle. At a crossing the projection switches from the nearest point to the horizontal
+# one. The switch puts a kink in the integrand, which would cost Gauss–Legendre its
+# convergence to rounding level. Crossings between neighboring nodes are located by
+# bisection.
 function _torus_edge_piece(uP, Δ, C, zP, dz, R, r, ψa, sa, t0, t1)
     f(t) = _torus_integrand(uP, Δ, C, zP, dz, R, r, ψa, sa, t)
     x, w = _GL16.x, _GL16.w
@@ -554,9 +571,9 @@ end
 """
     split_mesh(mesh, keep) -> (selected, rest)
 
-Split a mesh by patch: `keep(centroid)` determines, from a patch's area-weighted
-centroid, whether the patch goes to `selected` or `rest`. Use it to cut a port or a
-window out of a surface and make it an `aperture`.
+Splits a mesh by patch. `keep(centroid)` is called with the area-weighted centroid of
+each patch, and the patch goes to `selected` when it returns true and to `rest`
+otherwise. Use it to cut a port or a window out of a surface and make it an `aperture`.
 """
 function split_mesh(m::Mesh, keep)
     a, b = Mesh(), Mesh()
@@ -588,7 +605,7 @@ end
 """
     transform(mesh, R, t)
 
-Apply the rigid map `x ↦ R*x + t` to every vertex. `R` must be a proper rotation for
+Applies the rigid map `x ↦ R*x + t` to every vertex. `R` must be a proper rotation for
 the patch orientations to be preserved.
 """
 transform(m::Mesh, R::AbstractMatrix, t = zero(Vec3)) =
@@ -597,14 +614,15 @@ transform(m::Mesh, R::AbstractMatrix, t = zero(Vec3)) =
 """
     translate(mesh_or_component, t)
 
-Copy shifted by the vector `t` (mm).
+Returns a copy shifted by the vector `t` (mm).
 """
 translate(m::Mesh, t) = Mesh([v + Vec3(t) for v in m.vertices], copy(m.triangles), copy(m.patches))
 
 """
     rotation_to(n)
 
-Proper rotation matrix taking `ẑ` to the unit vector along `n` (minimal rotation).
+Returns the proper rotation matrix that takes `ẑ` to the unit vector along `n` by the
+minimal rotation.
 """
 function rotation_to(n)
     z = normalize(Vec3(n))
@@ -622,18 +640,18 @@ function rotation_to(n)
 end
 
 # ---------------------------------------------------------------------------------------
-# Primitives (all in local coordinates; place them with `transform`/`translate`)
+# Primitives are built in local coordinates; place them with `transform` or `translate`.
 # ---------------------------------------------------------------------------------------
 
 """
     conforming_grid(a, b, n, breaks; periodic = false) -> Vector{Float64}
 
-Grid lines from `a` to `b` with about `n` cells that include every break line in
-`breaks`: each interval between consecutive breaks is divided uniformly into
-`max(1, round(len / h))` cells, `h = (b - a)/n`. Breaks closer than `1e-9 (b - a)` are
-merged. With `periodic` (an azimuth, `b - a` one period), breaks are wrapped into the
-period and the grid runs from the first break to the first break plus the period, so
-the end points `a`, `b` are not grid lines themselves. Without breaks, use
+Returns grid lines from `a` to `b` with about `n` cells that include every break line in
+`breaks`. Each interval between consecutive breaks is divided uniformly into
+`max(1, round(len / h))` cells, with `h = (b - a)/n`. Breaks closer than `1e-9 (b - a)` are
+merged. `periodic` is for an azimuth with `b - a` one period. The breaks are then wrapped
+into the period, and the grid extends from the first break to the first break plus the
+period, so the end points `a` and `b` are not grid lines themselves. Without breaks, use
 `range(a, b; length = n + 1)`.
 """
 function conforming_grid(a, b, n::Integer, breaks; periodic::Bool = false)
@@ -663,14 +681,14 @@ end
     cylinder_mesh(radius, z0, z1; nz, nphi, inward = true, phi0 = 0.0, zbreaks = (),
                   phibreaks = ())
 
-Open cylinder of the given radius about the z axis spanning `z0 ≤ z ≤ z1`, with `nz`
-axial by `nphi` azimuthal quadrilateral patches. Front faces point toward the axis
-when `inward` (a hohlraum wall), away from it otherwise.
+Builds an open cylinder of the given radius about the z axis spanning `z0 ≤ z ≤ z1`,
+with `nz` axial by `nphi` azimuthal quadrilateral patches. Front faces point toward the
+axis when `inward`, as for a hohlraum wall, and away from it otherwise.
 
-`zbreaks` (mm) and `phibreaks` (radians) are lines the mesh must contain, e.g. the edges
-of a window cut into the wall: the grid is then uniform between consecutive breaks with
-about the default spacing (`conforming_grid`), so a region bounded by break lines is
-tiled exactly by whole patches. Without breaks the grid is uniform from `phi0`.
+`zbreaks` (mm) and `phibreaks` (radians) are lines that the mesh must contain, such as
+the edges of a window cut into the wall. The grid is then uniform between consecutive
+breaks with about the default spacing (`conforming_grid`), so whole patches tile a
+region bounded by break lines exactly. Without breaks the grid is uniform from `phi0`.
 """
 function cylinder_mesh(radius, z0, z1; nz::Integer, nphi::Integer, inward::Bool = true,
                        phi0 = 0.0, zbreaks = (), phibreaks = ())
@@ -695,11 +713,11 @@ end
 """
     annulus_mesh(r_inner, r_outer, z; nr, nphi, up = true, phi0 = 0.0, phibreaks = ())
 
-Flat annulus (a disk when `r_inner == 0`) in the plane `z`, with `nr` radial by `nphi`
-azimuthal patches. Front faces point along `+ẑ` when `up`, `-ẑ` otherwise. Rings are
+Builds a flat annulus in the plane `z`, or a disk when `r_inner == 0`, with `nr` radial by
+`nphi` azimuthal patches. Front faces point along `+ẑ` when `up`, `-ẑ` otherwise. Rings are
 equal-area so patch areas are uniform. `phibreaks` (radians) are azimuths the mesh must
-contain, as in `cylinder_mesh`; giving both the same `nphi` and `phibreaks` makes an
-end cap meet a wall at shared vertices.
+contain, as in `cylinder_mesh`; giving both the same `nphi` and `phibreaks` makes an end cap
+meet a wall at shared vertices.
 """
 function annulus_mesh(r_inner, r_outer, z; nr::Integer, nphi::Integer, up::Bool = true,
                       phi0 = 0.0, phibreaks = ())
@@ -726,7 +744,7 @@ end
 """
     disk_mesh(radius, z; nr, nphi, up = true)
 
-Flat disk in the plane `z`; an `annulus_mesh` with zero inner radius.
+Builds a flat disk in the plane `z`, an `annulus_mesh` with zero inner radius.
 """
 disk_mesh(radius, z; nr::Integer, nphi::Integer, up::Bool = true) =
     annulus_mesh(0.0, radius, z; nr, nphi, up)
@@ -734,8 +752,8 @@ disk_mesh(radius, z; nr::Integer, nphi::Integer, up::Bool = true) =
 """
     sphere_mesh(radius; ntheta, nphi, outward = true)
 
-Latitude–longitude sphere about the origin with `ntheta` bands uniform in `cos θ`, so
-all `ntheta × nphi` patches have equal area. Polar bands are triangle fans.
+Builds a latitude–longitude sphere about the origin with `ntheta` bands uniform in
+`cos θ`, so all `ntheta × nphi` patches have equal area. Polar bands are triangle fans.
 """
 function sphere_mesh(radius; ntheta::Integer, nphi::Integer, outward::Bool = true)
     m = Mesh()
@@ -761,12 +779,12 @@ end
 """
     cubed_sphere_mesh(radius; n, outward = true)
 
-Sphere about the origin from the six faces of a cube, each divided into `n × n`
+Builds a sphere about the origin from the six faces of a cube, each divided into `n × n`
 equiangular cells projected onto the sphere. The four corners of a projected cell are
-not coplanar, so each cell is split into two triangular patches along alternating
-diagonals chosen to keep the faceted sphere convex (`12n²` planar patches). Unlike a latitude–longitude mesh it has no poles and
-no slivers, which suits radiation problems where every part of the sphere matters
-equally.
+not coplanar. Each cell is therefore split into two triangular patches along alternating
+diagonals, chosen to keep the faceted sphere convex, for `12n²` planar patches. The mesh
+has no poles and no slivers, which suits radiation problems where every part of the
+sphere matters equally.
 """
 function cubed_sphere_mesh(radius; n::Integer, outward::Bool = true)
     m = Mesh()
@@ -778,9 +796,9 @@ function cubed_sphere_mesh(radius; n::Integer, outward::Bool = true)
         pt(a, b) = radius * normalize(sgn * ax + tan(a) * u + tan(b) * v)
         for i in 1:n, j in 1:n
             p = [pt(ts[i], ts[j]), pt(ts[i+1], ts[j]), pt(ts[i+1], ts[j+1]), pt(ts[i], ts[j+1])]
-            # take the diagonal that keeps the faceted sphere convex: the fourth corner
-            # must lie inside the plane of the other three (a reflex fold would hide
-            # neighboring elements from each other)
+            # Take the diagonal that keeps the faceted sphere convex. The fourth corner must
+            # lie inside the plane of the other three, because a reflex fold would hide
+            # neighboring elements from each other.
             n123 = cross(p[2] - p[1], p[3] - p[1])
             n123 = dot(n123, p[1]) < 0 ? -n123 : n123          # outward
             halves = dot(n123, p[4] - p[1]) <= 0 ? ((p[1], p[2], p[3]), (p[1], p[3], p[4])) :
@@ -797,30 +815,32 @@ end
 """
     icosphere_mesh(radius; n, outward = true)
 
-Geodesic sphere about the origin: each face of an icosahedron (in its standard frame,
-vertices at the cyclic permutations of (0, ±1, ±ϕ): mirror-symmetric in x, y and z)
-divided into `n × n` triangles whose vertices are projected onto the sphere (`20n²`
-triangular patches). The triangles are nearly equilateral everywhere (edges within
-about ±20% of `1.107 radius / n`), with no poles and no slivers; on a capsule they
-converge the flux's high Legendre moments (P4) with far fewer elements than
-`sphere_mesh`, whose polar cells are slivers. `icosphere_frequency` gives `n` for an
+Builds a geodesic sphere about the origin. Each face of an icosahedron is divided into
+`n × n` triangles whose vertices are projected onto the sphere, for `20n²` triangular
+patches. The icosahedron is in its standard frame, with vertices at the cyclic
+permutations of (0, ±1, ±ϕ), and is mirror-symmetric in x, y and z. The triangles are
+nearly equilateral everywhere, with edges within about ±20% of `1.107 radius / n`, and
+the mesh has no poles and no slivers. On a capsule the high Legendre moments (P4) of the
+flux converge with far fewer elements than on `sphere_mesh`, whose polar cells are
+slivers. `icosphere_frequency` gives `n` for an
 element size.
 """
 function icosphere_mesh(radius; n::Integer, outward::Bool = true)
     n >= 1 || throw(ArgumentError("the subdivision n must be at least 1"))
     m = Mesh()
     ϕ = (1 + sqrt(5)) / 2
-    # icosahedron in its standard frame (cyclic permutations of (0, ±1, ±ϕ)): its 2-fold
-    # axes and mirror planes are x, y and z, the symmetries of a hohlraum with a NIF-like
-    # (D2) beam set, so the mesh adds no modes the beams and wall do not (a vertex on z,
-    # a 5-fold axis, leaked odd-m modes at ~6e-5 of the drive)
+    # Place the icosahedron in its standard frame, with vertices at the cyclic
+    # permutations of (0, ±1, ±ϕ). Its 2-fold axes and mirror planes are x, y and z, the
+    # symmetries of a hohlraum with a NIF-like (D2) beam set. The mesh therefore does not
+    # add modes beyond those of the beams and wall. With a vertex on z, which is a 5-fold
+    # axis, odd-m modes leaked at ~6e-5 of the drive.
     V = [normalize(v) for s1 in (-1, 1) for s2 in (-1, 1)
          for v in (Vec3(0, s1, s2 * ϕ), Vec3(s1, s2 * ϕ, 0), Vec3(s2 * ϕ, 0, s1))]
     e = minimum(norm(V[i] - V[j]) for i in 1:12 for j in i+1:12)
     faces = [(i, j, k) for i in 1:12 for j in i+1:12 for k in j+1:12
              if all(d -> isapprox(d, e; rtol = 1e-9), (norm(V[i] - V[j]), norm(V[j] - V[k]), norm(V[i] - V[k])))]
-    # A point from integer barycentric weights, summed in vertex-index order so points on
-    # shared edges come out bitwise identical from either face.
+    # Build a point from integer barycentric weights, summed in vertex-index order so that
+    # points on shared edges come out bitwise identical from either face.
     pt(i, j, k, a, b, c) = radius * normalize(a * V[i] + b * V[j] + c * V[k])
     for (i, j, k) in faces
         P(a, b) = pt(i, j, k, n - a - b, a, b)
@@ -839,8 +859,8 @@ end
 """
     icosphere_frequency(radius, h) -> n
 
-Subdivision of `icosphere_mesh` for triangles with sides of about `h` (mm): an
-icosahedron edge spans 1.107 radians of arc.
+Returns the subdivision of `icosphere_mesh` for triangles with sides of about `h` (mm).
+An icosahedron edge spans 1.107 radians of arc.
 """
 function icosphere_frequency(r, h)
     h > 0 || throw(ArgumentError("the element size must be positive"))
@@ -850,8 +870,8 @@ end
 """
     rectangle_mesh(width, height; nu, nv)
 
-Rectangle `|x| ≤ width/2, |y| ≤ height/2` in the plane `z = 0`, front face along `+ẑ`,
-divided into `nu × nv` patches.
+Builds the rectangle `|x| ≤ width/2, |y| ≤ height/2` in the plane `z = 0`, with its front
+face along `+ẑ`, divided into `nu × nv` patches.
 """
 function rectangle_mesh(width, height; nu::Integer, nv::Integer)
     m = Mesh()
@@ -868,8 +888,8 @@ end
 """
     frustum_mesh(r0, z0, r1, z1; nz, nphi, inward = true)
 
-Conical frustum (a cone when one radius is zero) about the z axis from radius `r0` at
-`z0` to `r1` at `z1`. Useful for shields, cones and tapered hohlraum sections.
+Builds a conical frustum about the z axis from radius `r0` at `z0` to `r1` at `z1`, or a
+cone when one radius is zero. It is used for shields, cones and tapered hohlraum sections.
 """
 function frustum_mesh(r0, z0, r1, z1; nz::Integer, nphi::Integer, inward::Bool = true)
     m = Mesh()
@@ -885,7 +905,7 @@ function frustum_mesh(r0, z0, r1, z1; nz::Integer, nphi::Integer, inward::Bool =
         rb > 0 && append!(p, [Vec3(rb * cos(b), rb * sin(b), zb), Vec3(rb * cos(a), rb * sin(a), zb)])
         rb == 0 && push!(p, Vec3(0, 0, zb))
         φc = (a + b) / 2
-        # outward surface normal of the cone wall
+        # Compute the outward surface normal of the cone wall.
         out = normalize(Vec3((z1 - z0) * cos(φc), (z1 - z0) * sin(φc), -(r1 - r0)))
         add_polygon!(m, p; facing = inward ? -out : out)
     end

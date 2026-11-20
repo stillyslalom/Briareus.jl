@@ -1,8 +1,9 @@
-# The time panel with unconverted (1ω, 2ω) light: the drive history and the retune take
-# the drive's ratios on the beams whose light takes part, as the core's `drive_history`
-# and `retune_drive` take `unconverted`; without it they are bitwise the 3ω ones.
-# The unconverted light lands ≥ 4.8 mm off the 3ω axis (`nif_unconverted`), outside a
-# 2.9 mm hohlraum: a mock hohlraum 6 mm in radius with 5.5 mm entrance holes takes some in.
+# This file tests the time panel with unconverted (1ω, 2ω) light. The drive history and the
+# retune take the ratios of the drive on the beams whose light takes part, as
+# `drive_history` and `retune_drive` in the core take `unconverted`. Without the light they
+# are identical to the 3ω ones. The unconverted light is deposited ≥ 4.8 mm off the 3ω axis
+# (`nif_unconverted`), outside a 2.9 mm hohlraum, so a mock hohlraum 6 mm in radius with 5.5
+# mm entrance holes takes some in.
 
 # A session on the wide mock hohlraum.
 function _wide_hohlraum_session()
@@ -12,7 +13,8 @@ function _wide_hohlraum_session()
     return s
 end
 
-# Equal to 1e-12 relative: numbers, arrays, or Dicts of them with the same keys.
+# Whether numbers, arrays, or Dicts of them with the same keys are equal to 1e-12
+# relative.
 _near(a, b) = a isa AbstractDict ? keys(a) == keys(b) && all(isapprox(a[k], b[k]; rtol = 1e-12) for k in keys(a)) :
               isapprox(a, b; rtol = 1e-12)
 
@@ -47,7 +49,8 @@ _history_fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, 
     core(; kw...) = drive_history(s.model, s.deposition, at, h0.time; observe, wall, lmax = 4, kw...)
     fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, h.laser, h.source, h.absorbed)
 
-    # without unconverted light, bitwise the 3ω history (the core's without the keyword)
+    # Without unconverted light the history is identical to the 3ω history, the core
+    # history without the keyword.
     ref = core()
     @test isequal(fields(h0.history), fields(ref))
     # a ratio with no beam's 1ω or 2ω light taking part: still the 3ω history
@@ -72,7 +75,8 @@ _history_fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, 
     u = dr.result[].unconverted                                 # some of it absorbed (not vacuous)
     @test u.omega1.absorbed > 0 && u.omega2.absorbed > 0
     @test all(h1.Tr .> h0.Tr)                                   # the unconverted light adds drive
-    # the energy chart: each color's delivered energy, part of the laser's
+    # The energy chart shows the delivered energy of each color as part of the laser
+    # energy.
     E = Dict(x.name => x.values for x in h1.energy)
     upto(p) = [sum((h1.time[k+1] - h1.time[k]) * (p[k] + p[k+1]) / 2 for k in 1:j-1; init = 0.0)
                for j in eachindex(h1.time)]
@@ -103,7 +107,8 @@ _history_fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, 
     uk = core(; unconverted = (omega1 = keyed, omega2 = 0.02), by = :beam, colors = nif_unconverted())
     @test all(near.(fields(h2.history), fields(uk)))
     @test all(near(h2.history.unconverted.delivered[c], uk.unconverted.delivered[c]) for c in (:omega1, :omega2))
-    # (the first beam's 1ω light is left out: less 1ω delivered than on every beam, the same 2ω)
+    # The 1ω light of the first beam is left out, so less 1ω is delivered than on every
+    # beam and the 2ω is the same.
     @test all(0 .< uk.unconverted.delivered[:omega1] .< uc.unconverted.delivered[:omega1]) &&
           near(uk.unconverted.delivered[:omega2], uc.unconverted.delivered[:omega2])
 end
@@ -154,8 +159,8 @@ end
     sc = s.drive.scenario[]
     @test r.reference.unconverted !== nothing && r.after.unconverted !== nothing
 
-    # the retuned drive: a core history of the kept beams on the new pulses, with the
-    # same unconverted light
+    # The retuned drive is checked against a core history of the kept beams on the new
+    # pulses, with the same unconverted light.
     back = r.pulses
     uc = (; unconverted = (omega1 = 0.05, omega2 = 0.02), colors = nif_unconverted())
     after = drive_history(sc.model, sc.deposition[keep], τ -> with_pulses(kept, back, τ; by = :quad), r.after.time;
@@ -241,13 +246,15 @@ end
     @test h1.time == filter(fires, src.times)
     @test h2.time == sort(unique([collect(-4.0:0.5:2.5); 3.0; h1.time]))
 
-    # the drive history: the core's with the same ratios and one prepulse for every beam
+    # The drive history equals the core history with the same ratios and one prepulse for
+    # every beam.
     pre = PulseShape([-4.0, 2.5], [P, P])
     uc = (; unconverted = (omega1 = 0.05, omega2 = 0.02), colors = nif_unconverted())
     ref = _core_history(sess, h2.time; uc..., prepulse = (omega1 = pre,))
     @test all(_near.(_history_fields(h2.history), _history_fields(ref)))
     @test all(_near(h2.history.unconverted.delivered[c], ref.unconverted.delivered[c]) for c in (:omega1, :omega2))
-    # the steps before the main pulse: the prepulse's light alone, which gives a Tr
+    # The steps before the main pulse have only the light of the prepulse, which gives a
+    # Tr.
     early = h2.time .< 0
     @test count(early) == 8 && _near(h2.history.setup[early], ref.unconverted.delivered[:omega1][early]) &&
           all(>(0), h2.Tr[early])
@@ -290,15 +297,16 @@ end
           isapprox(c.time, -4.0; atol = 1e-12)
     rows = irradiance_checks(sess)
     @test length(rows) == 1 && rows[1].check === :specular && !rows[1].pass && occursin("-4.00 ns", rows[1].text)
-    # a threshold above every peak: the checks follow from the histories kept
+    # With a threshold above every peak, the checks follow from the histories kept.
     set_irradiance_threshold!(tm, 2 * maximum(x.peak for x in sc))
     @test tm.irradiance[].history === r.history && all(x -> x.specular, tm.irradiance[].specular) &&
           irradiance_checks(sess)[1].pass && isinf(tm.irradiance[].crossing.time)
     @test_throws ArgumentError set_irradiance_threshold!(tm, 0.0)
     set_irradiance_threshold!(tm, thr)
 
-    # the chart: the threshold, and the hohlraum's peak at each time (the largest 1ω + 2ω
-    # irradiance on its elements and back sides, from the core's history), floored for the log axis
+    # The chart shows the threshold and the peak of the hohlraum at each time, floored for
+    # the log axis. The peak is the largest 1ω + 2ω irradiance on its elements and back
+    # sides, from the core history.
     ch = time_chart(sess, :irradiance)
     @test ch.scale === :log && isempty(ch.empty)
     line = only(filter(x -> startswith(x.label, "threshold"), ch.left.series))
@@ -347,8 +355,8 @@ end
     p = r.preplasma
     @test p.preplasma == pc.preplasma && isapprox(p.onset, pc.onset; rtol = 1e-12) &&
           isapprox(p.arrival, pc.arrival; rtol = 1e-12)
-    # the prepulse reaches the threshold on the foil at its start; the 3ω light, zero
-    # before the shape's first knot, not before it
+    # The prepulse reaches the threshold on the foil at its start. The 3ω light, zero
+    # before the first knot of the shape, does not reach it before that knot.
     @test pc.preplasma && isapprox(pc.onset, -4.0; atol = 1e-12) && pc.arrival >= prevfloat(shape.t[1]) &&
           pc.lead ≈ pc.arrival - pc.onset
     rows = irradiance_checks(f)
@@ -376,10 +384,11 @@ end
 end
 
 @testset "time panel: a foil's retune with unconverted light and a prepulse (no GL)" begin
-    # five NIF quads from the foil's front side: three aimed at its center (their 3ω on
-    # the spot), two 10 mm off along their port's φ̂ (their 3ω misses the foil, their 1ω
-    # and 2ω squares, ≥ 4.8 and 2.9 mm off the axis, cover it); the last (off-axis)
-    # quad down: the 3ω drive keeps its powers, the 1ω and 2ω light lost is made up
+    # Five NIF quads come from the front side of the foil. Three aim at its center, with
+    # their 3ω on the spot. Two aim 10 mm off along the φ̂ of their port, so their 3ω misses
+    # the foil while their 1ω and 2ω squares, ≥ 4.8 and 2.9 mm off the axis, cover it. With
+    # the last, off-axis quad down, the 3ω drive keeps its powers, and the lost 1ω and 2ω
+    # light is made up.
     f = DesignSession(starter = :foil, resolution = :coarse, preset = :nif_quads)
     V = Briareus.Vec3
     t0 = f.target.target[]
@@ -436,9 +445,9 @@ end
     q = FoilIrradiance(foil; radius = f.drive.spot_radius[])
     lim = (k, τ) -> (0.0, 3.0 * ps(τ))
     kw = (; by = :group, limits = lim, unconverted = ratio, prepulse = (omega1 = pre,), colors = nif_unconverted())
-    # the core's retune on the GUI's reference: the GUI's powers to 1e-12; on the
-    # reference built here, to 1e-10 (measured 3e-12: the shape cannot be restored, the
-    # residual's minimum is shallow along one direction)
+    # The core retune on the GUI reference gives the GUI powers to 1e-12. On the reference
+    # built in this test it agrees to 1e-10 (measured 3e-12), since the shape cannot be
+    # restored and the minimum of the residual is shallow along one direction.
     core = retune_drive(q, sc.deposition[keep], beams[keep], (; time = times, deposition = gui); kw...)
     gp = [r.pulses[k](τ) for k in core.keys, τ in times]
     @test isapprox(gp, core.power; rtol = 1e-12)
@@ -448,8 +457,8 @@ end
     # powers), and the prepulse lights the spot before the 3ω pulse
     @test isapprox(r.after.mean, 1e14 .* core.level; rtol = 1e-12)
     @test all(>(0), r.reference.mean[times .< 0])
-    # and it matters: without it the dropped quad costs no 3ω light and the powers stay
-    # the reference's; with it they make up its 1ω and 2ω light (measured 4.6e-5 more)
+    # The light matters. Without it the dropped quad costs no 3ω light and the powers stay
+    # at the reference; with it they make up its 1ω and 2ω light (measured 4.6e-5 more).
     v3 = retune_pulses(sc, beams, f.beams.enabled[], pul; by = :group, cap = 3.0, foil, spot_radius = f.drive.spot_radius[])
     @test all(isapprox(v3.pulses[k](1.0), 0.5; rtol = 1e-12) for k in core.keys)
     @test all(r.pulses[k](1.0) / 0.5 - 1 > 1e-6 for k in core.keys)

@@ -44,9 +44,9 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         @test_throws ArgumentError MBandEmission(fraction = [0.5, 1.5])
     end
 
-    # a coarse hohlraum: constant albedos (cached LU path) and the Lindl wall loss
-    # (iterated albedos: the GMRES path). The walls differ in material only, so they
-    # share the 192-beam deposition operator and the view factors.
+    # A coarse hohlraum is run with constant albedos, on the cached LU path, and with the
+    # Lindl wall loss, whose iterated albedos take the GMRES path. The walls differ only in
+    # material, so they share the 192-beam deposition operator and the view factors.
     coarse(; kw...) = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.6, capsule_radius = 0.9,
                                h = 0.9, capsule_h = 0.45, kw...)
     beams = hybride_mock_pointing(nif_beams(power = 2.0))
@@ -96,7 +96,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             lit = findall(>(0), sol.laser)
             dark = findall(iszero, sol.laser)
             @test !isempty(lit) && !isempty(dark)
-            # the earlier rule: everything at the brightness temperature of B
+            # The earlier rule puts everything at the brightness temperature of B.
             sb = spectral_solve(sol; edges = E, mband = mb, spot = :brightness)
             TB = radiation_temperature.(sol.B)
             @test sb.temperature == sb.spot_temperature == TB
@@ -149,7 +149,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             @test s.H ≈ m.F * s.B
             # a NaN group albedo (computed, say) throws: `nothing` is the gray albedo
             @test_throws ArgumentError spectral_solve(sol; edges = E, albedo = Dict(:wall => [NaN, 0.7, 0.3, 0.1]))
-            # thermalized: the coupled system of all groups, dense
+            # The thermalized solve is the dense coupled system of all groups.
             s = spectral_solve(sol; edges = E, albedo = a, temperature = T, thermalize = true,
                                mband = MBandEmission())
             b = reduce(hcat, [planck_fractions(T[e], E) for e in 1:n])'
@@ -186,7 +186,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             PM = mband_power(mb, op, beams)
             wall_e = elements(t, :wall)
             @test all(PM[cap] .== 0) && sum(PM) > 0
-            # the per-group sum: each group deposited alone
+            # The per-group sum deposits each group separately.
             P = zeros(n)
             for (g, f) in mb.groups
                 d = deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in beams])
@@ -205,7 +205,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
 
         wall.albedo isa WallLossAlbedo && continue
         @testset "drive history M-band" begin
-            # outer → inner transfer growing in time: the cone balance changes
+            # With a transfer from outer to inner cones growing in time, the cone balance
+            # changes.
             cbet = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), (Δλ, τ) -> 0.15τ)
             pulse = PulseShape([0.0, 1.0, 5.0], [0.0, 2.0, 2.0])
             beams_at = τ -> with_pulses(beams, pulse, τ)
@@ -214,7 +215,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             h0 = drive_history(m, op, beams_at, times; lpi = cbet, mband = nothing)
             h = drive_history(m, op, beams_at, times; lpi = cbet)          # MBandSplit() by default
             @test h0.mband === nothing && h0.mband_moments === nothing
-            # the gray history is bitwise untouched
+            # The gray history is unchanged.
             @test all(getfield(h, k) == getfield(h0, k) for k in keys(h0) if !(k in (:mband, :mband_moments)))
             # the default split is the calibrated pairing, spelled out (α_M as a number and
             # as the group albedos it stands for)
@@ -234,8 +235,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                                 mband = MBandSplit(MBandEmission(groups = Dict(:none => 0.2)))).mband === nothing
             @test drive_history(m, op, beams_at, times[1:1];
                                 mband = MBandSplit(nif_mband(materials = (:Pt,)))).mband_moments === nothing
-            # reference: a static solve at each time and the M-band summed cone by cone by
-            # hand from the effective (post-transfer) beams
+            # The reference is a static solve at each time, with the M-band summed cone by
+            # cone by hand from the effective (post-transfer) beams.
             au = vcat(elements(t, :wall), elements(t, :cap_top), elements(t, :cap_bottom))
             ref = map(times) do τ
                 eff = apply_lpi(cbet, beams_at(τ), τ)
@@ -266,8 +267,9 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                 Pz[au] .+= f .* d.element[au]
             end
             @test mband_power(mb, op, eff; lpi = cbet, time = 3.0) == Pz
-            # the split pass, with and without an absorption weight: the deposition is
-            # `deposit`'s and each column the group deposited alone, exactly
+            # In the split pass, with and without an absorption weight, the deposition
+            # equals that of `deposit` exactly, and each column equals the deposition of its
+            # group by itself.
             for η in (nothing, 0.6)
                 key, EG = Briareus._mband_split(mb, t, eff)
                 d = Briareus._deposit(op, eff, (key, EG), η)
@@ -277,7 +279,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                 @test d.element == d0.element && d.backside == d0.backside && d.per_beam == d0.per_beam
                 @test all(EG[:, k] == alone[k] for k in eachindex(alone))
             end
-            # the split's keywords belong to the MBandSplit; `spectral` alone has no effect
+            # The keywords of the split belong to the MBandSplit; `spectral` by itself has no
+            # effect.
             @test_throws ArgumentError drive_history(m, op, beams_at, times; spectral = (; edges = [0.0, Inf]))
             @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = nothing, spectral = (; spot = :wall))
             @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = mb)
@@ -288,7 +291,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         t = coarse()
         m = RadiationModel(t; F = F0, closed = true)
         n = nelements(t)
-        # a blackbody cavity at T0: the hole radiates σT0⁴ over its area
+        # In a blackbody cavity at T0, the hole radiates σT0⁴ over its area.
         T0 = 250.0
         B = [c.kind === :aperture ? 0.0 : SIGMA_SB * T0^4 for c in t.components[t.elem_comp]]
         z = zeros(n)
@@ -298,7 +301,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                      for p in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
                      if abs(hypot(p[1], p[2]) - 1.6) < 1e-9)
         Apoly = length(rim) / 2 * 1.6^2 * sin(2π / length(rim))
-        # Dante 1 over its 60 mm field and through the hole alone
+        # Dante 1 is checked over its 60 mm field and through only the hole.
         for v in (dante1(), dante1(field_of_view = nothing), dante2(), DanteView(143, 274; pixels = 200))
             r = dante(v, sol)
             hole = v.through === :leh_bottom ? elements(t, :leh_bottom) : elements(t, :leh_top)
@@ -321,12 +324,12 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             r = dante(dante1(), RadiationSolution(RadiationModel(tl; F = zeros(nl, nl)), zl, zl, Bl, zl, zl, zl, τ, 0.0))
             Ao, Al = (sum(tl.elem_area[elements(tl, c)]) for c in (:leh_bottom, :leh_bottom_lip))
             open = (Ao + f * Al) / (Ao + Al)
-            # (the view through the hole reads 3.7e-3 off at f = 0 at 400 and at 1600
-            # pixels; the 60 mm field's 400 pixels add 4e-4)
+            # The view through the hole is 3.7e-3 off at f = 0 at 400 and at 1600 pixels,
+            # and the 400 pixels of the 60 mm field add 4e-4.
             @test r.Tr ≈ T0 * open^0.25 rtol = 5e-3
             f > 0 && @test r.Tr_open ≈ r.Tr / open^0.25 rtol = 1e-12
         end
-        # spectrum: a Planckian's channel signals unfold to its temperature
+        # The channel signals of a Planckian spectrum unfold to its temperature.
         E = spectral_edges()
         ch = dante1_channels()
         W = _channel_matrix(ch, E)
@@ -338,10 +341,10 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
     end
 
     @testset "Dante field of view" begin
-        # the blackbody cavity of "synthetic Dante": Dante 1's 60 mm field sees the cavity
-        # only through the hole (the outside of every one-sided surface is dark), so it
-        # reads what the view through the hole reads, to pixel resolution: at its default
-        # 400 pixels across the target, and at 800
+        # In the blackbody cavity of "synthetic Dante", the 60 mm field of Dante 1 sees the
+        # cavity only through the hole, since the outside of every one-sided surface is
+        # dark. It therefore records what the view through the hole records, to pixel
+        # resolution, at its default 400 pixels across the target and at 800.
         t = coarse()
         n = nelements(t)
         T0 = 250.0
@@ -388,7 +391,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                       sol_of(tt))
             @test r.Tr ≈ Tb rtol = 1e-12
         end
-        # a field narrower than the disk: the field's disk is what is seen
+        # With a field narrower than the disk, only the disk of the field is seen.
         D = 2.0
         clip = dante(DanteView(0, 0; through = nothing, field_of_view = D, pixels = 1000), sol_of(lone))
         @test clip.intensity ≈ Bd / π * π * (D / 2)^2 rtol = 2e-3

@@ -77,8 +77,8 @@ LLNL-CONF-742209, OSTI 1788342, full text) — **H**
     plasma (5.45 ns with 1.5× picket).
 - Core P2 over the six single-parameter shots ranges from **−18 to +21 µm**, with +5.6 µm
   at basecamp. It tracks the time-integrated thin-wall signal.
-- Inner-beam attenuation depends on the line-integrated density along the beam, not on
-  bubble displacement alone.
+- Inner-beam attenuation depends on the line-integrated density along the beam, not only on
+  bubble displacement.
   - 0.15 mg/cc moves the bubble further yet gives a 2× brighter thin-wall signal.
   - A 1.2× larger capsule collides about 400 ps earlier.
 
@@ -101,7 +101,7 @@ LLNL-CONF-742209, OSTI 1788342, full text) — **H**
     the exact form).
   - Power-law fit (x_bub/(R_hohl − R_i))^2.5, within 15% for 0.3 < f < 1.
 - Absorbed fraction (Eq. 6): CF_bub/CF = f[1 − exp(−G Z_Au ρ_bub² Δz (x_bub/1 mm)^0.5/T_e^1.5)].
-  - Chord length 1.1 → 1.5 mm.
+  - The chord length goes from 1.1 to 1.5 mm.
   - Bubble density ρ = S ρ₀ × (R_hohl/R_bub)^k, with S ≈ 3 from Rankine–Hugoniot at
     v_bub/c_s ≈ 345/140. The exponent k is illegible in the extracted text (**L**).
   - Computed bubble transparency at 5.5 ns: **29% (0.3 mg/cc) and 54% (0.15 mg/cc)**.
@@ -184,7 +184,7 @@ LLNL-CONF-742209, OSTI 1788342, full text) — **H**
   - Albedos come from a quasi-1D wall calculation.
   - LEH closure comes from SXI images.
 - Static model: **hohlraum, LEH and capsule radii at 85% of initial**, albedo 0.8 (Au)
-  and 0.3 (ablator), 3ω→x-ray conversion 0.9.
+  and 0.3 (ablator), 3ω-to-x-ray conversion 0.9.
 - Static against dynamic: mode 1 differs by 0.70% (mean absolute, all times) but **0.14% at
   peak**. The hot-spot velocity error is < 5% (38.7 vs 40.5 km/s).
 - Windows are modeled as α = 0.3 patches.
@@ -213,8 +213,8 @@ LLNL-CONF-742209, OSTI 1788342, full text) — **H**
   - Foot P2/P0 is held within ±1%. At constant 33% CF in the peak, P2/P0 swings from
     negative (inners reach the waist) to positive (they no longer propagate).
   - CBET shifts the swing negative "and does not significantly change the slope".
-  - Swing specification: ±4 µm in-flight→hot spot. Matching hot-spot P2 needed a **peak-CF
-    multiplier of 1.065**.
+  - Swing specification: ±4 µm from in-flight to hot spot. Matching hot-spot P2 needed a
+    **peak-CF multiplier of 1.065**.
   - "Hohlraum modeling is not currently predictive for the late-time P2", attributed to LEH
     closure, bubble plasma conditions or CBET.
   - In-flight P2 at P0 = 200 µm was within error bars; the numerical value is garbled in
@@ -236,7 +236,7 @@ LLNL-CONF-742209, OSTI 1788342, full text) — **H**
 
 - **IRAD3D** (arXiv 1606.00934, 1703.01579): the abstracts read show no spot motion or wall
   motion. The research-notes entry claiming "spot motion" should be downgraded to **L**
-  unless a full text says otherwise.
+  unless a full text states otherwise.
 - **OSTI 789033**, "Time-dependent view factor simulations of radiation symmetry in ICF
   hohlraums" (LANL subcontract LA-SUB-99-65, 1999), has no abstract and no full text.
 - **Hilsabeck et al., arXiv 2608.11664 (2026)** — **M**
@@ -267,8 +267,8 @@ A minimal parametric model with four pieces, all driven by `drive_history` time.
 
 **2. LEH radius(t) via the gap machinery.**
 - Model the closing annulus r_eff(t) < r < r₀ as a component with a time-dependent albedo,
-  reusing `GapClosure`-style `_albedo_split` with transmitted = open hole, rather than
-  remeshing.
+  reusing `GapClosure`-style `_albedo_split` with transmitted = open hole, so that the hole
+  needs no remeshing.
 - Default: r_eff = r₀ until the rise to peak, ramp over about 0.5 ns to **0.84 r₀** (the
   Schneider peak value, matching Young's 0.85), hold through peak.
   - Label it an engineering default; Build-A-Hohlraum suggests a further ~50 µm of radius
@@ -303,7 +303,7 @@ A minimal parametric model with four pieces, all driven by `drive_history` time.
 - **(b)** Izumi 2018/2021 HDC SymCap set (N170427/N171010 basecamp, N171212, N180102,
   N180103, N180117, N180705, N180917): x_bub(t) trajectories 1.2–2.4 mm over 4.5–6.5 ns,
   thin-wall inner-signal time histories, and core P2 −18 to +21 µm. Seven shots with
-  single-parameter changes test v_b scalings, clipping and the CF→P2 conversion (2.7 µm per
+  single-parameter changes test v_b scalings, clipping and the CF-to-P2 conversion (2.7 µm per
   1%, or 270 µm per unit CF).
 - **(c)** Young 2020's static-vs-dynamic test reproduced in Briareus (85% radii against
   keyframes): mode 1 within about 0.14% at peak.
@@ -327,4 +327,4 @@ A minimal parametric model with four pieces, all driven by `drive_history` time.
 6. Whether "MacLaren's empirical model" exists as such. Only the ViewFactor drive-deficit
    work (PRL 112, 105003, 2014) was found.
 7. CBET coupling: does Δλ change the bubble's T_e and absorption, i.e. the swing slope?
-   Kritcher 2021 says CBET shifts the swing but not its slope.
+   Kritcher 2021 reports that CBET shifts the swing but not its slope.

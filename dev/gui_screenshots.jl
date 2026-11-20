@@ -8,7 +8,7 @@
 # under `xvfb-run`), drives it through its QML callbacks from `BriareusGUI._TICK_HOOK[]`
 # as `BriareusGUI/test/qt_window.jl` does, and grabs the window's contents below the
 # toolbar with `request_grab` (QML `grabToImage`, written asynchronously); the Cut
-# settings popup and the Help window are grabbed alone (`request_cut_settings`,
+# settings popup and the Help window are grabbed by themselves (`request_cut_settings`,
 # `request_popup`). Nothing outside the window is captured. Every target and pointing is a
 # built-in public one: the hohlraum starter with the NIF quads at illustrative example
 # cone aims, and the OMEGA backlighter set on a foil; the 1ω and 2ω power ratios of the
@@ -16,8 +16,8 @@
 # standard mesh, a pointing optimization, a drive history, the TaLIS rules on every quad,
 # a placement sweep of the foil); stages wait for their jobs, so a slower machine gives
 # the same images. Qt's high-DPI scaling is switched off so that the window has its
-# default size (1640 × 1000) in screen pixels on any display scale; on a screen whose free area is
-# smaller than about 1820 × 1110 pixels the window opens at 90% of that area instead.
+# default size (1640 × 1000) in screen pixels on any display scale. On a screen whose free
+# area is smaller than about 1820 × 1110 pixels the window opens at 90% of that area instead.
 # Each grab is quantized to a 256-color palette by Pillow through uv (`uv run --python
 # 3.12 --with pillow`), which keeps each PNG near 200 kB; without uv the grabs are copied
 # as they are. Rerun after a change to the window's layout or canvases.
@@ -41,7 +41,8 @@ t_stage = Ref(time())
 t_start = time()
 next!() = (stage[] += 1; t_stage[] = time())
 after(dt) = time() - t_stage[] > dt
-# a grab lands asynchronously: wait for the file, then a moment for it to be complete
+# A grab is written asynchronously, so wait for the file and then a moment for it to be
+# complete.
 grabbed(name) = !(name in wanted) || (isfile(png(name)) && filesize(png(name)) > 0 && after(1.5))
 function grab(sh, name)
     name in wanted || return
@@ -50,7 +51,8 @@ function grab(sh, name)
 end
 idle(s) = s.drive.result[] !== nothing && !s.drive.building[] && !s.drive.evaluating[] &&
           B.Controllers.target_ready(s.target)
-# the Diagnostics tab's image, taken between two stages: 0 not yet, 1 shown, 2 grabbed
+# The image of the Diagnostics tab is taken between two stages, with the state 0 not yet,
+# 1 shown and 2 grabbed.
 diag = Ref(0)
 B._TICK_HOOK[] = function (sh)
     s = sh.sess
@@ -75,7 +77,8 @@ B._TICK_HOOK[] = function (sh)
         B.br_opt_edit("max_evaluations", "300")
         "optimize" in wanted && B.br_opt_start(); next!()
     elseif k == 2 && !s.optimize.running[] && after(1)
-        # applied to the beams: the capsule's θ–φ flux map of the optimized drive
+        # Once the design is applied to the beams, the θ–φ flux map of the capsule shows the
+        # optimized drive.
         s.optimize.result[] === nothing || B.br_opt_accept()
         B.br_set_view("map"); next!()
     elseif k == 3 && idle(s) && after(1)
@@ -83,7 +86,7 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 4 && after(1.5)
         grab(sh, "optimize"); next!()
     elseif k == 5 && grabbed("optimize")
-        # the hero shot: the optimized design, its drive and modes
+        # The hero shot shows the optimized design with its drive and modes.
         B.br_set_view("scene")
         B.br_select("task:drive")
         B.request_tab("drive")
@@ -105,7 +108,8 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 9 && after(1.5)
         grab(sh, "xray"); next!()
     elseif k == 10 && grabbed("xray")
-        # the drive in time: N221204's pulse shape, the history, the cursor at peak Tr
+        # The drive in time uses the pulse shape of N221204, with the history and the
+        # cursor at peak Tr.
         B.br_side_view(false)
         B.br_close_image()
         B.br_beam_style("rays")
@@ -124,7 +128,8 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 12 && after(1.5)
         grab(sh, "time_history"); next!()
     elseif k == 13 && grabbed("time_history") && "diagnostics" in wanted && diag[] < 2
-        # the Diagnostics tab on its imagers: the history's images of the lower SXI
+        # The Diagnostics tab on its imagers shows the images of the lower SXI from the
+        # history.
         if diag[] == 0
             B.request_tab("diagnostics")
             B.br_diag_category("xray_imager")
@@ -147,9 +152,10 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 14 && !s.talis.running[] && after(1.5)
         grab(sh, "talis"); next!()
     elseif k == 15 && grabbed("talis")
-        # the beam matrix: illustrative 1ω and 2ω power ratios of 5% each (as in the
-        # VisRad workspaces seen so far; the NIF User Guide gives no fraction), and the
-        # unconverted light of one inner quad drawn, its properties beside the tree's dots
+        # The beam-matrix shot sets the 1ω and 2ω power ratios to an illustrative 5% each.
+        # The NIF User Guide does not give a fraction; the VisRad sample workspaces use 5%.
+        # Unconverted light is drawn for one inner quad, with its properties shown beside
+        # the dots in the model tree.
         B.br_beam_color("group")
         B.br_set_color("component")
         B.br_unconverted_ratio(1, "0.05")
@@ -164,8 +170,9 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 16 && idle(s) && after(2)
         grab(sh, "beam_matrix"); next!()
     elseif k == 17 && grabbed("beam_matrix")
-        # display modes and an exact sector cut: the top cap wireframe, the bottom cap
-        # semi-transparent, and a 120° slice of the wall bounded to |z| ≤ 3 mm, toward the view
+        # The display modes and an exact sector cut show the top cap as a wireframe, the
+        # bottom cap semi-transparent, and a 120° slice of the wall bounded to |z| ≤ 3 mm,
+        # toward the view.
         B.br_beam_dot("beam:Q15T", "draw", 1, false)
         B.br_beam_dot("beam:Q15T", "draw", 2, false)
         B.br_unconverted_ratio(1, "")
@@ -207,8 +214,9 @@ B._TICK_HOOK[] = function (sh)
         # the Cut settings popup of that plane
         "cut_settings" in wanted && B.request_cut_settings(png("cut_settings")); next!()
     elseif k == 24 && grabbed("cut_settings")
-        # a backlighter foil with the OMEGA backlighter beams, colored by the absorbed
-        # laser intensity: the 3D view toward the foil's front, the foil's face beside it.
+        # A backlighter foil with the OMEGA backlighter beams is colored by the absorbed
+        # laser intensity, with the 3D view toward the front of the foil and the face of the
+        # foil beside it.
         B.br_remove_window(1)
         B.br_set_cutaway(false)
         if "backlighter" in wanted || "sweep" in wanted

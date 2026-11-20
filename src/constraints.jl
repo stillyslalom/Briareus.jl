@@ -1,14 +1,15 @@
-# Inequality constraints for `optimize_pointing` (an augmented Lagrangian around its
-# L-BFGS-B), and the ready-made ones: a laser-irradiance ceiling on named parts and a
-# per-degree gate on the capsule's mode shape; the drive objective they go with.
+# This file defines inequality constraints for `optimize_pointing`, which wraps its
+# L-BFGS-B in an augmented Lagrangian. It also defines ready-made constraints, such as a
+# laser-irradiance ceiling on named parts and a per-degree gate on the capsule mode shape,
+# and the drive objective used with them.
 
 """
     Constraint(name, f; upper = nothing, lower = nothing, scale = nothing, labels = nothing)
 
 An inequality constraint for [`optimize_pointing`](@ref): `f(ev) ≤ upper` (a ceiling) or
 `f(ev) ≥ lower` (a floor), with `f` any function of an [`Evaluation`](@ref) (its beams
-`ev.beams` included), generic in the number type so that the optimizer's
-automatic-differentiation gradients pass through it. Give exactly one of `upper` and
+`ev.beams` included), generic in the number type so that the automatic-differentiation
+gradients of the optimizer pass through it. Give exactly one of `upper` and
 `lower`.
 
 `f` may return a number or a vector; a vector constraint has one component per entry,
@@ -17,8 +18,8 @@ each with a separate multiplier and row in the report, against a `limit` that is
 (default `"1"`, `"2"`, …): a collection of names, or a function of the evaluation that
 returns them, for a constraint whose components follow the evaluation (one per beam,
 as in [`clearance_floor`](@ref)). Within one run the number of components is fixed; a
-constraint with a shared limit and labels from the evaluation serves scenarios with
-different numbers of beams (a stage on quads, then one on their beams).
+constraint with a shared limit and labels from the evaluation can be used for scenarios
+with different numbers of beams, such as a stage on quads and then one on their beams.
 
 `scale` (a number or one per component, positive) sets the units of the violation: the
 optimizer works on `±(f(ev) - limit)/scale` and its `feasibility` tolerance is in those
@@ -26,10 +27,10 @@ units. By default `scale = |limit|`, so a violation is relative (1e-3: 0.1% of t
 limit); a zero limit needs a `scale`.
 
 Ready-made constraints: [`irradiance_ceiling`](@ref), [`mode_gate`](@ref),
-[`clearance_floor`](@ref) (a keep-out's clearance per beam), [`light_ceiling`](@ref)
+[`clearance_floor`](@ref) (the clearance from a keep-out per beam), [`light_ceiling`](@ref)
 and [`light_floor`](@ref) (the laser light on named parts), [`pulse_ceiling`](@ref)
 (the limit of the laser on the pulses of a phased design). Any other quantity of the
-beams alone is `Constraint(:name, ev -> quantity(ev.beams); lower = minimum)`.
+beams only is `Constraint(:name, ev -> quantity(ev.beams); lower = minimum)`.
 """
 struct Constraint{F,L}
     name::Symbol
@@ -55,7 +56,8 @@ function Constraint(name, f; upper = nothing, lower = nothing, scale = nothing, 
     return Constraint(Symbol(name), f, L, S, upper !== nothing, lab)
 end
 
-# The labels of a constraint's `n` components at `ev` (empty: numbered).
+# Return the labels of the `n` components of a constraint at `ev`. Empty labels mean that
+# the components are numbered.
 _labels(c::Constraint{<:Any,Vector{String}}, ev, n) = c.labels
 function _labels(c::Constraint, ev, n)
     lab = collect(String, string.(c.labels(ev)))
@@ -68,8 +70,9 @@ Base.show(io::IO, c::Constraint) =
     print(io, "Constraint(:", c.name, c.upper ? " ≤ " : " ≥ ",
           length(c.limit) == 1 ? c.limit[1] : c.limit, ")")
 
-# The constraint's components normalized as violations: `±(value - limit)/scale`
-# (positive when violated), in the evaluation's number type.
+# Return the components of the constraint normalized as violations,
+# `±(value - limit)/scale`, in the number type of the evaluation. A violated component is
+# positive.
 function _violations(c::Constraint, ev)
     v = c.f(ev)
     s = c.upper ? 1 : -1
@@ -81,8 +84,8 @@ end
 
 The value of each component of `constraints` (a [`Constraint`](@ref), or a tuple or
 vector of them) at the evaluation `ev`, against its limit, as [`ConstraintRow`](@ref)s:
-the report of `PointingResult.constraints`, for any design (a reference, a staged
-run's result). `feasibility` is the tolerance on the normalized violation that
+the report of `PointingResult.constraints`, for any design (a reference, the result of a
+staged run). `feasibility` is the tolerance on the normalized violation that
 separates `:violated`, `:active` and `:satisfied`.
 """
 check_constraints(ev::Evaluation, c::Constraint; kwargs...) = check_constraints(ev, (c,); kwargs...)
@@ -93,8 +96,8 @@ function _constraint_rows(ev, cs::Tuple, multipliers, feasibility::Float64)
     rows = ConstraintRow[]
     k = 0
     for c in cs
-        # the reported value: the exact quantity where the constraint's function is a
-        # smooth stand-in for one (`_exact_value`), else the function value
+        # Report the exact quantity where the function of the constraint is a smooth
+        # stand-in for one (`_exact_value`), and the function value otherwise.
         v = something(_exact_value(c.f, ev), c.f(ev))
         vals = v isa Number ? [Float64(ForwardDiff.value(v))] : Float64.(ForwardDiff.value.(v))
         sg = c.upper ? 1 : -1
@@ -114,19 +117,21 @@ function _constraint_rows(ev, cs::Tuple, multipliers, feasibility::Float64)
     return rows
 end
 
-# The exact quantity that a constraint's function stands in for smoothly (a scalar, at a
-# Float64 evaluation), or `nothing` where the function is itself the quantity: the
-# irradiance ceiling's peak when it holds the peak (`exact = true`, its default).
+# Return the exact quantity for which the function of a constraint is a smooth stand-in,
+# as a scalar at a Float64 evaluation. Return `nothing` where the function is itself the
+# quantity. One example is the peak of an irradiance ceiling with `exact = true`, its
+# default.
 _exact_value(f, ev) = nothing
 
-# All constraints' normalized violations at `ev`, concatenated (Float64).
+# Concatenate the normalized violations of all constraints at `ev`, as Float64.
 _all_violations(cs::Tuple, ev) =
     reduce(vcat, map(c -> Float64.(ForwardDiff.value.(_violations(c, ev))), cs); init = Float64[])
 
 # The augmented Lagrangian (Powell–Hestenes–Rockafellar, for inequalities) of an
-# objective with multipliers `λ` (one vector per constraint) and penalty `μ`:
-# f + μ/2 Σᵢ [max(0, gᵢ + λᵢ/μ)² - (λᵢ/μ)²], with gᵢ the normalized violations. A function
-# of the evaluation only (its fields are fixed during an inner run): thread-safe.
+# objective with multipliers `λ` and penalty `μ` is
+# f + μ/2 Σᵢ [max(0, gᵢ + λᵢ/μ)² - (λᵢ/μ)²], with gᵢ the normalized violations. `λ` contains
+# one vector per constraint. The fields are fixed during an inner run, so the value depends
+# only on the evaluation, and the function is thread-safe.
 struct _Augmented{O,C<:Tuple,L<:Tuple}
     objective::O
     constraints::C
@@ -150,30 +155,35 @@ function _al_term(g::AbstractVector{T}, λ::Vector{Float64}, μ::Float64) where 
     return μ / 2 * s
 end
 
-# The constrained run of `optimize_pointing`: an augmented Lagrangian whose inner
-# problems (the box-constrained minimizations of `_Augmented`) are solved by `_lbfgsb`,
-# each warm-started from the last. Multipliers and penalty are updated as in ALGENCAN
-# (Andreani, Birgin, Martínez and Schuverdt, SIAM J. Optim. 18, 1286, 2008; Birgin and
-# Martínez, "Practical Augmented Lagrangian Methods for Constrained Optimization",
-# SIAM 2014): λ ← max(0, λ + μ g); μ grows tenfold when the infeasibility–
-# complementarity measure V = maxᵢ |max(gᵢ, -λᵢ/μ)| has not halved; the first μ balances
-# the objective against the initial violations; the inner tolerance on the projected
-# gradient tightens tenfold per outer iteration down to `g_tol`, and an inner run also
-# ends when an iteration changes its value by less than `inner_reltol` relative (1e-10 by
-# default: the drive objectives are flat along the constraints, and without it an inner
-# run creeps for hundreds of iterations at a 1e-6 gain).
+# The constrained run of `optimize_pointing` is an augmented Lagrangian. `_lbfgsb` solves
+# its inner problems, the box-constrained minimizations of `_Augmented`, each warm-started
+# from the last. Multipliers and penalty are updated as in ALGENCAN (Andreani, Birgin,
+# Martínez and Schuverdt, SIAM J. Optim. 18, 1286, 2008; Birgin and Martínez, "Practical
+# Augmented Lagrangian Methods for Constrained Optimization", SIAM 2014):
+# - The multipliers are updated as λ ← max(0, λ + μ g).
+# - μ grows tenfold when the infeasibility–complementarity measure
+#   V = maxᵢ |max(gᵢ, -λᵢ/μ)| has not halved.
+# - The first μ balances the objective against the initial violations.
+# - The inner tolerance on the projected gradient tightens tenfold per outer iteration,
+#   down to `g_tol`.
+# - An inner run also ends when an iteration changes its value by less than
+#   `inner_reltol` relative, 1e-10 by default. The drive objectives are flat along the
+#   constraints, and without this test an inner run creeps for hundreds of iterations
+#   at a 1e-6 gain.
 #
 # An inner run ended by its cap (`iterations` or `inner_evaluations`) has not solved its
-# subproblem, the premise of the penalty test (ALGENCAN's step 1, and the inner
-# tolerance ω_k of Conn, Gould and Toint, SIAM J. Numer. Anal. 28, 545, 1991): after one
-# that ends above the limits, the multipliers are updated as after any inner run, and the
-# penalty, the inner tolerance and the reference V of the penalty test are held, so that
-# a cap never grows the penalty toward the infeasible verdict; one that ends within the
-# limits takes the usual test (`capped` counts both). The largest normalized violation of the reported rows is recorded at the
-# start, at phase 1's design and after every inner run: a run that ends with a
-# violation above `feasibility` (the penalty's ceiling, `outer`, the budget, the time
-# limit, the callback) returns the iterate of least violation (`least_violation`), and
-# the latest iterate within the limits is kept as `last_feasible`.
+# subproblem, which is the premise of the penalty test (ALGENCAN's step 1, and the inner
+# tolerance ω_k of Conn, Gould and Toint, SIAM J. Numer. Anal. 28, 545, 1991). After a
+# capped run that ends above the limits, the multipliers are updated as after any inner
+# run, but the penalty, the inner tolerance and the reference V of the penalty test are
+# held, so that a cap never grows the penalty toward the infeasible verdict. A capped run
+# that ends within the limits takes the usual test, and `capped` counts both kinds.
+#
+# The largest normalized violation of the reported rows is recorded at the start, at
+# phase 1's design and after every inner run. A run that ends with a violation above
+# `feasibility` returns the iterate of least violation (`least_violation`), whether the
+# penalty ceiling, `outer`, the budget, the time limit or the callback stopped it. The
+# latest iterate within the limits is kept as `last_feasible`.
 Base.@nospecializeinfer function _constrained_pointing(
         s::_AbstractScenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
@@ -187,7 +197,7 @@ Base.@nospecializeinfer function _constrained_pointing(
     inner_reltol >= 0 || throw(ArgumentError("inner_reltol must be nonnegative"))
     inner_evaluations >= 1 || throw(ArgumentError("inner_evaluations must be at least 1"))
     phase1 |= relaxation
-    # the constraints' picket maps read from the deposition of the evaluations
+    # The picket maps of the constraints are read from the deposition of the evaluations.
     s = _with_split(s, _split_request(cs))
     ev = evaluate(s, xs)
     f0 = Float64(ForwardDiff.value(objective(ev)))
@@ -195,14 +205,15 @@ Base.@nospecializeinfer function _constrained_pointing(
     lens = map(c -> length(_violations(c, ev)), cs)
     x, ne, ni, k = copy(xs), 0, 0, 0
     p1 = nothing
-    # the iterates of least violation and the latest within the limits (outer 0: the
-    # start or phase 1's design)
+    # The iterates of least violation and the latest within the limits; outer iteration 0
+    # is the start or phase 1's design.
     least = rec0 = _iterate_record(cs, ev, xs, f0, 0, feasibility)
     feas = least.violation <= feasibility ? least : nothing
     rec1, ev1 = rec0, ev           # phase 1's record and evaluation, when it runs
-    # phase 1 (a fresh run whose start violates a constraint): the smallest infeasibility
-    # from the start, ignoring the objective; a verdict when it stays above `feasibility`,
-    # else the main run starts from its first design within the limits
+    # Phase 1 runs when a fresh run starts at a design that violates a constraint. It
+    # minimizes the infeasibility from the start without the objective. When the
+    # infeasibility stays above `feasibility`, phase 1 returns a verdict; otherwise the main
+    # run starts from its first design within the limits.
     if phase1 && state === nothing && maximum(g; init = -Inf) > feasibility
         r1 = _phase1(s, cs, x0, xs, lower, upper; evaluations, show_trace, g_tol,
                      callback, feasibility, deadline, inner_reltol)
@@ -214,9 +225,10 @@ Base.@nospecializeinfer function _constrained_pointing(
         _less_violating(rec1, least, feasibility) && (least = rec1)
         rec1.violation <= feasibility && (feas = rec1)
         if r1.verdict || (r1.stopped && !r1.feasible)
-            # infeasible (phase 1 converged above `feasibility`), or stopped by the budget,
-            # the time limit or the callback before a design within the limits: the
-            # design of least violation, phase 1's unless the start's is less
+            # The problem is infeasible, because phase 1 converged above `feasibility`, or
+            # the budget, the time limit or the callback stopped phase 1 before it reached a
+            # design within the limits. The result is the design of least violation, which
+            # is the phase-1 design unless the start has less violation.
             xr = least.x
             ev1 = xr === r1.x ? ev1 : evaluate(s, xr)
             rows = _constraint_rows(ev1, cs, nothing, feasibility)
@@ -234,16 +246,18 @@ Base.@nospecializeinfer function _constrained_pointing(
                                     least_violation = least, last_feasible = feas)
         end
     end
-    # the main run's start: phase 1's design within the limits, if any (its objective and
-    # violations set the first penalty), else the start
+    # The main run starts from the design of phase 1 when that design is within the
+    # limits, and from the start otherwise. The objective and violations of that design
+    # set the first penalty.
     fμ = f0
     if p1 !== nothing && p1.feasible
         x = copy(p1.x)
         fμ = rec1.value
         g = _all_violations(cs, ev1)
     end
-    # the constraints as the inner problems see them: an exact ceiling's stand-in at a
-    # working limit, lowered while the exact value ends above the limit
+    # The inner problems work on these constraints. For an exact ceiling they contain the
+    # stand-in at a working limit, which is lowered while the exact value ends above the
+    # limit.
     work = cs
     if state === nothing
         λ = zeros(length(g))
@@ -252,8 +266,8 @@ Base.@nospecializeinfer function _constrained_pointing(
         tol = max(Float64(g_tol), 1e-3)
         Vold = Inf
     else
-        # a warm restart (`from`): the multipliers, penalty, inner tolerance and working
-        # limits where the previous run left them
+        # A warm restart (`from`) takes the multipliers, penalty, inner tolerance and
+        # working limits from the end of the previous run.
         length(state.λ) == length(g) && length(state.limits) == length(cs) &&
             all(i -> length(state.limits[i]) == length(cs[i].limit), eachindex(state.limits)) ||
             throw(DimensionMismatch("`from` is a run with other constraints"))
@@ -289,15 +303,16 @@ Base.@nospecializeinfer function _constrained_pointing(
         rec.violation <= feasibility && (feas = rec)
         if r.stopped
             reason = r.reason
-            # a restart resumes the interrupted inner problem
+            # A restart resumes the interrupted inner problem.
             state = (; λ = λinner, μ, μmax, tol, Vold, limits = limits(work), x = copy(x))
             break
         end
-        # an inner run ended by its cap (`iterations`, `inner_evaluations`): its subproblem
-        # unsolved. Above the limits, the multipliers are updated and the penalty, the
-        # tolerance and the penalty test's reference held (V not halved there measures the
-        # cap, and the penalty's growth would lead to the infeasible verdict); within them,
-        # the usual test (V is then the complementarity, and no verdict can follow)
+        # An inner run ended by its cap (`iterations`, `inner_evaluations`) leaves its
+        # subproblem unsolved. Above the limits, the multipliers are updated, and the
+        # penalty, the tolerance and the reference of the penalty test are held. A V that
+        # has not halved after such a run measures the cap, and a growing penalty would
+        # lead to the infeasible verdict. Within the limits the usual test applies, since V
+        # is then the complementarity and no verdict can follow.
         capped_run = r.reason === :iterations
         capped += capped_run
         if capped_run && maximum(g; init = -Inf) > feasibility
@@ -309,23 +324,26 @@ Base.@nospecializeinfer function _constrained_pointing(
             continue
         end
         feasible = maximum(g; init = -Inf) <= feasibility
-        # converged: feasible and complementary, with the inner problem solved at the final
-        # tolerance (a start already feasible and active, as on a restart, would otherwise
-        # pass on the first, loose inner run with zero multipliers wherever the objective's
-        # gradient is below 1e-3)
+        # The run has converged when it is feasible and complementary and the inner problem
+        # is solved at the final tolerance. Without the tolerance condition, a start that
+        # is already feasible and active, as on a restart, would pass on the first, loose
+        # inner run, with zero multipliers wherever the gradient of the objective is below
+        # 1e-3.
         if feasible && V <= feasibility && r.reason === :converged && tol <= g_tol
-            # an exact ceiling above its limit: its stand-in's working limit scaled by
-            # limit/exact, and the run continued from here with the same multipliers
+            # For an exact ceiling above its limit, the working limit of its stand-in is
+            # scaled by limit/exact, and the run continues from this design with the same
+            # multipliers.
             lowered = _lower_exact_limits(cs, work, evx, feasibility)
             if lowered === nothing
                 state = (; λ, μ, μmax, tol, Vold = V, limits = limits(work), x = copy(x))
                 break
             end
             work = lowered
-            # the new limit's violation is not a stall: the penalty stays
+            # The violation of the new limit is not a stall, so the penalty is kept.
             V = Inf
         end
-        # the next outer iteration's penalty and tolerance (what a restart continues with)
+        # Set the penalty and tolerance of the next outer iteration, which a restart also
+        # continues with.
         μnext = V > Vold / 2 && V < Inf ? 10μ : μ
         tolnext = max(Float64(g_tol), tol / 10)
         state = (; λ, μ = μnext, μmax, tol = tolnext, Vold = V, limits = limits(work), x = copy(x))
@@ -335,22 +353,22 @@ Base.@nospecializeinfer function _constrained_pointing(
         end
         μ = μnext
         if !feasible && μ > μmax
-            # infeasible at the largest penalty; after an iterate within the limits the
-            # penalty's ceiling ends the run as its outer budget does
+            # The run is infeasible at the largest penalty. After an iterate within the
+            # limits, the penalty ceiling ends the run in the same way as the outer budget.
             feas === nothing || (reason = :iterations)
             break
         end
         Vold = V
         tol = tolnext
     end
-    # a run ended with a violation above `feasibility` returns its iterate of least
-    # violation (the start, phase 1's design or an outer iterate)
+    # A run that ends with a violation above `feasibility` returns its iterate of least
+    # violation, which is the start, the phase-1 design or an outer iterate.
     if rec.violation > feasibility && least !== rec
         x = copy(least.x)
         evx = evaluate(s, x)
     end
-    # the reported multipliers: those that best satisfy stationarity at the design (the
-    # iteration estimates, in `state`, are what a restart continues from)
+    # The reported multipliers are those that best satisfy stationarity at the design. A
+    # restart continues from the iteration estimates in `state`.
     kkt = _active_set_multipliers(s, objective, work, x, lower, upper,
                                   _all_violations(work, evx), feasibility)
     rows = _constraint_rows(evx, cs, kkt.λ, feasibility)
@@ -362,10 +380,11 @@ Base.@nospecializeinfer function _constrained_pointing(
                             last_feasible = feas, capped)
 end
 
-# The record of an iterate for `least_violation` and `last_feasible`: its parameters, its
-# largest normalized violation over the reported rows (an exact ceiling's exact value;
-# zero when every component holds), its objective and its outer iteration (0: the start
-# or phase 1's design).
+# The record of an iterate for `least_violation` and `last_feasible`. It contains the
+# parameters, the largest normalized violation over the reported rows, the objective and
+# the outer iteration. The violation takes the exact value of an exact ceiling and is zero
+# when the constraint is met for every component. Outer iteration 0 is the start or the
+# phase-1 design.
 function _iterate_record(cs::Tuple, ev, x, value::Float64, outer::Int, feasibility::Float64)
     rows = _constraint_rows(ev, cs, nothing, feasibility)
     v = max(0.0, maximum(r -> r.violation, rows; init = 0.0))
@@ -379,20 +398,25 @@ function _less_violating(a, b, feasibility::Float64)
     return va < vb || va == vb && a.value < b.value
 end
 
-# The multipliers reported at the end of a constrained run: the nonnegative least-squares
-# solution of the stationarity condition ∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0 on the parameters free
-# to move (inside the box), over the components within `feasibility` of their (working)
-# limits or beyond them (`gⱼ ≥ -feasibility`; zero for the others: complementary), the
-# least-norm one where several fit equally. A parameter at a bound is left out of the
-# fit: its row is the bound's multiplier, ∂L/∂xᵢ, of either sign (a sign that would move
-# the parameter inward shows that the bound does not hold it). The first-order update
-# λ ← max(0, λ + μ g) is exact only after an inner run solved to stationarity; an inner
-# run ended by its value tolerance leaves an error of μ times its constraint error, which
-# zeroes the multipliers of limits a few 1e-5 inside at a large μ (research notes,
-# "Multipliers from the converged active set"). Also the gradients of the objective and
-# of the Lagrangian f + Σⱼ λⱼ gⱼ at `x`, for the bound sensitivities, and the largest
-# |∂L/∂xᵢ| over the free parameters (the stationarity left with these multipliers, on
-# the scale of the inner runs' `g_tol`). One Jacobian (a gradient's cost).
+# Compute the multipliers reported at the end of a constrained run. They are the
+# nonnegative least-squares solution of the stationarity condition
+# ∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0, set up as follows:
+# - The rows are the parameters free to move inside the box. A parameter at a bound is
+#   left out of the fit, because its row is the multiplier of the bound, ∂L/∂xᵢ, of
+#   either sign. A sign that would move the parameter inward shows that the bound does
+#   not hold it.
+# - The unknowns are the multipliers of the components within `feasibility` of their
+#   working limits or beyond them (`gⱼ ≥ -feasibility`). By complementarity the others
+#   are zero.
+# - Where several solutions fit equally, the least-norm one is taken.
+# The first-order update λ ← max(0, λ + μ g) is exact only after an inner run solved to
+# stationarity. An inner run ended by its value tolerance leaves an error of μ times its
+# constraint error, which zeroes the multipliers of limits a few 1e-5 inside at a large μ
+# (research notes, "Multipliers from the converged active set"). The function also
+# returns the gradients of the objective and of the Lagrangian f + Σⱼ λⱼ gⱼ at `x`, for
+# the bound sensitivities, and the largest |∂L/∂xᵢ| over the free parameters. That value
+# is the stationarity left with these multipliers, on the scale of the `g_tol` of the
+# inner runs. The cost is one Jacobian, which costs as much as a gradient.
 Base.@nospecializeinfer function _active_set_multipliers(s::_AbstractScenario, @nospecialize(objective),
                                                          @nospecialize(work::Tuple), x::Vector{Float64},
                                                          lower, upper, g::Vector{Float64},
@@ -400,15 +424,16 @@ Base.@nospecializeinfer function _active_set_multipliers(s::_AbstractScenario, @
     λ = zeros(length(g))
     side = map(_bound_side, x, lower, upper)
     act = findall(>=(-feasibility), g)
-    Jm = _scenario_jacobian(s, _KKTValues(objective, work), x)     # rows: f, then each gᵢ
+    Jm = _scenario_jacobian(s, _KKTValues(objective, work), x)     # f first, then each gᵢ
     gf = Jm[1, :]
-    # the stationarity rows: the parameters free to move (inside the box, not fixed)
+    # The stationarity rows are the parameters free to move, inside the box and not fixed.
     free = findall(i -> side[i] == 0 && lower[i] < upper[i], eachindex(x))
     if !isempty(act)
         A = Jm[1 .+ act, free]'
-        # where the multipliers are not unique (components with the same gradient) the
-        # least-norm solution: a weight 1e-6 × the largest column norm on ‖λ‖, which moves
-        # the multipliers of well-conditioned columns by about 1e-12 relative
+        # Where the multipliers are not unique, as for components with the same gradient,
+        # take the least-norm solution. A weight of 1e-6 times the largest column norm on
+        # ‖λ‖ selects it, and it moves the multipliers of well-conditioned columns by about
+        # 1e-12 relative.
         m = length(act)
         ρ = 1e-6 * maximum(norm, eachcol(A); init = 0.0)
         λ[act] .= _nnls([A; ρ * Matrix(1.0I, m, m)], [-gf[free]; zeros(m)])
@@ -417,8 +442,8 @@ Base.@nospecializeinfer function _active_set_multipliers(s::_AbstractScenario, @
     return (; λ, gradients = (gf, gL), stationarity = maximum(i -> abs(gL[i]), free; init = 0.0))
 end
 
-# The objective and the constraints' normalized violations at `ev`, stacked (the rows of
-# the Jacobian of `_active_set_multipliers`).
+# Stack the objective and the normalized violations of the constraints at `ev`. These are
+# the rows of the Jacobian of `_active_set_multipliers`.
 struct _KKTValues{O,C<:Tuple}
     objective::O
     constraints::C
@@ -434,9 +459,10 @@ end
 _append_all!(out, ::Tuple{}) = out
 _append_all!(out, gs::Tuple) = _append_all!(append!(out, first(gs)), Base.tail(gs))
 
-# Nonnegative least squares, argmin ‖A z - b‖ over z ≥ 0, by the active-set method of
-# Lawson and Hanson ("Solving Least Squares Problems", Prentice-Hall 1974, ch. 23).
-# Rank-deficient passive sets are solved by pivoted QR (a basic solution).
+# Solve the nonnegative least-squares problem argmin ‖A z - b‖ over z ≥ 0 by the
+# active-set method of Lawson and Hanson, "Solving Least Squares Problems",
+# Prentice-Hall 1974, ch. 23. Rank-deficient passive sets are solved by pivoted QR, which
+# gives a basic solution.
 function _nnls(A::Matrix{Float64}, b::Vector{Float64})
     m, n = size(A)
     z = zeros(n)
@@ -444,8 +470,9 @@ function _nnls(A::Matrix{Float64}, b::Vector{Float64})
     P = falses(n)
     tol = 10 * eps() * max(m, n) * max(opnorm(A, 1), 1e-300) * max(norm(b, Inf), 1e-300)
     w = A' * b
-    # columns whose entry left the solution unchanged (its least-squares entry came out
-    # nonpositive at once, a rounding-level gain): skipped until the solution moves
+    # Columns whose entry left the solution unchanged are skipped until the solution
+    # moves. For such a column the least-squares entry came out nonpositive at once, a
+    # gain at the rounding level.
     blocked = falses(n)
     for _ in 1:3n
         j = 0
@@ -481,14 +508,14 @@ function _nnls(A::Matrix{Float64}, b::Vector{Float64})
     return z
 end
 
-# Phase 1 of a constrained run: the box-constrained minimization of the infeasibility
-# ψ = ½ Σᵢ max(0, gᵢ)² over every component's normalized violation (the augmented
-# Lagrangian's limit as μ → ∞, zero exactly on the feasible set), ignoring the
-# objective, by the same L-BFGS-B and its inner-run value tolerance. It stops at the
+# Phase 1 of a constrained run minimizes the infeasibility ψ = ½ Σᵢ max(0, gᵢ)² over the
+# box, with gᵢ the normalized violation of each component. ψ is the limit of the augmented
+# Lagrangian as μ → ∞, and it is zero exactly on the feasible set. Phase 1 leaves out the
+# objective and uses the same L-BFGS-B with its inner-run value tolerance. It stops at the
 # first design with ψ ≤ ½ feasibility², where every violation is within `feasibility`
-# (`feasible`). Converged above it with a violation over `feasibility`, the design is a
-# local minimum of the infeasibility: the verdict that the constraints cannot all be met
-# from this start (`verdict`).
+# (`feasible`). When it converges above that level with a violation over `feasibility`,
+# the design is a local minimum of the infeasibility. That result is the verdict that the
+# constraints cannot all be met from this start (`verdict`).
 struct _Infeasibility{C<:Tuple}
     constraints::C
 end
@@ -508,9 +535,9 @@ Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs:
                                          deadline::Float64, inner_reltol::Float64)
     thr = feasibility^2 / 2
     found, stalled = Ref(false), Ref(false)
-    best = Float64[]                       # the least ψ after each evaluation
+    best = Float64[]                       # least ψ after each evaluation
     W = _PHASE1_WINDOW
-    # the callback's view: phase 1 reports `outer = 0`
+    # Phase 1 passes `outer = 0` to the callback.
     stop = st -> begin
         st.value <= thr && (found[] = true; return true)
         push!(best, st.best_value)
@@ -518,39 +545,43 @@ Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs:
         n > W && best[n] > (1 - _PHASE1_STALL) * best[n-W] && (stalled[] = true; return true)
         return callback === nothing ? false : callback(merge(st, (; outer = 0))) === true
     end
-    # a separate budget for phase 1: no cap on its iterations (the inner runs' `iterations` caps the
-    # augmented Lagrangian's subproblems, which phase 1 is not), so that it ends on
-    # convergence, its stall rule, the run's evaluation budget, the time limit or the
-    # callback
+    # Phase 1 has a separate budget with no cap on its iterations. The `iterations` cap of
+    # the inner runs applies to the subproblems of the augmented Lagrangian, and phase 1 is
+    # not one of them. Phase 1 therefore ends on convergence, on its stall rule, on the
+    # evaluation budget of the run, at the time limit or by the callback.
     r = _lbfgsb(s, _Infeasibility(cs), x0, xs, lower, upper; iterations = typemax(Int), evaluations,
                 show_trace, g_tol, callback = stop, f_reltol = inner_reltol, deadline)
-    # converged, or stalled: a local minimum of ψ, or as near one as the stall rule tells
+    # A converged or stalled phase 1 ends at a local minimum of ψ, or as near one as the
+    # stall rule can resolve.
     ended = !r.stopped && r.reason === :converged || r.stopped && r.reason === :callback && stalled[]
     feasible = found[] || r.value <= thr
     g = feasible ? Float64[] : _all_violations(cs, evaluate(s, r.x))
     verdict = !feasible && ended && maximum(g; init = -Inf) > feasibility
-    # an ended phase 1 whose violations are all within `feasibility` (many components each
-    # just inside it) counts as feasible
+    # An ended phase 1 whose violations are all within `feasibility` counts as feasible.
+    # This case arises when many components each lie just inside it.
     feasible |= ended && !verdict
     stopped = r.stopped && !found[] && !stalled[]
-    # what ended it: `:feasible`, `:converged` or `:stalled` (a verdict, or within the limits
-    # at its end), else the stop's reason (`:evaluations`, `:time_limit`, `:callback`)
+    # Record why phase 1 ended. `:feasible`, `:converged` and `:stalled` end it with a
+    # verdict or with a design within the limits. Otherwise the reason of the stop is
+    # recorded (`:evaluations`, `:time_limit` or `:callback`).
     why = found[] || r.value <= thr ? :feasible : stalled[] ? :stalled : stopped ? r.reason : :converged
     return (; r.x, r.value, r.iterations, r.evaluations, stopped, r.reason, r.result, feasible, verdict, why)
 end
 
-# Phase 1's stall rule (engineering defaults): it ends when its least infeasibility has
-# fallen by less than `_PHASE1_STALL` (relative) over the last `_PHASE1_WINDOW`
-# evaluations. A drive problem's phase 1 that can reach the limits does so in tens of
-# evaluations; one that cannot creeps toward its local minimum of ψ for thousands
-# (research notes, "A verdict on conflicting constraints").
+# The stall rule of phase 1 uses engineering defaults. Phase 1 ends when its least
+# infeasibility has fallen by less than `_PHASE1_STALL` (relative) over the last
+# `_PHASE1_WINDOW` evaluations. On a drive problem whose limits can be reached, phase 1
+# reaches them in tens of evaluations. When they cannot be reached, phase 1 creeps toward
+# its local minimum of ψ for thousands (research notes, "A verdict on conflicting
+# constraints").
 const _PHASE1_WINDOW = 100
 const _PHASE1_STALL = 0.01
 
-# The objective of a relaxation: a smooth largest positive normalized violation of one
-# constraint's components, `m (Σₖ max(0, gₖ/m)ᵖ)^(1/p)` with `m` the largest (a constant:
-# the norm is homogeneous), above the largest by at most a factor n^(1/p) for n equal
-# components; zero once every component holds.
+# The objective of a relaxation is a smooth largest positive normalized violation of the
+# components of one constraint, `m (Σₖ max(0, gₖ/m)ᵖ)^(1/p)`. Here `m` is the largest
+# violation, held constant, which is valid because the norm is homogeneous. The value
+# exceeds the largest by at most a factor n^(1/p) for n equal components, and it is zero
+# once the constraint is met for every component.
 struct _Relaxed{C}
     constraint::C
     p::Float64
@@ -567,15 +598,17 @@ function _positive_norm(g::AbstractVector{T}, p::Float64) where {T}
     return m * s^(1 / p)
 end
 
-# The p of a relaxation's smooth largest violation (engineering default: as the gate
-# multiples of a study, 4 components equal at most 2.2% above their largest)
+# `_RELAX_P` is the p of the smooth largest violation of a relaxation, an engineering
+# default. With it, 4 equal components, as for the gate multiples of a study, give at most
+# 2.2% above their largest.
 const _RELAX_P = 64.0
 
-# The relaxation of each constraint violated or active at the infeasible design `x1`
-# (rows `rows`; a constraint of the conflict can end at its limit there, the violation
-# carried by the others): the smallest largest violation of its components with the
-# others as constraints, each a constrained run (phase 1 on the others first) from `x1`,
-# within the remaining budget and time.
+# Compute the relaxation of each constraint that is violated or active at the infeasible
+# design `x1`, whose rows are `rows`. A constraint of the conflict can end at its limit at
+# `x1`, with the violation carried by the others. Each relaxation is the smallest largest
+# violation of the components of the constraint, with the others as constraints. It is a
+# constrained run from `x1`, with phase 1 on the others first, within the remaining budget
+# and time.
 Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecialize(cs::Tuple), rows,
                                               @nospecialize(lens::Tuple), x0::Vector{Float64},
                                               x1::Vector{Float64}, lower, upper; iterations::Integer,
@@ -597,7 +630,8 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
         end
         obj = _Relaxed(c, _RELAX_P)
         r = if isempty(others)
-            # the constraint alone: a box-constrained run, as `optimize_pointing` without constraints
+            # With no other constraint, the run is box-constrained, as `optimize_pointing`
+            # runs without constraints.
             q = _lbfgsb(s, obj, x0, x1, lower, upper; iterations, evaluations = budget, show_trace, g_tol,
                         callback = nothing, deadline)
             _pointing_result(s, q.x, q.value, q.initial_value, q.iterations, q.evaluations, q.stopped,
@@ -625,11 +659,12 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
     return out
 end
 
-# The working constraints with each exact ceiling whose exact value at `ev` exceeds its
-# limit by more than `feasibility` (normalized) given its stand-in's working limit times
-# limit/exact, or `nothing` when every exact value is within it. The stand-in tracks the
-# exact value nearly in proportion near the limit (a p-norm against the peak), so the
-# scaled limit lands the exact value near the limit; a few rounds settle the remainder.
+# Lower the working limits of exact ceilings. For each exact ceiling whose exact value at
+# `ev` exceeds its limit by more than `feasibility` (normalized), the working limit of its
+# stand-in is multiplied by limit/exact. The function returns the new working constraints,
+# or `nothing` when every exact value is within the tolerance. Near the limit the stand-in,
+# a p-norm, is nearly proportional to the exact peak, so the scaled limit puts the exact
+# value near the limit, and a few rounds remove the remainder.
 function _lower_exact_limits(cs::Tuple, work::Tuple, ev, feasibility::Float64)
     lowered = false
     new = map(cs, work) do c, w
@@ -650,7 +685,8 @@ _split_multipliers(λ::Vector{Float64}, lens::Tuple) =
 # Laser irradiance on named parts
 # ---------------------------------------------------------------------------------------
 
-# The elements of the named parts or components (an error for a name not in the target).
+# Return the elements of the named parts or components. A name not in the target is an
+# error.
 _named_elements(t::Target, names) = (_check_names(t, names); elements(t, names...))
 
 function _check_names(t::Target, names)
@@ -666,22 +702,21 @@ end
 """
     peak_irradiance(ev, names...; weight = nothing) -> Real
 
-The largest absorbed laser irradiance (TW/mm²; `to_Wcm2` converts) over the elements of
-the named parts or components: element power over element area, as in
-[`laser_flux`](@ref). Exact over the elements, so it has a kink wherever the peak moves
-to another element: the reported quantity of [`irradiance_ceiling`](@ref), whose
-optimizer works on the smooth [`irradiance_norm`](@ref). The element average resolves
-a peak only as finely as the mesh: a coarser mesh averages the hottest spot over more
-area and reports a lower peak (on the dropped-bundle hohlraum, 8% lower at 0.45 mm
-than at 0.2 mm).
+The largest absorbed laser irradiance (TW/mm²; `to_Wcm2` converts) over the elements of the
+named parts or components. The irradiance of an element is its power over its area, as in
+[`laser_flux`](@ref). The peak is exact over the elements, so it has a kink wherever it
+moves to another element. It is the reported quantity of [`irradiance_ceiling`](@ref), whose
+optimizer works on the smooth [`irradiance_norm`](@ref). The element average resolves a peak
+only as finely as the mesh: a coarser mesh averages the hottest spot over more area and
+reports a lower peak (on the dropped-bundle hohlraum, 8% lower at 0.45 mm than at 0.2 mm).
 
-`weight`, a function of a beam, counts each beam's deposition times `weight(beam)`
+`weight`, a function of a beam, counts the deposition of each beam times `weight(beam)`
 instead of all beams at their own powers: `0` leaves a beam out, so
-`weight = b -> b.group in (:outer44, :outer50) ? 1.0 : 0.0` gives the outer cones'
-irradiance, and a picket energy over the beam's power gives a fluence map (the
-deposition is linear in each beam's power). The weighted deposition is one more
-deposit per evaluation, of the evaluation's effective beams through the scenario's
-laser–plasma model. The function sees the evaluation's setup beams (their names,
+`weight = b -> b.group in (:outer44, :outer50) ? 1.0 : 0.0` gives the irradiance of the
+outer cones, and a picket energy over the beam power gives a fluence map (the deposition
+is linear in the power of each beam). The weighted deposition is one more deposit per
+evaluation, of the effective beams of the evaluation through the laser–plasma model of
+the scenario. The function is called with the setup beams of the evaluation (their names,
 groups, quads and ports).
 """
 function peak_irradiance(ev::Evaluation, names::Symbol...; weight = nothing)
@@ -691,8 +726,9 @@ end
 
 _peak(P, t::Target, es) = maximum(P[e] / t.elem_area[e] for e in es)
 
-# The element powers whose irradiance counts: the evaluation's deposition, or that of its
-# effective beams with each beam's power times `weight(setup beam)`.
+# Return the element powers whose irradiance counts. Without a weight they are the
+# deposition of the evaluation. With a weight they are the deposition of its effective
+# beams, with the power of each beam multiplied by `weight` of its setup beam.
 _counted_power(ev::Evaluation, ::Nothing) = ev.deposition.element
 function _counted_power(ev::Evaluation, weight)
     s = ev.scenario
@@ -704,13 +740,13 @@ end
 """
     irradiance_norm(ev, names...; p = 64, weight = nothing) -> Real
 
-The area-weighted `p`-norm of the absorbed laser irradiance `I` (TW/mm²) over the
-elements of the named parts or components, `(Σ Aₑ Iₑᵖ / Σ Aₑ)^(1/p)`: a smooth stand-in for
-the [`peak_irradiance`](@ref), below it and approaching it as `p` grows (the power-mean
-inequality), with a gradient from every element near the peak instead of from the
-hottest one alone. As an area mean it is a property of the irradiance field rather
-than of the elements, so it depends less on the mesh than the peak does. `weight` is
-as in [`peak_irradiance`](@ref). Generic in the number type.
+The area-weighted `p`-norm of the absorbed laser irradiance `I` (TW/mm²) over the elements
+of the named parts or components, `(Σ Aₑ Iₑᵖ / Σ Aₑ)^(1/p)`. It is a smooth stand-in for the
+[`peak_irradiance`](@ref). It lies below the peak and approaches it as `p` grows (the
+power-mean inequality), and its gradient comes from every element near the peak instead of
+only the hottest one. As an area mean it is a property of the irradiance field and not of
+the elements, so it depends less on the mesh than the peak does. `weight` is as in
+[`peak_irradiance`](@ref). Generic in the number type.
 """
 function irradiance_norm(ev::Evaluation, names::Symbol...; p::Real = 64, weight = nothing)
     t = ev.scenario.target
@@ -719,7 +755,8 @@ end
 
 function _irradiance_norm(P::AbstractVector{T}, t::Target, es, p::Float64) where {T}
     p >= 1 || throw(ArgumentError("p must be at least 1"))
-    # scaled by the largest value (a constant: the norm is homogeneous) against overflow
+    # Scale by the largest value against overflow; the scale is held constant, which is
+    # valid because the norm is homogeneous.
     m = maximum(e -> ForwardDiff.value(P[e]) / t.elem_area[e], es; init = 0.0)
     m > 0 || return zero(T)
     s = zero(T)
@@ -737,56 +774,53 @@ end
                        p = 64, weight = nothing, scale = limit, exact = true) -> Constraint
 
 A ceiling on the absorbed laser irradiance over the elements of the named parts or
-components: a [`Constraint`](@ref) named `:irradiance` that holds the
-[`peak_irradiance`](@ref) at or below `limit` (by default; `exact`, below). Its
-function is the smooth stand-in the optimizer works on, the [`irradiance_norm`](@ref)
-scaled to equal the peak at the `reference` evaluation, `‖I‖ₚ × peak_ref/‖I‖ₚ,ref`.
-With the default `limit` (the reference's peak) the ceiling holds the irradiance at the
-reference design's, the
-reference being, for example, the pointing before a bundle was dropped; a number in
-TW/mm² sets another, measured on the same scale. The reference evaluation must be on
-the same target as the optimized scenario (a `subset` of it shares the target), with
-the same laser–plasma model (`lpi`, compared field by field, so that a model built
-alike passes) at the same time; otherwise evaluating the ceiling throws an
-`ArgumentError`. A reference evaluated without the scenario's CBET model gives the peak
-and the stand-in's scale of another quantity, and the ceiling would hold the design to
-a limit it does not share, so the mismatch is an error rather than a warning:
-evaluate the reference in a scenario with the same model, e.g.
-`evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`.
-`weight` selects and weighs the beams that count, as in [`peak_irradiance`](@ref) (the
-outer cones only, or picket energies for a fluence ceiling), for the reference and the
-design alike.
+components. The [`Constraint`](@ref) is named `:irradiance`, and by default it bounds the
+[`peak_irradiance`](@ref) by `limit` (see `exact` below). Its function is the smooth
+stand-in the optimizer works on, the [`irradiance_norm`](@ref) scaled to equal the peak at
+the `reference` evaluation, `‖I‖ₚ × peak_ref/‖I‖ₚ,ref`. With the default `limit`, the peak
+of the reference, the irradiance is held at that of the reference design, for example the
+pointing before a bundle was dropped; a
+number in TW/mm² sets another, measured on the same scale. The reference evaluation must be
+on the same target as the optimized scenario (a `subset` of it shares the target), with the
+same laser–plasma model (`lpi`, compared on every field, so that a model built alike passes)
+at the same time; otherwise evaluating the ceiling throws an `ArgumentError`. A reference
+evaluated without the CBET model of the scenario gives the peak and the stand-in scale of
+another quantity, and the ceiling would hold the design to a limit on that quantity, so the
+mismatch throws an error. Evaluate the reference in a scenario with the
+same model, e.g. `evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`. `weight`
+selects and weighs the beams that count, as in [`peak_irradiance`](@ref) (the outer cones
+only, or picket energies for a fluence ceiling), for the reference and the design alike.
 
 The ceiling is on an absolute irradiance: where the power can fall (power scales,
 [`PowerScales`](@ref), or powers among the parameters) the optimizer can meet it by
 cutting power, at a loss of drive (on a re-pointing study with a power scale per cone
-at most 1, a large one). A [`drive_floor`](@ref) beside it holds the drive.
+at most 1, a large one). With a [`drive_floor`](@ref) beside it, the drive is held.
 
-A ceiling on the wall's peak irradiance at the reference's value is an engineering
-limit, not a published criterion: the published scalings of the gold bubble's growth
-use the outer cones' picket fluence on the wall (research notes), which `weight`
-expresses on the same machinery.
+A ceiling on the peak wall irradiance at the value of the reference is an engineering
+limit and is not a published criterion. The published scalings of the growth of the gold
+bubble are written in terms of the picket fluence of the outer cones on the wall (research
+notes), and a `weight` computes that fluence on the same machinery.
 
-With `exact = true` (the default) the ceiling holds the peak itself. The optimizer
+With `exact = true` (the default) the peak itself is held at the limit. The optimizer
 works on the norm, but once the constrained run has converged it compares the
 [`peak_irradiance`](@ref) with the limit; while the peak exceeds it by more than the
-run's `feasibility` (in units of `scale`), the norm's working limit is scaled by
+`feasibility` of the run (in units of `scale`), the working limit of the norm is scaled by
 limit/peak and the run continues from the same design, multipliers and penalty. The
 reported value ([`check_constraints`](@ref), `PointingResult.constraints`) is the peak
 against the limit, and a converged run ends with the peak at or below the limit within
 `feasibility`. The cost is the further outer iterations, when the peak ends above the
 limit (research notes, "Constrained re-pointing").
 
-`exact = false` bounds the norm alone, and the norm is the reported value: at the limit
-the field's hot spots are as hot, in the `p`-norm mean, as the reference's, while the
-peak over the elements may exceed the limit, by a margin that depends on where the run
-ends: on the tutorial's mesh 0.1% at `p = 64` and 3% at `p = 16`, and on the
-dropped-bundle test case (0.45 mm wall elements) 3% at `p = 64` for one of two designs
-that meet the same gates, under another floating-point rounding of the same run
+`exact = false` bounds only the norm, and the norm is the reported value. At the limit the
+hot spots of the field are as hot, in the `p`-norm mean, as those of the reference, but
+the peak over the elements may exceed the limit by a margin that depends on where the run
+ends. On the tutorial mesh the margin is 0.1% at `p = 64` and 3% at `p = 16`. On the
+dropped-bundle test case (0.45 mm wall elements) it is 3% at `p = 64` for one of two
+designs that meet the same gates, under another floating-point rounding of the same run
 (research notes, "Constrained re-pointing").
 
-Across meshes the ceiling is a ratio to the reference on the same
-mesh, which changes less with the element size than the peak's ratio does (rms
+Across meshes the ceiling is a ratio to the reference on the same mesh, which changes
+less with the element size than the ratio of the peaks does (rms
 difference 1.0% against 1.3% between 0.2 and 0.45 mm elements near the limit), while
 the peak itself falls on a coarser mesh.
 """
@@ -808,10 +842,10 @@ function irradiance_ceiling(reference::Evaluation, names::Symbol...;
     return Constraint(:irradiance, value; upper = lim, scale = something(scale, lim))
 end
 
-# The ceiling's value: the irradiance norm on the reference's peak scale; with `exact`,
-# the reported value is the peak itself. `lpi` and `time` are the reference scenario's
-# laser–plasma model and time, which every evaluation must share; `checked` holds the
-# last model found equal to it (an identity check from then on).
+# The value of the ceiling is the irradiance norm on the peak scale of the reference. With
+# `exact`, the reported value is the peak itself. `lpi` and `time` are the laser–plasma
+# model and time of the reference scenario, which every evaluation must share. `checked`
+# contains the last model found equal to it, and later checks compare identity with it.
 struct _CeilingValue{W}
     target::Target
     elements::Vector{Int}
@@ -837,9 +871,10 @@ function _check_ceiling(c::_CeilingValue, ev::Evaluation)
     return nothing
 end
 
-# A constraint's reference evaluation and the optimized scenario share the laser–plasma
-# model (compared field by field; `checked` holds the last model found equal, an identity
-# check from then on) and, with a model, its time; otherwise an `ArgumentError` from `who`.
+# Check that the reference evaluation of a constraint and the optimized scenario share the
+# laser–plasma model and, with a model, its time. Otherwise throw an `ArgumentError` that
+# names `who`. The models are compared on every field. `checked` contains the last model
+# found equal, and later checks compare identity with it.
 function _check_reference_model(who::String, ref_lpi, ref_time::Float64, checked::Base.RefValue{Any},
                                 s::Scenario)
     lpi = s.lpi
@@ -859,8 +894,8 @@ function _check_reference_model(who::String, ref_lpi, ref_time::Float64, checked
     return nothing
 end
 
-# The laser–plasma model and time of a reference evaluation, for a constraint that
-# refuses evaluations with another (`_check_reference_model`).
+# `_ReferenceModel` contains the laser–plasma model and time of a reference evaluation. A
+# constraint with one throws on evaluations with another model (`_check_reference_model`).
 struct _ReferenceModel
     lpi::Any
     time::Float64
@@ -876,8 +911,9 @@ _model_name(::Nothing) = "none"
 _model_name(m) = string(nameof(typeof(m)))
 _model_name(m::Union{Tuple,AbstractVector}) = "(" * join(map(_model_name, m), ", ") * ")"
 
-# Structural equality of two laser–plasma models (two built alike are the same model):
-# identical, or of one type with equal fields, arrays and dictionaries by their entries.
+# Test two laser–plasma models for structural equality, so that two models built alike
+# are the same model. They are equal when they are identical, or when they have one type
+# and equal fields, with arrays and dictionaries compared by their entries.
 function _same_model(a, b)
     a === b && return true
     typeof(a) === typeof(b) || return false
@@ -902,48 +938,48 @@ end
 """
     clearance_floor(keepout; minimum = keepout.minimum, scale = 1.0, name = :clearance) -> Constraint
 
-A floor on each beam's worst-case clearance (mm) from a keep-out: the
+A floor on the worst-case clearance (mm) of each beam from a keep-out: the
 [`Constraint`](@ref) `keepout_clearance(keepout, ev) .≥ minimum`, one component per beam
-of the evaluation, labeled by the beam's name. The keep-out is any with a
+of the evaluation, labeled by the beam name. The keep-out is any with a
 [`keepout_clearance`](@ref) method and a `minimum` field: an [`ApertureKeepOut`](@ref),
 a [`SphereKeepOut`](@ref), a [`HardwareKeepOut`](@ref). A beam the keep-out does not
-apply to (clearance `Inf`) gives a component that always holds; a clearance of `-Inf` or
+apply to (clearance `Inf`) gives a component that is always met; a clearance of `-Inf` or
 `NaN` throws an `ArgumentError` naming the keep-out and the beam, as in
-[`keepout_penalty`](@ref). The keep-out's `weight`
-is not used: the constraint replaces its penalty ([`keepout_penalty`](@ref)), so pass
-the keep-out to the objective's `keepout` keyword or as a constraint, not both.
+[`keepout_penalty`](@ref). The `weight` of the keep-out is not used: the constraint
+replaces its penalty ([`keepout_penalty`](@ref)), so pass the keep-out to the `keepout`
+keyword of the objective or as a constraint, not both.
 
 `scale` (mm) is the unit of the violation: with the default 1 mm and `feasibility =
 1e-3`, a clearance within 1 µm of `minimum` is `:active` (an engineering default, finer
 than the keep-out accuracy against [`clearance`](@ref), a few micrometers). Give
 each of several keep-outs a distinct `name`.
 
-Where the limits conflict, `scale` is also the keep-out's weight against the other
-constraints: phase 1, the augmented Lagrangian and the least-violation design of
-[`PointingResult`](@ref) trade normalized violations, so at 1 mm a beam 0.1 mm inside
-the keep-out weighs as a mode gate exceeded by 10% of itself or a ceiling 10% over its
-limit (one component per beam). A smaller scale, e.g. a pointing tolerance of
-0.05 mm, makes the same shortfall weigh twenty times more: on a re-pointing study whose
-gates conflicted with the keep-out and a ceiling, it moved the violation from the
-keep-out onto the gates and the ceiling, each then several times further over (research
-notes, "Least violation, capped inner runs and phase 1's budget", § 6). Choose it for
-the trade the design accepts.
+Where the limits conflict, `scale` is also the weight of the keep-out against the other
+constraints, because phase 1, the augmented Lagrangian and the least-violation design of
+[`PointingResult`](@ref) all trade normalized violations. At 1 mm, a beam 0.1 mm inside
+the keep-out weighs as much as a mode gate exceeded by 10% of itself or a ceiling 10% over
+its limit, with one component per beam. A smaller scale, e.g. a pointing tolerance of
+0.05 mm, makes the same shortfall weigh twenty times more. On a re-pointing study whose
+gates conflicted with the keep-out and a ceiling, that change moved the violation from the
+keep-out onto the gates and the ceiling, and each of them ended several times further
+over (research notes, "Least violation, capped inner runs and phase 1's budget", § 6). The
+scale should be chosen for the trade the design accepts.
 
-The floor is per beam, not on the smallest clearance over the beams: in the augmented
-Lagrangian each beam component has a separate multiplier, which stays zero for a beam
-clear of its minimum (its term then vanishes from the inner problem), and each term is
-as smooth as that beam's clearance, while the smallest clearance over the beams has a
-kink wherever the closest beam changes (research notes, "Constrained re-pointing").
-The components follow the evaluation's beams, so the same constraint serves a stage on
-quads and a stage on their beams.
+The floor applies to each beam separately. In the augmented Lagrangian each beam
+component has a separate multiplier, which stays zero for a beam clear of its minimum, and
+the term of that beam then vanishes from the inner problem. Each term is as smooth as the
+clearance of its beam. The smallest clearance over the beams would instead have a kink
+wherever the closest beam changes (research notes, "Constrained re-pointing"). The
+components follow the beams of the evaluation, so the same constraint can be used for a
+stage on quads and a stage on their beams.
 
 On a [`PhasedScenario`](@ref) the constraint takes the [`PerPhase`](@ref) evaluation
-directly, without [`in_phase`](@ref): each beam's component is its least clearance over
-the phases, and its rows carry no phase in their names (`leh[B211]`). The phases share
-the aims, so a keep-out that does not read the beams' power (an `ApertureKeepOut` at a
-`peak_fraction`) gives every phase the same clearance, bitwise identical to that of any one
-phase; a keep-out at an absolute `intensity` widens with the power, and the
-brightest phase sets the clearance.
+directly, without [`in_phase`](@ref): the component of each beam is its least clearance over
+the phases, and its rows carry no phase in their names (`leh[B211]`). The phases share the
+aims, so a keep-out that does not read the beam power (an `ApertureKeepOut` at a
+`peak_fraction`) gives every phase the same clearance, identical to that of any one phase; a
+keep-out at an absolute `intensity` widens with the power, and the brightest phase sets the
+clearance.
 """
 function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale::Real = 1.0,
                          name = :clearance)
@@ -953,9 +989,9 @@ function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale:
     return Constraint(name, _ClearanceValue(keepout); lower = lim, scale, labels = _beam_names)
 end
 
-# The constraint's value: the keep-out's clearance per beam of the evaluation, `-Inf` and
-# `NaN` refused as by `keepout_penalty` (a violation of +Inf would make the augmented
-# Lagrangian infinite without a message).
+# The value of the constraint is the clearance from the keep-out per beam of the
+# evaluation. `-Inf` and `NaN` throw, as in `keepout_penalty`, because a violation of +Inf
+# would make the augmented Lagrangian infinite without a message.
 struct _ClearanceValue{K}
     keepout::K
 end
@@ -975,7 +1011,7 @@ fraction of the delivered (effective, post-LPI) power:
 [`power_fraction`](@ref)`(ev, names...) + `[`clipped_fraction`](@ref)`(ev, names...)`,
 the absorbed power on their elements and the power striking their outside (back side).
 The value of [`light_ceiling`](@ref) and [`light_floor`](@ref); differentiable, in the
-evaluation's number type. A name not in the target is an `ArgumentError`.
+number type of the evaluation. A name not in the target is an `ArgumentError`.
 """
 function light_fraction(ev::Evaluation, names::Symbol...)
     _check_names(ev.scenario.target, names)
@@ -987,20 +1023,20 @@ end
                   scale = max(limit, 1e-3), name = :light) -> Constraint
     light_ceiling(limit::Real, names...; scale = max(limit, 1e-3), name = :light) -> Constraint
 
-A ceiling on the laser light the named parts or components receive: the
-[`Constraint`](@ref) `light_fraction(ev, names...) ≤ limit` ([`light_fraction`](@ref):
-absorbed plus striking their outside, a fraction of the delivered power), labeled by
-the names. With a `reference` evaluation the limit is its light on the parts (no more
-light on a window or a shield than an accepted design gives it); a number sets the
-fraction directly.
+A ceiling on the laser light the named parts or components receive, the
+[`Constraint`](@ref) `light_fraction(ev, names...) ≤ limit`, labeled by the names.
+[`light_fraction`](@ref) is the light absorbed on the parts plus the light striking their
+outside, as a fraction of the delivered power. With a `reference` evaluation the limit is
+the light of the reference on the parts, so that a window or a shield receives no more
+light than in an accepted design. A number sets the fraction directly.
 
 `scale` sets the units of the violation: relative to the limit (the default) when the
 limit is above 1e-3 of the delivered power, otherwise absolute in units of 1e-3, so
 that a ceiling at or near zero (a part meant to stay dark) is met to 1e-6 of the
 delivered power at `feasibility = 1e-3` (an engineering default). The fraction comes
-from the deposition operator, which samples the spots' edges: compare a ray trace
+from the deposition operator, which samples the spot edges: compare a ray trace
 ([`raytrace_deposition`](@ref)) where the light on hardware must be known to better than
-the operator's sampling (research notes, "Capture and clearance rules as optimization
+the sampling of the operator (research notes, "Capture and clearance rules as optimization
 quantities").
 """
 light_ceiling(reference::Evaluation, names::Symbol...; limit = nothing, kwargs...) =
@@ -1014,8 +1050,8 @@ light_ceiling(limit::Real, names::Symbol...; kwargs...) =
     light_floor(limit::Real, names...; scale = max(limit, 1e-3), name = :light) -> Constraint
 
 A floor on the laser light the named parts or components receive,
-`light_fraction(ev, names...) ≥ limit`: the capture by a part meant to be hit (a
-backlighter foil, a landing surface), at least the `reference` design's or a given
+`light_fraction(ev, names...) ≥ limit`: the capture by a part meant to be hit, such as a
+backlighter foil or a landing surface, at least that of the `reference` design or a given
 fraction. Otherwise as [`light_ceiling`](@ref).
 """
 light_floor(reference::Evaluation, names::Symbol...; limit = nothing, kwargs...) =
@@ -1036,7 +1072,7 @@ function _light_constraint(upper::Bool, limit::Float64, names::Tuple; scale = no
                    Constraint(name, f; lower = limit, scale = s, labels = lab)
 end
 
-# The constraint's value: the light on the named parts.
+# The value of the constraint is the light on the named parts.
 struct _LightValue{N}
     names::NTuple{N,Symbol}
 end
@@ -1057,26 +1093,29 @@ from [`flux_ylm`](@ref); with an evaluation, those of the evaluation). For an ax
 this is `|aₗ/a₀ - aₗ'/a₀'|`. Generic in the number type: the value of
 [`mode_gate`](@ref).
 
-`m = :zero` sums the zonal order `m = 0` alone (`√(2l+1) |Δ(c_l0/c_00)|`, the change of
-`aₗ/a₀` about the coefficients' polar axis) and `m = :nonzero` the other orders, so that
-`δₗ² = δₗ(:zero)² + δₗ(:nonzero)²`, the split of [`mode_rms`](@ref)'s `m`: a gate per
-degree holds `δₗ`, and the split shows whether a degree's departure is axisymmetric
-(e.g. `l = 1`, `m = ±1`: a sideways shift of the drive from a dropped bundle).
+`m = :zero` sums only the zonal order `m = 0`, `√(2l+1) |Δ(c_l0/c_00)|`, which is the
+change of `aₗ/a₀` about the polar axis of the coefficients. `m = :nonzero` sums the other
+orders, so that `δₗ² = δₗ(:zero)² + δₗ(:nonzero)²`, as in the split of
+[`mode_rms`](@ref)'s `m`. A gate per degree bounds `δₗ`, and the split shows whether the
+departure in a degree is axisymmetric. For example, `l = 1` with `m = ±1` is a sideways
+shift of the drive from a dropped bundle.
 """
 function mode_departure(c::AbstractVector, reference::AbstractVector; lmax::Integer = 4, m::Symbol = :all)
     n = (lmax + 1)^2
     length(c) >= n && length(reference) >= n ||
         throw(ArgumentError("the coefficient vectors need degrees through l = $lmax"))
     m in (:all, :zero, :nonzero) || throw(ArgumentError("m must be :all, :zero or :nonzero, got :$m"))
-    # a zero of the result type rather than the type itself: the comprehension's closure
-    # stores a type as a `DataType` field, and Julia 1.10 then dispatches at run time
+    # Pass a zero of the result type, not the type itself. The closure of the comprehension
+    # would store a type as a `DataType` field, and Julia 1.10 would then dispatch at run
+    # time.
     z = zero(c[1] / c[1] - reference[1] / reference[1])
     return [_departure(c, reference, l, z, m) for l in 1:lmax]
 end
 mode_departure(ev::Evaluation, reference::AbstractVector; lmax::Integer = 4, m::Symbol = :all) =
     mode_departure(flux_ylm(ev; lmax), reference; lmax, m)
 
-# The departure of degree l over the orders `m` selects (:all, :zero, :nonzero).
+# Return the departure of degree l over the orders that `m` selects (:all, :zero or
+# :nonzero).
 function _departure(c, r, l, z, m::Symbol)
     s = z
     for k in (m === :zero ? (0:0) : -l:l)
@@ -1085,7 +1124,7 @@ function _departure(c, r, l, z, m::Symbol)
         s += (c[i] / c[1] - r[i] / r[1])^2
     end
     d2 = (2l + 1) * s
-    # √ at an exact match is a cone tip: its subgradient 0 instead of 0/0
+    # At an exact match √ has a cone tip, so the subgradient 0 is returned instead of 0/0.
     return d2 > 0 ? sqrt(d2) : zero(d2)
 end
 
@@ -1095,61 +1134,62 @@ end
     mode_gate(reference::AbstractVector, gates; fraction = 1, floor = nothing, shift = nothing)
         -> Constraint
 
-A gate per degree on the departure of the capsule's drive shape from a `reference`
-shape: the [`Constraint`](@ref) `mode_departure(ev, reference; lmax) ≤ gates`, named
-`:mode_gate`, one component per degree `l = 1:lmax` (labeled `l = 1`, …), each in units
-of its gate.
+A gate per degree on the departure of the capsule drive shape from a `reference` shape.
+The [`Constraint`](@ref) `mode_departure(ev, reference; lmax) ≤ gates` is named
+`:mode_gate` and has one component per degree `l = 1:lmax`, labeled `l = 1`, …, each in
+units of its gate.
 
-`gates` is a vector of departures (`gates[l]` for degree `l`, in the units of
-[`mode_departure`](@ref): for an axisymmetric difference `|Δaₗ/a₀|`, so `0.005` at
-`l = 2` is 0.5% in P2/P0), or the result of [`mode_uncertainty`](@ref), whose
-`floor` is the gate, `√(2l+1) × rms_mode[l]`: the departure that random errors of
-that size (e.g. NIF's 50 µm rms pointing) give each degree. That gate is a lower bound,
-what pointing error alone produces: laser delivery and the hohlraum plasma move the
-shape from shot to shot by more, in ways a view-factor model does not carry, so a
-tolerance per degree in physical units, a choice of the design, is the usual gate. At
+`gates` is either a vector of departures or the result of [`mode_uncertainty`](@ref). In
+a vector, `gates[l]` is the gate for degree `l` in the units of [`mode_departure`](@ref),
+which for an axisymmetric difference are `|Δaₗ/a₀|`; so `0.005` at `l = 2` is 0.5% in
+P2/P0. For a [`mode_uncertainty`](@ref) result the gate is its `floor`,
+`√(2l+1) × rms_mode[l]`, the departure that random errors of that size (e.g. NIF's 50 µm
+rms pointing) give each degree. That gate is a lower bound, because it is what pointing
+error alone produces. Laser delivery and the hohlraum plasma move the shape from shot to
+shot by more, in ways a view-factor model does not carry. A tolerance per degree in
+physical units, chosen for the design, is therefore the usual gate. At
 the pointing floor the gates can cost re-pointing and drive that a tolerance within
 that shot-to-shot spread does not (research notes, "Mode gates in physical units").
-Laser delivery's share can enter the floor through `mode_uncertainty`'s `power` (an
-rms fraction per pointing unit): on the dropped-bundle tutorial's case 3% per quad
-raises the floor by 40% at `l = 1` and 21% at `l = 2`, 5% by 92% and 51% (NIF's
-published beam-to-beam balance is better than 5%; research notes, "Inner-run options,
-a wall-loss scenario warning and laser delivery figures", § 7).
-With [`drive_objective`](@ref), the largest drive within the gates; with
-[`shift_objective`](@ref), the least re-pointing that meets them.
+The share of laser delivery can be included in the floor through `mode_uncertainty`'s
+`power`, an rms fraction per pointing unit. On the case of the dropped-bundle tutorial,
+3% per quad raises the floor by 40% at `l = 1` and 21% at `l = 2`, and 5% raises it by 92%
+and 51%. NIF's published beam-to-beam balance is better than 5% (research notes,
+"Inner-run options, a wall-loss scenario warning and laser delivery figures", § 7).
+With [`drive_objective`](@ref) the optimizer finds the largest drive within the gates;
+with [`shift_objective`](@ref) it finds the least re-pointing that meets them.
 
-With a reference [`Evaluation`](@ref) (e.g. the pointing before a bundle was dropped,
-in a scenario that observes the capsule), the shape is its [`flux_ylm`](@ref)
-coefficients, and the gate records the reference scenario's laser–plasma model (`lpi`)
-and time: evaluating the gate on a scenario with another model, or the same model at
-another time, throws an `ArgumentError`, as for [`irradiance_ceiling`](@ref) (the shape
-of a drive without the scenario's CBET model is another shape, and the gates would hold
-the design to it). The reference may be on another target (a hohlraum without the
-design's windows). A coefficient vector records no model, so that method cannot check
-it: the vector must come from an evaluation with the scenario's `lpi` and time.
+With a reference [`Evaluation`](@ref) (e.g. the pointing before a bundle was dropped, in a
+scenario that observes the capsule), the shape is its [`flux_ylm`](@ref) coefficients, and
+the gate records the laser–plasma model (`lpi`) and time of the reference scenario:
+evaluating the gate on a scenario with another model, or the same model at another time,
+throws an `ArgumentError`, as for [`irradiance_ceiling`](@ref) (the shape of a drive without
+the CBET model of the scenario is another shape, and the gates would hold the design to it).
+The reference may be on another target (a hohlraum without the windows of the design). A
+coefficient vector does not record a model, so that method cannot check it: the vector must
+come from an evaluation with the `lpi` and time of the scenario.
 
 **Keywords.**
 
-- `fraction` (positive, default 1) scales a pointing floor: with `gates` a
-  [`mode_uncertainty`](@ref) result the gate is `fraction × √(2l+1) × rms_mode[l]`, that
-  is `fraction × u.floor[l]` (`fraction = 0.8`: 0.8 of the floor). A vector gives one
-  multiple per degree (`fraction = [1, 2, 2, 2]`: the floor at `l = 1`, twice it at
-  `l = 2–4`), as long as the floor.
+- `fraction` (positive, default 1) scales a pointing floor. With `gates` a
+  [`mode_uncertainty`](@ref) result, the gate is `fraction × √(2l+1) × rms_mode[l]`, that
+  is `fraction × u.floor[l]`; `fraction = 0.8` gives 0.8 of the floor. A vector as long as
+  the floor gives one multiple per degree; `fraction = [1, 2, 2, 2]` gives the floor at
+  `l = 1` and twice the floor at `l = 2–4`.
 - `floor` (a [`mode_uncertainty`](@ref) result, or a vector of departures per degree)
   makes the floor a lower bound of physical gates: the gate per degree is the larger of
   `gates[l]` and `fraction × floor[l]`, so that a tolerance in physical units is never
   tighter than the departure pointing error alone produces (research notes, "Mode
   gates in physical units"). `gates` and `floor` cover the same degrees.
-- `shift` moves the target shape away from the reference's: the departure is measured
-  from the reference's coefficients with each listed mode shifted, the reference's
-  laser–plasma model and time still checked. A shift is a pair `l => Δ` (the axisymmetric
-  mode `(l, 0)`) or `(l, m) => Δ`, or a collection of them, with `Δ` in the units of
+- `shift` moves the target shape away from the reference shape: the departure is measured
+  from the reference coefficients with each listed mode shifted, the laser–plasma model and
+  time of the reference still checked. A shift is a pair `l => Δ` (the axisymmetric mode
+  `(l, 0)`) or `(l, m) => Δ`, or a collection of them, with `Δ` in the units of
   [`mode_departure`](@ref): for `m = 0`, `Δ` is the change of `aₗ/a₀` in the Legendre
-  expansion of the capsule flux `Σ aₗ Pₗ(cos θ)` (`2 => 0.024` sets the target's P2/P0
-  0.024 above the reference's; with the orthonormal coefficients of [`flux_ylm`](@ref),
-  `c_l0 → c_l0 + Δ c_00/√(2l+1)`), and for `m ≠ 0` the same change of the real
-  coefficient `c_lm`, so that the shifted shape departs from the reference's by `|Δ|` in
-  degree `l` ([`shift_modes`](@ref)). The drive `c_00` is unchanged.
+  expansion of the capsule flux `Σ aₗ Pₗ(cos θ)` (`2 => 0.024` sets the target P2/P0 0.024
+  above that of the reference; with the orthonormal coefficients of [`flux_ylm`](@ref),
+  `c_l0 → c_l0 + Δ c_00/√(2l+1)`), and for `m ≠ 0` the same change of the real coefficient
+  `c_lm`, so that the shifted shape departs from the reference shape by `|Δ|` in degree `l`
+  ([`shift_modes`](@ref)). The drive `c_00` is unchanged.
 """
 mode_gate(reference::Evaluation, gates; fraction::Union{Real,AbstractVector{<:Real}} = 1, floor = nothing,
           shift = nothing) =
@@ -1169,9 +1209,9 @@ _gate_values(gates::AbstractVector{<:Real}) = gates
 _gate_values(u::NamedTuple) = _mode_floor(u.rms_mode)
 _gate_lmax(gates) = max(length(_gate_values(gates)), 1)
 
-# The gates per degree from `mode_gate`'s arguments: the gates themselves, `fraction` of
-# a floor, or the larger of physical gates and `fraction` of a floor. `fraction` is one
-# number or one per degree of the floor.
+# Return the gates per degree from the arguments of `mode_gate`. They are the gates
+# themselves, `fraction` of a floor, or the larger of physical gates and `fraction` of a
+# floor. `fraction` is one number or one per degree of the floor.
 function _gate_vector(gates, fraction::Union{Real,AbstractVector{<:Real}}, floor)
     all(f -> isfinite(f) && f > 0, fraction) ||
         throw(ArgumentError("the fraction must be positive and finite, got $fraction"))
@@ -1192,7 +1232,7 @@ function _gate_vector(gates, fraction::Union{Real,AbstractVector{<:Real}}, floor
     return max.(collect(Float64, g), _scaled_floor(fraction, f))
 end
 
-# `fraction` (one number, or one per degree) times the floor `f`.
+# Multiply the floor `f` by `fraction`, which is one number or one per degree.
 _scaled_floor(fraction::Real, f) = fraction == 1 ? f : fraction .* f
 function _scaled_floor(fraction::AbstractVector{<:Real}, f)
     length(fraction) == length(f) ||
@@ -1203,15 +1243,16 @@ end
 """
     shift_modes(c, shift) -> Vector{Float64}
 
-The coefficient vector `c` ([`flux_ylm`](@ref): orthonormal real harmonics in
-[`mode_index`](@ref) order) with each mode of `shift` moved, the target shape of
-[`mode_gate`](@ref)`(...; shift)`: a pair `l => Δ` (the mode `(l, 0)`) or `(l, m) => Δ`,
-or a collection of them, with `Δ` in the units of [`mode_departure`](@ref):
-`c_lm → c_lm + Δ c_00/√(2l+1)`. For `m = 0`, `Δ` is the change of `aₗ/a₀` in the Legendre expansion
-`Σ aₗ Pₗ(cos θ)` (since `aₗ/a₀ = √(2l+1) c_l0/c_00`); a single shift departs from `c` by
-`|Δ|` in its degree. `c_00` (the drive) is unchanged, and the vector records no
-laser–plasma model: `mode_gate(reference::Evaluation, gates; shift)` keeps the
-reference's check.
+The coefficient vector `c` with each mode of `shift` moved, the target shape of
+[`mode_gate`](@ref)`(...; shift)`. The coefficients are those of [`flux_ylm`](@ref),
+orthonormal real harmonics in [`mode_index`](@ref) order. A shift is a pair `l => Δ` for
+the mode `(l, 0)`, a pair `(l, m) => Δ`, or a collection of them, with `Δ` in the units of
+[`mode_departure`](@ref):
+`c_lm → c_lm + Δ c_00/√(2l+1)`. For `m = 0`, `Δ` is the change of `aₗ/a₀` in the Legendre
+expansion `Σ aₗ Pₗ(cos θ)` (since `aₗ/a₀ = √(2l+1) c_l0/c_00`); a single shift departs from
+`c` by `|Δ|` in its degree. `c_00` (the drive) is unchanged, and the vector does not record
+a laser–plasma model: `mode_gate(reference::Evaluation, gates; shift)` still checks the
+reference model.
 """
 function shift_modes(c::AbstractVector{<:Real}, shift)
     out = collect(Float64, c)
@@ -1240,8 +1281,8 @@ function _mode_gate(reference::AbstractVector, gates::AbstractVector{<:Real}, mo
                       labels = ["l = $l" for l in 1:lmax])
 end
 
-# The gate's value; `model` the reference's laser–plasma model and time (`nothing` for a
-# coefficient vector: unchecked).
+# The value of a gate. `model` contains the laser–plasma model and time of the reference, or
+# `nothing` for a coefficient vector, which is not checked.
 struct _GateValue{M<:Union{Nothing,_ReferenceModel}}
     reference::Vector{Float64}
     lmax::Int
@@ -1258,9 +1299,10 @@ end
 
 Objective for the largest drive: `-a₀/drive`, with `a₀` the [`mean_flux`](@ref) on the
 capsule and `drive` (TW/mm²) its scale (e.g. `mean_flux(evaluate(scenario, x0))`, or a
-reference design's), plus the `clip`, `missed`, `direct` and `keepout` penalties of
-[`symmetry_objective`](@ref). Meant to run with constraints that hold the shape, such
-as [`mode_gate`](@ref): alone it trades every symmetry for drive.
+that of a reference design), plus the `clip`, `missed`, `direct` and `keepout` penalties of
+[`symmetry_objective`](@ref). The objective is meant to run with constraints that hold
+the shape, such as [`mode_gate`](@ref). Without them it rewards drive at any cost to
+symmetry.
 """
 function drive_objective(; drive::Real, clip = 10.0, missed = 10.0, direct = 10.0,
                          direct_names = nothing, keepout = nothing)
@@ -1276,21 +1318,21 @@ end
 """
     drive_floor(reference; fraction, scale = limit, name = :drive) -> Constraint
 
-A floor on the capsule's drive: the [`Constraint`](@ref) `mean_flux(ev) ≥ fraction ×
-mean_flux(reference)` ([`mean_flux`](@ref): the solid-angle mean of the incident flux on
-the observed capsule, TW/mm²), with `reference` an [`Evaluation`](@ref) of a reference
-design in a scenario that observes the capsule (the pointing before a bundle was
-dropped, or the start). `fraction` (positive, no default) sets how much of the
-reference's drive the design must keep: no value holds for every study, as a reference
-with more beams than the design delivers more drive.
+A floor on the capsule drive, the [`Constraint`](@ref)
+`mean_flux(ev) ≥ fraction × mean_flux(reference)`. [`mean_flux`](@ref) is the solid-angle
+mean of the incident flux on the observed capsule (TW/mm²). `reference` is an
+[`Evaluation`](@ref) of a reference design, such as the pointing before a bundle was
+dropped or the start, in a scenario that observes the capsule. `fraction` (positive, no
+default) sets how much of the reference drive the design must keep: no value suits every
+study, as a reference with more beams than the design delivers more drive.
 
-The constraint for a design whose power can fall: with power scales
+This floor is the constraint for a design whose power can fall. With power scales
 ([`PowerScales`](@ref)) or powers among the parameters, a ceiling on an absolute
-quantity (an [`irradiance_ceiling`](@ref), a [`light_ceiling`](@ref)) is met by cutting
-power, and the drive falls with it. The default `scale` is the limit, so the default
+quantity, such as an [`irradiance_ceiling`](@ref) or a [`light_ceiling`](@ref), is met by
+cutting power, and the drive falls with it. The default `scale` is the limit, so the default
 `feasibility = 1e-3` meets the floor to 0.1% of the limit. As for
-[`mode_gate`](@ref), the floor records the reference scenario's laser–plasma model and
-time, and evaluating it with another throws an `ArgumentError`; the reference may be on
+[`mode_gate`](@ref), the floor records the laser–plasma model and time of the reference
+scenario, and evaluating it with another throws an `ArgumentError`; the reference may be on
 another target. [`drive_ceiling`](@ref) is the upper side, for a band.
 """
 function drive_floor(reference::Evaluation; fraction::Real, scale::Union{Nothing,Real} = nothing,
@@ -1303,14 +1345,14 @@ end
 """
     drive_ceiling(reference; fraction, scale = limit, name = :drive_ceiling) -> Constraint
 
-A ceiling on the capsule's drive: the [`Constraint`](@ref) `mean_flux(ev) ≤ fraction ×
+A ceiling on the capsule drive: the [`Constraint`](@ref) `mean_flux(ev) ≤ fraction ×
 mean_flux(reference)`, the upper side of [`drive_floor`](@ref), with the same reference,
-`scale` and check of the reference's laser–plasma model and time (an `ArgumentError` on
-an evaluation with another; the reference may be on another target). With a floor it
-holds the drive in a band about the reference's: `drive_floor(reference; fraction =
+`scale` and check of the laser–plasma model and time of the reference (an `ArgumentError`
+on an evaluation with another; the reference may be on another target). With a floor the
+drive is held in a band about the reference drive: `drive_floor(reference; fraction =
 1.0)` and `drive_ceiling(reference; fraction = 1.02)` keep it within 0–2% above, so
 that power scales among the parameters cannot buy shape with drive beyond the band.
-`fraction` (positive, no default) is a choice of the study, not a facility limit.
+`fraction` (positive, no default) is a choice of the study and is not a facility limit.
 """
 function drive_ceiling(reference::Evaluation; fraction::Real, scale::Union{Nothing,Real} = nothing,
                        name = :drive_ceiling)
@@ -1319,7 +1361,7 @@ function drive_ceiling(reference::Evaluation; fraction::Real, scale::Union{Nothi
                       scale = something(scale, lim))
 end
 
-# The limit `fraction × mean_flux(reference)` of a drive floor or ceiling.
+# Return the limit `fraction × mean_flux(reference)` of a drive floor or ceiling.
 function _drive_limit(reference::Evaluation, fraction::Real)
     isfinite(fraction) && fraction > 0 || throw(ArgumentError("the fraction must be positive and finite"))
     a0 = Float64(ForwardDiff.value(mean_flux(reference)))
@@ -1327,8 +1369,8 @@ function _drive_limit(reference::Evaluation, fraction::Real)
     return fraction * a0
 end
 
-# The floor's or ceiling's value: the capsule's mean flux, on the reference's laser–plasma
-# model.
+# The value of the floor or ceiling is the mean flux on the capsule, evaluated with the
+# laser–plasma model of the reference.
 struct _DriveValue
     model::_ReferenceModel
     ceiling::Bool

@@ -7,10 +7,10 @@ super-Gaussian spot, an f-number cone, pointing and defocus. A quad model splits
 its facility beams, `nif_beams(quads)`, and beams join into quads at their mean aim,
 `nif_quads(beams)`.
 
-A beam's direction is fixed by its port (``\mathbf{k} = -\hat{\mathbf{p}}``), and
+The direction of a beam is fixed by its port (``\mathbf{k} = -\hat{\mathbf{p}}``), and
 pointing translates its axis through `aim`. Best focus is at `aim + defocus·k`; positive
 defocus moves the focus along the beam, as in VisRad and the NIF CMT. The spot axes are
-given in the port's (``\hat\theta``, ``\hat\phi``) frame. [`VisRadProfile`](@ref)
+given in the (``\hat\theta``, ``\hat\phi``) frame of the port. [`VisRadProfile`](@ref)
 reproduces VisRad's beam away from focus, by the law that the parameters exported by
 VisRad follow (research notes, "VisRad's beam profile law").
 

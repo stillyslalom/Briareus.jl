@@ -1,16 +1,17 @@
-# The wall re-emission closure of `drive_history` (`wall_release`) against an independent
-# reference: 1-D nonlinear radiation diffusion in a static gold wall with the power laws
-# of Hammer & Rosen, PoP 10, 1829 (2003) (e = 3.4 T^1.6 ρ^-0.14 MJ/g, κ_R = 7200 T^-1.5
-# ρ^0.2 cm²/g, T in heV) and a Marshak boundary driven by the incident flux σT_D(t)^4.
-# The closure is given the same T_D(t) and the constant-T scaling of the same medium (a
-# static medium: E ∝ T^((4+α+β)/2) t^0.5, a = 3.55 and b = 0.5; coefficient from the
-# reference's constant-T energy). Prints the release factor each drive needs (the
-# closure is linear in it for a prescribed T_D) and the check at `WallLossAlbedo`'s
-# default. A static wall needs 0.76–0.78 (the default until 2026-10-25); the default is
-# now the ablating wall's 1.0 (`examples/late_time_wall.jl release`), so the check at
-# the default shows the static wall's overshoot. Research notes, "Wall re-emission and
-# the capsule radius (2026-10-24)" and "Capsule absorption, conversion and the
-# ablating-wall release (2026-10-25)".
+# This example checks the wall re-emission closure of `drive_history` (`wall_release`)
+# against an independent reference. The reference is 1-D nonlinear radiation diffusion in a
+# static gold wall with the power laws of Hammer & Rosen, PoP 10, 1829 (2003), with e = 3.4
+# T^1.6 ρ^-0.14 MJ/g, κ_R = 7200 T^-1.5 ρ^0.2 cm²/g and T in heV, and a Marshak boundary
+# driven by the incident flux σT_D(t)^4. The closure is given the same T_D(t) and the
+# constant-T scaling of the same static medium, E ∝ T^((4+α+β)/2) t^0.5 with a = 3.55 and b
+# = 0.5, and a coefficient from the constant-T energy of the reference. The example prints
+# the release factor each drive needs, in which the closure is linear for a prescribed T_D,
+# and the check at the default of `WallLossAlbedo`. A static wall needs 0.76–0.78, the
+# default until 2026-10-25. The default is now 1.0, the value for the ablating wall
+# (`examples/late_time_wall.jl release`), so the check at the default shows the overshoot of
+# the static wall. The research notes sections are "Wall re-emission and the capsule radius
+# (2026-10-24)" and "Capsule absorption, conversion and the ablating-wall release
+# (2026-10-25)".
 #
 #   julia --project=. examples/wall_reemission.jl [ρ g/cc (19.3)]      # ~10 min
 

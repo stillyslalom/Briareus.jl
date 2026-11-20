@@ -6,7 +6,7 @@
 using Briareus, LinearAlgebra, Test
 
 @testset "NIF beams on VisRad's phase plates" begin
-    # the default is bitwise the beam frame
+    # The default is identical to the beam frame.
     @test nif_beams() == nif_beams(spot_frame = :beam)
     @test_throws ArgumentError nif_beams(spot_frame = :cone)
     # the plates by cone, and their spots

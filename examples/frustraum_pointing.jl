@@ -1,9 +1,9 @@
-# Frustraum cone pointing, derived from the example cylinder pointing (BriareusGUI's
-# FRUSTRAUM_CONE_POINTING): each cone's spot centroid on the frustraum wall at the
-# fraction of the half-length where the cylinder pointing puts it on the 10.1 mm
-# cylinder, where the entrance hole allows it. An engineering default, derived; no
-# frustraum pointing beyond the 50° cone's is public (research notes, "Frustraum cone
-# pointing: derived (2026-11-03)").
+# This example derives the frustraum cone pointing (FRUSTRAUM_CONE_POINTING in BriareusGUI)
+# from the example cylinder pointing. The spot centroid of each cone is placed on the
+# frustraum wall at the fraction of the half-length where the cylinder pointing puts it on
+# the 10.1 mm cylinder, where the entrance hole allows it. The result is a derived
+# engineering default; no frustraum pointing is public beyond that of the 50° cone (research
+# notes, "Frustraum cone pointing: derived (2026-11-03)").
 #
 #   julia --project=. -t auto examples/frustraum_pointing.jl
 #

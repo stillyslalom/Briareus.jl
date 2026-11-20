@@ -27,25 +27,26 @@
     @test c3.margin == c3.worst - 0.5
     @test c3.point ≈ Vec3(x0, 0, 2.0)
     @test c3.status === :pass && c3.unit === :mm
-    # the tolerance term: dropping it, or moving the pivot, changes only r·tan(0.5°)
+    # Dropping the tolerance term, or moving the pivot, changes only r·tan(0.5°).
     c0 = trow(talis_check(t, [b]; capture = (:f,), tolerance = 0, rtol = 0), :clearance_3w, :plate)
     @test c0.worst - c3.worst ≈ tan05 * hypot(x0, 2.0) atol = 1e-4
     bA = remake(b; aim = (0.0, 0.0, 0.5))               # aim 0.5 mm up the axis
     cA = trow(talis_check(t, [bA]; capture = (:f,), pivot = :aim, rtol = 0), :clearance_3w, :plate)
     @test lowerbound(cA.worst, x0 - (ρ1 + 1.5 / 16) - R - 1 / 16 - tan05 * hypot(x0, 1.5))
-    # pivot on the edge point: no allowance there, but r·tan(0.5°) grows linearly along
-    # the edge and the distance only quadratically, so the minimum sits off the pivot
-    # (|y| ≈ 0.5° · x0 = 14 µm) and lies below the vertex value; reference: the exact
-    # edge distance on a 0.1 µm grid
+    # With the pivot on the edge point, the allowance at that point is zero. Along the edge
+    # r·tan(0.5°) grows linearly and the distance only quadratically, so the minimum lies
+    # off the pivot (|y| ≈ 0.5° · x0 = 14 µm) and below the vertex value. The reference is
+    # the exact edge distance on a 0.1 µm grid.
     cP = trow(talis_check(t, [b]; capture = (:f,), pivot = (x0, 0.0, 2.0), rtol = 0), :clearance_3w, :plate)
     refP = minimum(hypot(x0, y) - (ρ1 + 2 / 16) - R - 1 / 16 - tan05 * abs(y) for y in 0:1e-7:0.1)
     @test refP < nominal - R - 1 / 16 - 5e-5 && lowerbound(cP.worst, refP)
     cM = trow(talis_check(t, [bA]; capture = (:f,), pivot = :max, rtol = 0), :clearance_3w, :plate)
     @test cM.worst <= min(cA.worst, trow(talis_check(t, [bA]; capture = (:f,), rtol = 0), :clearance_3w, :plate).worst) + 1e-4
-    # A plate crossed by the beam between its vertices (one quad, corners ≥ 50 mm off
-    # the axis): the minimum over the whole triangle, on the axis, not at the vertices.
-    # Exact: −ρ1 − 2/16 (inside the envelope) less the error stack and 2·tan(0.5°). At
-    # the default rtol the bound lies within 1% of its distance from the 0.5 mm rule.
+    # The beam of one quad crosses a plate between its vertices, with the corners ≥ 50 mm
+    # off the axis. The minimum over the whole triangle lies on the axis; the vertices do
+    # not set it. The exact value is −ρ1 − 2/16 (inside the envelope), less the error stack
+    # and 2·tan(0.5°). At the default rtol the bound lies within 1% of its distance from the
+    # 0.5 mm rule.
     wide = Component(:plate, translate(rectangle_mesh(100.0, 100.0; nu = 1, nv = 1), (8.0, 8.0, 2.0)), gold();
                      two_sided = true)
     cw = trow(talis_check(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), wide), [b];
@@ -73,8 +74,9 @@
     # an axis that misses the substrate fails capture outright
     rmiss = talis_check(t, [remake(b; aim = (3.0, 0.0, 0.0))]; capture = (:f,))
     @test trow(rmiss, :capture_3w, :none).status === :fail
-    # incidence: flat foil, beam axis at θ from its normal; worst = θ plus the f-cone's
-    # half-angle atan(1/16) = 3.576° (no rule tolerance), so the limit falls at θ = 66.42°
+    # For incidence on a flat foil with the beam axis at θ from its normal, the worst angle
+    # is θ plus the half-angle of the f-cone, atan(1/16) = 3.576°, with no rule tolerance.
+    # The limit therefore falls at θ = 66.42°.
     big = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 12.0, n = 12))
     hc = atand(1 / 16)
     incs = [(θ, st, trow(talis_check(big, [Beam("i"; theta = θ, phi = 30, spot, fnumber = 8.0)]; capture = (:f,)),
@@ -108,7 +110,7 @@
     @test lowerbound(o1.worst, δ - taper - R - tan05 * hypot(4.45 - δ, 0.05))
     @test o1.status === :pass                              # 0.5 mm in: clears by > 0.2 mm
     @test trow(r1, :clearance_1w, :other).nominal > 8      # the other side is dark
-    # prism model: no taper
+    # The prism model has no taper.
     rp = talis_check(t1, [bl]; capture = (), omega1_focus = Inf, lens_distance = Inf, rtol = 0)
     @test lowerbound(trow(rp, :clearance_1w, :own).worst, δ - R - tan05 * hypot(4.45 - δ, 0.05))
     # a 100 mm plate in the focal plane over the whole footprint, corners ≥ 20 mm out of
@@ -170,8 +172,8 @@
     @test trow(talis_check(Target(cyl(1.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk).status === :pass
     ms = trow(talis_check(Target(cyl(2.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk)
     @test ms.unit === :deg && ms.status === :fail          # its rim line reflects straight back
-    # curvature overrides: dimpled, too-fine dimples, dimples of unknown spacing (User
-    # Guide §5.6.2 needs half-side/radius ≥ 0.25), and undetermined meshes
+    # The curvature overrides cover dimpled meshes, too-fine dimples, dimples of unknown
+    # spacing (User Guide §5.6.2 needs half-side/radius ≥ 0.25), and undetermined meshes.
     dimpled(c) = trow(talis_check(Target(pl), [bl]; capture = (), open_ports = [pq],
                                   curvature = Dict(:mirror => c)), :management_1w, :mirror)
     @test dimpled((:dimpled, 1.0, 0.25)).status === :pass
@@ -204,7 +206,8 @@
                      curvature = Dict(:sombrero => (:dimpled, 2.5, 1.0)))
     dimp = [x for x in rd.rows if x.rule === :management_1w && x.component === :sombrero]
     @test length(dimp) == length(flat) && all(x -> x.status === :pass, dimp)
-    # beams entering through the LEH: no capture rows fail on the wall, and the caps clear
+    # For beams entering through the LEH, every capture row on the wall passes, and the
+    # caps clear.
     @test all(x -> x.status === :pass, (x for x in rs.rows if x.rule === :capture_3w))
     @test all(x -> x.margin > 0, (x for x in rs.rows if x.rule === :clearance_3w && x.component === :sombrero))
     @test any(x -> x.rule === :tas_stay_in, rs.rows)
@@ -287,7 +290,7 @@
     @test trow(rb2, :capture_3w, :bl; beam = ob2[1].name).status === :fail
     @test first(violations(rb2)).status === :fail
 
-    # TAS stay-in zone: a part 20 mm above the lowest upper-beam aim point fails.
+    # In the TAS stay-in zone, a part 20 mm above the lowest upper-beam aim point fails.
     up = translate(Component(:post, disk_mesh(0.5, 0.0; nr = 1, nphi = 8), gold()), (8.0, 8.0, 20.0))
     rt = talis_check(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 4), up),
                      [remake(qs[1]; aim = (0.0, 0.0, 0.0))]; capture = (:f,), omega1 = false)
@@ -304,7 +307,7 @@
     path = write_talis_csv(tempname() * ".csv", rs)
     lines = readlines(path)
     @test count(!startswith("#"), lines) == 1 + length(rs.rows)
-    # the header carries the scope: source, settings, skipped checks, out-of-scope items
+    # The header states the scope: source, settings, skipped checks and out-of-scope items.
     @test occursin(TALIS_SOURCE, lines[1]) && "# setting tolerance = 0.5" in lines &&
           "# setting pivot = tcc" in lines && "# setting resolution = 0.0001" in lines
     @test count(startswith("# out of scope: "), lines) == length(TALIS_OUT_OF_SCOPE)
@@ -313,7 +316,7 @@
 end
 
 @testset "TaLIS requirement text" begin
-    # each rule's requirement reads its thresholds from the report's settings
+    # The requirement of each rule takes its thresholds from the report settings.
     s = (; capture_contour = 0.1, capture_margin = 0.2, max_incidence = 70.0, clearance_contour = 0.01,
          clearance_margin = 0.5, omega1_edge = 1.25, omega1_margin = 3.0, cylinder_radius = 4.0,
          sphere_radius = 2.5, reflection_angle = 10.0, stay_in = 6.0)

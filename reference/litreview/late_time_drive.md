@@ -2,10 +2,10 @@
 
 ROADMAP, "Absolute energetics on N221204". After the laser power falls, Briareus's drive falls much faster than Dante 1
 on all three benchmark shots. Model minus measured over the initial LEH area, at 8.5 ns:
-N191118 −73 eV, N210601 −44 eV, N221204 −28 eV. At bang time Dante reads 226 / 254 eV on
+N191118 −73 eV, N210601 −44 eV, N221204 −28 eV. At bang time Dante measures 226 / 254 eV on
 the Zylstra pair, the model 155 / 186 eV (research notes, "Zylstra 2022 LEH pair,
 time-dependent"). Closing this takes ~250–450 kJ more x-ray source after the fall. This
-review asks which published mechanism could supply it, how large each is, and which of
+review examines which published mechanism could supply it, how large each is, and which of
 them Briareus's data can test.
 
 Confidence: **H** primary text read; **H-img** read from a rendered figure (±5 eV,
@@ -77,7 +77,8 @@ on the rate of rise (BP11.126, abstract text not served).
   important and is not accounted for in this simple model." Ca20's eq. 9 replaces the
   physics after laser-off by T_r^3.3(t) = T_r^3.3(t_laser) exp[−3.3 (t − t_laser)/τ_decay]
   (following Mo17); the τ_decay value is not printed. Its Fig. 4 Dante falls ~30–35 eV/ns
-  after the peak (290 → 195 eV over ~3 ns on an HDC/DU shot: T e-folds in ~7.5 ns, *L*).
+  after the peak (from 290 to 195 eV over ~3 ns on an HDC/DU shot, so T e-folds in ~7.5 ns;
+  *L*).
 - **Cooling rate (LHL23, H).** "The hohlraum drive temperature drops at a rate that depends
   on the rate at which the laser power drops, the size of the laser entrance holes, and the
   hohlraum wall area and opacity"; the drive-pressure cooling time is "typical[ly] 1.5 ns";
@@ -191,7 +192,8 @@ to Dante would make Dante a fit target.
    (Kr22: −29 to −40 eV from maximum to bang). So the missing ~250–450 kJ is in the
    hohlraum plasma, which a radiosity model has no store for.
 2. **The closure is not the main error, but its release factor is low for an ablating
-   wall**: ~1.0 rather than 0.77 (0.9–1.07 over 10–50% drops and in the 0-D hohlraum).
+   wall**: it should be ~1.0, against the 0.77 used (0.9–1.07 over 10–50% drops and in the
+   0-D hohlraum).
    In the full model it recovers 2–27 eV at 8.5–9 ns and 17–33 eV at bang: 30–45% of the
    gap at bang, less at 8.5 ns.
 3. **The published evidence points to energy held in the laser-heated corona** (Kl11's
@@ -201,8 +203,8 @@ to Dante would make Dante a fit target.
    right order (160–400 kJ on 1.6–2 MJ). Its return rate after laser-off is not published;
    only its thermal part (~60 kJ, ~0.3 ns) is estimable, and that is the lag already
    tested.
-4. **The capsule's W-doped exhaust** (the user's suspect) holds ~100 kJ thermal; its
-   emission before bang is unpublished. Its reheating role after bang (Ru24) is
+4. **The capsule's W-doped exhaust** (the user's suspect) contains ~100 kJ of thermal
+   energy; its emission before bang is unpublished. Its reheating role after bang (Ru24) is
    established but lies outside the window.
 
 What would settle it, in order of value:

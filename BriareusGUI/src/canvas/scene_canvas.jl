@@ -1,7 +1,8 @@
-# The 3D viewer: the target mesh colored by component or by a drive field, the beams
-# as rays (axis from a start point to where it lands) or volumes (envelope cut where
-# it meets the target), the selection highlighted, an orientation triad, and the CAD
-# camera (cad_camera.jl) with picking by ray casting into the target.
+# The 3D viewer draws the target mesh colored by component or by a drive field, and the
+# beams as rays (the axis from a start point to where it meets the target) or as volumes
+# (the envelope cut where it meets the target). It highlights the selection and shows an
+# orientation triad and the CAD camera (cad_camera.jl), with picking by ray casting into
+# the target.
 #
 # Under Qt a canvas has a current GL context only while Qt renders it, and GLMakie
 # creates or frees GPU objects as soon as a plot is added to or removed from a
@@ -123,7 +124,7 @@ function scene_canvas(sess::DesignSession)
                     strokecolor = :white)
     hits = scatter!(sc, _NOPOINT3; color = [NAN_COLOR], markersize = 8, marker = :diamond)
     outlines = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2.5)
-    # (drawn over the geometry: a frame inside a hohlraum stays visible)
+    # The triad is drawn over the geometry, so a frame inside a hohlraum stays visible.
     frame_axes = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5, visible = false,
                                overdraw = true)
     frame_names = text!(sc, _NOPOINT3; text = [""], fontsize = 12, markerspace = :pixel,
@@ -156,8 +157,8 @@ function scene_canvas(sess::DesignSession)
     cam.handle_release = px -> _triad_release!(c, sess, px)
     cam.handle_cancel = () -> _triad_cancel!(c, sess)
     cam.hover = px -> _triad_hover!(c, sess, px)
-    # (the triad keeps its size on screen)
-    # (the session keeps the pose, without notifying: it is saved, not an edit)
+    # The triad keeps its size on screen.
+    # The session keeps the pose without notifying; the pose is saved but is not an edit.
     cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);
                            sess.view.camera.val = camera_pose(cam); c.dirty[] = true)
     attach_cad_camera!(sc, cam)
@@ -169,7 +170,8 @@ function scene_canvas(sess::DesignSession)
         return Consume(true)
     end
     dr, v = sess.drive, sess.view
-    # a pose set by a session loaded (nothing: the default view, fitted to the target)
+    # A pose set by a loaded session; `nothing` gives the default view, fitted to the
+    # target.
     on(p -> _apply_camera!(c, p), v.camera)
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
           sess.time.cursor, sess.time.history, v.cutaway, v.display, v.cut_azimuth, v.cut_width,
@@ -403,7 +405,7 @@ function _click!(c::SceneCanvas, sess::DesignSession, o, d, px)
     return nothing
 end
 
-# Double click: fit the clicked component (or beam), or the whole target on empty space.
+# On double click, fit the clicked component or beam, or the whole target on empty space.
 function _double_click!(c::SceneCanvas, sess::DesignSession, o, d, px)
     _click!(c, sess, o, d, px)
     fit_selection!(c, sess)
@@ -426,7 +428,7 @@ function selection_bounds(sess::DesignSession)
             tt === nothing && continue
             for k in eachindex(tt.tri_area)
                 c = tt.components[tt.tri_comp[k]]
-                (c.name in names || c.part in names) || continue     # (a part made in pieces: all of them)
+                (c.name in names || c.part in names) || continue     # all pieces of a part made in pieces
                 push!(pts, tt.tri_v0[k], tt.tri_v0[k] + tt.tri_e1[k], tt.tri_v0[k] + tt.tri_e2[k])
             end
         end
@@ -468,7 +470,7 @@ function _body_coloring(sess::DesignSession)
     else
         dr.scenario[].target === t && return vals
     end
-    # a drive on the cavity: its elements are some of the target's
+    # For a drive on the cavity, its elements are a subset of those of the target.
     idx = dr.cavity_index[]
     (idx !== nothing && dr.key[] !== nothing && dr.key[][1] === t) || return nothing
     full = fill(NaN, nelements(t))
@@ -476,8 +478,8 @@ function _body_coloring(sess::DesignSession)
     return full
 end
 
-# Components left out of the calculations, drawn faint (not pickable: rays and the
-# picker see only the calculation target); an invisible one is not drawn.
+# Components left out of the calculations, drawn faint. They cannot be picked, since rays
+# and the picker see only the calculation target. An invisible one is not drawn.
 function _draw_ghost!(c::SceneCanvas, sess::DesignSession)
     g = sess.target.ghost[]
     v = sess.view
@@ -501,8 +503,8 @@ end
 
 _faces(n) = [GLTriangleFace(3i - 2, 3i - 1, 3i) for i in 1:n]
 
-# The parts the sweep moves, as at its selected step (`sweep_ghost`), drawn faint in
-# their own color beside the design as it is (not pickable).
+# The parts the sweep moves, as at its selected step (`sweep_ghost`), drawn faint in a
+# separate color beside the design as it is; they cannot be picked.
 function _draw_sweep_ghost!(c::SceneCanvas, sess::DesignSession)
     pts = Point3f[]
     for comp in sweep_ghost(sess), (i, j, k) in comp.mesh.triangles
@@ -515,10 +517,11 @@ function _draw_sweep_ghost!(c::SceneCanvas, sess::DesignSession)
     return c
 end
 
-# The target: each drawn triangle in its component's display mode (opaque in `body`,
-# semi-transparent in `translucent`, edges in `wire`), clipped exactly to what the
-# cutaway keeps (`cut_triangle`), with the cut's edges in `sections`. Every piece takes
-# its triangle's color: its component's, or its element's value of a drive field.
+# The target, with each drawn triangle in the display mode of its component: opaque in
+# `body`, semi-transparent in `translucent` and edges in `wire`. Each triangle is clipped
+# exactly to what the cutaway keeps (`cut_triangle`), with the edges of the cut in
+# `sections`. Every piece takes the color of its triangle, either the color of its
+# component or the value of a drive field on its element.
 function _draw_body!(c::SceneCanvas, sess::DesignSession)
     t = sess.target.target[]
     g = sess.target.ghost[]
@@ -548,7 +551,7 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
         mode = display_mode(v, shown_component(name))
         v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
         if mode === :opaque && (r.kind === :none || !(name in r.components))
-            push!(opaque, P(v0), P(v0 + e1), P(v0 + e2))       # untouched: no allocation
+            push!(opaque, P(v0), P(v0 + e1), P(v0 + e2))       # untouched, so no allocation
             push!(otri, k)
             continue
         end
@@ -577,7 +580,8 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
     used = unique!(sort!(vcat(otri, ctri, wtri)))
     col = Dict{Int,RGBAf}()
     if vals === nothing
-        # component colors are keyed in the model tree (its swatches), not on the canvas
+        # Component colors are keyed in the model tree by its swatches; the canvas does
+        # not show a key.
         pal = component_colors(t)
         for k in used
             col[k] = _hexcolor(pal[t.components[t.tri_comp[k]].name])
@@ -629,7 +633,8 @@ end
 
 _cmap_color(cmap, f) = RGBAf(cmap[clamp(round(Int, f * (length(cmap) - 1)) + 1, 1, length(cmap))])
 
-# The colorbar takes room only for a drive field: hidden, it has no width, ticks or label.
+# The colorbar takes room only for a drive field. When hidden, it has no width, ticks or
+# label.
 function _show_colorbar!(c::SceneCanvas, show::Bool)
     cb = c.colorbar
     cb.blockscene.visible[] == show && return
@@ -644,7 +649,8 @@ end
 
 function _draw_selection!(c::SceneCanvas, sess::DesignSession)
     t = sess.target.target[]
-    # every selected component, part and window (an assembly: its parts' components)
+    # every selected component, part and window, with the components of the parts of an
+    # assembly
     names = Set{Symbol}(selected_components(sess))
     drawn = c.drawn[]
     pts = Point3f[]
@@ -798,8 +804,8 @@ function _draw_selected_beams!(c::SceneCanvas, sess::DesignSession)
     return c
 end
 
-# Each beam's worst status in the report the beams are colored by (the TaLIS stay-in
-# rows are per hemisphere, not per beam).
+# The worst status of each beam in the report the beams are colored by. The TaLIS stay-in
+# rows are per hemisphere, so they are skipped.
 function _beam_status(sess::DesignSession)
     mode = sess.view.beam_color[]
     mode === :group && return nothing
@@ -838,7 +844,7 @@ function _draw_windows!(c::SceneCanvas, sess::DesignSession)
         p(φ, z) = Point3f(to_chamber(F, (r * cos(φ), r * sin(φ), z)))
         col = w.open ? WINDOW_COLORS.open : WINDOW_COLORS.closed
         if w.round
-            # a circle on the unrolled wall: arc length R φ by z
+            # A circle on the unrolled wall is plotted as arc length R φ against z.
             φ0, a = deg2rad(w.phi), w.width / 2
             q(t) = p(φ0 + a * cos(t) / R, w.z + a * sin(t))
             tq = range(0, 2π; length = 4narc + 1)

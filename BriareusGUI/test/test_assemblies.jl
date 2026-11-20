@@ -1,7 +1,8 @@
-# The model tree of assemblies (phase B2): membership separate from placement, nested
-# assemblies, subtree show/hide and include/exclude with the mixed state, the tree's
-# commands (new, move into, ungroup, rename, remove), the analyses seeing the flattened
-# components (the drive bitwise unchanged), sessions (round trip, version 9).
+# This file tests the model tree of assemblies (phase B2). It covers membership separate
+# from placement, nested assemblies, subtree show/hide and include/exclude with the mixed
+# state, and the tree commands (new, move into, ungroup, rename, remove). It also checks
+# that the analyses see the flattened components with the drive unchanged, and sessions
+# (round trip, version 9).
 
 const A3 = Briareus.Vec3
 
@@ -15,19 +16,20 @@ _drive_bits(sess) = (r = (build_scenario!(sess); sess.drive.result[]);
     ts, bt, v = s.target, s.beams, s.view
     before = _drive_bits(s)
     fr0, t0 = part_frames(ts), ts.target[]
-    # grouping the starter: the hohlraum (placed in TCC, its assembly's frame at the top
-    # level) is placed in the new assembly's frame; the capsule, placed in the
-    # hohlraum's, keeps its placement
+    # When the starter is grouped, the hohlraum, placed in TCC (the frame of its assembly at
+    # the top level), is placed in the frame of the new assembly. The capsule, placed in the
+    # frame of the hohlraum, keeps its placement.
     @test add_assembly!(ts; name = :cavity, members = [:hohlraum, :capsule])
     ps = ts.parts[]
     hp, cp = ps[part_index(ts, :hohlraum)], ps[part_index(ts, :capsule)]
     @test hp.assembly === cp.assembly === :cavity && hp.frame === :cavity && cp.frame === :hohlraum
     @test assemblies(ts) == [ps[end]] && is_assembly(ps[end]) && ps[end].assembly === TOP_LEVEL
     @test assembly_parts(ps, :cavity) == [:hohlraum, :capsule]
-    # nothing moved: the same frames, the same components, so the same target
+    # Nothing moved: the frames and the components are the same, so the target is the
+    # same.
     @test all(n -> part_frames(ts)[n] == fr0[n], keys(fr0))
     @test ts.target[] === t0 && target_summary(ts) == target_summary(TargetSetup(resolution = :coarse))
-    # the analyses see the flattened components: the drive is bitwise the same
+    # The analyses see the flattened components, so the drive is unchanged.
     @test _drive_bits(s) == before
 
     # nested, and both at the top: a disk beside them
@@ -36,7 +38,8 @@ _drive_bits(sess) = (r = (build_scenario!(sess); sess.drive.result[]);
     @test ts.parts[][part_index(ts, :cavity)].assembly === :outer
     @test [p.name for p in assembly_children(ts.parts[], TOP_LEVEL)] == [:outer, :shield]
     @test assembly_members(ts.parts[], :outer) == [:cavity, :hohlraum, :capsule]
-    # the tree: the assemblies (expanded), the hohlraum's pieces under it, the disk at the top
+    # The tree shows the assemblies expanded, the pieces of the hohlraum under it and the
+    # disk at the top.
     v.expanded[] = union(v.expanded[], ("assembly:outer", "assembly:cavity"))
     rows = model_tree(s)
     depth(id) = only(r for r in rows if r.id == id).depth
@@ -60,15 +63,16 @@ _drive_bits(sess) = (r = (build_scenario!(sess); sess.drive.result[]);
     @test part_frames(ts)[:capsule].origin ≈ A3(0.5, 0, 0) atol = 1e-15
     @test all(isapprox.([bt.beams[][i].aim for i in idx], [a + A3(0.5, 0, 0) for a in a0]; atol = 1e-14))
     @test part_frames(ts)[:shield].origin == A3(4, 0, 0)
-    # (an assembly sweeps like a part: it is a sweep subject)
+    # An assembly is a sweep subject and sweeps like a part.
     @test :outer in sweep_subjects(s)
     @test edit_part!(ts, part_index(ts, :outer), :x, "0")
 
-    # what an assembly has not: geometry, a role, surface fields
+    # An assembly does not have geometry, a role or surface fields.
     i = part_index(ts, :outer)
     @test !set_part_role!(ts, i, :foil) && occursin("no surface", ts.error[])
     @test !edit_part!(ts, i, :albedo, "0.5") && occursin("no field", ts.error[])
-    # the tree is a tree: no assembly inside itself, no user frame in one
+    # The tree is a tree, so no assembly can go inside itself and no user frame can go
+    # in one.
     @test !move_into_assembly!(ts, [:outer], :cavity) && occursin("inside", ts.error[])
     @test !move_into_assembly!(ts, [:cavity], :cavity) && occursin("itself", ts.error[])
     @test add_frame!(ts; name = :mount)
@@ -87,7 +91,8 @@ end
     @test row("assembly:cavity").on == 1 && row("assembly:cavity").display == "opaque"
     @test Set(node_components(s, "assembly:cavity")) == Set([:capsule; [piece_name(:hohlraum, p) for p in
                                                                         hohlraum_pieces(ts.parts[][1]) if !occursin("lip", String(p))]])
-    # partly hidden: the mixed state, on the assembly and on the hohlraum part
+    # A partly hidden subtree shows the mixed state on the assembly and on the hohlraum
+    # part.
     set_display!(v, :capsule, :invisible)
     @test row("assembly:cavity").on == 2 && row("assembly:cavity").display == "mixed"
     @test row("part:hohlraum").on == 1
@@ -97,17 +102,17 @@ end
     @test row("assembly:cavity").on == 0 && row("part:hohlraum").on == 0
     set_display!(v, node_components(s, "assembly:cavity"), :opaque)
 
-    # excluded as a subtree: its parts leave the calculations and give up their roles
+    # When a subtree is excluded, its parts leave the calculations and lose their roles.
     @test observed_name(ts) === :capsule && :hohlraum_wall in wall_names(ts)
     include_components!(s, [:cavity], false)
     @test ts.excluded[] == Set([:hohlraum, :capsule])
     @test component_names(ts.target[]) == [:shield]
     @test observed_name(ts) === nothing && isempty(wall_names(ts))
     @test occursin("not in calculations", row("assembly:cavity").detail)
-    # a part put back alone: the assembly is partly in the calculations
+    # When only one part is put back, the assembly is partly in the calculations.
     include_components!(s, [:capsule], true)
     @test observed_name(ts) === :capsule && occursin("partly in calculations", row("assembly:cavity").detail)
-    # a piece left out alone comes back with its assembly
+    # A piece left out by itself comes back with its assembly.
     include_components!(s, [:hohlraum], true)
     @test set_excluded!(ts, :hohlraum_wall, true)
     @test occursin("partly", row("part:hohlraum").detail)
@@ -131,7 +136,8 @@ end
     p = ts.parts[][part_index(ts, :shield)]
     @test p.assembly === :addon && p.frame === :addon
     @test isapprox(part_frames(ts)[:shield], F; atol = 1e-14)
-    # rename: the member's membership and placement, the beams aimed in it, the selection
+    # Renaming updates the membership and placement of the member, the beams aimed in
+    # it, and the selection.
     idx = findall(==(:outer50), bt.cluster[])[1:2]
     set_aim_frame!(s, idx, :addon)
     select!(v, "assembly:addon")
@@ -140,7 +146,7 @@ end
     p = ts.parts[][part_index(ts, :shield)]
     @test p.assembly === :mount && p.frame === :mount && all(==(:mount), bt.aim_frame[][idx])
     @test v.selection[] == "assembly:mount" && "assembly:mount" in v.expanded[]
-    # the session stores the tree, and reads it back the same
+    # The session stores the tree and loads it back unchanged.
     state = session_state(s)
     @test only(q for q in state["target"]["parts"] if q["name"] == "shield")["assembly"] == "mount"
     s2 = DesignSession(resolution = :coarse)
@@ -159,15 +165,16 @@ end
     # a starter inserted in an assembly's frame from the window joins it; here by hand
     @test insert_starter!(ts, :foil; frame = :mount) && move_into_assembly!(ts, [:foil, :main], :mount)
     @test assembly_parts(ts.parts[], :mount) == [:shield, :foil, :main]
-    # ungroup: the members stay where they are, now at the top level and placed in TCC
+    # After an ungroup the members stay where they are, now at the top level and placed in
+    # TCC.
     Fs = Dict(n => part_frames(ts)[n] for n in (:shield, :foil, :main))
     @test ungroup_assembly!(ts, :mount)
     @test isempty(assemblies(ts)) && v.selection[] == "target"
     @test all(n -> (q = ts.parts[][part_index(ts, n)]; q.assembly === TOP_LEVEL && q.frame === :tcc), keys(Fs))
     @test all(n -> isapprox(part_frames(ts)[n], Fs[n]; atol = 1e-14), keys(Fs))
     @test all(==(:tcc), bt.aim_frame[][idx])                          # its beams keep their aims
-    # remove a subtree: everything in it goes; a part outside it that was placed in its
-    # frame stays where it is, at the top level's frame
+    # Removing a subtree removes everything in it. A part outside it that was placed in
+    # its frame stays where it is, in the frame of the top level.
     @test add_assembly!(ts; name = :pack, members = [:foil, :main])
     @test add_part!(ts, :sphere; name = :bead, frame = :pack, z = 1.0, r1 = 0.1)
     @test add_part!(ts, :sphere; name = :pearl, frame = :pack, z = -1.0, r1 = 0.1)

@@ -154,8 +154,8 @@ PoP 24, 056312 (2017) (the LASNEX hohlraum template and drive multipliers), Rose
   lines of sight."
   - This is the only published VisRad energetics calibration I found. It is the natural first
     benchmark for Briareus, which reproduces VisRad.
-- **Picket versus peak (L).** η rises with time (t^0.12–0.2) and falls with intensity (95% → 80% from
-  10¹⁴ to 10¹⁵ W/cm²).
+- **Picket versus peak (L).** η rises with time (t^0.12–0.2) and falls with intensity (from
+  95% to 80% between 10¹⁴ and 10¹⁵ W/cm²).
   - In the picket (~50 TW, low intensity, < 1 ns) η is lower, because it is in its rise and the wall
     behind the conversion layer is cold.
   - At peak (~10¹⁵ W/cm² outer spots), the measured hohlraum-integrated η is 0.85–0.95.
@@ -195,7 +195,8 @@ PoP 24, 056312 (2017) (the LASNEX hohlraum template and drive multipliers), Rose
   - Hohlraum energy from the Dante flux F (their eq. 1, Lambertian): E_H ∝ ∫F dt · [(1−α)A_wall + 2A_LEH]/A_LEH.
     The equation is garbled in the text, and it carries a cos θ factor.
   - The authors take a constant α = 0.8.
-  - Post-bang reheating is not laser-driven: 313 → ~350 eV, E_H = 220 ± 30 kJ on N221204.
+  - Post-bang reheating is not laser-driven: from 313 to ~350 eV, E_H = 220 ± 30 kJ on
+    N221204.
 - **Kr24b Fig. 1(c) (H-img), simulated internal Trad.**
   - Trace values: ≈130 eV through the picket/trough (1–3.5 ns), ≈200 eV at 5 ns, ≈270 eV at 6–7 ns,
     peak ≈ 300 eV near 8.3 ns (N221204). The N210808 curve is nearly identical but ends ~0.3 ns earlier.
@@ -274,9 +275,9 @@ PoP 24, 056312 (2017) (the LASNEX hohlraum template and drive multipliers), Rose
 - **Kr22 (H).** The smaller LEH "was used to operate at lower peak power ... while still achieving
   similar Trad" (Zy22 gives the numbers above).
 - **Ch20 (H).**
-  - The effective LEH radius from gated LEH images (3–5 keV) is ≈1550 µm before the high-density
-    ridge forms. It drops quickly at the rise to peak, holds nearly constant at peak, and closes faster
-    after the laser turns off.
+  - The effective LEH radius from gated LEH images (3–5 keV) is ≈1550 µm before the
+    high-density ridge forms. It drops quickly at the rise to peak, stays nearly constant at
+    peak, and closes faster after the laser turns off.
   - At peak, the measurement is within about 50 µm of f = 0.15 LASNEX (0.6 mg/cc). At 0.3 mg/cc
     "data and simulations agree".
   - **VisRad models matched the LEH images only with the wall radius reduced by 300–700 µm**, because
@@ -311,10 +312,11 @@ PoP 24, 056312 (2017) (the LASNEX hohlraum template and drive multipliers), Rose
   - Lindl's gold formula at 313 eV and 8 ns: 0.065. With a DU factor of ~0.83: 0.054.
   - So **η ≈ 0.9–0.95 with U-wall albedo ≈ 0.94–0.95** closes the peak power balance only if the
     capsule's effective absorbing area is ≤ ~½ of its initial area.
-  - Addendum: this used peak power alone. Over the whole pulse, Kr24b puts the capsule at 16.2%
-    against 25.2% for the LEH, a ratio of 0.64. The open-hole areas give f_cap·A_cap/A_LEH = 0.8 ×
-    0.162/0.151 = 0.86 at the initial capsule area. Averaged over the pulse, the effective f_cap·A
-    is therefore ≈ 0.75 × the initial outer value (L), not ½.
+  - Addendum: this used only the peak power. Over the whole pulse, Kr24b puts the capsule at
+    16.2% against 25.2% for the LEH, a ratio of 0.64. The open-hole areas give
+    f_cap·A_cap/A_LEH = 0.8 × 0.162/0.151 = 0.86 at the initial capsule area. Averaged over
+    the pulse, the effective f_cap·A is therefore ≈ 0.75 × the initial outer value (L), not
+    ½.
 - **Energy-level target (Kr24b, L).** Briareus's integrated output split should reproduce:
   - wall (laser deposition plus x-ray loss) ≈ 54%
   - LEH ≈ 25%
@@ -368,8 +370,8 @@ Dante geometry for synthetic diagnostics:
    - η(I) per element, interpolated in log I between (10¹⁴, 0.95) and (10¹⁵ W/cm², 0.80) (De08).
    - Raise the NIF gold default toward 0.85–0.9 at peak (Ol12, BAH).
    - Keep it generic in the number type; the absorbed flux per element is already known.
-   - Validate with the BAH VisRad pair (η 0.95, α 0.77 → Dante 1/2 peak) and the Li04 1 ns Nova
-     T ∝ t^0.15 curve.
+   - Validate with the BAH VisRad pair (η 0.95 and α 0.77 give the Dante 1/2 peak) and the
+     Li04 1 ns Nova T ∝ t^0.15 curve.
 3. **Capsule model.** Expose `ablator(albedo)` as a `TabulatedAlbedo`, default constant 0.2 per BAH,
    plus an effective-radius schedule R_cap(t) (initial R, then R₀(1 − (1/3)·ramp) toward 2/3 near peak
    velocity).
@@ -398,13 +400,13 @@ Dante geometry for synthetic diagnostics:
 - Partly settled by Kr24b: "capsule absorbed" (≈246 kJ) excludes the ablated material, and total
   capsule absorption is 16.2%. Still open:
   - Are Kr24b's fractions of the delivered laser or of the 9–13% degraded laser?
-  - Is the 16.2% net of capsule re-emission? (It reads as net absorbed.)
+  - Is the 16.2% net of capsule re-emission? (It appears to be net absorbed.)
   - What is the integration window?
 - No W-doped HDC α_cap(t) is published. The total-energy check supports α_cap ≈ 0.2–0.3 on the outer
   area to ±10%. The time history is unconstrained.
-- What Trad does the capsule see, against Dante 1's 37° LEH view? At peak, simulated internal and
-  measured agree to within a few eV (Kr22: 305 against 307; Kr24b: ≈300 against 313 for N221204).
-  In the trough, the internal ≈130 eV sits below Dante's ≈145–150 eV.
+- What Trad does the capsule see, against Dante 1's 37° LEH view? At peak, simulated
+  internal and measured agree to within a few eV (305 against 307 in Kr22; ≈300 against 313
+  for N221204 in Kr24b). In the trough, the internal ≈130 eV sits below Dante's ≈145–150 eV.
 - How does Kr24b's 54.1% wall heating split between unconverted laser energy and x-ray Marshak loss?
   This would fix η directly. Callahan et al., PoP 27, 072704 (2020), the source of Hu24's generic
   accounting, may give it; it was not read.

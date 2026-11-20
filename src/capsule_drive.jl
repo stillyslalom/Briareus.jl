@@ -1,13 +1,14 @@
-# The drive handed to a capsule-only hydrodynamics run (ROADMAP "Briareus → CompactLES", LLNL's two-step
-# method; reference/litreview/hydro_coupling.md §(c)).
+# This file builds the drive handed to a capsule-only hydrodynamics run, as in LLNL's
+# two-step method. See the ROADMAP item on coupling Briareus to CompactLES, and
+# reference/litreview/hydro_coupling.md §(c).
 
 """
     CapsuleDrive
 
-The radiation drive on the capsule over time, for a capsule-only hydrodynamics run
-(LLNL's two-step method: an integrated hohlraum step, then capsule-only runs driven by
-its capsule flux; Clark et al., PoP 26, 050601 (2019); Masse et al., PoP 26 (2019)).
-Build one with [`capsule_drive`](@ref). Fields:
+The radiation drive on the capsule over time, for a capsule-only hydrodynamics run.
+LLNL's two-step method runs an integrated hohlraum step first and then drives
+capsule-only runs with its capsule flux (Clark et al., PoP 26, 050601, 2019; Masse et
+al., PoP 26, 2019). Build one with [`capsule_drive`](@ref). Fields:
 
 - `time` — uniform time grid (ns)
 - `Tr` — radiation temperature of the capsule-averaged incident flux (eV),
@@ -19,15 +20,16 @@ Build one with [`capsule_drive`](@ref). Fields:
 - `absorbed` — x-ray power absorbed by the capsule (TW), as in `energy_balance`
   (`NaN` where the history does not record it)
 - `radius` — the radius (mm) of the sphere the flux was evaluated on (the capsule mesh)
-- `area` — the observed elements' area (mm²)
-- `provenance` — `Dict{Symbol,Any}`: code, version, git commit, the history's source
-  times, observed components, capsule material, mesh size, and whatever the caller adds
+- `area` — the area of the observed elements (mm²)
+- `provenance` — `Dict{Symbol,Any}`: code, version, git commit, the source times of
+  the history, observed components, capsule material, mesh size, and whatever the caller
+  adds
 - `ylm` — `nothing` (axisymmetric), or the drive with every `m`: the `(lmax+1)² × nt`
   ratios `bₗₘ` (rows in [`mode_index`](@ref) order, so row 1 is 1) of
   `F(θ,φ,t) = a₀(t) Σₗₘ bₗₘ(t) Ŷₗₘ(θ,φ)`, where `Ŷₗₘ` are the real Schmidt
   semi-normalized harmonics, `Ŷₗ₀ = Pₗ(cos θ)` and
   `Ŷₗ,±ₘ = √(2(l−m)!/(l+m)!) Pₗᵐ(cos θ) (cos mφ, sin mφ)` for `m > 0`, without the
-  Condon–Shortley phase, `φ` from +x toward +y (NIF: Switchyard 1). That is the
+  Condon–Shortley phase, `φ` from +x toward +y (Switchyard 1 on NIF). That is the
   normalization of `modes`: the `m = 0` rows *are* `modes` (`bₗ₀ = aₗ/a₀`), and
   `√(Σₘ bₗₘ²)` is `mode_amplitude`, the rotation-invariant `|aₗ/a₀|` of degree `l`.
   From the orthonormal coefficients `cₗₘ` of `ylm_moments` (or
@@ -35,7 +37,8 @@ Build one with [`capsule_drive`](@ref). Fields:
 
 The angular structure is that of the flux on the initial capsule radius; applying it
 at a moving ablation front far inside that radius changes the geometric smoothing
-(`hydro_coupling.md` §2, pitfall 2). Gray: no spectral (M-band) split yet (ROADMAP "Spectral radiosity").
+(`hydro_coupling.md` §2, pitfall 2). The drive is gray, without a spectral (M-band) split
+(ROADMAP "Spectral radiosity").
 """
 struct CapsuleDrive
     time::Vector{Float64}
@@ -69,7 +72,7 @@ struct CapsuleDrive
     end
 end
 
-"Highest Legendre order a `CapsuleDrive` carries."
+"Returns the highest Legendre order stored in a `CapsuleDrive`."
 _lmax(d::CapsuleDrive) = size(d.modes, 1) - 1
 
 function Base.show(io::IO, d::CapsuleDrive)
@@ -100,26 +103,28 @@ end
                   ylm = history.ylm !== nothing, provenance = (;)) -> CapsuleDrive
 
 The capsule drive of a [`drive_history`](@ref) result for a capsule-only hydrodynamics
-run, on a uniform grid of spacing `≤ dt` (ns; 50 ps by default, `hydro_coupling.md`
-§(c)) spanning the history's solved times, or on the given `times` (within them). The
-Legendre moments `aₗ` are interpolated linearly between the history's steps and
-divided by the interpolated `a₀`; `flux` is `a₀` and `Tr` its radiation temperature,
-exactly the history's `flux` and `Tr` at the history times. Run `drive_history(...; lmax = 8)`
-for the moments through `l = 8` the hand-over calls for; `lmax` here may only truncate.
+run. The drive is sampled on a uniform grid of spacing `≤ dt` ns that spans the solved
+times of the history, or on the given `times`, which must lie within them. The default
+`dt` is 50 ps (`hydro_coupling.md` §(c)). The Legendre moments `aₗ` are interpolated
+linearly between the history steps and divided by the interpolated `a₀`. `flux` is `a₀`
+and `Tr` its radiation temperature; at the history times both equal the `flux` and `Tr`
+of the history exactly. Run `drive_history(...; lmax = 8)` for the moments through
+`l = 8` that the hand-over requires; the `lmax` of `capsule_drive` may only truncate.
 
-With `ylm` (the default when the history recorded them,
-`drive_history(...; ylm = true)`), the drive carries every `m` as well: the history's
-orthonormal coefficients `cₗₘ`, interpolated linearly like `aₗ`, become the Schmidt ratios
-`bₗₘ = √((2l+1)/4π) cₗₘ / a₀` of the `ylm` field, whose `m = 0` rows are then set to
-`modes`, so the two agree exactly. (The history integrates its Legendre moments one
-sub-triangle level finer than its `Y_lm`; the replaced rows differ by less than 1e-3
-of `a₀` on the coarse test hohlraum.)
+With `ylm`, the drive contains every `m` as well. `ylm` is the default when the harmonics
+were recorded in the history with `drive_history(...; ylm = true)`. The orthonormal
+coefficients `cₗₘ` of the history are interpolated linearly like `aₗ` and become the
+Schmidt ratios `bₗₘ = √((2l+1)/4π) cₗₘ / a₀` of the `ylm` field. The `m = 0` rows of
+that field are then set to `modes`, so the two agree exactly. The history integrates its
+Legendre moments one sub-triangle level finer than its `Y_lm`, and the replaced rows
+differ by less than 1e-3 of `a₀` on the coarse test hohlraum.
 
-`target` (a `Target` or `RadiationModel`; the keyframes' reference target for a moving
-hohlraum) supplies the radius of the observed sphere (its `SphereSurface`; pass
-`radius` for any other surface), the observed area, and the capsule material and mesh
-recorded in `provenance`. `observe` must name the components the history observed.
-`provenance` (NamedTuple or Dict: hohlraum, pulse, albedo model, …) is merged into the
+`target` is a `Target` or `RadiationModel`; for a moving hohlraum it is the reference
+target of the keyframes. The radius of the observed sphere is taken from its
+`SphereSurface`. The observed area, and the capsule material and mesh recorded in
+`provenance`, are taken from the target. For any other observed surface, pass `radius`.
+`observe` must name the components observed in the history. `provenance`, a NamedTuple
+or Dict with entries such as the hohlraum, pulse and albedo model, is merged into the
 recorded `provenance`.
 """
 function capsule_drive(h::NamedTuple, target; observe = :capsule, dt::Real = 0.05,
@@ -188,7 +193,7 @@ function capsule_drive(h::NamedTuple, target; observe = :capsule, dt::Real = 0.0
     return CapsuleDrive(grid, radiation_temperature.(flux), flux, modes, absorbed, R, area, prov, B)
 end
 
-# The radius of the sphere the observed elements lie on.
+# Returns the radius of the sphere on which the observed elements lie.
 function _observed_radius(t::Target, elems)
     s = t.components[t.elem_comp[elems[1]]].surface
     for e in elems
@@ -199,7 +204,8 @@ function _observed_radius(t::Target, elems)
     return s.radius
 end
 
-# The package checkout's commit (with "-dirty" for uncommitted changes), or "unknown".
+# Returns the commit of the package checkout, with "-dirty" for uncommitted changes, or
+# "unknown".
 function _git_commit()
     dir = pkgdir(@__MODULE__)
     try

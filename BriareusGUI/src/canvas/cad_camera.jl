@@ -87,7 +87,7 @@ end
 
 _normalized(v) = v / norm(v)
 
-# Camera frame: forward (toward the look-at point), right, true up.
+# Camera frame of forward (toward the look-at point), right and true up.
 function camera_frame(c::CadCamera)
     f = _normalized(c.lookat - c.eye)
     r = cross(f, c.up)

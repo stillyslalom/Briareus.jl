@@ -3,9 +3,9 @@
 
 using Briareus, Test
 
-# A keyframe of a moving target: a target built, both caches filled, and only a weak
-# reference to it returned (the targets are made in functions of their own, so that no
-# frame of the test keeps one alive).
+# A keyframe of a moving target. The function builds a target, fills both caches and returns
+# only a weak reference to it. The targets are made in separate functions so that no frame
+# of the test keeps one alive.
 @noinline function _cache_keyframe(v, im)
     t = hohlraum(nz = 4, nphi = 8, capsule_ntheta = 4, capsule_nphi = 6)
     Briareus._footprint(v, t)

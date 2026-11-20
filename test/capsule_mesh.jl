@@ -24,7 +24,8 @@ using Briareus, LinearAlgebra, Test
         @test 0 < 1 - flat / (4π * R^2) < 0.3hR^2
         t = Target(Component(:s, m, gold(); surface = SphereSurface(R)))
         @test sum(t.elem_area) ≈ 4π * R^2 rtol = 1e-12
-        # nearly equilateral: edges within -20% / +20% of the nominal size
+        # The facets are nearly equilateral, with edges within -20% / +20% of the nominal
+        # size.
         ls = [norm(p - q) for (a, b, c) in tris for (p, q) in ((a, b), (b, c), (c, a))]
         n > 1 && @test 0.8 < minimum(ls) / (hR * R) && maximum(ls) / (hR * R) < 1.2
     end
@@ -36,12 +37,14 @@ using Briareus, LinearAlgebra, Test
     @test icosphere_frequency(R, 10.0) == 1
     @test_throws ArgumentError icosphere_frequency(R, 0.0)
 
-    # convex faceting: from inside, every element sees all of the sphere (F_ij = A_j/4πR²)
+    # The faceting is convex, so from inside every element sees all of the sphere
+    # (F_ij = A_j/4πR²).
     t = Target(Component(:s, icosphere_mesh(2.0; n = 3, outward = false), gold(); surface = SphereSurface(2.0)))
     F = view_factors(t)
     @test maximum(abs.(F .- (t.elem_area ./ sum(t.elem_area))')) < 1e-12
 
-    # a uniform field has no l ≥ 1 moments on the compact capsule (exact solid angles)
+    # The l ≥ 1 moments of a uniform field vanish on the compact capsule (exact solid
+    # angles).
     tc = Target(Component(:c, icosphere_mesh(R; n = 6), ablator(); surface = SphereSurface(R)))
     es = collect(1:nelements(tc))
     c = ylm_weights(tc, es; lmax = 4) * ones(length(es))
@@ -56,7 +59,8 @@ using Briareus, LinearAlgebra, Test
     @test a[3] / a[1] ≈ 0.1 rtol = 0.02
     @test a[5] / a[1] ≈ -0.03 rtol = 0.05
 
-    # in a hohlraum: a uniform wall source drives the capsule as on the lat-long mesh
+    # In a hohlraum, a uniform wall source drives the capsule as it does on the lat-long
+    # mesh.
     kw = (; h = 0.6, capsule_h = 0.15, wall = Material(:Au; albedo = 0.85, conversion = 1.0))
     th = hohlraum(; kw..., capsule_mesh = :compact)
     tl = hohlraum(; kw..., capsule_mesh = :latlong)

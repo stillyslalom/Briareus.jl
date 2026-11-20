@@ -1,19 +1,20 @@
-# Optimizing Barlow et al. 2024's NIF polar-direct-drive pointing for the vacuum
-# illumination nonuniformity σ₁ alone (rms over the sphere relative to the mean, l ≤ 30),
-# by gradient (L-BFGS-B with ForwardDiff through `deposit`, from their Optimized Config
-# and from random starts) and by two derivative-free baselines already in Optim
-# (Nelder–Mead and particle swarm), counting evaluations to converge. Decision 6 of
-# reference/litreview/polar_direct_drive.md; the comparison of the design itself with
-# Ba24's numbers is the tutorial docs/literate/polar_direct_drive.jl.
+# This example optimizes the NIF polar-direct-drive pointing of Barlow et al. 2024 for only
+# the vacuum illumination nonuniformity σ₁, the rms over the sphere relative to the mean for
+# l ≤ 30. It optimizes by gradient, with L-BFGS-B and ForwardDiff through `deposit` from
+# their Optimized Config and from random starts, and by two derivative-free baselines
+# already in Optim, Nelder–Mead and particle swarm. It counts the evaluations to converge.
+# The study is decision 6 of reference/litreview/polar_direct_drive.md. The tutorial
+# docs/literate/polar_direct_drive.jl compares the design itself with the numbers of Ba24.
 #
 # Ba24 (PRL 133, 175101, 2024) is the only published genetic-algorithm PDD optimizer. Its
-# fitness also holds σ₂ and the ablation pressure of a 4-ns plasma with CBET, which need
-# Stages 1–3 of the review's plan; here only its σ₁ term is optimized, CBET-free, over
-# its 16 parameters (per cone pair: surface polar angle θ_s, azimuth offset Δφ_s from the
-# port, defocus 0–10 mm, power 2–4 TW/quad, Ba24's bounds) with the Briareus beams:
-# LMF-measured CPP spots, f-cone defocus, all four beams of a quad aimed at the quad's
-# surface point (Ba24's overlap assumption). Research notes, "Hard-sphere direct-drive
-# illumination", "Ba24 σ₁ comparison and optimization".
+# fitness also includes σ₂ and the ablation pressure of a 4-ns plasma with CBET, which need
+# Stages 1–3 of the plan in the review. This example optimizes only the σ₁ term, without
+# CBET, over its 16 parameters with the Briareus beams. Per cone pair the parameters are the
+# surface polar angle θ_s, the azimuth offset Δφ_s from the port, a defocus of 0–10 mm and a
+# power of 2–4 TW/quad, within the bounds of Ba24. The Briareus beams have LMF-measured CPP
+# spots and f-cone defocus, and all four beams of a quad aim at the surface point of the
+# quad, as the overlap assumption of Ba24 requires. The research notes sections are
+# "Hard-sphere direct-drive illumination" and "Ba24 σ₁ comparison and optimization".
 #
 #     julia --project=. -t auto examples/ba24_pdd_optimization.jl [part]
 #

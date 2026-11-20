@@ -20,7 +20,8 @@
     @test_throws ArgumentError henke_mass_attenuation(:Al, 5.0)
     @test_throws ArgumentError henke_mass_attenuation(:CH4, 1000.0)
 
-    # Fresnel: n² = 1 − χ* with χ = r_e λ² N f/π (f = f₁ + i f₂ summed over the formula)
+    # The Fresnel index is n² = 1 − χ* with χ = r_e λ² N f/π (f = f₁ + i f₂ summed over the
+    # formula).
     E = 8000.0
     λ = 1.239841984e-4 / E                               # cm
     f = complex(Briareus._henke_f(:Si, E)...) + 2 * complex(Briareus._henke_f(:O, E)...)
@@ -35,8 +36,8 @@
     @test mirror_reflectivity(:SiO2, rad2deg(θ), E) ≈ abs2(χ) / (16 * sin(θ)^4) * (1 + cos(2θ)^2) / 2 rtol = 0.005
     # total external reflection below it, bounded by 1
     @test 0.95 < mirror_reflectivity(:SiO2, rad2deg(θc / 4), E) < 1
-    # roughness σ: the Névot–Croce factor lies between 1 and the Debye–Waller exp(−4k²σ² sin²θ),
-    # and approaches the latter far above θc
+    # With roughness σ, the Névot–Croce factor lies between 1 and the Debye–Waller factor
+    # exp(−4k²σ² sin²θ), and it approaches the Debye–Waller factor far above θc.
     k = 2π / λ
     σ = 0.1                                              # nm
     dw(θ) = exp(-4 * k^2 * sin(θ)^2 * (1e-7σ)^2)
@@ -46,7 +47,7 @@
     # a density given overrides the table's: an Si mirror at half density has the χ of half N
     @test mirror_reflectivity(:Si, 90.0, E; density = 2.329 / 2) ≈ mirror_reflectivity(:Si, 90.0, E) / 4 rtol = 1e-4
 
-    # tabulated curves: exact on linear data, held or zero outside
+    # Tabulated curves are exact on linear data and held or zero outside the table.
     c = TabulatedCurve([1.0, 2.0, 4.0], [3.0, 5.0, 1.0])
     xs = [1.0, 1.25, 2.0, 3.0, 3.5, 4.0]
     @test c.(xs) ≈ [3.0, 3.5, 5.0, 3.0, 2.0, 1.0] atol = 1e-14

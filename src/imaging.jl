@@ -1,4 +1,4 @@
-# Synthetic images and line-of-sight radiance.
+# This file renders synthetic images and computes line-of-sight radiance.
 
 """
     OrthoCamera(direction; up = ẑ, center = 0, width, height = width, nx = 256, ny = nx)
@@ -32,10 +32,10 @@ end
 """
     render(target, values, camera; background = NaN) -> Matrix
 
-Image of a per-element field: each pixel shows `values[e]` for the element seen first
-along its line of sight (apertures are transparent), or `background`. Row 1 is the top
-of the image. Pass `radiance(sol)` for an x-ray image or `laser_flux(dep, target)` for a
-deposition map.
+Image of a per-element field. Each pixel shows `values[e]` for the element first met
+along its line of sight, or `background` where there is none; apertures are
+transparent. Row 1 is the top of the image. Pass `radiance(sol)` for an x-ray image or
+`laser_flux(dep, target)` for a deposition map.
 """
 function render(t::Target, values::AbstractVector, cam::OrthoCamera; background = NaN)
     img = fill(Float64(background), cam.ny, cam.nx)
@@ -70,11 +70,12 @@ radiosity `B` (TW/mm²), each counted with its unobstructed fraction `fᵢ`:
 `Σ Bᵢ/π · fᵢ Aᵢ cosθᵢ`.
 
 `fᵢ` is the area-weighted fraction of points on the element from which a ray toward the
-detector meets no opaque surface (apertures are transparent): the centroids of the
-`nsub²` equal sub-triangles of each of its triangles, and of `(refine·nsub)²` on an
-element whose first points disagree (an element partly hidden behind an edge). The
-error is first order in the sub-triangle size, on partly hidden elements only; an
-occluder that misses every first point of an element is not seen.
+detector does not meet an opaque surface; apertures are transparent. The points are the
+centroids of the `nsub²` equal sub-triangles of each of its triangles. On an element
+whose first points give different results, such as an element partly hidden behind an
+edge, `(refine·nsub)²` points are used. The error is first order in the sub-triangle
+size, on partly hidden elements only. An occluder that misses every first point of an
+element is not detected.
 """
 function line_of_sight_power(t::Target, B::AbstractVector, direction;
                              elems = 1:nelements(t), nsub::Integer = 4, refine::Integer = 8)
@@ -91,8 +92,9 @@ function line_of_sight_power(t::Target, B::AbstractVector, direction;
     return s
 end
 
-# The area-weighted fraction of the centroids of the n² equal sub-triangles of element
-# `e`'s triangles that see along `d` without meeting an opaque surface.
+# Returns the area-weighted fraction of the centroids of the n² equal sub-triangles of
+# the triangles of element `e` from which a ray along `d` does not meet an opaque
+# surface.
 function _visible_fraction(t::Target, e::Integer, d::Vec3, n::Integer)
     off = _ray_eps(t) * t.elem_normal[e]
     seen = total = 0.0
@@ -100,7 +102,7 @@ function _visible_fraction(t::Target, e::Integer, d::Vec3, n::Integer)
         v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
         m = 0
         for i in 0:n-1, j in 0:n-1-i
-            # the upward sub-triangle at (i, j), and the downward one beside it
+            # The upward sub-triangle at (i, j) is tested, then the downward one beside it.
             m += !any_hit(t.bvh, v0 + ((i + 1 / 3) / n) * e1 + ((j + 1 / 3) / n) * e2 + off, d)
             i + j <= n - 2 &&
                 (m += !any_hit(t.bvh, v0 + ((i + 2 / 3) / n) * e1 + ((j + 2 / 3) / n) * e2 + off, d))

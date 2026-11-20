@@ -1,9 +1,10 @@
-# Differentiable aperture keep-out: worst-case clearance of beam envelopes from the rims
-# of entrance holes, smooth enough to optimize against.
+# This file defines differentiable keep-outs. The aperture keep-out gives the worst-case
+# clearance of beam envelopes from the rims of entrance holes, smooth enough to optimize
+# against.
 
-# A piece of a hole's rim, sampled at `taus` in [0, 1]: the straight edge from `p` to `q`,
-# or (`arc`) the circular arc about `o` of radius `ρ` from angle `θ0` through `Δθ` in the
-# hole plane's basis `e1`, `e2`.
+# A piece of the rim of a hole, sampled at `taus` in [0, 1]. The piece is the straight
+# edge from `p` to `q`, or with `arc` the circular arc about `o` of radius `ρ` from angle
+# `θ0` through `Δθ` in the basis `e1`, `e2` of the hole plane.
 struct _RimPiece
     arc::Bool
     p::Vec3
@@ -25,10 +26,10 @@ _rim_point(r::_RimPiece, τ) =
 _rim_tangent(r::_RimPiece, τ) =
     r.arc ? r.ρ * r.Δθ * (-sin(r.θ0 + τ * r.Δθ) * r.e1 + cos(r.θ0 + τ * r.Δθ) * r.e2) : r.q - r.p
 
-# A hole's rim samples, piece after piece: the rim point, its derivative in τ, τ, the
-# piece, and for an arc sample after the first of its piece the arc length from the
-# sample before (it bounds the change of s over the interval) and the sagitta of that
-# arc (-Inf and 0 on an edge).
+# The rim samples of a hole, piece after piece. Each sample holds the rim point, its
+# derivative in τ, τ and the piece. For an arc sample after the first of its piece, it
+# also holds the arc length from the sample before, which bounds the change of s over
+# the interval, and the sagitta of that arc. On an edge these are -Inf and 0.
 struct _RimSamples
     x::Vector{Vec3}
     dx::Vector{Vec3}
@@ -55,52 +56,58 @@ end
                     hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
                     minimum = 0.0, weight = 100.0, nrim = 96, softness = 1e-4)
 
-Keep-out constraint for beams entering through planar apertures of any shape (laser
-entrance holes, slots). `aperture_clearance(keepout, beams)` gives each beam's
-worst-case clearance (mm) from the rim of its entrance aperture — the aperture on the
-beam's port side — judged as `clearance` judges it: the beam envelope is the best-focus
-contour at `peak_fraction` of the peak (or at `intensity`, W/cm²) grown by the f-cone
-radius `|s|/(2F)` and `margin`; the clearance is the smallest distance from the rim to
-the envelope, less the transverse error radius `pointing + target_offset +
-hardware_tolerance` and `focus/(2F)` for the focus error.
+Keep-out constraint for beams entering through planar apertures of any shape, such as
+laser entrance holes and slots. `aperture_clearance(keepout, beams)` gives the
+worst-case clearance (mm) of each beam from the rim of its entrance aperture, which is
+the aperture on the port side of the beam. The clearance is judged as `clearance` judges
+it. The beam envelope is the best-focus contour at `peak_fraction` of the peak (or at
+`intensity`, W/cm²), grown by the f-cone radius `|s|/(2F)` and `margin`. The clearance
+is the smallest distance from the rim to the envelope, less the transverse error radius
+`pointing + target_offset + hardware_tolerance` and `focus/(2F)` for the focus error.
 
-The rim is the hole's boundary: the edges of the aperture's triangles (with a closing
-lip in its plane about the same center, of the union) that no other of its triangles
-continues across. On a `DiskSurface` aperture an edge whose ends lie at one radius from
-the surface's center is the circular arc between them (the element's exact shape), so
-a circular hole meshed as a polygon keeps its circle; every other edge is straight
-(rectangular, slotted or elliptical openings, CAD apertures: the mesh is the geometry).
-The rim is sampled at about `nrim` points, every straight edge at both ends, and the
-least distance on each sample interval is found exactly: at an end, or where the
-distance's slope along the rim rises through zero, located from the slopes at the
-samples to 1e-12 of the interval. An interval is first split where the distance has a
-kink (where the rim crosses the plane of best focus, the f-cone term turning), where
-the rim crosses an axis of an elongated envelope (the first-order distance below turns
-sharply there), inside the envelope also where the rim passes nearest the beam axis
-(there the first-order distance dips steeply), and where the cubic through the ends'
-distances and slopes turns twice. A dual beam's rim is searched on its values; the
-result's partials follow from its sensitivities to the focus and the envelope's
-semi-axes, so their cost does not grow with the number of partials.
+The rim is the boundary of the hole. It consists of the edges of the aperture triangles
+that no other triangle of the aperture continues across; a closing lip in the plane of
+the aperture about the same center is part of the union. On a `DiskSurface` aperture,
+an edge whose ends lie at one radius from the center of the surface is the circular arc
+between them, the exact shape of the element. The rim of a circular hole meshed as a
+polygon is therefore its circle. Every other edge is straight, as for rectangular, slotted or
+elliptical openings and CAD apertures, where the mesh is the geometry. The rim is
+sampled at about `nrim` points, with every straight edge sampled at both ends. The least
+distance on each sample interval is found exactly, at an end or where the slope of the
+distance along the rim rises through zero. That point is located from the slopes at the
+samples to 1e-12 of the interval. An interval is first split at these points:
+
+- where the distance has a kink, which is where the rim crosses the plane of best focus
+  and the f-cone term turns;
+- where the rim crosses an axis of an elongated envelope, since the first-order
+  distance below turns sharply there;
+- inside the envelope, where the rim passes nearest the beam axis, since the first-order
+  distance dips steeply there;
+- where the cubic through the distances and slopes at the ends turns twice.
+
+The rim of a dual beam is searched on its values. The partials of the result follow from
+its sensitivities to the focus and the semi-axes of the envelope, so their cost does not
+grow with the number of partials.
 
 The clearance is a smooth minimum of these interval minima, `−softness · log Σ σₖ
-exp(−dₖ/softness)` (`softness` in mm), each interval's weight σₖ 1 within 10 `softness`
-of the least and falling smoothly to 0 at 20 `softness` (a term there weighs at most
-e⁻¹⁰ of the least). The exact minimum over the rim has kinks where the worst rim point
-jumps between separate local minima of the distance, which the smooth minimum rounds
-off. It never exceeds the exact minimum, lies below it by at most `softness` times the
-log of the number of intervals counted, and is the exact minimum for `softness = 0`.
-The default, 1e-4 mm, is an engineering default well below the keep-out's agreement
-with `clearance` (a few micrometers): on NIF quads through a hohlraum's entrance holes
-the smooth minimum lies 0 to 0.18 µm below the exact one, and over 144 scans of the aim
-the largest change of slope in a step falls from 0.21 (a kink) to 0.002 (what remains
-where one interval holds two local minima; research notes, "Defaults changed
-(2026-11-19)").
+exp(−dₖ/softness)` (`softness` in mm). The weight σₖ of each interval is 1 within
+10 `softness` of the least and falls smoothly to 0 at 20 `softness`, where a term
+weighs at most e⁻¹⁰ of the least. The exact minimum over the rim has kinks where the
+worst rim point jumps between separate local minima of the distance, and the smooth
+minimum rounds them off. It never exceeds the exact minimum, lies below it by at most
+`softness` times the log of the number of intervals counted, and is the exact minimum
+for `softness = 0`. The default, 1e-4 mm, is an engineering default well below the
+agreement of the keep-out with `clearance`, which is a few micrometers. On NIF quads
+through the entrance holes of a hohlraum, the smooth minimum lies 0 to 0.18 µm below the
+exact one. Over 144 scans of the aim, the largest change of slope in a step falls from
+0.21 (a kink) to 0.002, which remains where one interval contains two local minima
+(research notes, "Defaults changed (2026-11-19)").
 
-The distance to the envelope ellipse is first order (Sampson): exact on the envelope
-and for round spots, and smooth in aim, defocus and spot size. Confirm a design with
-`clearance`, which also accounts for wings and power on hardware. Pass it as
-`keepout` to `symmetry_objective` or `asymmetry_objective`, which then add
-`weight × Σᵢ max(0, minimum − cᵢ)²`.
+The distance to the envelope ellipse is first order (Sampson). It is exact on the
+envelope and for round spots, and smooth in aim, defocus and spot size. A design should
+be confirmed with `clearance`, which also accounts for wings and power on hardware. The
+keep-out is passed as `keepout` to `symmetry_objective` or `asymmetry_objective`, which
+then add `weight × Σᵢ max(0, minimum − cᵢ)²`.
 """
 struct ApertureKeepOut
     names::Vector{Symbol}
@@ -114,7 +121,7 @@ struct ApertureKeepOut
     margin::Float64
     minimum::Float64
     weight::Float64
-    softness::Float64      # length (mm) of the smooth minimum over the rim (0: the exact one)
+    softness::Float64      # length (mm) of the smooth minimum over the rim (0 for the exact one)
 end
 
 function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing,
@@ -124,9 +131,9 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     nrim >= 3 || throw(ArgumentError("nrim must be at least 3"))
     softness >= 0 || throw(ArgumentError("softness must be non-negative"))
-    # by default every planar aperture; open windows in a hohlraum wall (apertures on a
-    # `CylinderSurface`) are not entrance holes, and a closing lip (an aperture with a
-    # `GapClosure`) widens the hole whose plane and center it shares
+    # By default the holes are every planar aperture. Open windows in a hohlraum wall,
+    # which are apertures on a `CylinderSurface`, are not entrance holes. A closing lip,
+    # an aperture with a `GapClosure`, widens the hole whose plane and center it shares.
     lip(c) = c.kind === :aperture && _transmits(c.material.albedo)
     names, holes = apertures === nothing ? _default_apertures(t, lip) :
                    (ns = Symbol[apertures...]; (ns, [Set(part_pieces(t, n)) for n in ns]))
@@ -157,9 +164,10 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
                            minimum, weight, Float64(softness))
 end
 
-# The rim of the hole made of the coplanar components `comps` (normal `n`): the edges of
-# their triangles that no other of them continues across (an edge two triangles share,
-# or one with another triangle just beyond it: a T-junction, a crack between rings), each
+# Returns the rim of the hole made of the coplanar components `comps` (normal `n`). The
+# rim consists of the edges of their triangles that no other of their triangles continues
+# across. An edge that two triangles share is excluded, and so is an edge with another
+# triangle just beyond it, as at a T-junction or a crack between rings. Each rim edge is
 # a straight piece or an arc (see `ApertureKeepOut`), sampled with about `nrim` points.
 function _hole_rim(t::Target, comps, n, nrim)
     e1 = normalize(abs(n[1]) < 0.9 ? cross(n, Vec3(1, 0, 0)) : cross(n, Vec3(0, 1, 0)))
@@ -180,12 +188,12 @@ function _hole_rim(t::Target, comps, n, nrim)
     end
     angle(x, o) = atan(dot(x - o, e2), dot(x - o, e1))
     sweep(x, y, o) = rem2pi(angle(y, o) - angle(x, o), RoundNearest)
-    # (ends, arc: center and radius, the side of the arc its element lies on)
+    # (ends, arc as center and radius, and the side of the arc on which its element lies)
     cand = Tuple{Vec3,Vec3,Union{Nothing,Tuple{Vec3,Float64}},Int}[]
     for (a, b, c, ci) in tris, (x, y, z) in ((a, b, c), (b, c, a), (c, a, b))
         uses[edgekey(x, y)] == 1 || continue
-        # a point just beyond the edge, away from its triangle: inside another one, the
-        # edge lies inside the hole
+        # A point just beyond the edge, away from its triangle, is tested. When it lies
+        # inside another triangle, the edge lies inside the hole.
         m = (x + y) / 2
         out = normalize(cross(y - x, n))
         dot(out, z - m) > 0 && (out = -out)
@@ -203,8 +211,9 @@ function _hole_rim(t::Target, comps, n, nrim)
         end
         push!(cand, (x, y, arc, side))
     end
-    # arcs of one circle with elements on both sides (rings of different counts: their
-    # exact sectors meet though their chords leave a crack) lie inside the hole
+    # Arcs of one circle with elements on both sides lie inside the hole. This happens for
+    # rings of different counts, whose exact sectors meet though their chords leave a
+    # crack.
     function covered((x, y, arc, side))
         arc === nothing && return false
         o, ρ = arc
@@ -232,11 +241,12 @@ function _hole_rim(t::Target, comps, n, nrim)
     return pieces
 end
 
-# The default entrance holes: the planar aperture components (not lips), one hole per part
-# and plane. A part's pieces in one plane are one hole (a CAD part's hole split into
-# pieces); a part with holes in several planes (a hohlraum part: `Component.part` is the
-# part on every piece) has one per plane, named by its first piece there. Returns the
-# names and each hole's component indices.
+# Returns the default entrance holes, which are the planar aperture components other than
+# lips, with one hole per part and plane. The pieces of a part in one plane form one hole,
+# as when the hole of a CAD part is split into pieces. A part with holes in several
+# planes, such as a hohlraum part (`Component.part` is the part on every piece), has one
+# hole per plane, named by its first piece there. Returns the names and the component
+# indices of each hole.
 function _default_apertures(t::Target, lip)
     cs = [ci for (ci, c) in enumerate(t.components)
           if c.kind === :aperture && !(c.surface isa CylinderSurface) && !lip(c)]
@@ -253,7 +263,7 @@ function _default_apertures(t::Target, lip)
             push!(holes[j], ci)
         end
     end
-    # a part with several holes: each by its first piece's name
+    # each hole of a part with several holes is named by its first piece
     for j in eachindex(names)
         count(==(keys[j][1]), first.(keys)) > 1 && (names[j] = t.components[minimum(holes[j])].name)
     end
@@ -264,11 +274,11 @@ end
     aperture_clearance(keepout, beams) -> Vector
 
 Worst-case clearance (mm) of each beam from the rim of its entrance aperture (see
-`ApertureKeepOut`); `Inf` for a beam with no aperture on its port side. Differentiable
-in the beams' aim, defocus and spot size.
+`ApertureKeepOut`), and `Inf` for a beam with no aperture on its port side.
+Differentiable in the aim, defocus and spot size of the beams.
 """
 function aperture_clearance(k::ApertureKeepOut, beams::AbstractVector{<:Beam})
-    # the envelope radius once per distinct spot and power (values): a root search each
+    # the envelope radius once per distinct spot and power (values), with a root search each
     seen = Tuple{SuperGaussianSpot{Float64},Float64,Float64}[]
     return [_aperture_clearance(k, b, _envelope_radius!(seen, k, b)) for b in beams]
 end
@@ -283,8 +293,8 @@ function _envelope_radius!(seen, k::ApertureKeepOut, b::Beam)
     return ρ
 end
 
-# `Inf` in the beam's number type: a Float64 `Inf` beside dual clearances made the
-# clearance a `Union` and the objectives' keep-out penalty infer as `Any`.
+# `Inf` in the number type of the beam. A Float64 `Inf` beside dual clearances made the
+# clearance a `Union`, and the keep-out penalty of the objectives then inferred as `Any`.
 _no_clearance(::Beam{T}) where {T} = T(Inf)
 
 function _aperture_clearance(k::ApertureKeepOut, b::Beam, ρ::Float64)
@@ -297,13 +307,15 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam, ρ::Float64)
     rim = k.rims[j]
     isempty(rim) && return _no_clearance(b)        # an aperture without a rim
     fv = _RimFrame(k, b isa Beam{Float64} ? b : _value_beam(b), ρ)
-    # the rim is searched on the beam's values; the terms found enter in its number type
+    # The rim is searched on the values of the beam, and the terms found enter in its
+    # number type.
     terms, imin = _rim_terms(k, rim, k.samples[j], fv)
     return _rim_result(k, terms, imin, fv, b, ρ) - k.transverse - k.focus * fv.cone
 end
 
-# What the distance from a rim point to a beam's envelope reads of the beam (in its number
-# type): the envelope's semi-axes at best focus, the beam frame, the focus and the f-cone.
+# The quantities of the beam that the distance from a rim point to the envelope uses, in
+# the number type of the beam. They are the semi-axes of the envelope at best focus, the
+# beam frame, the focus and the f-cone.
 struct _RimFrame{T}
     A::T
     B::T
@@ -315,7 +327,7 @@ struct _RimFrame{T}
     margin::Float64
 end
 
-# (`ρ`: the envelope radius, read from the beam's values)
+# (`ρ` is the envelope radius, computed from the values of the beam)
 function _RimFrame(k::ApertureKeepOut, b::Beam{T},
                    ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)) where {T}
     kv = direction(b)
@@ -331,17 +343,18 @@ function _rim_distance(f::_RimFrame, x::Vec3)
 end
 _rim_distance(f::_RimFrame, r::_RimPiece, τ::Float64) = _rim_distance(f, _rim_point(r, τ))
 
-# The smooth minimum counts the sample intervals whose least distance lies within
-# `_SOFT_FULL` softness of the least at full weight, and those up to `_SOFT_ZERO` at a
-# weight falling (C¹) to 0 there: where a weight falls, its term is at most e⁻¹⁰ = 4.5e-5
-# of the least's.
+# The smooth minimum counts at full weight the sample intervals whose least distance lies
+# within `_SOFT_FULL` softness of the least. Intervals up to `_SOFT_ZERO` count with a
+# weight that falls (C¹) to 0 there. Where a weight falls, its term is at most
+# e⁻¹⁰ = 4.5e-5 of the least term.
 const _SOFT_FULL = 10.0
 const _SOFT_ZERO = 20.0
 
-# The smooth minimum's terms, found on the beam's values (frame `f`): for each sample
-# interval of the rim its least distance (at an end, or at a minimum inside), kept with its
-# rim point if within `_SOFT_ZERO` softness of the least (`softness = 0`: the least
-# alone). Returns the terms (distance, point) and the index of the least.
+# Returns the terms of the smooth minimum, found on the values of the beam (frame `f`).
+# For each sample interval of the rim, the term is its least distance, at an end or at a
+# minimum inside. The term is kept with its rim point if it lies within `_SOFT_ZERO`
+# softness of the least; with `softness = 0` only the least is kept. Returns the terms
+# (distance, point) and the index of the least.
 function _rim_terms(k::ApertureKeepOut, rim::Vector{_RimPiece}, rs::_RimSamples, f::_RimFrame{Float64})
     reach = _SOFT_ZERO * k.softness
     sf = _SlopeFrame(f)
@@ -359,14 +372,14 @@ function _rim_terms(k::ApertureKeepOut, rim::Vector{_RimPiece}, rs::_RimSamples,
             if g <= lo + reach
                 push!(terms, (g, xg))
                 lo = min(lo, g)
-                # (the terms kept before the least was reached, dropped now and then)
+                # (terms kept before the least was reached are dropped now and then)
                 length(terms) == cap && (_drop_above!(terms, lo + reach); cap = max(32, 2length(terms)))
             end
         end
         x0, d0, S0, s0, t0, w0 = x1, d1, S1, s1, t1, w1
     end
     _drop_above!(terms, lo + reach)
-    # a NaN distance (an envelope of zero size) passes into the result
+    # a NaN distance, from an envelope of zero size, passes into the result
     isempty(terms) && push!(terms, (NaN, rs.x[1]))
     imin = 1
     for i in eachindex(terms)
@@ -377,7 +390,7 @@ end
 
 _drop_above!(terms, cut) = filter!(t -> t[1] <= cut, terms)
 
-# The Float64 frame of the search, with the semi-axes' inverse squares.
+# The Float64 frame of the search, with the inverse squares of the semi-axes.
 struct _SlopeFrame
     focus::Vec3
     kv::Vec3
@@ -398,10 +411,10 @@ function _SlopeFrame(f::_RimFrame{Float64})
                        f.margin, e > 1 ? 0.25 / sqrt(e^2 - 1) : Inf)
 end
 
-# At the rim point `x` with tangent `t` (dx/dτ): the distance to the envelope, the slope of
-# its Sampson part in τ, the axial position s and its slope, and the point in the
-# envelope's units (u/A, v/B: inside it within 1 of the axis). The distance's slope is
-# S′ − cone·sign(s)·s′: |s| has a concave kink where s = 0.
+# Returns, at the rim point `x` with tangent `t` (dx/dτ), the distance to the envelope,
+# the slope of its Sampson part in τ, the axial position s and its slope, and the point in
+# envelope units (u/A, v/B, inside the envelope within 1 of the axis). The slope of the
+# distance is S′ − cone·sign(s)·s′, since |s| has a concave kink where s = 0.
 @inline function _rim_slope(f::_SlopeFrame, x::Vec3, t::Vec3)
     d = x - f.focus
     s, u, v = dot(d, f.kv), dot(d, f.e1), dot(d, f.e2)
@@ -420,37 +433,41 @@ end
     return D - f.cone * abs(s) - f.margin, dD, s, ts, SVector(u * f.ia, v * f.ib)
 end
 
-# The point and tangent of piece `r` at τ (one sincos on an arc).
+# Returns the point and tangent of piece `r` at τ, with one sincos on an arc.
 function _rim_point_tangent(r::_RimPiece, τ::Float64)
     r.arc || return r.p + τ * (r.q - r.p), r.q - r.p
     sn, cs = sincos(r.θ0 + τ * r.Δθ)
     return r.o + r.ρ * (cs * r.e1 + sn * r.e2), r.ρ * r.Δθ * (-sn * r.e1 + cs * r.e2)
 end
 
-# The distance's slope at τ on piece `r`, on the branch `σ` = sign(s) of |s|.
+# Returns the slope of the distance at τ on piece `r`, on the branch `σ` = sign(s) of |s|.
 function _slope_at(f::_SlopeFrame, r::_RimPiece, τ::Float64, σ)
     x, t = _rim_point_tangent(r, τ)
     _, S, _, ts = _rim_slope(f, x, t)
     return S - f.cone * σ * ts
 end
 
-# The least distance on the sample interval [τa, τb] of piece `p` of `rim` (`arc`: its arc
-# length, -Inf on an edge; `sag`: the arc's sagitta), given the lesser end's (`g` at `xg`)
-# and the ends' Sampson slope, s, s′, point in envelope units and distance (`ea`, `eb`).
-# The interval is split (`_split_min`) where |s| has a kink; where the rim crosses an
-# axis of the envelope, if the Sampson distance's direction factor can turn sharply there
-# (an elongated spot: it peaks over about 1/√(e² − 1) of the direction in envelope units,
-# e the ratio of the semi-axes; the interval split if it turns through a quarter of
-# that); and, if it reaches inside the envelope, also where it passes nearest the beam
-# axis. Each part on which the distance is smooth is searched by `_part_min`.
+# Returns the least distance on the sample interval [τa, τb] of piece `p` of `rim`. `arc`
+# is the arc length of the interval (-Inf on an edge) and `sag` the sagitta of the arc.
+# `g` at `xg` is the distance at the lesser end. `ea` and `eb` hold, for each end, the
+# Sampson slope, s, s′, the point in envelope units and the distance. The interval is
+# split (`_split_min`) at these points:
+# - where |s| has a kink;
+# - where the rim crosses an axis of the envelope, if the direction factor of the Sampson
+#   distance can turn sharply there. For an elongated spot the factor peaks over about
+#   1/√(e² − 1) of the direction in envelope units, with e the ratio of the semi-axes,
+#   and the interval is split if the direction turns through a quarter of that;
+# - if the interval reaches inside the envelope, where it passes nearest the beam axis.
+# Each part on which the distance is smooth is searched by `_part_min`.
 @inline function _interval_min(f::_SlopeFrame, rim, p, τa, τb, arc, sag, ea, eb, g, xg)
     Sa, sa, ta, wa, da = ea
     Sb, sb, tb, wb, db = eb
     c = f.cone
-    # a kink inside: s changes sign, or (on an arc) passes an extremum near enough zero to
-    # cross it (|s′| is at most the interval's arc length per unit τ)
+    # A kink lies inside when s changes sign, or when on an arc s passes an extremum near
+    # enough to zero to cross it; |s′| is at most the arc length of the interval per unit τ.
     kink = c > 0 && ((sa > 0 && sb < 0) || (sa < 0 && sb > 0) || (ta * tb < 0 && min(abs(sa), abs(sb)) <= arc))
-    # the chord's nearest approach to the beam axis, in envelope units (with the arc's sag)
+    # nearest approach of the chord to the beam axis, in envelope units, with the sag of
+    # the arc
     Δ = wb - wa
     t = clamp(-dot(wa, Δ) / dot(Δ, Δ), 0.0, 1.0)
     inside = sum(abs2, wa + t * Δ) < (1 + sag * max(f.ia, f.ib))^2
@@ -470,8 +487,8 @@ end
 end
 
 # Whether the cubic Hermite interpolant on an interval of length `L` with end values `dl`,
-# `dr` and slopes `ml`, `mr` of one sign turns twice inside (its slope, a quadratic, changes
-# sign at its vertex).
+# `dr` and slopes `ml`, `mr` of one sign turns twice inside, which is when its slope, a
+# quadratic, changes sign at its vertex.
 @inline function _hermite_turns(L, dl, dr, ml, mr)
     (ml < 0) == (mr < 0) || return false
     a0, a1, δ = L * ml, L * mr, dl - dr
@@ -487,12 +504,13 @@ function _smaller(f::_SlopeFrame, r::_RimPiece, τ, g, xg)
     return d < g ? (d, x) : (g, xg)
 end
 
-# The least distance below `g` (at `xg`) on a part [l, rr] of piece `p` of `rim` on which
-# the distance is smooth (`σ`: the branch of |s|), from its ends' distances `dl`, `dr` and
-# slopes `ml`, `mr`: a minimum inside where the slope rises through zero (`_slope_root`).
-# Slopes of one sign at both ends whose cubic Hermite interpolant turns twice inside (a
-# minimum and a maximum between the samples) split the part at its two turning points,
-# each a candidate, and each piece is searched again (once).
+# Returns the least distance below `g` (at `xg`) on a part [l, rr] of piece `p` of `rim` on
+# which the distance is smooth, with `σ` the branch of |s|. The search uses the distances
+# `dl`, `dr` and slopes `ml`, `mr` at the ends, and a minimum inside lies where the slope
+# rises through zero (`_slope_root`). With slopes of one sign at both ends, the cubic
+# Hermite interpolant may turn twice inside, which gives a minimum and a maximum between
+# the samples. The part is then split at the two turning points, each a candidate, and
+# each piece is searched again, once.
 function _part_min(f::_SlopeFrame, rim, p, l, rr, dl, dr, ml, mr, σ, g, xg, again::Bool = true)
     if ml < 0 < mr
         r = rim[p]
@@ -522,12 +540,13 @@ function _part_min(f::_SlopeFrame, rim, p, l, rr, dl, dr, ml, mr, σ, g, xg, aga
     return _part_min(f, rim, p, τ2, rr, d2, dr, m2, mr, σ, g, xg, false)
 end
 
-# `_interval_min` on an interval split at the kinks of |s| and, with `axes`, where the rim
-# crosses the envelope's axes (u = 0, v = 0: the Sampson distance's direction factor at
-# its extremes, between which it turns within the axis's distance, sharply for an
-# elongated spot), and at `τq`, the chord's nearest approach to the beam axis inside the
-# envelope (where the Sampson distance (q − 1)·h falls to −h); each split point is a
-# candidate, and each part is searched by `_part_min` on its branch of |s|.
+# `_interval_min` on an interval split at the kinks of |s|. With `axes`, the interval is
+# also split where the rim crosses the axes of the envelope (u = 0, v = 0). There the
+# direction factor of the Sampson distance is at its extremes, and between them it turns
+# within the distance of the axis, sharply for an elongated spot. A further split is at
+# `τq`, the nearest approach of the chord to the beam axis inside the envelope, where the
+# Sampson distance (q − 1)·h falls to −h. Each split point is a candidate, and each part
+# is searched by `_part_min` on its branch of |s|.
 function _split_min(f::_SlopeFrame, r::_RimPiece, τa, τb, ea, eb, g, xg, kink, axes, τq)
     k1, k2 = kink ? _crossings(f, r, τa, τb, f.kv) : (NaN, NaN)
     u1, u2 = axes ? _crossings(f, r, τa, τb, f.e1) : (NaN, NaN)
@@ -536,7 +555,7 @@ function _split_min(f::_SlopeFrame, r::_RimPiece, τa, τb, ea, eb, g, xg, kink,
     splits = sort(SVector(k1, k2, u1, u2, v1, v2, m, τb); by = τ -> isnan(τ) ? Inf : τ)
     c = f.cone
     rim = (r,)
-    l, dl, Sl, tl = τa, ea[5], ea[1], ea[3]  # the part's left end: τ, distance, Sampson slope, s′
+    l, dl, Sl, tl = τa, ea[5], ea[1], ea[3]  # left end of the part: τ, distance, Sampson slope, s′
     for rr in splits
         (isnan(rr) || rr <= l) && continue
         if rr == τb
@@ -555,9 +574,10 @@ function _split_min(f::_SlopeFrame, r::_RimPiece, τa, τb, ea, eb, g, xg, kink,
     return g, xg
 end
 
-# The points inside (τa, τb) at which the rim piece `r` crosses the plane through the focus
-# normal to `n` (dot(x − focus, n) = 0), ascending (NaN for none): linear in τ on an edge,
-# C + M cos(θ − φ) on an arc. With `n` the beam direction, the kinks of |s|.
+# Returns the points inside (τa, τb) at which the rim piece `r` crosses the plane through
+# the focus normal to `n` (dot(x − focus, n) = 0), in ascending order (NaN for none). The
+# crossing condition is linear in τ on an edge and C + M cos(θ − φ) on an arc. With `n`
+# the beam direction, the points are the kinks of |s|.
 function _crossings(f::_SlopeFrame, r::_RimPiece, τa, τb, n)
     if !r.arc
         ds = dot(r.q - r.p, n)
@@ -576,16 +596,16 @@ function _crossings(f::_SlopeFrame, r::_RimPiece, τa, τb, n)
     return (min(t1, t2), max(t1, t2))
 end
 
-# The τ in (τa, τb) at which arc `r` reaches the angle θ (modulo a turn, `period` in τ),
-# or NaN.
+# Returns the τ in (τa, τb) at which arc `r` reaches the angle θ (modulo a turn, with
+# `period` in τ), or NaN.
 function _arc_tau(r::_RimPiece, θ, τa, τb, period)
     τ = τa + mod((θ - r.θ0) / r.Δθ - τa, period)
     return τa < τ < τb ? τ : NaN
 end
 
-# The point in (a, b) where the slope `S′ − cone·σ·s′` of the distance along piece `r`
-# rises through zero (`la` < 0 at a, `lb` > 0 at b): regula falsi with the Illinois step,
-# to 1e-12 of the interval.
+# Returns the point in (a, b) where the slope `S′ − cone·σ·s′` of the distance along piece
+# `r` rises through zero, with `la` < 0 at a and `lb` > 0 at b. The search is regula falsi
+# with the Illinois step, to 1e-12 of the interval.
 function _slope_root(f::_SlopeFrame, r::_RimPiece, a, b, la, lb, σ)
     tol = 1e-12 * (b - a)
     side = 0
@@ -611,9 +631,9 @@ function _slope_root(f::_SlopeFrame, r::_RimPiece, a, b, la, lb, σ)
     return τ
 end
 
-# The smooth minimum of the terms' distances (`ApertureKeepOut`), evaluated in the frame
-# `f`: −λ log Σₖ σₖ exp(−dₖ/λ), each term's weight σₖ 1 within `_SOFT_FULL` λ of the
-# least and falling (C¹) to 0 at `_SOFT_ZERO` λ.
+# Returns the smooth minimum of the distances of the terms (`ApertureKeepOut`), evaluated
+# in the frame `f`, as −λ log Σₖ σₖ exp(−dₖ/λ). The weight σₖ of each term is 1 within
+# `_SOFT_FULL` λ of the least and falls (C¹) to 0 at `_SOFT_ZERO` λ.
 function _rim_soft_min(k::ApertureKeepOut, terms, imin, f::_RimFrame)
     λ = k.softness
     lo = _rim_distance(f, terms[imin][2])
@@ -633,15 +653,17 @@ function _soft_weight(z)
     return 1 - t^2 * (3 - 2t)
 end
 
-# Dual numbers of the keep-out: the smooth minimum's sensitivities to the focus (three)
-# and the envelope's semi-axes (two), the only quantities of the beam it reads.
+# Dual numbers of the keep-out. They hold the sensitivities of the smooth minimum to the
+# focus (three) and to the semi-axes of the envelope (two), the only quantities of the
+# beam that it uses.
 struct _RimTag end
 const _RimDual = ForwardDiff.Dual{_RimTag,Float64,5}
 
-# The smooth minimum in the beam's number type. On Float64 the terms on the values; on a
-# dual beam its sensitivities to the frame's five dual quantities (`_RimDual`, Float64
-# partials), carried to the beam's partials by the chain rule, so the cost does not grow
-# with the beam's partials; on nested duals the terms in the number type of the beam.
+# Returns the smooth minimum in the number type of the beam. On Float64 it uses the terms
+# on the values. On a dual beam it uses the sensitivities to the five dual quantities of
+# the frame (`_RimDual`, with Float64 partials), carried to the partials of the beam by
+# the chain rule, so the cost does not grow with the partials of the beam. On nested
+# duals it uses the terms in the number type of the beam.
 _rim_result(k::ApertureKeepOut, terms, imin, fv, ::Beam{Float64}, ρ) = _rim_soft_min(k, terms, imin, fv)
 
 function _rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam{<:ForwardDiff.Dual{<:Any,Float64}}, ρ)
@@ -652,15 +674,16 @@ function _rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam{<:ForwardDiff.
     c = _rim_soft_min(k, terms, imin, fs)
     p = ForwardDiff.partials(c)
     fb = _RimFrame(k, b, ρ)
-    Δ(x) = x - ForwardDiff.value(x)          # the partials alone, at value 0
+    Δ(x) = x - ForwardDiff.value(x)          # only the partials, at value 0
     return ForwardDiff.value(c) + p[1] * Δ(fb.focus[1]) + p[2] * Δ(fb.focus[2]) + p[3] * Δ(fb.focus[3]) +
            p[4] * Δ(fb.A) + p[5] * Δ(fb.B)
 end
 
 _rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam, ρ) = _rim_soft_min(k, terms, imin, _RimFrame(k, b, ρ))
 
-# First-order (Sampson) signed distance from (u, v) to the ellipse with semi-axes A, B:
-# exact on the ellipse and for circles, smooth everywhere but the center.
+# Returns the first-order (Sampson) signed distance from (u, v) to the ellipse with
+# semi-axes A, B. It is exact on the ellipse and for circles, and smooth everywhere
+# except at the center.
 function _sampson_distance(u, v, A, B)
     q = sqrt((u / A)^2 + (v / B)^2)
     g = sqrt((u / A^2)^2 + (v / B^2)^2)
@@ -674,28 +697,30 @@ end
                   weight = 100.0)
 
 Keep-out constraint for spherical obstacles inside a target, such as the capsule of a
-hohlraum. `sphere_clearance(keepout, beams)` gives each beam's worst-case clearance (mm)
-from the nearest of the `spheres` it passes before landing, with the envelope and error
-set of `ApertureKeepOut`: the distance from the sphere's center to the beam envelope
-(best-focus contour at `peak_fraction` of the peak, or at `intensity`, grown by the
-f-cone at the center's axial position and by `margin`) less the sphere's radius, the
-transverse error radius `pointing + target_offset + hardware_tolerance` and
-`focus/(2F)`. The distance to the envelope is first order (Sampson), as for apertures;
-the f-cone tilt of the envelope surface (cos of the cone half-angle) is neglected.
+hohlraum. `sphere_clearance(keepout, beams)` gives the worst-case clearance (mm) of each
+beam from the nearest of the `spheres` that it passes before landing, with the envelope
+and error set of `ApertureKeepOut`. The clearance is the distance from the center of the
+sphere to the beam envelope, less the radius of the sphere, the transverse error radius
+`pointing + target_offset + hardware_tolerance` and `focus/(2F)`. The envelope is the
+best-focus contour at `peak_fraction` of the peak, or at `intensity`, grown by the
+f-cone at the axial position of the center and by `margin`. The distance to the
+envelope is first order (Sampson), as for apertures, and the f-cone tilt of the envelope
+surface (the cosine of the cone half-angle) is neglected.
 
-By default the spheres are the parts that are spheres: those whose largest spherical
-component carries at least 90% of the part's area (a primitive capsule, or a CAD capsule
-fitted with `curved_components`, its fill tube a separate piece), not the small
-spherical fillets fitted on hohlraum CAD. `spheres` names parts or components; a part
-stands for its largest sphere, and its other pieces are not landing surfaces.
+By default the spheres are the parts that are spheres, which are those whose largest
+spherical component covers at least 90% of the part area. Examples are a primitive
+capsule, or a CAD capsule fitted with `curved_components` with its fill tube a separate
+piece. The small spherical fillets fitted on hohlraum CAD are excluded. `spheres` names
+parts or components. A part stands for its largest sphere, and its other pieces are not
+landing surfaces.
 
-A sphere counts only when its center lies upstream of where the beam axis first meets
-another opaque component (the wall a hohlraum beam lands on), found on the nominal
-beam; a sphere behind that surface is shadowed and ignored. The penalty added by the
-objectives is `weight × Σᵢ max(0, minimum − cᵢ)²`. The deposition penalty `direct`
-(squared fraction of power on the capsule) vanishes as the spot edge starts to clip and
-cannot keep a margin; use this keep-out when the capsule must stay clear. Confirm with
-`clearance` on the capsule.
+A sphere counts only when its center lies upstream of the point where the beam axis
+first meets another opaque component, such as the wall on which a hohlraum beam lands.
+That point is found on the nominal beam, and a sphere behind that surface is shadowed
+and ignored. The penalty added by the objectives is `weight × Σᵢ max(0, minimum − cᵢ)²`.
+The deposition penalty `direct` (the squared fraction of power on the capsule) vanishes
+as the spot edge starts to clip, so it cannot hold a margin. This keep-out serves when
+the capsule must stay clear, and a design is confirmed with `clearance` on the capsule.
 """
 struct SphereKeepOut
     names::Vector{Symbol}
@@ -718,7 +743,7 @@ function SphereKeepOut(t::Target; spheres = nothing, peak_fraction = nothing,
                        weight = 100.0)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     area(ci) = sum(t.elem_area[e] for e in t.comp_elems[ci] if t.elem_side[e] == 1; init = 0.0)
-    # the largest sphere among the components `cis` (nothing if none)
+    # the largest sphere among the components `cis` (nothing if there is none)
     function sphere_of(cis)
         sph = [ci for ci in cis if t.components[ci].kind === :surface &&
                                    t.components[ci].surface isa SphereSurface]
@@ -726,8 +751,8 @@ function SphereKeepOut(t::Target; spheres = nothing, peak_fraction = nothing,
     end
     names, comps = Symbol[], Int[]
     if spheres === nothing
-        # parts that are spheres: a fitted CAD capsule (with its fill tube) is, the small
-        # spherical fillets fitted on hohlraum CAD are not
+        # A fitted CAD capsule with its fill tube counts as a sphere, and the small
+        # spherical fillets fitted on hohlraum CAD do not.
         for p in parts(t)
             cis = part_pieces(t, p)
             k = sphere_of(cis)
@@ -757,9 +782,9 @@ end
 """
     sphere_clearance(keepout, beams) -> Vector
 
-Worst-case clearance (mm) of each beam from the spheres of a `SphereKeepOut` it passes
-before landing; `Inf` for a beam that passes none. Differentiable in the beams' aim,
-defocus and spot size.
+Worst-case clearance (mm) of each beam from the spheres of a `SphereKeepOut` that it
+passes before landing, and `Inf` for a beam that passes none. Differentiable in the aim,
+defocus and spot size of the beams.
 """
 sphere_clearance(k::SphereKeepOut, beams::AbstractVector{<:Beam}) =
     [_sphere_clearance(k, b) for b in beams]
@@ -788,13 +813,15 @@ end
     keepout_clearance(keepout, beams) -> Vector
     keepout_clearance(keepout, ev::Evaluation) -> Vector
 
-Each beam's worst-case clearance (mm) from a keep-out, the quantity its penalty holds
-at or above the keep-out's `minimum`: [`aperture_clearance`](@ref) for an
-[`ApertureKeepOut`](@ref), [`sphere_clearance`](@ref) for a [`SphereKeepOut`](@ref),
-[`hardware_clearance`](@ref) for a [`HardwareKeepOut`](@ref); `Inf` for a beam the
-keep-out does not apply to. A pure function of the beams (of the
-evaluation's setup `beams` for an `Evaluation`), in their number type, so a constraint
-`keepout_clearance(keepout, ev) .≥ minimum` can be handed to an optimizer as it stands.
+The worst-case clearance (mm) of each beam from a keep-out, which is the quantity that
+its penalty holds at or above the `minimum` of the keep-out. It is
+[`aperture_clearance`](@ref) for an [`ApertureKeepOut`](@ref),
+[`sphere_clearance`](@ref) for a [`SphereKeepOut`](@ref) and
+[`hardware_clearance`](@ref) for a [`HardwareKeepOut`](@ref), and `Inf` for a beam to
+which the keep-out does not apply. It is a pure function of the beams, or of the setup
+`beams` of an `Evaluation`, in their number type. A constraint
+`keepout_clearance(keepout, ev) .≥ minimum` can therefore be handed to an optimizer as
+it stands.
 """
 keepout_clearance(k::ApertureKeepOut, beams::AbstractVector{<:Beam}) = aperture_clearance(k, beams)
 keepout_clearance(k::SphereKeepOut, beams::AbstractVector{<:Beam}) = sphere_clearance(k, beams)
@@ -804,27 +831,29 @@ keepout_clearance(k, ev::Evaluation) = keepout_clearance(k, ev.beams)
     keepout_penalty(keepout, beams) -> Real
     keepout_penalty(keepout, ev::Evaluation) -> Real
 
-The penalty a keep-out adds to an objective: `weight × Σᵢ max(0, minimum − cᵢ)²` over
-the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the keep-out
-`weight` and `minimum`; for a tuple or vector of keep-outs the sum of theirs, and 0 for
-`nothing`. It is what the `keepout` keyword of [`symmetry_objective`](@ref),
-[`asymmetry_objective`](@ref) and [`face_flux_objective`](@ref) adds, so a hand-written
-objective adds `keepout_penalty(keepout, ev)` to the same effect. In the beams' number
-type (ForwardDiff duals) and thread-safe. A keep-out of another type takes part through
-a `keepout_clearance` method and `weight` and `minimum` fields.
+The penalty that a keep-out adds to an objective, `weight × Σᵢ max(0, minimum − cᵢ)²`
+over the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the `weight` and
+`minimum` of the keep-out. For a tuple or vector of keep-outs it is the sum of their
+penalties, and for `nothing` it is 0. The `keepout` keyword of
+[`symmetry_objective`](@ref), [`asymmetry_objective`](@ref) and
+[`face_flux_objective`](@ref) adds this penalty, so a hand-written objective adds
+`keepout_penalty(keepout, ev)` to the same effect. In the number type of the beams
+(ForwardDiff duals) and thread-safe. A keep-out of another type takes part through a
+`keepout_clearance` method and `weight` and `minimum` fields.
 
-A clearance of `+Inf` (a beam the keep-out does not apply to) adds nothing. A clearance
-of `-Inf` (a beam that fails a rule with no finite margin to continue, as a
-[`CaptureKeepIn`](@ref) beam whose axis misses every part when no part has a free edge)
-or `NaN` throws an `ArgumentError` naming the keep-out and the beam: either would hand
-the optimizer a non-finite objective, and a large finite penalty in its place would
-hide the cause.
+A clearance of `+Inf`, for a beam to which the keep-out does not apply, adds nothing. A
+clearance of `-Inf` or `NaN` throws an `ArgumentError` naming the keep-out and the beam.
+`-Inf` marks a beam that fails a rule with no finite margin to continue, such as a
+[`CaptureKeepIn`](@ref) beam whose axis misses every part when no part has a free edge.
+Either value would give the optimizer a non-finite objective, and a large finite
+penalty in its place would hide the cause.
 """
 keepout_penalty(::Nothing, beams::AbstractVector{<:Beam}) = 0.0
 keepout_penalty(k, ev::Evaluation) = keepout_penalty(k, ev.beams)
 
-# Several keep-outs (a tuple or vector) add their penalties. A tuple is unrolled with
-# `map`: a generator over a heterogeneous tuple took Julia 1.13's inference 27 s.
+# The penalties of several keep-outs (a tuple or vector) are added. A tuple is unrolled
+# with `map`, since a generator over a heterogeneous tuple made inference in Julia 1.13
+# take tens of seconds.
 keepout_penalty(ks::Tuple, beams::AbstractVector{<:Beam}) =
     sum(map(k -> keepout_penalty(k, beams), ks); init = 0.0)
 
@@ -839,15 +868,15 @@ end
 function keepout_penalty(k, beams::AbstractVector{<:Beam})
     c = keepout_clearance(k, beams)
     _check_clearances(k, beams, c)
-    # in the beams' number type also when no clearance is finite (a Float64 0.0 beside
-    # dual penalties made the sum over keep-outs a runtime dispatch)
+    # The penalty is in the number type of the beams also when no clearance is finite. A
+    # Float64 0.0 beside dual penalties made the sum over keep-outs a runtime dispatch.
     J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if ci != Inf; init = 0.0)
     return convert(eltype(c), J)
 end
 
-# A keep-out's clearances `c` of `beams`, checked for what neither a penalty nor a
-# constraint can take: `-Inf` and `NaN` are an `ArgumentError` naming the keep-out and the
-# first such beam (`+Inf`, a beam the keep-out does not apply to, passes).
+# Checks the clearances `c` of `beams` from a keep-out for values that neither a penalty
+# nor a constraint can take. `-Inf` and `NaN` are an `ArgumentError` naming the keep-out
+# and the first such beam. `+Inf`, for a beam to which the keep-out does not apply, passes.
 function _check_clearances(k, beams, c)
     for i in eachindex(c, beams)
         ci = ForwardDiff.value(c[i])

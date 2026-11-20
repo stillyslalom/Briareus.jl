@@ -56,8 +56,7 @@ function base_name(code::AbstractString)
     return String(m.captures[2])
 end
 
-# Pages Documenter renders: every markdown file under docs/src but the generated
-# tutorials.
+# Documenter renders every markdown file under docs/src except the generated tutorials.
 function pages()
     out = String[]
     for (root, _, files) in walkdir(DOCS_SRC)
@@ -174,7 +173,7 @@ function refs(text::AbstractString)
     return out
 end
 
-# One docstring: a binding at a signature, with its text, source path and module.
+# One docstring is a binding at a signature, with its text, source path and module.
 struct Doc
     mod::Module
     name::String
@@ -372,7 +371,7 @@ end
 #   - `*`/`**` emphasis opened inside a word (`T*` ... `P*`);
 #   - `$...$` math and `$name` interpolation (math is written ``...``);
 #   - a backtick or an HTML tag in rendered text (a code span that did not close; raw
-#     HTML, which this Markdown prints as text);
+#     HTML, which this Markdown renders as text);
 #   - any other literal `_` in rendered text. It renders now, but the next `_` written in
 #     the same paragraph pairs with it: identifiers, paths and subscripts go in code
 #     (`n_e`) or math (``n_e``), or are escaped (`\_`).
@@ -525,7 +524,8 @@ end
     bad = DocRefs.markdown_issues()
     foreach(line -> @warn(line), bad)
     @test isempty(bad)
-    # the guard itself: the failure it was written for, and text that must pass
+    # The guard itself is checked on the failure it was written for and on text that
+    # must pass.
     lint = DocRefs.MDLint.issues
     @test Set(first.(lint("See (VR/power_sources/x.html) and `visrad_spot`."))) ==
           Set([:underscore_emphasis, :backtick])

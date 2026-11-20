@@ -24,7 +24,7 @@
     save_session(path, s)
     @test occursin("BriareusGUI session", read(path, String))
 
-    # a fresh session restored from the file has bitwise the same design
+    # A fresh session restored from the file has an identical design.
     s2 = DesignSession()
     load_session!(s2, path)
     @test session_state(s2) == session_state(s)
@@ -37,7 +37,7 @@
     @test s2.view.beams[] === :volumes && display_mode(s2.view, :capsule) === :invisible
     @test count(b -> b.quad == "Q31T", s2.beams.beams[]) == 4    # the split quad
     @test !can_undo(s2)                                          # history starts at the load
-    # results are not saved: the drive is computed again
+    # Results are not saved, so the drive is computed again.
     @test s2.drive.scenario[] === nothing
 
     # other files are refused
@@ -131,7 +131,7 @@ end
     set_diagnostic!(s, first(ids), true)
     @test redo!(s) && s.view.beams[] === :volumes && Set(s.time.diagnostics[]) == Set(ids)
     @test undo!(s)
-    # undo walks back: the power, the window, the length
+    # Undo walks back through the power, the window and the length.
     @test undo!(s) && s.beams.beams[][1] == b0
     @test undo!(s) && isempty(hohlraum_windows(s.target))
     @test can_redo(s)
@@ -149,7 +149,7 @@ end
     # an edit that is not recorded yet is undone too (undo records first)
     set_resolution!(s.target, :standard)
     @test undo!(s) && s.target.resolution[] === :coarse
-    # stale analyses: a drive computed before an undo of the target is stale after it
+    # A drive computed before an undo of the target is stale after it.
     reset_history!(s)
     @test !can_undo(s)
 end
@@ -177,12 +177,12 @@ end
         () -> set_diagnostic!(s, first(ids), false),                     # a tick
         () -> record!(s),
         () -> set_cut!(s.view; azimuth = 15.0), () -> record!(s),
-        () -> set_cut!(s.view; azimuth = 25.0), () -> record!(s),        # a drag: merged
+        () -> set_cut!(s.view; azimuth = 25.0), () -> record!(s),        # a drag, merged
         () -> undo!(s), () -> undo!(s), () -> redo!(s),
-        () -> (s.optimize.iterations[] = 12),                            # a setting, not recorded
+        () -> (s.optimize.iterations[] = 12),                            # a setting, which is not recorded
         () -> undo!(s),
         () -> redo!(s), () -> redo!(s), () -> redo!(s),
-        () -> build_scenario!(s),                                        # results: no step
+        () -> build_scenario!(s),                                        # results, which add no step
         () -> record!(s),
         () -> set_cut!(s.view; azimuth = 15.0),                          # back to the noted state
         () -> set_cut!(s.view; azimuth = 25.0),
@@ -279,7 +279,7 @@ end
 end
 
 @testset "CAD files saved in sessions (no GL)" begin
-    # mock CAD: a tube 1 mm in radius, taller in each later version (binary STL)
+    # The mock CAD is a tube 1 mm in radius, taller in each later version (binary STL).
     tube(h) = cylinder_mesh(1.0, 0.0, h; nz = 1, nphi = 8)
     dir = mktempdir()
     src = joinpath(dir, "shield.stl")
@@ -297,7 +297,7 @@ end
     @test zip_names(zr) == ["session.toml", "cad/" * bytes2hex(sha256(bytes)) * ".stl"]
     @test zip_readentry(zr, zip_names(zr)[2]) == bytes
 
-    # opened where the source is gone: the design reads the saved copy
+    # Opened where the source is gone, the design loads the saved copy.
     mv(src, src * ".moved")
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
@@ -329,7 +329,8 @@ end
     @test !relink_cad!(s3, other, joinpath(dir, "missing.stl"))
     @test all(p -> p.file == other, filter(p -> p.kind === :mesh, s3.target.parts[]))
 
-    # without the CAD files: paths only, and a changed file named on load
+    # Without the CAD files the session stores only paths, and a changed file is named on
+    # load.
     g = joinpath(dir, "refs.briar.toml")
     save_session(g, s3)
     @test startswith(read(g, String), "# BriareusGUI session")
@@ -354,7 +355,7 @@ end
     # through the bottom hole, straight below
     @test 0.9 < seen / (π * 0.9^2 / 36 * 64^2) < 1.1
     @test all(>(0), filter(isfinite, im.values))
-    # the image follows the drive: more power, brighter
+    # The image follows the drive, brighter with more power.
     peak = maximum(filter(isfinite, im.values))
     edit_beams!(s.beams, 1, :power, string(2 * s.beams.beams[][1].power); by = :beam)
     for b in 2:length(s.beams.beams[])
@@ -416,7 +417,7 @@ end
 @testset "cutaway, exclusion and multi-selection (no GL)" begin
     s = DesignSession(resolution = :coarse)
     v, ts = s.view, s.target
-    # the cut: quadrant facing −x −y by default, then a half facing +x
+    # The cut is the quadrant facing −x −y by default, then a half facing +x.
     @test v.cutaway[] && v.cut_width[] == 90 && v.cut_azimuth[] == 225
     @test is_cut(v, :hohlraum_wall, (-1.0, -1.0, 0.0)) && !is_cut(v, :hohlraum_wall, (1.0, -1.0, 0.0))
     @test !is_cut(v, :capsule, (-1.0, -1.0, 0.0))                # not a cut component
@@ -459,7 +460,7 @@ end
     select!(v, "comp:hohlraum_wall")
     select_add!(v, "comp:hohlraum_cap_top")
     @test selected_components(s) == [:hohlraum_wall, :hohlraum_cap_top]
-    select_add!(v, "beams")                                          # another family: alone
+    select_add!(v, "beams")                                          # another family, selected by itself
     @test selected_ids(v) == ["beams"]
     order = [r.id for r in model_tree(s)]
     select!(v, "comp:hohlraum_wall")
@@ -485,13 +486,13 @@ end
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, joinpath(dir, "session.briar.toml"))
     @test session_state(s2) == session_state(s)
-    # facilities: presets set them, the facility gates the TaLIS rules
+    # Presets set the facility, and the facility gates the TaLIS rules.
     @test s.beams.facility[] === :nif && :talis in session_tasks(s)
     set_facility!(s.beams, :omega)
     @test s.beams.preset[] === :omega_hohlraum && s.beams.facility[] === :omega
     @test !(:talis in session_tasks(s))
     @test !any(r -> r.id == "task:talis", model_tree(s))
-    set_facility!(s.beams, :omega_ep)                                  # no presets: the other facility's beams go
+    set_facility!(s.beams, :omega_ep)                                  # no presets, so the beams of the other facility go
     @test isempty(s.beams.beams[]) && s.beams.preset[] === :custom && s.beams.facility[] === :omega_ep
     load_preset!(s.beams, :nif_quads)
     @test s.beams.facility[] === :nif
@@ -526,7 +527,8 @@ end
     @test ts.parts[][part_index(ts, :marker)].frame === :lid
     @test !set_part_frame!(ts, part_index(ts, :lid), :marker) && occursin("loop", ts.error[])
     @test replaced_parts(ts, [:lid]) == [:marker]                     # its child would move out of it
-    # backlighter-style aiming: beams at a part's center, held in its frame, following it
+    # Backlighter-style aiming puts beams at the center of a part, held in its frame, so
+    # they follow it.
     idx = findall(==(:outer50), s.beams.cluster[])[1:2]
     set_aim_frame!(s, idx, :lid; keep = false)
     p0 = part_centroid(ts.target[], :lid)
@@ -658,7 +660,7 @@ end
     @test s2.visrad_source[] == abspath(src)
     @test s2.drive.beam_model[] === :visrad && s2.drive.profile[].envelope == s.drive.profile[].envelope
     @test component_names(s2.target.target[]) == names
-    # with its CAD: the parts and the export template share one saved copy
+    # With its CAD, the parts and the export template share one saved copy.
     fz = joinpath(dir, "vrw.briar")
     save_session(fz, s)
     @test length(zip_names(ZipReader(read(fz)))) == 2
@@ -684,7 +686,7 @@ end
     dir = mktempdir()
     src = joinpath(dir, "work.vrw")
     write(src, synthetic_workspace())
-    # as in a window: the import runs on a worker and is applied from the queue
+    # As in a window, the import runs on a worker and is applied from the queue.
     s = DesignSession(resolution = :coarse)
     queue = Channel{Any}(Inf)
     s.deliver[] = f -> put!(queue, f)
@@ -714,9 +716,9 @@ end
     @test occursin("import of empty.vrw failed", s.status[]) && s.target.target[] === t
     s.spawn[] = false
     s.deliver[] = f -> f()
-    @test_throws ArgumentError import_visrad_workspace!(s, bad)              # inline: throws
+    @test_throws ArgumentError import_visrad_workspace!(s, bad)              # inline, so it throws
 
-    # roles: the imported rectangle becomes the backlighter foil, keeping its name
+    # The imported rectangle takes the backlighter foil role and keeps its name.
     ts = s.target
     i = part_index(ts, :Rectangle_0)
     @test part_role(ts.parts[][i]) === :none && active_foil(ts) === nothing
@@ -725,7 +727,7 @@ end
           active_foil(ts) === :Rectangle_0 && :Rectangle_0 in component_names(ts.target[])
     @test !set_part_role!(ts, part_index(ts, :Cyl_Hohlraum_0), :observed)      # not a sphere
     @test occursin("is a sphere", ts.error[])
-    # a CAD capsule: a sphere fitted to it takes its place in the calculations
+    # For a CAD capsule, a sphere fitted to it takes its place in the calculations.
     np = length(ts.parts[])
     @test set_part_role!(ts, part_index(ts, :CAD_0), :observed)
     cap = ts.parts[][end]
@@ -749,7 +751,7 @@ end
     c0, r0 = fit_sphere(pts)
     @test sqrt(sum(abs2, c0 - Briareus.Vec3(0.2, 0, 0))) < 1e-9 && r0 ≈ 1.1
 
-    # a drive too large for the x-ray view factors computes the laser alone
+    # A drive too large for the x-ray view factors computes only the laser.
     RADIATION_MAX_ELEMENTS[] = 50
     try
         @test !radiation_size(ts.target[]).feasible
@@ -780,7 +782,7 @@ end
     start_optimize!(s; spawn = false)
     @test st.result[] !== nothing && st.result[].before.spot !== nothing
 
-    # the target as STL: one named solid per part (ASCII), read back as parts
+    # The target as STL has one named solid per part (ASCII) and is read back as parts.
     f = joinpath(dir, "target.stl")
     export_target_stl(s, f; binary = false)
     solids = read_stl_solids(f)
@@ -789,7 +791,8 @@ end
     fb = joinpath(dir, "target_binary.stl")
     export_target_stl(s, fb)                                                  # binary
     @test length(read_stl(fb).triangles) == length(ts.target[].tri_area)
-    # and back in as parts: one per solid of the ASCII file, one for the binary file
+    # Back in as parts, there is one part per solid of the ASCII file and one for the
+    # binary file.
     ts2 = TargetSetup(starter = :none)
     n0 = length(ts2.parts[])
     @test add_stl_parts!(ts2, f; h = 0.5)
@@ -849,7 +852,8 @@ end
     s = DesignSession(resolution = :coarse)
     t1 = @elapsed import_visrad_workspace!(s, src)          # compiles too
     ts = s.target
-    # drawn only: left out of the calculations, from its file's facets (no remeshing)
+    # A part drawn only is left out of the calculations and drawn from the facets of its
+    # file, without remeshing.
     @test :BIG_CAD in ts.excluded[] && !(:BIG_CAD in component_names(ts.target[]))
     @test length(ts.ghost[].tri_area) >= 100_000
     @test occursin("drawn only", s.status[]) && occursin("BIG_CAD", s.status[])
@@ -858,7 +862,8 @@ end
     s2 = DesignSession(resolution = :coarse)
     @test (@elapsed import_visrad_workspace!(s2, src)) < 10
     @test (@elapsed model_tree(s2)) < 0.5
-    # VisRad's flags alone: in the calculations, too many elements for the x-ray drive
+    # With only the VisRad flags, the part is in the calculations but has too many
+    # elements for the x-ray drive.
     small = joinpath(dir, "cad_small.vrw")                  # remeshing 10⁵ slivers takes a minute
     write(small, sliver_workspace(20_000))
     RADIATION_MAX_ELEMENTS[] = 500
@@ -868,7 +873,7 @@ end
         @test :BIG_CAD in component_names(s3.target.target[])
         @test occursin("laser only", s3.status[]) && occursin("BIG_CAD", s3.status[])
         n = nelements(s3.target.target[])
-        # left out again: cheap (its facets as they are)
+        # Leaving it out again is cheap, since its facets are used as they are.
         @test (@elapsed include_components!(s3, [:BIG_CAD], false)) < 10
         @test :BIG_CAD in s3.target.excluded[] && nelements(s3.target.target[]) < n
     finally
@@ -896,8 +901,9 @@ end
                                 disk_mesh(1.0, 1.0; nr = 2, nphi = 200)); binary = false)
     @test add_part!(ts, :mesh; name = :can, file = can, h = 0.4, x = -4.0)
     @test only(c for c in ts.target[].components if c.name === :can).surface === nothing
-    # the drive fits a part of several faces (the can: its wall and its lid) in a separate
-    # target; the pieces map back to the part's elements, and the drive reports the part
+    # The drive fits a part of several faces, the wall and lid of the can, in a
+    # separate target. The pieces map back to the elements of the part, and the drive
+    # reports the part.
     t = ts.target[]
     refs = Controllers._fit_references(t, ts.mesh[], ts.parts[])
     @test collect(keys(refs)) == [:can]                     # the tube and the shell are fitted whole
@@ -935,8 +941,9 @@ end
 end
 
 @testset "a CAD cavity balanced when apertures close it (no GL)" begin
-    # a mock CAD hohlraum (one STL part: wall and caps with 0.6 mm entrance holes); the
-    # drive's cavity around TCC is balanced once aperture parts close both holes
+    # A mock CAD hohlraum is one STL part with a wall and caps that have 0.6 mm entrance
+    # holes. The cavity of the drive around TCC is balanced once aperture parts close both
+    # holes.
     dir = mktempdir()
     can = joinpath(dir, "hohlraum.stl")
     write_stl(can, merge_meshes(cylinder_mesh(1.5, -2.0, 2.0; nz = 4, nphi = 96),
@@ -951,7 +958,7 @@ end
                                            cavity = (Briareus.Vec3(0, 0, 0), Set{Symbol}()))
     end
     rowsums(o) = vec(sum(o.s.model.F; dims = 2))
-    # no apertures: open (two LEHs, ~4% of the rays)
+    # Without apertures the cavity is open, with two LEHs taking ~4% of the rays.
     o = drive()
     @test !o.closed && !o.leak.apertures && o.leak.fraction > 0.02
     @test occursin("add apertures", Controllers._closure_note(o.leak, o.closed))
@@ -961,7 +968,8 @@ end
     @test !o.closed && o.leak.apertures && o.leak.fraction > Controllers.CAVITY_MAX_LEAK
     @test occursin("past its apertures", Controllers._closure_note(o.leak, o.closed))
     @test minimum(rowsums(o)) < 0.99                          # raw view factors
-    # both closed: balanced, the leak down to the cracks where the disks meet the caps
+    # With both holes closed the cavity is balanced, and the leak is down to the cracks
+    # where the disks meet the caps.
     @test add_part!(ts, :disk; name = :leh_bottom, aperture = true, z = -2.0, r1 = 0.6, h = 0.3)
     o = drive()
     @test o.closed && o.leak.fraction < Controllers.CAVITY_MAX_LEAK / 4
@@ -996,9 +1004,9 @@ end
     s.spawn[] = true
     i = part_index(ts, :CAD_0)
     n0 = length(elements(ts.target[], :CAD_0))
-    # an element size not meshed yet: the edit is committed at once, the part drawn from
-    # its file's facets (4) until it is remeshed on a worker; a drive asked for meanwhile
-    # waits for it
+    # For an element size not meshed yet, the edit is committed at once, and the part is
+    # drawn from the facets of its file (4) until it is remeshed on a worker. A drive
+    # requested meanwhile waits for it.
     @test edit_part!(ts, i, :h, "0.31")
     record!(s)
     @test ts.parts[][i].values[:h] == 0.31 && ts.pending[] == Set([:CAD_0])
@@ -1010,12 +1018,13 @@ end
                       s.drive.result[] !== nothing, queue)
     n1 = length(elements(ts.target[], :CAD_0))
     @test n1 > 4 && n1 != n0 && !drive_stale(s) && !s.build_queued[]
-    # undo and redo: both sizes are meshed now, so no job
+    # Both sizes are meshed now, so undo and redo start no job.
     @test undo!(s) && isempty(ts.pending[]) && ts.parts[][i].values[:h] == 0
     @test length(elements(ts.target[], :CAD_0)) == n0
     @test redo!(s) && isempty(ts.pending[]) && length(elements(ts.target[], :CAD_0)) == n1
-    # two edits in a row: the second's job supersedes the first's, and the target is built
-    # from the design as it is when the meshing is done (a move made meanwhile kept)
+    # With two edits in a row, the job of the second supersedes that of the first. The
+    # target is built from the design as it is when the meshing is done, so a move made
+    # meanwhile is kept.
     @test edit_part!(ts, i, :h, "0.27") && edit_part!(ts, i, :h, "0.23")
     j = part_index(ts, :Marker)
     @test edit_part!(ts, j, :x, "1.0") && ts.pending[] == Set([:CAD_0])
@@ -1080,7 +1089,7 @@ end
         @test ts.ghost[] !== g0 && !drive_stale(s)
         @test only(c for c in ts.ghost[].components if c.name === :Marker).mesh.vertices ≈
               only(c for c in g0.components if c.name === :Marker).mesh.vertices .+ Ref(Briareus.Vec3(0.7, 0, 0))
-        # two edits in a row: the second's build supersedes the first's
+        # With two edits in a row, the build of the second supersedes that of the first.
         t1 = ts.target[]
         @test edit_part!(ts, part_index(ts, :Rectangle_0), :y, "0.1") &&
               edit_part!(ts, part_index(ts, :Rectangle_0), :y, "0.2")
@@ -1091,7 +1100,7 @@ end
         # parts added while the target builds get distinct names
         @test add_part!(ts, :disk; z = 3.0) && add_part!(ts, :disk; z = 4.0)
         @test [p.name for p in ts.parts[][end-1:end]] == [:disk_1, :disk_2]
-        # the checks wait for the target (here: built on the spot)
+        # The checks wait for the target, which in this test is built on the spot.
         @test remove_part!(ts, length(ts.parts[]) - 1) && ts.building[]     # a design not built yet
         start_clearance!(s; spawn = false)
         @test !ts.building[] && !(:disk_1 in component_names(ts.target[])) &&
@@ -1115,7 +1124,8 @@ end
         @test :Rectangle_0 in component_names(ts.target[])
         @test !(:Rectangle_0 in s.review.targets[]) && !(:Rectangle_0 in s.review.hardware[])
 
-        # the capsule role of a CAD part: its sphere is fitted on a worker, the role given then
+        # For the capsule role of a CAD part, its sphere is fitted on a worker and the role
+        # is given then.
         np = length(ts.parts[])
         i = part_index(ts, :CAD_0)
         given = Ref(false)
@@ -1183,7 +1193,7 @@ end
     @test length(back) == 48
     @test all(iszero, back[:Q31T].p) && all(iszero, back[:Q31B].p)
     @test all(p -> iszero(p(0.0)) && iszero(p(4.0)), values(back))   # off where the reference is
-    # the job: mode 1 of the dropped bundle removed, the drive kept, within the limits
+    # The job removes mode 1 of the dropped bundle and keeps the drive, within the limits.
     v = retune_pulses(s.drive.scenario[], beams, s.beams.enabled[], pul; cap = 1.5)
     ε1(h) = maximum(mode_amplitude(h.ylm[:, k], 1) for k in eachindex(h.time))
     @test ε1(v.before) > 0.01

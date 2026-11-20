@@ -1,5 +1,5 @@
-// Properties of the beam set: presets, beam files (beam table CSV and VisRad files),
-// and how the beams are drawn.
+// The properties of the beam set are the presets, the beam files (beam table CSV and
+// VisRad files), and how the beams are drawn.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

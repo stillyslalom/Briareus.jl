@@ -1,6 +1,6 @@
-# A pulse-shape budget: per-key power multipliers over a pulse's phases (one per quad and
-# phase, from a re-pointing run with power scales) grouped into a few distinct shapes, each
-# of which needs facility validation, and the shapes written out as pulses.
+# Pulse-shape budgets. Per-key power multipliers over the phases of a pulse (one per quad
+# and phase, from a re-pointing run with power scales) are grouped into a few distinct
+# shapes, each of which needs facility validation, and the shapes are written out as pulses.
 
 """
     PulseShapeGroups
@@ -9,21 +9,21 @@ Multipliers per key and phase grouped into shapes, from [`pulse_shape_groups`](@
 Fields:
 
 - `keys`: the keys (e.g. quad names), in the order of the input;
-- `names`: the shapes' names, `Symbol(class, i)` per class (`:shape1`, … without
+- `names`: the shape names, `Symbol(class, i)` per class (`:shape1`, … without
   classes), numbered within a class by increasing mean log multiplier;
-- `class`: each shape's class;
-- `multipliers`: shapes × phases, each shape's multiplier per phase, the geometric mean
-  of its members';
-- `members`: each shape's keys, in input order;
-- `assignment`: a `Dict` from each key to its shape's name;
-- `rms`: the fit's root-mean-square residual in the natural log of the multipliers, over
-  every key and phase;
+- `class`: the class of each shape;
+- `multipliers`: shapes × phases, the multiplier of each shape per phase, the geometric
+  mean of those of its members;
+- `members`: the keys of each shape, in input order;
+- `assignment`: a `Dict` from each key to the name of its shape;
+- `rms`: the root-mean-square residual of the fit in the natural log of the multipliers,
+  over every key and phase;
 - `split`: the number of shapes per class, as `class => n` pairs in order of first
   appearance; `splits`: every admissible split of the chosen number of shapes (counts
   per class in that order) and its rms;
 - `counts`: each number of shapes tried and the rms of its best split, in increasing
-  order (`shapes` alone without a `tolerance`);
-- `exact`: `true` when every class's grouping is the exact least-squares optimum (by
+  order (only `shapes` when no `tolerance` is given);
+- `exact`: `true` when the grouping of every class is the exact least-squares optimum (by
   enumeration or, with one phase, by dynamic programming), `false` where seeded restarts
   found it.
 """
@@ -47,46 +47,49 @@ end
                        exact_limit = 10^6) -> PulseShapeGroups
     pulse_shape_groups(multipliers::AbstractDict; phases = nothing, kwargs...)
 
-Group per-key power multipliers over a pulse's phases into `shapes` distinct pulse shapes:
-k-means on the natural log of the multipliers (a key's point has one coordinate per
-phase), so that a shape's multiplier per phase is the geometric mean of its members' and
-the fit is least squares in the relative error. Rows of the matrix are `keys` (e.g. quad
-names) and columns phases; a dictionary maps each key to its vector of multipliers per
-phase, or, with `phases` (the phases in order), each `(key, phase)` pair to a multiplier,
-the layout of power scales keyed per quad and phase. Keys of a dictionary are sorted (by
-their string) for a deterministic order. Every multiplier must be positive.
+Group per-key power multipliers over the phases of a pulse into `shapes` distinct pulse
+shapes. The grouping is k-means on the natural log of the multipliers, with one coordinate
+per phase for the point of each key, so that the multiplier of a shape per phase is the
+geometric mean of those of its members and the fit is least squares in the relative error.
+Rows of the matrix are `keys` (e.g. quad names) and columns phases; a dictionary maps each
+key to its vector of multipliers per phase, or, with `phases` (the phases in order), each
+`(key, phase)` pair to a multiplier, the layout of power scales keyed per quad and phase.
+Keys of a dictionary are sorted (by their string) for a deterministic order. Every
+multiplier must be positive.
 
-`class` (a function of the key, a dictionary or a vector aligned with the keys; `nothing`:
-one class) separates keys that never share a shape, such as the inner and the outer cones'
-quads, which follow different base pulses. Each class is grouped separately, with at least
-one shape and at most one per key, and the `shapes` are split between the classes by the
-smallest total squared error over every admissible split (ties to the first in order).
+`class` is a function of the key, a dictionary or a vector aligned with the keys, and
+`nothing` means one class. It separates keys that never share a shape, such as the quads
+of the inner and the outer cones, which follow different base pulses. Each class is
+grouped separately, with at least one shape and at most one per key, and the `shapes` are
+split between the classes by the smallest total squared error over every admissible split
+(ties to the first in order).
 
 `tolerance` (an rms in the natural log of the multipliers; `nothing`, the default, for a
 fixed count) makes `shapes` an upper bound: the result is the smallest number of shapes,
 from one per class up to `shapes`, whose best split fits with an rms at or below
 `tolerance`, or `shapes` when none does (`counts` lists the rms of each number tried).
-Shapes that differ by less than the laser delivers distinctly need not be separate
-pulses. For scale, not a default: NIF's laser performance model predicts total energies
-"within 2–3 percent" and gives "beam-to-beam energy balance better than 5 percent for
-full system shots" (NIF User Guide, section 4.8, Laser Performance Operations Model,
-<https://nifuserguide.llnl.gov/home/4-laser-system/48-laser-performance-operations-model>;
-the page states no statistic for the balance); a relative error ε is about ε in the log,
-so 0.02–0.05 spans those figures. The choice of tolerance is the study's.
+Shapes that differ by less than the laser delivers distinctly need not be separate pulses.
+The following figures give a scale only; the default tolerance is `nothing`. NIF's laser
+performance model predicts total energies "within 2–3 percent" and gives "beam-to-beam
+energy balance better than 5 percent for full system shots" (NIF User Guide, section 4.8,
+Laser Performance Operations Model,
+<https://nifuserguide.llnl.gov/home/4-laser-system/48-laser-performance-operations-model>).
+The page does not give a statistic for the balance. A relative error ε is about ε in the
+log, so 0.02–0.05 spans those figures. The tolerance is left to the study.
 
-Method, per class of `n` keys into `k` groups: exact where the size allows, by
-enumerating every partition into `k` groups when there are at most `exact_limit` of them
-(the Stirling number S(n, k)), or by dynamic programming over the sorted values when there
-is a single phase (an optimal one-dimensional grouping is contiguous); otherwise the best
-of `restarts` k-means++ seedings refined by single-key transfers until no transfer
-lowers the squared error (Hartigan's rule, a local optimum at least as good as Lloyd's).
-The seedings draw from a SplitMix64 stream started at `seed`, so the result is the same on
-every Julia version and machine. Restarts are a heuristic: the result is the global
-optimum only with high probability (it matched exhaustive enumeration on every small case
-tested).
+Each class of `n` keys is grouped into `k` groups exactly where the size allows. Every
+partition into `k` groups is enumerated when there are at most `exact_limit` of them (the
+Stirling number S(n, k)), and dynamic programming over the sorted values is used when
+there is a single phase (an optimal one-dimensional grouping is contiguous). Otherwise the
+best of `restarts` k-means++ seedings is taken, each refined by single-key transfers until
+no transfer lowers the squared error (Hartigan's rule, which reaches a local optimum at
+least as good as Lloyd's). The seedings are drawn from a SplitMix64 stream started at
+`seed`, so the result is the same on every Julia version and machine. Restarts are a
+heuristic: the result is the global optimum only with high probability (it matched
+exhaustive enumeration on every small case tested).
 
-[`shape_pulses`](@ref) writes the shapes out as pulses, and the `assignment` ties the
-power scales of a re-optimization per shape ([`PowerScales`](@ref) with
+[`shape_pulses`](@ref) writes the shapes out as pulses, and the `assignment` is used to
+tie the power scales of a re-optimization per shape ([`PowerScales`](@ref) with
 `by = b -> groups.assignment[b.quad]`).
 
 ```julia
@@ -109,7 +112,8 @@ function pulse_shape_groups(M::AbstractMatrix{<:Real}, keys::AbstractVector; sha
     n > 0 && d > 0 || throw(ArgumentError("no multipliers"))
     all(x -> isfinite(x) && x > 0, M) || throw(ArgumentError("multipliers must be positive and finite"))
     restarts >= 1 || throw(ArgumentError("restarts must be at least 1"))
-    # the class of each key, resolved here: the grouping below takes no callable
+    # The class of each key is resolved in this method, because the grouping below does not
+    # take a callable.
     cl = class === nothing ? fill(nothing, n) :
          class isa AbstractVector ? collect(class) :
          class isa AbstractDict ? [class[k] for k in keys] : [class(k) for k in keys]
@@ -129,11 +133,12 @@ function _pulse_shape_groups(X::Matrix{Float64}, keys::Vector{K}, cl::Vector{C},
     nc = length(classes)
     nc <= shapes <= n ||
         throw(ArgumentError("$shapes shapes for $n keys in $nc classes: at least one shape per class, at most one per key"))
-    # each class's best grouping into every number of groups it can take
+    # Find the best grouping of each class into every number of groups it can take.
     kmax = [min(sizes[j], shapes - nc + 1) for j in 1:nc]
     fits = [[_kmeans_log(X[rows[j], :], k, seed, restarts, exact_limit) for k in 1:kmax[j]] for j in 1:nc]
-    # every split of a count of shapes between the classes, and its rms: the count
-    # `shapes`, or with a tolerance the smallest count up to it whose best split meets it
+    # The rms is computed for every split of a count of shapes between the classes. The
+    # count is `shapes`, or with a tolerance the smallest count up to `shapes` whose best
+    # split meets the tolerance.
     local splits, best, bestsse
     counts = Pair{Int,Float64}[]
     for m in (tolerance === nothing ? shapes : nc):shapes
@@ -153,7 +158,7 @@ function _pulse_shape_groups(X::Matrix{Float64}, keys::Vector{K}, cl::Vector{C},
     for j in 1:nc
         f = fits[j][best[j]]
         exact &= f.exact
-        # shapes in a class by increasing mean log multiplier
+        # The shapes in a class are sorted by increasing mean log multiplier.
         order = sortperm([sum(f.centers[g, :]) for g in 1:best[j]])
         for (i, g) in enumerate(order)
             name = classes[j] === nothing ? Symbol(:shape, i) : Symbol(classes[j], i)
@@ -217,7 +222,7 @@ function _compositions(total::Integer, kmax::Vector{Int})
     return out
 end
 
-# The squared error of a grouping: Σ over groups of Σ |x - mean|².
+# The squared error of a grouping, Σ over groups of Σ |x - mean|².
 function _grouping_sse(X::Matrix{Float64}, a::Vector{Int}, k::Int)
     n, d = size(X)
     S, cnt = zeros(k, d), zeros(Int, k)
@@ -249,7 +254,7 @@ function _stirling2(n::Int, k::Int)
     return S[k+1]
 end
 
-# k-means of the rows of X into k groups: (; assignment, centers, sse, exact).
+# k-means of the rows of X into k groups, returning (; assignment, centers, sse, exact).
 function _kmeans_log(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::Integer, exact_limit::Real)
     n = size(X, 1)
     a = if k == 1
@@ -268,8 +273,8 @@ function _kmeans_log(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::Integer
     return (; assignment = a, centers = _centers(X, a, k), sse = _grouping_sse(X, a, k), exact)
 end
 
-# Every partition of 1:n into exactly k groups (restricted growth strings), the least
-# squared error kept (the first of equal ones).
+# Every partition of 1:n into exactly k groups (restricted growth strings) is tried, and the
+# one with the least squared error is kept (the first of equal ones).
 function _kmeans_enumerate(X::Matrix{Float64}, k::Int)
     n = size(X, 1)
     a = ones(Int, n)
@@ -282,7 +287,7 @@ function _kmeans_enumerate(X::Matrix{Float64}, k::Int)
             sse < bestsse && (bestsse = sse; copyto!(best, a))
             return
         end
-        # enough keys left to open the groups still missing
+        # Enough keys must be left to open the groups still missing.
         for g in 1:min(m + 1, k)
             m + (g > m) + (n - i) >= k || continue
             a[i] = g
@@ -294,8 +299,8 @@ function _kmeans_enumerate(X::Matrix{Float64}, k::Int)
     return best
 end
 
-# One dimension: an optimal grouping is contiguous in the sorted values; dynamic
-# programming over the split points (O(k n²)).
+# In one dimension an optimal grouping is contiguous in the sorted values, so dynamic
+# programming over the split points finds it in O(k n²).
 function _kmeans_1d(x::Vector{Float64}, k::Int)
     n = length(x)
     p = sortperm(x)
@@ -323,8 +328,8 @@ function _kmeans_1d(x::Vector{Float64}, k::Int)
     return a
 end
 
-# SplitMix64 (Steele, Lea and Flood, OOPSLA 2014): a stream fixed by its seed on every
-# Julia version, unlike `Random`'s default generators.
+# SplitMix64 (Steele, Lea and Flood, OOPSLA 2014) gives a stream fixed by its seed on every
+# Julia version; `Random`'s default generators do not.
 mutable struct _SplitMix
     s::UInt64
 end
@@ -337,8 +342,9 @@ function _next!(r::_SplitMix)
 end
 _uniform!(r::_SplitMix) = (_next!(r) >> 11) * 2.0^-53          # in [0, 1)
 
-# The best of `restarts` k-means++ seedings (Arthur and Vassilvitskii, SODA 2007), each
-# assigned to its nearest seed and refined by Hartigan's single-key transfers.
+# The best of `restarts` k-means++ seedings (Arthur and Vassilvitskii, SODA 2007). In each
+# seeding every key is assigned to its nearest seed, and the grouping is refined by
+# Hartigan's single-key transfers.
 function _kmeans_restarts(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::Integer)
     n, d = size(X)
     rng = _SplitMix(seed)
@@ -349,7 +355,7 @@ function _kmeans_restarts(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::In
         D = [dist2(i, X[seeds[1], :]) for i in 1:n]
         while length(seeds) < k
             tot = sum(D)
-            if tot <= 0             # fewer distinct points than groups: any key not yet a seed
+            if tot <= 0             # fewer distinct points than groups; take a new key
                 push!(seeds, first(setdiff(1:n, seeds)))
             else
                 u, acc, pick = _uniform!(rng) * tot, 0.0, 0
@@ -364,7 +370,7 @@ function _kmeans_restarts(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::In
         end
         a = [argmin([dist2(i, X[s, :]) for s in seeds]) for i in 1:n]
         for (g, s) in enumerate(seeds)
-            a[s] = g                 # each seed in a separate group: none empty
+            a[s] = g                 # each seed in a separate group, so none is empty
         end
         _hartigan!(a, X, k)
         sse = _grouping_sse(X, a, k)
@@ -373,8 +379,8 @@ function _kmeans_restarts(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::In
     return best
 end
 
-# Single-key transfers: move a key from group a to group b when it lowers the squared
-# error, n_b/(n_b+1) |x - c_b|² < n_a/(n_a-1) |x - c_a|², until no move does.
+# Single-key transfers. A key is moved from group a to group b when the move lowers the
+# squared error, n_b/(n_b+1) |x - c_b|² < n_a/(n_a-1) |x - c_a|², until no move lowers it.
 function _hartigan!(a::Vector{Int}, X::Matrix{Float64}, k::Int)
     n, d = size(X)
     cnt = [count(==(g), a) for g in 1:k]
@@ -413,29 +419,30 @@ end
     scaled_pulse(base::PulseShape, times, multipliers; peak = nothing, power_max = nothing)
         -> PulseShape
 
-The pulse `base` with its power multiplied by a multiplier given per phase: `multipliers[i]`
-at `times[i]` (ns, increasing), interpolated linearly between the phase times and held at
-the first and last values outside them. The result is tabulated at the union of `base`'s
-times and the phase times (inside `base`'s span), each power the base's times the
-multiplier there; between those points it is linear, as every `PulseShape` is (the exact
-product of two linear pieces is quadratic: the table is the multiplier applied at the
-points, not that product).
+The pulse `base` with its power multiplied by a multiplier given per phase. The multiplier
+is `multipliers[i]` at `times[i]` (ns, increasing), interpolated linearly between the
+phase times and held at the first and last values outside them. The result is tabulated at
+the union of `base`'s times and the phase times (inside `base`'s span), and each tabulated
+power is the power of the base times the multiplier at that point. Between those points
+the result is linear, as every `PulseShape` is. The exact product of two linear pieces is
+quadratic, so the table contains the multiplier applied at the points; the exact product is
+not tabulated.
 
-`peak`, a time after the last phase, leaves the pulse from there on unscaled: the
-multiplier then runs linearly from the last phase's value to 1 between the last phase time
-and `peak`, and is 1 after it. This is the treatment for a peak at the laser's limit,
-which carries no multiplier: the phases sample the pulse at their times only, and the ramp
-between the last phase and the peak is an assumption of this function, not a fitted
-quantity.
+With `peak`, a time after the last phase, the pulse is left unscaled from that time on: the
+multiplier then varies linearly from its value at the last phase to 1 between the last phase
+time and `peak`, and is 1 after it. This is the treatment for a peak at the laser limit,
+which is left unscaled. The pulse is sampled only at the phase times, and the ramp between
+the last phase and the peak is an assumption of this function (it is not fitted).
 
-`power_max` (TW per beam) checks the result against the laser's limit: a pulse above it
-anywhere (the table's points, where its maximum lies) is an `ArgumentError` naming the
-time, the power and the excess. Multipliers within the limit at the phase times can
-still exceed it between them, where the base pulse rises: [`pulse_ceiling`](@ref)`(scenario;
-pulses, times, power_max, peak)` holds this pulse within the limit as a constraint of a
-phased design, and [`bounds`](@ref)`(scenario.param; power_max, pulses, times, peak)` the
-conditions on one scale alone as a box. A table is not clipped: clipping would change the
-energy of the pulse and the drive the design was optimized for.
+`power_max` (TW per beam) checks the result against the laser limit: a pulse above it
+anywhere (at the table points, where its maximum lies) is an `ArgumentError` naming the
+time, the power and the excess. Multipliers within the limit at the phase times can still
+exceed it between them, where the base pulse rises.
+[`pulse_ceiling`](@ref)`(scenario; pulses, times, power_max, peak)` holds this pulse
+within the limit as a constraint of a phased design, and
+[`bounds`](@ref)`(scenario.param; power_max, pulses, times, peak)` gives the conditions on
+a single scale as a box. A table is not clipped: clipping would change the energy of the
+pulse and the drive the design was optimized for.
 """
 function scaled_pulse(base::PulseShape, times, multipliers; peak = nothing,
                       power_max::Union{Nothing,Real} = nothing)
@@ -469,14 +476,14 @@ end
     shape_pulses(groups::PulseShapeGroups, base, times; peak = nothing, power_max = nothing)
         -> Dict{Symbol,PulseShape}
 
-The pulse of each shape of `groups` ([`pulse_shape_groups`](@ref)), keyed by the shape's
-name: [`scaled_pulse`](@ref) of its class's base pulse with the shape's multipliers at the
-phase `times` (and `peak`). `base` is one [`PulseShape`](@ref) for every class, or a
-dictionary or function from class to pulse (e.g. the inner and the outer cones' pulses).
-[`write_pulse_table`](@ref) writes the result as a table, one column per shape, and
-[`with_pulses`](@ref) applies it to beams keyed by `groups.assignment`. `power_max` (a
-number, or like `base` one per class) checks every shape against the laser's limit as
-`scaled_pulse` does.
+The pulse of each shape of `groups` ([`pulse_shape_groups`](@ref)), keyed by the shape
+name. Each pulse is [`scaled_pulse`](@ref) of the base pulse of its class with the
+multipliers of the shape at the phase `times` (and `peak`). `base` is one
+[`PulseShape`](@ref) for every class, or a dictionary or function from class to pulse
+(e.g. the pulses of the inner and the outer cones). [`write_pulse_table`](@ref) writes the
+result as a table, one column per shape, and [`with_pulses`](@ref) applies it to beams
+keyed by `groups.assignment`. `power_max` (a number, or like `base` one per class) checks
+every shape against the laser limit as `scaled_pulse` does.
 """
 function shape_pulses(g::PulseShapeGroups, base, times; peak = nothing, power_max = nothing)
     size(g.multipliers, 2) == length(times) ||

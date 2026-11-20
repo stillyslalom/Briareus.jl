@@ -34,8 +34,9 @@ function pair(h; flat = false)
                      surface = sf(DiskSurface(center = (0, 0, 1.0)))),
            Component(:package_bottom, disk_mesh(1.5, -1.0; nr, nphi, up = false), face;
                      surface = sf(DiskSurface(center = (0, 0, -1.0))))]
-    # flat facets watertight: each hole's disk takes the cap's full azimuthal count (the
-    # hohlraum's has half, which leaves cracks that only the curved path closes)
+    # To keep the flat facets watertight, the disk of each hole takes the full azimuthal
+    # count of the cap. The hole disk of the hohlraum has half the count, which leaves
+    # cracks that only the curved path closes.
     tight(c) = !flat || c.kind !== :aperture ? c :
                aperture(c.name, disk_mesh(1.0, c.mesh.vertices[1][3]; nr = 2, nphi, up = c.mesh.vertices[1][3] < 0))
     t = Target([[translate(named(tight(x), :top; flat), (0, 0, 2.25)) for x in top.components];

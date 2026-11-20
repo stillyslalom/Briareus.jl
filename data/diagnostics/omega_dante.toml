@@ -1,11 +1,12 @@
 # Omega Dante as configured at the time of Rubery et al., RSI (2023), OSTI 1975922, Fig. 13
 # (channels 1 and 2 then offline), read from the page image. Public: filters, mirrors,
 # XRD cathodes, nominal energies, XRD apertures (ch 1 10.5 mm, ch 2–4 8.3 mm, ch 5–18
-# 13.2 mm) and the port. Not public: the standoff, so no solid angles (Ω = aperture area /
-# standoff²): supply solid_angle_sr in a file that extends this one. Mirrors (carbon,
-# beryllium) as uncalibrated Fresnel mirrors; the XRD cathodes as NIF's XRD-31 model
-# (assumed). The hohlraum axis on Omega is P6–P7 or P5–P8 (37.37° to this line of
-# sight, May et al. 2012), not the chamber's z axis: place the target accordingly.
+# 13.2 mm) and the port. The standoff is not public, so the solid angles (Ω = aperture area
+# / standoff²) are absent; supply solid_angle_sr in a file that extends this one. The carbon
+# and beryllium mirrors are modeled as uncalibrated Fresnel mirrors, and the XRD cathodes as
+# the NIF XRD-31 model (assumed). The hohlraum axis on Omega is P6–P7 or P5–P8, 37.37° to
+# this line of sight (May et al. 2012). It is not the chamber z axis, so place the target
+# accordingly.
 
 schema = 1
 id = "omega_dante"

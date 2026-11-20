@@ -45,8 +45,8 @@ using Briareus, Test
     end
 
     @testset "point-spread function" begin
-        # the penumbra 37.5 µm, diffraction 1.03 λ distance / d at 4 keV (Schneider 2010's
-        # SXI: "diffraction and geometry about equal")
+        # The penumbra is 37.5 µm and the diffraction 1.03 λ distance / d at 4 keV. For the
+        # SXI, Schneider 2010 gives "diffraction and geometry about equal".
         @test im.penumbra ≈ 0.025 * 1.5 rtol = 1e-14
         @test im.diffraction ≈ 1.03 * 1.239841984e-6 / 4 * 1656.7 / 0.025 rtol = 1e-12
         # the kernel's variance per axis: the disk's D²/16 plus the Gaussian's σ², on a

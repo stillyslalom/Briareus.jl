@@ -10,7 +10,8 @@ const A = BriareusGUI
 
     @testset "icons" begin
         @test all(isfile, joinpath.(icons, ("briareus.ico", "briareus.png", "briareus.icns")))
-        # ICNS: big-endian lengths, the file's in its header, each entry length including the entry header
+        # ICNS uses big-endian lengths, with the file length in its header and each entry
+        # length including the entry header.
         b = read(joinpath(icons, "briareus.icns"))
         len(i) = Int(ntoh(reinterpret(UInt32, b[i:i+3])[1]))
         @test String(b[1:4]) == "icns" && len(5) == length(b)
@@ -107,9 +108,9 @@ const A = BriareusGUI
         end
     end
 
-    # The script itself, with a stand-in for the app's shim: it reads the splash's status
-    # file from BRIAREUS_SPLASH, sends "quit" as the window would, and exits with the code
-    # given; the script passes the code on and removes the status file.
+    # The script itself runs with a stand-in for the shim of the app. The stand-in reads the
+    # status file of the splash from BRIAREUS_SPLASH, sends "quit" as the window would, and
+    # exits with the code given. The script passes the code on and removes the status file.
     @testset "shortcut script runs the app" begin
         tool = A.qml_tool()
         mktempdir() do dir
@@ -179,7 +180,7 @@ end
     union!(refs, ("time." * String(c) for c in A.Controllers.TIME_CHARTS if c !== :diagnostics))
     @test isempty(setdiff(refs, keys_))                 # every topic shown exists
     @test all(startswith("start."), setdiff(keys_, refs))   # every topic is shown somewhere
-    # each topic: a hint of one short line, and a text without a long unbroken paragraph
+    # Each topic has a hint of one short line and a text without a long unbroken paragraph.
     topics = collect(eachmatch(r"key: \"([a-z_]+\.[a-z_]+)\", title: \"[^\"]*\",\s*tip: \"([^\"]*)\",\s*text: md\(`(.*?)`\)"s, js))
     @test length(topics) == length(keys_)
     @test all(m -> 0 < length(m[2]) <= 64, topics)

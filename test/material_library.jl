@@ -1,4 +1,5 @@
-# The material library: entries against the package defaults, sources, printing.
+# The tests of the material library cover entries against the package defaults, sources
+# and printing.
 
 # Field-by-field equality, recursing into structs (`Material`'s albedo models and
 # conversions hold vectors, which `===` compares by identity).
@@ -19,7 +20,8 @@ end
     @test _same_fields(material_default(:nif_gold).material, nif_gold())
     @test _same_fields(material_default(:nif_uranium).material, nif_uranium())
     @test _same_fields(material_default(:black).material, BLACK)
-    # foils: the default of foil and backlighter_foil, and one entry per foil element
+    # The foil entries are the default of foil and backlighter_foil and one entry per foil
+    # element.
     @test _same_fields(material_default(:gold_foil).material, foil_material())
     @test _same_fields(foil(:f, (0, 0, 0), (0, 0, 1); width = 1.0, n = 1).material, foil_material())
     @test _same_fields(backlighter_foil((90.0, 0.0); standoff = 5.0, n = 1).material, foil_material())
@@ -36,7 +38,8 @@ end
     @test all(!isempty(strip(v.source)) && !isempty(strip(v.uncertainty)) for v in values)
     @test all(v.basis in MATERIAL_BASES for v in values)
 
-    # the published values: gold() is Young 2020's static model; the alternatives
+    # The published values are checked: gold() is the static model of Young 2020, and
+    # the alternatives follow.
     y, s, disk = material_default(:gold), material_default(:gold_swadling2025), material_default(:gold_disk)
     @test (albedo(y.material), conversion_efficiency(y.material.conversion)) == (0.8, 0.9)
     @test y.albedo.basis === y.conversion.basis === :published
@@ -49,7 +52,8 @@ end
     gf = material_default(:gold_foil)
     @test conversion_efficiency(gf.material.conversion) == conversion_efficiency(disk.material.conversion, 0.0, 1e15)
     @test conversion_efficiency(disk.material.conversion, 0.0, 3e15) ≈ gf.conversion.value rtol = 1e-12
-    # mid-Z foils: suggested values, each the midpoint of the range its uncertainty states
+    # Mid-Z foils have suggested values, each the midpoint of the range its uncertainty
+    # states.
     midz = [material_default(Symbol(n, :_foil)) for (_, n, _) in FOIL_ELEMENTS[2:end]]
     @test all(d.albedo.basis === d.conversion.basis === :suggested for d in midz)
     @test all(d.conversion.value ≈ sum(Briareus._MIDZ_CONVERSION_RANGE) / 2 &&
@@ -62,7 +66,7 @@ end
     # defaults without a source are left out
     @test !(:ablator in names)
 
-    # printing: one source and one uncertainty line per quantity
+    # Printing gives one source line and one uncertainty line per quantity.
     for d in (material_default(:gold), disk)
         txt = sprint(show, MIME"text/plain"(), d)
         n = 2 + length(d.other)

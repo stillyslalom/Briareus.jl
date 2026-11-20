@@ -1,5 +1,5 @@
-# A pulse-shape budget: grouping per-key multipliers over phases into a few shapes, and
-# the shapes written out as pulses.
+# This file tests a pulse-shape budget, which groups per-key multipliers over phases into
+# a few shapes and writes the shapes out as pulses.
 #
 # References: exhaustive enumeration of every assignment of the keys to the groups (k^n of
 # them, written here independently of the package's enumeration of partitions) for the
@@ -28,7 +28,7 @@ function _brute_sse(X, k)
     return best
 end
 
-# deterministic multipliers: three loose clusters in four phases, and noise
+# The deterministic multipliers form three loose clusters in four phases, with noise.
 function _mock_multipliers(n, d; seed = 0)
     centers = [0.8 0.85 0.9 0.95; 1.0 1.02 1.05 1.08; 1.3 1.25 1.2 1.1]
     return [centers[1 + (i % 3), j] * (1 + 0.05 * sin(7.1i + 3.3j + seed)) for i in 1:n, j in 1:d]
@@ -44,7 +44,7 @@ end
             keys = ["Q$i" for i in 1:size(M, 1)]
             ref = _brute_sse(log.(M), k)
             ge = pulse_shape_groups(M, keys; shapes = k)                     # enumeration (or 1-D DP)
-            gr = pulse_shape_groups(M, keys; shapes = k, exact_limit = 0)    # restarts (1-D: DP)
+            gr = pulse_shape_groups(M, keys; shapes = k, exact_limit = 0)    # restarts (DP in 1-D)
             push!(ok_exact, ge.exact && isapprox(sse(ge, M), ref; rtol = 1e-12, atol = 1e-15))
             push!(ok_restarts, isapprox(sse(gr, M), ref; rtol = 1e-12, atol = 1e-15))
         end
@@ -67,7 +67,7 @@ end
         keys = ["Q$i" for i in 1:10]
         cls = [i <= 4 ? :inner : :outer for i in 1:10]
         g = pulse_shape_groups(M, keys; shapes = 4, class = cls)
-        # the split by exhaustive search: each class's best grouping per count
+        # The split by exhaustive search gives the best grouping of each class per count.
         X = log.(M)
         inn, out = X[1:4, :], X[5:10, :]
         splits = [(ki, 4 - ki) for ki in 1:3]
@@ -96,7 +96,8 @@ end
         gd = pulse_shape_groups(byvec; shapes = 4, class = Dict(zip(keys, cls)))
         gp = pulse_shape_groups(pairs; phases = (:picket, :foot, :rise), shapes = 4, class = Dict(zip(keys, cls)))
         @test gd.assignment == gp.assignment == g.assignment && isapprox(gd.rms, g.rms; rtol = 1e-12)
-        # no class: one class, shapes named :shape1, ...; a shape per key fits exactly
+        # Without a class there is one class, with shapes named :shape1, .... A shape per
+        # key fits exactly.
         @test pulse_shape_groups(M, keys; shapes = 2).names == [:shape1, :shape2]
         @test pulse_shape_groups(M, keys; shapes = 10).rms == 0
         @test_throws ArgumentError pulse_shape_groups(M, keys; shapes = 1, class = cls)
@@ -105,8 +106,8 @@ end
         @test_throws DimensionMismatch pulse_shape_groups(M, keys[1:9]; shapes = 2)
         @test occursin("rms", sprint(show, MIME"text/plain"(), g)) && occursin("inner1", sprint(show, MIME"text/plain"(), g))
 
-        # a tolerance: the fewest shapes up to `shapes` whose best split fits within it,
-        # against the best split per count by exhaustive search
+        # A tolerance selects the fewest shapes up to `shapes` whose best split fits within
+        # it, checked against the best split per count by exhaustive search.
         best(m) = sqrt(minimum(_brute_sse(inn, ki) + _brute_sse(out, m - ki) for ki in 1:min(4, m - 1) if m - ki <= 6) / 30)
         r2, r3, r4 = best(2), best(3), best(4)
         @test r2 > r3 > r4 > 0 && g.counts == [4 => g.rms]
@@ -133,7 +134,8 @@ end
         q = scaled_pulse(base, [1.5, 4.0], [2.0, 1.0])
         @test q.t == [0.0, 1.0, 1.5, 2.0, 4.0, 6.0, 8.0]
         @test isapprox(q(1.5), base(1.5) * 2.0; rtol = 1e-14) && isapprox(q(2.0), base(2.0) * (2.0 - 0.5 / 2.5); rtol = 1e-14)
-        # the peak unscaled: the multiplier ramps from the last phase's to 1 by `peak`
+        # With the peak unscaled, the multiplier ramps from the value of the last phase to 1
+        # by `peak`.
         r = scaled_pulse(base, t, m; peak = 5.0)
         @test r.t == [0.0, 1.0, 2.0, 4.0, 5.0, 6.0, 8.0]
         @test isapprox(r(5.0), base(5.0); rtol = 1e-14) && r(6.0) == base(6.0) && r(8.0) == base(8.0)
@@ -163,13 +165,14 @@ end
                                                 power_max = Dict(:inner => 2.0, :outer => 1.0))
     end
 
-    # The laser's limit between the phase samples. `pulse_ceiling` holds every point of the
-    # written pulse (`scaled_pulse` of the base with the scales as multipliers, ramped to 1
-    # at `peak`) within the limit; checked against the written pulse sampled every 1e-4 ns
-    # (every point of the tables below lies on that grid), on random designs: a design
-    # meets the constraint if and only if its sampled pulse stays within the limit. The box
-    # of `bounds(...; pulses, times, peak)` holds the conditions on one scale alone and
-    # excludes no design within the limit.
+    # These tests check the laser limit between the phase samples. `pulse_ceiling` keeps
+    # every point of the written pulse within the limit; the written pulse is `scaled_pulse`
+    # of the base with the scales as multipliers, ramped to 1 at `peak`. The check uses the
+    # written pulse sampled every 1e-4 ns on random designs, and every point of the tables
+    # below lies on that grid. A design meets the constraint if and only if its sampled
+    # pulse stays within the limit. The box of `bounds(...; pulses, times, peak)` contains
+    # the conditions that involve a single scale and does not exclude any design within the
+    # limit.
     @testset "power cap between the phases" begin
         quads = nif_quads(power = 1.0)[1:4]
         tph = [1.0, 2.25, 3.75, 5.0]
@@ -199,9 +202,10 @@ end
             # the hull keeps fewer points than the tables carry
             @test length(c.limit) < length(scaled_pulse(base, tph, ones(4); peak = pk).t)
         end
-        # the study's case: the earlier scales at 1.06, the last below 1; the former rule (each
-        # scale under the largest base on the interval it governs) capped the step's at
-        # 2/1.94, while the written pulse stays within the limit
+        # In the case of the study, the earlier scales are at 1.06 and the last is below 1.
+        # The previous rule kept each scale under the largest base on the interval it
+        # governs and so capped the step scale at 2/1.94, while the written pulse stays
+        # within the limit.
         pr = phased(rise)
         c = pulse_ceiling(pr; pulses = rise, times, power_max = L, peak = pk)
         _, hi = bounds(pr; scale = Inf, power_max = L, pulses = rise, times, peak = pk)
@@ -222,7 +226,8 @@ end
         @test all(lo[ph.n+1:end] .<= s .<= hi[ph.n+1:end]) && c.labels[argmax(v .- c.limit)] == "all, 1.6 ns"
         @test maximum(v) ≈ 1.9 * 1.1 rtol = 1e-14
         @test_throws ArgumentError scaled_pulse(hump, tph, s; peak = pk, power_max = L)
-        # generic in the number type: the components' gradient, the constant coefficients
+        # The constraint is generic in the number type, with the gradient of the components
+        # and the constant coefficients.
         x = [zeros(ph.n); s]
         J = ForwardDiff.jacobian(y -> c.f(apply(ph, y)), x)
         k = findfirst(==("all, 1.6 ns"), c.labels)

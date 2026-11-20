@@ -5,11 +5,11 @@
 #
 # The workload has no GL context, so it cannot render the canvases on the window's screen
 # type (`GLMakie.Screen{QMLMakie.QMLWindow}`); without these signatures the first frame
-# compiled for about 14 s. A window opens for a few seconds (it needs a display). Rerun
-# after updating GLMakie, QMLMakie or Makie, or after changing what the canvases plot:
+# takes several seconds to compile. A window opens for a few seconds (it needs a display).
+# Rerun after updating GLMakie, QMLMakie or Makie, or after changing what the canvases plot:
 # signatures that no longer resolve are skipped, but new ones are compiled at run time.
-# Signatures the cache already holds do not show in the trace, so the file keeps the ones
-# it had (delete it and rebuild the cache first for a clean recording).
+# Signatures the cache already holds do not show in the trace, so the file keeps the ones it
+# had (delete it and rebuild the cache first for a clean recording).
 root = dirname(@__DIR__)
 gui = joinpath(root, "BriareusGUI")
 out = joinpath(gui, "src", "qt", "first_frame.jl")

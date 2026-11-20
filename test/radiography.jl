@@ -24,7 +24,7 @@ function box_mesh(x0, x1, y0, y1, z0, z1)
     return m
 end
 
-# the length of the segment a → b inside an axis-aligned box (slab clipping)
+# the length of the segment from a to b inside an axis-aligned box (slab clipping)
 function clip_length(a, b, lo, hi)
     r = b - a
     s0, s1 = 0.0, 1.0
@@ -107,7 +107,8 @@ end
         τ = r.transmission[100, :]
         part = findall(v -> 1e-9 < v < 1 - 1e-9, τ)
         @test all(abs.(x[part]) .< D / 2 + h / 2) && maximum(abs.(x[part])) > D / 2 - 1.5h
-        # the blur moves no shadow: the row's blocked length is the box's 1 mm in the field
+        # The blur does not move a shadow, so the blocked length of the row is the 1 mm of
+        # the box in the field.
         @test sum(1 .- τ) * h ≈ 1.0 rtol = 1e-6
     end
 
@@ -120,9 +121,10 @@ end
                         up = Vec3(0, 1, 0))
         r = radiograph(rg, t, dep; object = [:edge => :Al])
         @test r.magnification ≈ (s + Ld) / s rtol = 1e-14
-        # by hand: each foil element a point source (isotropic, E_e/4π sr⁻¹) toward the
-        # detector point on the line from the foil's center through the pixel's point, at
-        # the ray's incidence on the flat detector (normal +z), attenuated by the box's chord
+        # By hand, each foil element is an isotropic point source of E_e/4π sr⁻¹ toward the
+        # detector point on the line from the foil center through the pixel point. The
+        # fluence is taken at the incidence of the ray on the flat detector (normal +z) and
+        # attenuated by the chord through the box.
         fe = elements(t, :backlighter)
         Ee = 0.01 * 1e3 .* dep.element[fe]
         fc = Vec3(0, 0, -s)
@@ -134,10 +136,12 @@ end
                 for (k, e) in enumerate(fe)) / hνJ
         end
         @test all(isapprox.(r.images[1], expect; rtol = 1e-10))
-        # the open field at the center: a point source at s + L, to the foil's extent
+        # The open field at the center is a point source at s + L, up to the extent of the
+        # foil.
         @test r.open[21, 21] ≈ sum(Ee) / (4π * (s + Ld)^2) / hνJ rtol = 1e-4
-        # the source's blur on the object plane, w L/(s + L): partial transmission only
-        # within it of the edge (element centroids span w(1 − 1/8))
+        # The blur of the source on the object plane is w L/(s + L), and the transmission
+        # is partial only within that distance of the edge. The element centroids span
+        # w(1 − 1/8).
         xs = [pixel_point(rg, 21, j) ⋅ Vec3(1, 0, 0) for j in 1:41]
         τ = r.transmission[21, :]
         T0 = exp(-κAl * 0.02)
@@ -153,8 +157,9 @@ end
         t, dep = backlit_scene(; w = 100.0, n = 4)
         A = 100.0^2
         Ex = 0.01 * 1e3 * 1.0 * 10.0
-        # pinhole: the fluence is R ∫ cosθ_d cosθ_p / D² dA over the pinhole disk (normal
-        # +z) from the detector point, by Gauss–Legendre in radius and uniform azimuths
+        # Through a pinhole the fluence is R ∫ cosθ_d cosθ_p / D² dA over the pinhole disk
+        # (normal +z) from the detector point, computed by Gauss–Legendre in radius and
+        # uniform azimuths.
         rg = Radiograph(0, 0; line = :Ge, distance = L, pinhole = dpin, pinhole_distance = p5, width = W,
                         pixels = 5, ce = 0.01, pulse = 1.0, angular = :lambertian, up = Vec3(0, 1, 0))
         q = pixel_point(rg, 3, 5)
@@ -169,9 +174,10 @@ end
         ref = Ex / (π * A) * G / hνJ
         rp = radiograph(rg, t, dep)
         @test isapprox(rp.open[3, 5], ref; rtol = 1e-9) && isapprox(rp.open[3, 3] * cos(α)^4, ref; rtol = 1e-9)
-        # point projection: each element's fluence per detector area, E_e/4π times the
-        # solid angle of a small detector square about the detector point over its area
-        # (two triangles, Van Oosterom–Strackee, the triple product from the edges)
+        # In point projection, the fluence of each element per detector area is E_e/4π times
+        # the solid angle of a small detector square about the detector point, divided by
+        # its area. The solid angle uses two triangles by Van Oosterom–Strackee, with the
+        # triple product from the edges.
         function Ωtri(R1, R2, R3)
             r1, r2, r3 = norm(R1), norm(R2), norm(R3)
             2atan(abs(dot(R1, cross(R2 - R1, R3 - R1))),
@@ -201,9 +207,9 @@ end
         r = radiograph(rg, t, dep)
         s = backlighter_signal(t, dep, (0.0, 0.0); line = :Ge, pulse = 2.0, prepulse = true, distance = 500.0,
                                object = nothing)
-        # backlighter_signal's fluence is normal to each ray; the radiograph's, per area of
-        # the flat detector, is times each element's incidence cosine (isotropic, uniform
-        # foil: weights 1/r² per element)
+        # The fluence of backlighter_signal is normal to each ray. The radiograph fluence,
+        # per area of the flat detector, includes the incidence cosine of each element. For
+        # an isotropic, uniform foil the weights are 1/r² per element.
         Pd = Vec3(0, 0, 500.0)
         rs = [Pd - t.elem_centroid[e] for e in elements(t, :backlighter)]
         inc = sum(r -> r[3] / norm(r)^3, rs) / sum(r -> 1 / norm(r)^2, rs)
@@ -237,8 +243,8 @@ end
     @testset "definitions" begin
         issues = filter(i -> basename(i.file) == "nif_inflight_radiography.toml", check_diagnostics())
         @test Set(i.key for i in issues if i.level === :missing) ⊇ Set(["line_of_sight.phi_deg", "filters"])
-        # a mock-up completing it: every value below is invented for the test, not a
-        # facility value
+        # A mock-up completes the definition. Every value below is invented for the test;
+        # none is a facility value.
         mktempdir() do dir
             write(joinpath(dir, "mock.toml"), """
                 schema = 1

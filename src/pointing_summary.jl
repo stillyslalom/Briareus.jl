@@ -1,5 +1,6 @@
-# A one-line account of a pointing against reference beams: aim shifts, power and cone
-# fraction, keep-out clearances and the fractions of laser power clipped and missed.
+# This file gives a one-line account of a pointing against reference beams, with aim
+# shifts, power and cone fraction, keep-out clearances and the fractions of laser power
+# clipped and missed.
 
 """
     PointingSummary
@@ -10,32 +11,35 @@ A pointing (e.g. the beams of a re-pointing result) against reference beams, fro
 - `nbeams`; `shift_mean`, `shift_rms` and `shift_max` (mm): the mean, root-mean-square
   and largest aim shift `|aim - reference aim|` over the beams, matched by name (the rms
   is the square root of [`shift_objective`](@ref) with unit weights);
-- `power` (TW): the total setup power, and `cone_fraction`: the inner groups' share of it;
+- `power` (TW): the total setup power, and `cone_fraction`: the share of it in the inner
+  groups;
 - `clearance` and `reference_clearance` (mm): per keep-out, the least clearance of the
-  beams and of the reference beams, leaving out `+Inf` (a beam the keep-out does not
-  apply to; `Inf` when every beam is such) but keeping `-Inf` (a beam the rule cannot
-  place, e.g. a [`CaptureKeepIn`](@ref) beam whose axis misses every capture part) and
-  `NaN`, which then are the least and show as such; and `margin` (mm): the clearance
-  less the keep-out's `minimum` (negative: inside the keep-out);
+  beams and of the reference beams. `+Inf`, for a beam to which the keep-out does not
+  apply, is left out, and the value is `Inf` when every beam is of that kind. `-Inf` and
+  `NaN` are kept, so that they are the least and show as such. `-Inf` marks a beam that
+  the rule cannot place, such as a [`CaptureKeepIn`](@ref) beam whose axis misses every
+  capture part. `margin` (mm) is the clearance less the `minimum` of the keep-out, and
+  it is negative inside the keep-out;
 - `clipped` and `missed`: [`clipped_fraction`](@ref) and [`missed_fraction`](@ref) of
   the beams in the scenario;
-- with a `drive_reference`: `drive_ratio`, the capsule drive's mean over the
-  reference's (`c₀₀/r₀₀` of the [`flux_ylm`](@ref) coefficients), and `departure`, the
-  [`mode_departure`](@ref) per degree `l = 1:lmax` from the reference's shape, split by
-  order into `departure_zero` (`m = 0`, `mode_departure(...; m = :zero)`) and
-  `departure_nonzero` (`m ≠ 0`), whose squares add to `departure`'s; `NaN` and empty
-  without one;
-- with `gates`: `gate`, the gate per degree, and `gate_departure`, the departure it
-  bounds (the value of a [`mode_gate`](@ref), from the shape of its reference, shifted if so;
-  otherwise `departure`); with `floor`: `floor`, the pointing floor per degree, against
-  which `departure` is shown. Empty without them;
+- with a `drive_reference`: `drive_ratio`, the mean capsule drive over that of the
+  reference (`c₀₀/r₀₀` of the [`flux_ylm`](@ref) coefficients), and `departure`, the
+  [`mode_departure`](@ref) per degree `l = 1:lmax` from the shape of the reference. The
+  departure is split by order into `departure_zero` (`m = 0`,
+  `mode_departure(...; m = :zero)`) and `departure_nonzero` (`m ≠ 0`), whose squares add
+  to the square of `departure`. Without a reference these are `NaN` and empty;
+- with `gates`: `gate`, the gate per degree, and `gate_departure`, the departure that
+  it bounds. That is the value of a [`mode_gate`](@ref), from the shape of its
+  reference, shifted if the gate is shifted, and otherwise `departure`. With `floor`:
+  `floor`, the pointing floor per degree, against which `departure` is shown. Without
+  them these are empty;
 - with `moved` thresholds (mm): `moved_thresholds`, and `moved`, the number of groups
-  (by `moved_by`, e.g. quads; `ngroups` of them) whose largest aim shift exceeds each
-  threshold. Empty, and `ngroups` 0, without them.
+  (by `moved_by`, e.g. quads, with `ngroups` groups) whose largest aim shift exceeds
+  each threshold. Without thresholds these are empty, and `ngroups` is 0.
 
-Its display is one line, suited to a log of a study's runs, with the departure over
-the gate and over the floor per degree where given (1.00: at the gate) and the groups
-moved past each threshold.
+The display is one line, suited to a log of the runs of a study. Where given, it shows
+the departure over the gate and over the floor per degree (1.00 at the gate) and the
+groups moved past each threshold.
 """
 struct PointingSummary
     nbeams::Int
@@ -59,7 +63,7 @@ struct PointingSummary
     moved_thresholds::Vector{Float64}
     moved::Vector{Int}
     ngroups::Int
-    moved_by::String     # the groups' name in the display
+    moved_by::String     # name of the groups in the display
 end
 
 PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
@@ -69,41 +73,43 @@ PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, 
                     Float64[], Float64[], Float64[], Float64[], Float64[], Float64[], Int[], 0, "groups")
 
 """
-    pointing_summary(scenario, beams; reference = beams of the scenario's start,
+    pointing_summary(scenario, beams; reference = starting beams of the scenario,
                      keepout = nothing, inner = (:inner23, :inner30),
                      drive_reference = nothing, lmax = 4, gates = nothing, floor = nothing,
                      moved = (), moved_by = :quad) -> PointingSummary
     pointing_summary(scenario, result::PointingResult; kwargs...)
 
-Summary of `beams` (or a result's `beams`) in `scenario` against the `reference` beams,
-by default the scenario parameterization's beams at its initial parameters (the start
-of `optimize_pointing`). Each beam is matched to the reference beam of its name (an
-`ArgumentError` when there is none), so a subset's beams compare with the full set's.
-`keepout` is an [`ApertureKeepOut`](@ref), a [`SphereKeepOut`](@ref), a
-[`HardwareKeepOut`](@ref) (any keep-out with a [`keepout_clearance`](@ref) method), a
-tuple or vector of them, or `nothing`; `inner` names the groups whose power is the cone fraction (as for
-[`cone_fraction_pulses`](@ref)). The clipped and missed fractions come from
-`evaluate(scenario, beams)`, after the scenario's laser–plasma model.
+Summary of `beams` (or the `beams` of a result) in `scenario` against the `reference`
+beams. By default the reference is the beams of the parameterization of the scenario at
+its initial parameters, the start of `optimize_pointing`. Each beam is matched to the
+reference beam of its name, with an `ArgumentError` when there is none, so the beams of
+a subset compare with those of the full set. `keepout` is an [`ApertureKeepOut`](@ref),
+a [`SphereKeepOut`](@ref), a [`HardwareKeepOut`](@ref) (any keep-out with a
+[`keepout_clearance`](@ref) method), a tuple or vector of them, or `nothing`. `inner`
+names the groups whose power is the cone fraction, as for
+[`cone_fraction_pulses`](@ref). The clipped and missed fractions come from
+`evaluate(scenario, beams)`, after the laser–plasma model of the scenario.
 
-`drive_reference`, an [`Evaluation`](@ref) of a reference design (e.g. the pointing
-before a bundle was dropped, in the full scenario) or its [`flux_ylm`](@ref)
-coefficients through `l = lmax`, adds the capsule drive against it: the drive ratio
+`drive_reference` adds the capsule drive against a reference design, as the drive ratio
 and the departure per degree, the quantities of [`drive_objective`](@ref) and
-[`mode_gate`](@ref). It needs a scenario that observes the capsule.
+[`mode_gate`](@ref). It is an [`Evaluation`](@ref) of the reference design (e.g. the
+pointing before a bundle was dropped, in the full scenario) or its [`flux_ylm`](@ref)
+coefficients through `l = lmax`. It needs a scenario that observes the capsule.
 
-`gates` adds the departure against gates per degree: a vector of gates (in the units of
-[`mode_departure`](@ref), against the departure from `drive_reference`), a
+`gates` adds the departure against gates per degree. It is a vector of gates (in the
+units of [`mode_departure`](@ref), against the departure from `drive_reference`), a
 [`mode_uncertainty`](@ref) result (its floor, `√(2l+1) × rms_mode`), or a
-[`mode_gate`](@ref) constraint, whose own value (the departure from its reference's
-shape, shifted if so, with its check of the laser–plasma model and time) and limits are
-shown. `floor` (a vector, or a `mode_uncertainty` result) adds the departure from
-`drive_reference` against the pointing floor. Both need degrees `1:lmax`.
+[`mode_gate`](@ref) constraint. For a constraint, its value and limits are shown, where
+the value is the departure from the shape of its reference, shifted if the gate is
+shifted, with its check of the laser–plasma model and time. `floor` (a vector, or a
+`mode_uncertainty` result) adds the departure from `drive_reference` against the
+pointing floor. Both need degrees `1:lmax`.
 
 `moved`, aim shifts in mm (e.g. `(0.1, 0.2, 0.3)`), counts the groups of beams whose
-largest shift exceeds each: groups by `moved_by`, a `Beam` field (`:quad`, the default;
-`:group` for cones, `:name` for beams) or a function of a beam. A quad re-aimed as a
-unit moves its beams alike, so the count per quad is the number of quads whose aim
-point a review sees changed by more than the threshold.
+largest shift exceeds each threshold. Groups are formed by `moved_by`, a `Beam` field
+(`:quad`, the default; `:group` for cones, `:name` for beams) or a function of a beam.
+The beams of a quad re-aimed as a unit move alike, so the count per quad is the number
+of quads whose aim point changes by more than the threshold in a review.
 
 ```julia
 r = optimize_pointing(scenario, objective)
@@ -125,8 +131,8 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
     P = sum(b -> b.power, bs; init = 0.0)
     Pin = sum(b -> b.power, (b for b in bs if b.group in inner); init = 0.0)
     ks = keepout === nothing ? Any[] : keepout isa Union{Tuple,AbstractVector} ? collect(Any, keepout) : Any[keepout]
-    # +Inf (a beam the keep-out does not apply to) left out; -Inf (a capture failure) and
-    # NaN kept, so that they show (`minimum` propagates NaN)
+    # +Inf, for a beam to which the keep-out does not apply, is left out. -Inf (a capture
+    # failure) and NaN are kept so that they show, since `minimum` propagates NaN.
     least(k, b) = minimum(filter(!=(Inf), keepout_clearance(k, b)); init = Inf)
     refb = [_value_beam(ref[b.name]) for b in bs]
     c = Float64[least(k, bs) for k in ks]
@@ -154,8 +160,9 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
                            moved_by === :name ? "beams" : "groups")
 end
 
-# The thresholds, the number of groups (`by`: a beam field or a function of a beam) whose
-# largest shift exceeds each, and the number of groups; none without thresholds.
+# Returns the thresholds, the number of groups whose largest shift exceeds each, and the
+# number of groups, or none of these without thresholds. `by` is a beam field or a
+# function of a beam.
 function _moved_groups(beams, shifts, moved, by)
     th = collect(Float64, moved)
     isempty(th) && return th, Int[], 0
@@ -169,8 +176,9 @@ function _moved_groups(beams, shifts, moved, by)
     return th, [count(>(t), values(most)) for t in th], length(most)
 end
 
-# The summary's gates per degree and the departure they bound: the value and limits of
-# a mode gate, or gates (a vector, a `mode_uncertainty` floor) against `dep`.
+# Returns the gates per degree of the summary and the departure that they bound. These
+# are the value and limits of a mode gate, or gates (a vector, a `mode_uncertainty`
+# floor) against `dep`.
 _summary_gate(::Nothing, ev, dep, lmax) = (Float64[], Float64[])
 function _summary_gate(c::Constraint, ev::Evaluation, dep, lmax)
     v = _gate_value(c.f, ev)
@@ -186,7 +194,8 @@ function _summary_gate(gates, ev, dep, lmax)
     return g, dep
 end
 
-# A mode gate's value at `ev` (`nothing` for another constraint's function).
+# Returns the value of a mode gate at `ev`, or `nothing` for the function of another
+# constraint.
 _gate_value(f, ev) = nothing
 _gate_value(g::_GateValue, ev::Evaluation) = g(ev)
 
@@ -200,28 +209,30 @@ end
 pointing_summary(s::Scenario, r::PointingResult; kwargs...) = pointing_summary(s, r.beams; kwargs...)
 
 """
-    shift_objective(scenario; reference = beams of the scenario's start, weight = b -> 1.0)
+    shift_objective(scenario; reference = starting beams of the scenario, weight = b -> 1.0)
     shift_objective(reference::AbstractVector{<:Beam}; weight = b -> 1.0)
 
-An objective for [`optimize_pointing`](@ref): the weighted mean squared aim shift (mm²)
-of an evaluation's beams from the `reference` beams, matched by name,
-`Σ w_b |aim_b - aim_ref(b)|² / Σ w_b`, by default from the scenario parameterization's
-beams at its initial parameters (the start of `optimize_pointing`). With gates as
-`constraints` it gives the least re-pointing that meets them, e.g. to cost each
-entrance-hole size against a fixed reference drive:
+An objective for [`optimize_pointing`](@ref), the weighted mean squared aim shift (mm²)
+of the beams of an evaluation from the `reference` beams, matched by name,
+`Σ w_b |aim_b - aim_ref(b)|² / Σ w_b`. By default the reference is the beams of the
+parameterization of the scenario at its initial parameters, the start of
+`optimize_pointing`. With gates as `constraints` the objective gives the least
+re-pointing that meets them, for example to cost each entrance-hole size against a fixed
+reference drive:
 
 ```julia
 r = optimize_pointing(scenario, shift_objective(scenario); constraints = (gates, keepout))
 sqrt(r.value)            # the rms aim shift (mm), as pointing_summary(scenario, r).shift_rms
 ```
 
-`weight`, a function of a reference beam (its group, quad or name), is evaluated once on
-the reference beams, e.g. `b -> b.group in (:inner23, :inner30) ? 4.0 : 1.0` makes the
-inner cones' shifts dearer; the weights must be finite and non-negative with a positive
-sum over the beams evaluated. A beam without a reference beam of its name is an
-`ArgumentError` at evaluation; reference beams outside the evaluation are ignored (so a
-subset's beams compare with the full set's). Only the aim enters, not the defocus. The
-objective is generic in the number type and thread-safe (it reads only its tables).
+`weight`, a function of a reference beam (of its group, quad or name), is evaluated
+once on the reference beams. For example, `b -> b.group in (:inner23, :inner30) ? 4.0 :
+1.0` makes shifts of the inner cones costlier. The weights must be finite and
+non-negative with a positive sum over the beams evaluated. A beam without a reference
+beam of its name is an `ArgumentError` at evaluation. Reference beams outside the
+evaluation are ignored, so the beams of a subset compare with those of the full set.
+Only the aim enters; the defocus does not. The objective is generic in the number type
+and thread-safe, since it does not modify its tables.
 """
 shift_objective(s::Scenario; reference = apply(s.param, initial_parameters(s.param)), weight = b -> 1.0) =
     shift_objective(reference; weight)

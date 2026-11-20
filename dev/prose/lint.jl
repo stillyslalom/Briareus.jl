@@ -273,8 +273,9 @@ function lint(rel::String, text::String, only = nothing)
         for m in eachmatch(r"\b(cannot|can't|can not) tell\b", s)
             push!(hits, Hit(i, length(s, 1, m.offset), :mind, m.match, ""))
         end
+        so = String(unquote(cs))       # original case: a capitalized possessor is a name
         for (re, why) in DISCOURAGED
-            for m in eachmatch(re, s)
+            for m in eachmatch(re, so)
                 w = m.match
                 if why == "possessive on a thing"
                     stem = lowercase(match(r"^[\p{L}-]+", w).match)
@@ -282,7 +283,7 @@ function lint(rel::String, text::String, only = nothing)
                                                                  "here", "what", "who")) && continue
                 end
                 why == "\"<verb> no\"" && lowercase(split(w)[1]) in NO_OK && continue
-                push!(hits, Hit(i, length(s, 1, m.offset), :discouraged, w, why))
+                push!(hits, Hit(i, length(so, 1, m.offset), :discouraged, w, why))
             end
         end
     end
@@ -302,11 +303,21 @@ const PERCENT = Regex("(?<=[0-9⁰¹²³⁴⁵⁶⁷⁸⁹)])[    ]%")
 
 # discouraged in the docs register (warnings): heuristics, so a literal use stays
 const DISCOURAGED = [
-    (r"\bprovenance\b", "\"provenance\" (say references or sources)"),
-    (r"\b(reads|prints|printed)\b", "\"reads\"/\"prints\" (literal file I/O is fine)"),
-    (r"\bto round-?off\b", "\"to round-off\""),
-    (r"\b\p{L}+s no\b(?! (longer|more|less|matter|doubt|one|other)\b)", "\"<verb> no\""),
-    (r", not (a|an|the)\b", "\"a, not b\" (state what it is)"),
+    (r"(?i)\bprovenance\b", "\"provenance\" (say references or sources)"),
+    (r"(?i)\b(reads|prints|printed)\b", "\"reads\"/\"prints\" (literal file I/O is fine)"),
+    (r"(?i)\bto round-?off\b", "\"to round-off\""),
+    (r"(?i)\b\p{L}+s no\b(?! (longer|more|less|matter|doubt|one|other)\b)", "\"<verb> no\""),
+    (r"(?i), not (a|an|the)\b", "\"a, not b\" (state what it is)"),
+    (r"(?i)\bbitwise\b", "\"bitwise\" (say matches, identical to, the same, unchanged)"),
+    (r"(?i): its \p{L}+ and its\b", "\"the can: its wall and its lid\" (the wall and lid of the can)"),
+    (r"(?i)\b(seen|so far seen|known) so far\b", "\"seen so far\" (vague; say which)"),
+    (r"(?i)\ban? [\p{L}-]+( [\p{L}-]+)?, an? [\p{L}-]+( [\p{L}-]+)?, an? [\p{L}-]+",
+     "\"(a shield, a stalk, a window)\" (such as shields, stalks and windows)"),
+    (r"(?i)\bthe (former|latter)\b", "\"the former/latter\" (name the thing)"),
+    (r"(?i)\brather than\b", "\"rather than\" (state what it is)"),
+    (r"\([^()]*\p{L}: \p{L}[^()]*\)", "colon inside parentheses (make the aside a sentence)"),
+    (r"(?i)\b(holds|sees|serves|lands|carries|keeps) (the|a|an|its|every|each|no|here|on|in)\b",
+     "inanimate subject given an action (passive or a literal verb)"),
     (r"\(\d+(\.\d+)? ?(s|ms|min)\)", "timing claim (machine specific)"),
     (r"\b[\p{Ll}][\p{L}-]*['’]s\b|\b[\p{Ll}][\p{L}-]*s['’](?=\s)", "possessive on a thing"),
 ]

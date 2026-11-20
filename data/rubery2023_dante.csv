@@ -5,7 +5,7 @@
 # narrow XANES spikes at the C K, O K and Cr L edges and the Al K edge are under-read).
 # An overlay of the digitized points on the figures agreed to ~1 px (~0.1% of full scale).
 # Every 4th pixel column (energy step 3.4 eV in Fig. 3, 11 eV in Fig. 8).
-# curve: cr_xrd   Fig. 3b Cr XRD sensitivity; the axis reads V/GW, taken as MV/GW (the units
+# curve: cr_xrd   Fig. 3b Cr XRD sensitivity; the axis label is V/GW, taken as MV/GW (the units
 #                 of Fig. 8b's Al XRD; with V/GW the quantum efficiency would be ~1e-8, and
 #                 MV/GW gives the published 0.97 TW/sr/V of the channel-2 calibration)
 #        al_xrd   Fig. 8b Al XRD sensitivity (MV/GW)

@@ -1,13 +1,14 @@
 # NIF Dante 1 in its latest public configuration. Every Dante 1 configuration views the
-# whole target: the rays are cast over the collimated field of view, so a halfraum pair's
-# walls, a package or a shield in the field count, occluded by every part. The field is
-# the 2004 design's ±30 mm at TCC (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120; research notes,
-# "Dante-family hardware and geometry", confidence H for the design). The collimators as
-# fielded are not public (Girard et al. 2009 describe a "centimeter-wide" field), nor is
-# the field of any one channel except the multilayer channel's 12 mm (Rubery et al. 2022): a
-# user file that extends this one narrows it. Tr stays over the lower entrance hole's
-# initial area, Dante's convention. Extend this id to describe a shot's or a campaign's
-# channels; a user file with id = "nif_dante1" later on the search path shadows this one.
+# whole target. The rays are cast over the collimated field of view, so the walls of a
+# halfraum pair and any package or shield in the field count, occluded by every part. The
+# field is the ±30 mm at TCC of the 2004 design (Dewald et al., RSI 75, 3759 (2004), OSTI
+# 15014120; research notes, "Dante-family hardware and geometry", confidence H for the
+# design). The collimators as fielded are not public (Girard et al. 2009 describe a
+# "centimeter-wide" field), and neither is the field of any one channel except the 12 mm of
+# the multilayer channel (Rubery et al. 2022). A user file that extends this one can narrow
+# the field. Tr stays over the initial area of the lower entrance hole, the Dante
+# convention. Extend this id to describe the channels of a shot or a campaign; a user file
+# with id = "nif_dante1" later on the search path shadows this one.
 
 schema = 1
 id = "nif_dante1"

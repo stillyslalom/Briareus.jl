@@ -6,7 +6,8 @@
 # power axis from the frame (0 and 3 TW at 355 and 201 px; 0.5 TW ticks agree). Each value is
 # the median row of the pure-color stroke over +/-2 px (+/-0.1 ns) of columns. Reading error
 # ~0.03 TW (stroke width 0.04 TW); NaN where the other color's stroke covers this one
-# (interpolate). Requested, not delivered: every beam of a cone gets the same power.
+# (interpolate). The powers are as requested, before delivery, so every beam of a cone gets
+# the same power.
 # Columns: t (ns); inner, outer (TW per beam)
 t,inner,outer
 0.250,0.156,0.185

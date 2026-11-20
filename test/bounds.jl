@@ -17,11 +17,11 @@
         @test bounds(p, x0; power = 0.9, power_max = 3.0)[2][ip[k]] == 3.0
         @test lo[1:2:end] == x0[1:2:end] .- 1 && hi[1:2:end] == x0[1:2:end] .+ 1
     end
-    # every group at zero power: the box needs a finite power_max
+    # With every group at zero power, the box needs a finite power_max.
     pz = GroupPointing([remake(b; power = 0.0) for b in q]; fields = (:power,))
     @test_throws ArgumentError bounds(pz)
     @test bounds(pz; power_max = 9.0) == (zeros(4), fill(9.0, 4))
-    # a field without a width is refused, not given the defocus width
+    # A field without a width is refused; the defocus width is not substituted.
     pd = GroupPointing(q; fields = (:defocus,))
     @test_throws ArgumentError Briareus._box_bounds(pd, initial_parameters(pd), (; z = 1.0), 0.5, 0.5, 0.0, Inf)
 end

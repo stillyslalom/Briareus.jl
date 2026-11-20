@@ -1,16 +1,16 @@
-# Parameterizations built from others: some parameters held at given values
-# (`HeldParameters`), and a power scale per group of beams beside the inner
-# parameterization's parameters (`PowerScales`). Both wrap any parameterization with
-# `apply` and `initial_parameters` (a `GroupPointing`, a `FramePointing`, or another
-# wrapper), so they compose.
+# This file builds parameterizations from others. `HeldParameters` holds some parameters
+# at given values, and `PowerScales` adds a power scale per group of beams to the
+# parameters of the inner parameterization. Both wrap any parameterization with `apply`
+# and `initial_parameters`, such as `GroupPointing`, `FramePointing` and other wrappers,
+# so they compose.
 
 """
     HeldParameters(p, held; values = initial_parameters(p))
 
-The parameterization `p` with the parameters `held` fixed at `values` and the rest free:
-its parameter vector holds the free parameters of `p`, in their order, and
-`apply(h, y)` is `apply(p, x)` with `x = values` except at the free indices, where
-`x = y`. `held` selects parameters of `p` by
+The parameterization `p` with the parameters `held` fixed at `values` and the rest free. Its
+parameter vector contains the free parameters of `p` in their order. `apply(h, y)` is
+`apply(p, x)` with `x = values` except at the free indices, where `x = y`. `held` selects
+parameters of `p` by
 
 - indices (a vector of integers) or a mask (a `Bool` per parameter);
 - names (a vector of `parameter_names(p)` entries, e.g. `"Q31B.z"`);
@@ -18,17 +18,20 @@ its parameter vector holds the free parameters of `p`, in their order, and
   `GroupPointing` grouped by cone, or `n -> first(split(n, '.')) in inner_quads` for a
   set of quad names when grouped by quad.
 
-An unknown name is an `ArgumentError`. `p` may itself be a composition, such as a
+An unknown name throws an `ArgumentError`. `p` may itself be a composition, such as a
 [`PowerScales`](@ref); `p` needs a [`parameter_names`](@ref) method to select by name.
 
-The full parameterization interface follows `p`: [`initial_parameters`](@ref) are
-`values` at the free indices, [`parameter_names`](@ref) and [`nparams`](@ref) those of
-the free parameters, and [`bounds`](@ref)`(h, y0; kwargs...)` the box of `p` about the
-held values and `y0` (the keywords of `p`'s `bounds`), restricted to the free
-parameters. `apply` is generic in the number type: the held values enter as constants
-of the element type of `y`, so ForwardDiff duals flow through the free parameters only.
-Named values pass through to `p` ([`parameters`](@ref)), and a [`subset`](@ref) of a
-scenario keeps the kept parameters' names, values and holds.
+The full parameterization interface follows `p`:
+
+- [`initial_parameters`](@ref) are `values` at the free indices;
+- [`parameter_names`](@ref) and [`nparams`](@ref) are those of the free parameters;
+- [`bounds`](@ref)`(h, y0; kwargs...)` is the box of `p` about the held values and `y0`,
+  restricted to the free parameters, with `kwargs` the keywords of the `bounds` of `p`.
+
+`apply` is generic in the number type. The held values enter as constants of the element
+type of `y`, so ForwardDiff duals pass only through the free parameters. Named values pass
+through to `p` ([`parameters`](@ref)), and a [`subset`](@ref) of a scenario contains the
+names, values and holds of the kept parameters.
 
 ```julia
 pointing = GroupPointing(quads; by = :quad, fields = (:z, :phi), relative = true)
@@ -51,7 +54,7 @@ function HeldParameters(p, held; values = initial_parameters(p))
     return HeldParameters(p, v, findall(!, mask))
 end
 
-# A `Bool` per parameter of `p` (`n` of them): whether `held` selects it.
+# Returns a `Bool` per parameter of `p` (`n` of them), true where `held` selects it.
 function _held_mask(p, held::AbstractVector{Bool}, n)
     length(held) == n || throw(DimensionMismatch("a mask of $(length(held)) for $n parameters"))
     return collect(Bool, held)
@@ -84,11 +87,12 @@ parameter_names(h::HeldParameters) = _inner_names(h.inner, length(h.values))[h.f
 """
     initial_parameters(h::HeldParameters) -> Vector{Float64}
 
-The held values at the free indices.
+Returns the held values at the free indices.
 """
 initial_parameters(h::HeldParameters) = h.values[h.free]
 
-# The inner parameter vector: the held values, `y` at the free indices, in eltype(y).
+# Builds the inner parameter vector in eltype(y) from the held values and `y` at the
+# free indices.
 function _full_parameters(h::HeldParameters, y::AbstractVector{T}) where {T}
     length(y) == length(h.free) ||
         throw(DimensionMismatch("expected $(length(h.free)) parameters"))
@@ -105,16 +109,16 @@ end
 """
     apply(h::HeldParameters, y) -> Vector{Beam}
 
-Beams of the inner parameterization at the held values, with `y` at the free
-parameters (element type follows `y`).
+Returns the beams of the inner parameterization at the held values, with `y` at the free
+parameters. The element type follows `y`.
 """
 apply(h::HeldParameters, y::AbstractVector) = apply(h.inner, _full_parameters(h, y))
 
 """
     bounds(h::HeldParameters, y0 = initial_parameters(h); kwargs...) -> (lower, upper)
 
-The inner parameterization's box (its `bounds` with `kwargs`) about the held values and
-`y0`, at the free parameters.
+Returns the box of the inner parameterization, its `bounds` with `kwargs`, about the held
+values and `y0`, at the free parameters.
 """
 function bounds(h::HeldParameters, y0 = initial_parameters(h); kwargs...)
     lo, hi = bounds(h.inner, _full_parameters(h, collect(Float64, y0)); kwargs...)
@@ -126,31 +130,32 @@ _nparams_shown(h::HeldParameters) = nparams(h)
 """
     PowerScales(p; by = :group)
 
-The parameterization `p` with a power scale per group of beams after its
-parameters: the parameter vector is `[x; s]`, and `apply(ps, [x; s])` is `apply(p, x)`
-with each beam's power multiplied by the scale `s` of its group. Groups are keyed by
-`by` on the beams of `p` at its initial parameters: `:group` (e.g. the cone), `:quad`,
-`:beam`, or a function `beam -> key`, such as two keys for the inner and the outer cones,
+The parameterization `p` with a power scale per group of beams after its parameters. The
+parameter vector is `[x; s]`, and `apply(ps, [x; s])` is `apply(p, x)` with the power of
+each beam multiplied by the scale `s` of its group. Groups are keyed by `by` on the beams
+of `p` at its initial parameters. `by` is `:group`, which keys cones, or `:quad`, `:beam`
+or a function `beam -> key`, such as one with two keys for the inner and outer cones,
 
 ```julia
 cones = PowerScales(pointing; by = b -> b.group in (:inner23, :inner30) ? :inner : :outer)
 ```
 
-which varies the cone fraction (and the total power) beside the pointing. Beams that
-share a key share a scale, so a grouping ties them: with the shapes of
-[`pulse_shape_groups`](@ref) (keyed by quad), `PowerScales(pointing; by = b -> g.assignment[b.quad])`
-gives one scale per pulse shape for a re-optimization. The scales
-start at 1 and are named `"<key>.power_scale"`. They multiply whatever power `p` gives,
-a `:power` field of `p` included, so the two are redundant together; holding one of
-them ([`HeldParameters`](@ref)) removes the redundancy.
+With this grouping, the cone fraction and the total power vary beside the pointing.
+Beams that share a key share a scale, so a grouping ties them. With the shapes of
+[`pulse_shape_groups`](@ref), keyed by quad,
+`PowerScales(pointing; by = b -> g.assignment[b.quad])` gives one scale per pulse shape
+for a re-optimization. The scales start at 1 and are named `"<key>.power_scale"`. They
+multiply whatever power `p` gives, including a `:power` field of `p`, so the two are
+redundant together. Holding one of them ([`HeldParameters`](@ref)) removes the
+redundancy.
 
-[`bounds`](@ref)`(ps, y0; scale = 0.5, scale_min = 0.0, scale_max = Inf, kwargs...)`
-puts each scale within `y0 (1 ± scale)`, clipped to `[scale_min, scale_max]`
-(engineering defaults, not facility limits; `scale_max = 1` holds each group at or below
-the power of `p`), and the other parameters in `p`'s box with `kwargs`. `apply` is
-generic in the number type. A scale is set by name as the field `power_scale` of its key
-([`parameters`](@ref)), and a [`subset`](@ref) of a scenario keeps the scales of the
-groups that keep a beam.
+[`bounds`](@ref)`(ps, y0; scale = 0.5, scale_min = 0.0, scale_max = Inf, kwargs...)` puts
+each scale within `y0 (1 ± scale)`, clipped to `[scale_min, scale_max]`, and the other
+parameters in the box of `p` with `kwargs`. The defaults are engineering defaults, and no
+facility limit sets them; with `scale_max = 1`, each group stays at or below the power of
+`p`. `apply` is generic in the number type. A scale is set by name as the field
+`power_scale` of its key ([`parameters`](@ref)), and a [`subset`](@ref) of a scenario
+contains the scales of the groups that still have a beam.
 """
 struct PowerScales{P,K}
     inner::P
@@ -171,32 +176,34 @@ function PowerScales(p; by = :group)
     return PowerScales(p, length(x0), uk, [findfirst(isequal(k), uk) for k in ks])
 end
 
-"Number of parameters of a `PowerScales`: the inner parameterization's plus one per group."
+"Number of parameters of a `PowerScales`: those of the inner parameterization, plus one per
+group."
 nparams(ps::PowerScales) = ps.n + length(ps.keys)
 
 """
-Names of a `PowerScales`' parameters: the inner parameterization's (`"x[i]"` for one
-without names), then `"<key>.power_scale"`.
+Returns the names of the parameters of a `PowerScales`. These are the names of the inner
+parameterization, or `"x[i]"` for one without names, then `"<key>.power_scale"`.
 """
 parameter_names(ps::PowerScales) =
     vcat(_inner_names(ps.inner, ps.n), [string(k, ".power_scale") for k in ps.keys])
 
-# The parameter names of `p` (`n` parameters), "x[i]" without a `parameter_names` method.
+# Returns the parameter names of `p`, which has `n` parameters, or "x[i]" when `p` has no
+# `parameter_names` method.
 _inner_names(p, n) = hasmethod(parameter_names, Tuple{typeof(p)}) ?
                      collect(String, parameter_names(p)) : ["x[$i]" for i in 1:n]
 
 """
     initial_parameters(ps::PowerScales) -> Vector{Float64}
 
-The inner parameterization's initial parameters, then a scale of 1 per group.
+Returns the initial parameters of the inner parameterization, then a scale of 1 per group.
 """
 initial_parameters(ps::PowerScales) = vcat(initial_parameters(ps.inner), ones(length(ps.keys)))
 
 """
     apply(ps::PowerScales, y) -> Vector{Beam}
 
-Beams of the inner parameterization at `y[1:n]`, each beam's power multiplied by its
-group's scale in `y[n+1:end]` (element type follows `y`).
+Returns the beams of the inner parameterization at `y[1:n]`, with the power of each beam
+multiplied by the scale of its group in `y[n+1:end]`. The element type follows `y`.
 """
 function apply(ps::PowerScales, y::AbstractVector{T}) where {T}
     length(y) == nparams(ps) || throw(DimensionMismatch("expected $(nparams(ps)) parameters"))
@@ -206,8 +213,8 @@ function apply(ps::PowerScales, y::AbstractVector{T}) where {T}
     return _scaled_powers(beams, ps.group, y, ps.n)
 end
 
-# `beams` with each power times its group's scale `y[n + group[i]]` (a function barrier:
-# the inner parameterization's beam type is known here).
+# Returns `beams` with each power times the scale `y[n + group[i]]` of its group. This
+# function is a barrier, so the beam type of the inner parameterization is known inside it.
 _scaled_powers(beams::AbstractVector{<:Beam}, group::Vector{Int}, y::AbstractVector, n::Int) =
     [remake(b; power = b.power * y[n+group[i]]) for (i, b) in enumerate(beams)]
 
@@ -215,8 +222,9 @@ _scaled_powers(beams::AbstractVector{<:Beam}, group::Vector{Int}, y::AbstractVec
     bounds(ps::PowerScales, y0 = initial_parameters(ps); scale = 0.5, scale_min = 0.0,
            scale_max = Inf, kwargs...) -> (lower, upper)
 
-The inner parameterization's box (its `bounds` with `kwargs`) for the first parameters,
-and each power scale within `y0 (1 ± scale)`, clipped to `[scale_min, scale_max]`.
+Returns the box of the inner parameterization, its `bounds` with `kwargs`, for the first
+parameters, and each power scale within `y0 (1 ± scale)`, clipped to
+`[scale_min, scale_max]`.
 """
 function bounds(ps::PowerScales, y0 = initial_parameters(ps); scale = 0.5, scale_min = 0.0,
                 scale_max = Inf, kwargs...)
@@ -240,11 +248,11 @@ _nparams_shown(ps::PowerScales) = nparams(ps)
     parameters(ps::PowerScales, values::Pair...; group = (field = value, ...), ...)
         -> Vector{Float64}
 
-The parameter vector of a composed parameterization with named values, as for a
-[`GroupPointing`](@ref) (`key => (; field = value, ...)` pairs, or keywords for `Symbol`
-keys): the fields pass through to the wrapped parameterization, a `GroupPointing` or a
-[`FramePointing`](@ref) inside, and a [`PowerScales`](@ref) scale is the field
-`power_scale` of its key, so that one pair can set a quad's aim and its scale:
+Returns the parameter vector of a composed parameterization with named values, given as
+for a [`GroupPointing`](@ref). The values are `key => (; field = value, ...)` pairs, or
+keywords for `Symbol` keys. The fields pass through to the wrapped `GroupPointing` or
+[`FramePointing`](@ref). The scale of a [`PowerScales`](@ref) is the field `power_scale`
+of its key, so one pair can set the aim of a quad and its scale:
 
 ```julia
 p = HeldParameters(PowerScales(GroupPointing(beams; by = :quad, fields = (:z, :phi)); by = :quad),
@@ -252,15 +260,16 @@ p = HeldParameters(PowerScales(GroupPointing(beams; by = :quad, fields = (:z, :p
 y0 = parameters(p, "Q15T" => (z = 5.2, power_scale = 0.9))
 ```
 
-Values not named keep [`initial_parameters`](@ref) (a `HeldParameters`' values at its free
-parameters, scales of 1). A held parameter, a scale key with no scale, an unknown group
-or a field that is not a parameter is an `ArgumentError`.
+Values not named keep [`initial_parameters`](@ref), which are the values of a
+`HeldParameters` at its free parameters and scales of 1. A held parameter, a scale key
+with no scale, an unknown group or a field that is not a parameter throws an
+`ArgumentError`.
 """
 parameters(h::HeldParameters, values::Pair...; kwargs...) = _with_named(h, (values..., pairs(kwargs)...))
 parameters(ps::PowerScales, values::Pair...; kwargs...) = _with_named(ps, (values..., pairs(kwargs)...))
 
-# The indices into the parameters of `p` and the values that the named values `kv`
-# (`key => (; field = value)` pairs) set.
+# Returns the indices into the parameters of `p` and the values set by the named values
+# `kv`, which are `key => (; field = value)` pairs.
 function _named_values(p::Union{GroupPointing,FramePointing}, kv)
     out = Pair{Int,Any}[]
     for (key, fv) in kv
@@ -277,7 +286,8 @@ function _named_values(p::Union{GroupPointing,FramePointing}, kv)
     return out
 end
 
-# A scale per key (`power_scale`), the other fields to the inner parameterization.
+# Sets a scale per key from `power_scale` and passes the other fields to the inner
+# parameterization.
 function _named_values(ps::PowerScales, kv)
     out = Pair{Int,Any}[]
     rest = Pair[]
@@ -298,7 +308,8 @@ function _named_values(ps::PowerScales, kv)
     return append!(out, _named_values(ps.inner, rest))
 end
 
-# The inner parameterization's, at the free parameters; a held one refused.
+# Maps the named values of the inner parameterization to the free parameters and refuses
+# a held one.
 function _named_values(h::HeldParameters, kv)
     pos = zeros(Int, length(h.values))
     pos[h.free] = eachindex(h.free)
@@ -314,9 +325,9 @@ end
 _named_values(p, kv) = isempty(kv) ? Pair{Int,Any}[] :
     throw(ArgumentError("named values need a GroupPointing or FramePointing inside, not a $(typeof(p))"))
 
-# `subset`'s default for the wrappers (`subset` in optimize.jl): the inner
-# parameterization's subset, which keeps its groups, wrapped again. The kept parameters
-# (by name) at their values, held or free as they were.
+# Implements the default of `subset` for the wrappers (`subset` in optimize.jl). The
+# subset of the inner parameterization, which keeps its groups, is wrapped again. The
+# kept parameters, matched by name, keep their values and stay held or free as they were.
 function _subset_param(h::HeldParameters, keep)
     inner = _subset_param(h.inner, keep)
     old = _inner_names(h.inner, length(h.values))
@@ -328,8 +339,8 @@ function _subset_param(h::HeldParameters, keep)
     return HeldParameters(inner, h.values[idx], findall(i -> isfree[i], idx))
 end
 
-# The kept groups' scales, in order of first appearance among the kept beams (as the
-# constructor orders them).
+# Keeps the scales of the kept groups, in order of first appearance among the kept beams,
+# as the constructor orders them.
 function _subset_param(ps::PowerScales, keep)
     inner = _subset_param(ps.inner, keep)
     g = ps.group[keep]

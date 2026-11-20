@@ -19,10 +19,11 @@ using LinearAlgebra: norm
     cs = part_components(p, h)
     @test [c.name for c in cs] == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_leh_top]
     @test all(_same_component(a, b) for (a, b) in zip(cs, ref.components)) && !ref.closed
-    # an open end has no cap to hold the wall role, and the enclosure is not closed
+    # An open end does not have a cap to hold the wall role, and the enclosure is not
+    # closed.
     @test wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top]
     @test !closed_design(ts)
-    # the bottom entrance hole of a separate radius (0: the LEH radius)
+    # The bottom entrance hole has a separate radius, where 0 means the LEH radius.
     @test edit_part!(ts, i, :bottom_end, "1") && edit_part!(ts, i, :bottom_leh_radius, "1.0")
     t = ts.target[]
     @test sum(t.elem_area[elements(t, :hohlraum_leh_bottom)]) ≈ π rtol = 1e-12
@@ -33,8 +34,8 @@ using LinearAlgebra: norm
 end
 
 @testset "halfraum starters and the flat observed face (no GL)" begin
-    # the shock tube: two halfraums facing each other across the package, its top face
-    # observed and flat
+    # The shock tube is two halfraums facing each other across the package, with the top
+    # face of the package observed and flat.
     ps = starter_parts(:shock_tube)
     @test [q.name for q in ps] == [:halfraum_top, :halfraum_bottom, :package, :package_top, :package_bottom]
     @test [hohlraum_pieces(q) for q in ps[1:2]] == [[:wall, :cap_top, :leh_top], [:wall, :cap_bottom, :leh_bottom]]
@@ -46,8 +47,9 @@ end
     zs(n) = extrema(v[3] for c in t.components if c.name === n for v in c.mesh.vertices)
     @test all(isapprox.(zs(:package_top), 1.0; atol = 1e-12)) && zs(:halfraum_top_wall)[1] ≈ 1.0
     @test all(isapprox.(zs(:package_bottom), -1.0; atol = 1e-12)) && zs(:halfraum_bottom_wall)[2] ≈ -1.0
-    # and meet the walls' end rings at shared vertices, at the coarse and standard element
-    # sizes (no gap at the seam: the disks take the wall's azimuthal count)
+    # and meet the end rings of the walls at shared vertices, at the coarse and standard
+    # element sizes. The seam has no gap, since the disks take the azimuthal count of the
+    # wall.
     function ring(t, n, z)
         vs = [v for c in t.components if c.name === n for v in c.mesh.vertices
               if abs(v[3] - z) < 1e-9 && abs(hypot(v[1], v[2]) - 1.5) < 1e-9]
@@ -61,7 +63,8 @@ end
     @test all(seams(st.target[])) && length(ring(st.target[], :package_top, 1.0)) == 40
     build_scenario!(sess)
     res = sess.drive.result[]
-    # a flat observed face: no capsule modes; its mean flux and its statistics over the face
+    # A flat observed face has no capsule modes, only its mean flux and its statistics over
+    # the face.
     @test isempty(res.modes) && res.face !== nothing
     @test res.face.low <= to_Wcm2(res.mean_flux) <= res.face.peak && 0 <= res.face.rms < 1
     s = sess.drive.scenario[]
@@ -75,8 +78,9 @@ end
     # the capsule symmetry objective needs a sphere
     @test_throws ArgumentError Controllers._make_objective(Controllers._objective_settings(sess.optimize; observed = :package_top), s, nothing, 0.5)
 
-    # the opacity halfraum: the sample in the open end's plane, facing into the cavity;
-    # what misses it leaves (the scenario's view factors are not balanced)
+    # In the opacity halfraum the sample lies in the plane of the open end, facing into
+    # the cavity. What misses it leaves, so the view factors of the scenario are not
+    # balanced.
     sess = DesignSession(starter = :opacity, resolution = :coarse)
     ts = sess.target
     @test [q.name for q in ts.parts[]] == [:halfraum, :sample] && observed_name(ts) === :sample && observed_flat(ts)
@@ -90,14 +94,15 @@ end
     @test eb.lost > 0
     @test sum(values(eb.absorbed)) + sum(values(eb.escaped)) + eb.lost ≈ eb.source rtol = 1e-10
 
-    # the drive history of the flat face: per step, the face's statistics and its Tr from
-    # the area-mean flux, not Legendre moments
+    # The drive history of the flat face records per step the statistics of the face and
+    # its Tr from the area-mean flux; Legendre moments are not used.
     use_pulse_shape!(sess; step = 1.0)
     start_history!(sess)
     h = sess.time.history[]
     @test h isa DriveHistory && h.face !== nothing && size(h.legendre) == (0, length(h.time))
-    # independent check: the core `drive_history` on the same scenario, pulses and wall,
-    # recording each step's radiosity solution's incident flux, reduced here directly
+    # The independent check runs the core `drive_history` on the same scenario, pulses and
+    # wall, records the incident flux of the radiosity solution at each step, and reduces
+    # it directly in this test.
     s = sess.drive.scenario[]
     src, beams, enabled = sess.time.pulses[], sess.beams.beams[], sess.beams.enabled[]
     observe = Controllers._observed_parts(s)
@@ -116,9 +121,10 @@ end
     @test isapprox(h.face.low[ks], 1e14 .* minimum.(Hs); rtol = 1e-12)
     @test isapprox(h.face.rms[ks], rms; rtol = 1e-12)
     @test isapprox(h.Tr[ks], radiation_temperature.(μ); rtol = 1e-12)
-    # (the core's Tr is from the Legendre moment P0 over the face: close, not the same)
+    # The core Tr comes from the Legendre moment P0 over the face, which is close but
+    # differs.
     @test h.Tr != core.Tr && isapprox(h.Tr, core.Tr; rtol = 0.01)
-    # the drive chart: the face's Tr, and its statistics on the right axis
+    # The drive chart shows the Tr of the face, with its statistics on the right axis.
     ch = time_chart(sess, :drive)
     @test isempty(ch.empty) && startswith(ch.title, "Observed face") && ch.left.series[1].label == "Face Tr"
     @test ch.left.series[1].y == h.Tr && ch.right.label == "Face nonuniformity (%)"
@@ -126,8 +132,8 @@ end
     @test ch.right.series[1].y == 100 .* h.face.rms
     @test ch.right.series[2].y ≈ 100 .* (h.face.peak ./ h.face.mean .- 1) rtol = 1e-12
     @test all(ch.right.series[3].y .<= 0 .<= ch.right.series[2].y)
-    # the retune of the flat face: the first quad down, the others retuned to the
-    # reference's flux over the face
+    # The retune of the flat face turns the first quad down and retunes the others to the
+    # flux of the reference over the face.
     dir = mktempdir()
     pul = Dict(g => PulseShape([0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0, 0.0]) for g in unique(b.group for b in beams))
     table = write_pulse_table(joinpath(dir, "reference.csv"), pul)
@@ -136,9 +142,9 @@ end
     retune_to_reference!(sess, table, out; cap = 1.5)
     r = sess.time.retune[]
     @test r.kind === :face && isfile(out) && occursin("face worst RMS", sess.drive.retune_status[])
-    # independent check: core histories of the enabled beams on the reference and on the
-    # retuned pulses (as written, before the CSV's rounding), the face's mean and RMS from
-    # each step's flux on its elements
+    # The independent check runs core histories of the enabled beams on the reference and on
+    # the retuned pulses, as written before the rounding of the CSV, and takes the mean and
+    # RMS of the face from the flux on its elements at each step.
     kept = findall(sess.beams.enabled[])
     stats(P, by) = begin
         hc = drive_history(s.model, s.deposition[kept], τ -> with_pulses(beams[kept], P, τ; by), r.after.time;
@@ -155,7 +161,7 @@ end
     Δ(f) = maximum(abs.(f.mean ./ r.reference.mean .- 1))
     @test Δ(r.after) < 1e-3 < Δ(r.before)
     @test maximum(abs.(r.after.rms .- r.reference.rms)) < maximum(abs.(r.before.rms .- r.reference.rms))
-    # its chart: the face's RMS and mean, before and after
+    # Its chart shows the RMS and mean of the face, before and after.
     ch = time_chart(sess, :retune)
     @test ch.right.label == "Face RMS, mean − reference (%)"
     @test [x.label for x in ch.right.series] == ["RMS before", "RMS retuned", "RMS reference", "mean before",
@@ -170,15 +176,15 @@ end
     V = Briareus.Vec3
     top, bot = Symbol("hohlraum.leh_top"), Symbol("hohlraum.leh_bottom")
     upper(bs) = [b.port[3] > 0 for b in bs]
-    # the default design: the quads in its entrance holes' frames, their chamber aims
-    # bitwise those of the example cone pointing (`isequal` tells -0.0 from 0.0)
+    # The default design has the quads in the frames of its entrance holes, with chamber
+    # aims identical to those of the example cone pointing (`isequal` tells -0.0 from 0.0).
     cone = Controllers._cone_pointing(nif_quads(power = 8.0), Controllers.NIF_CONE_POINTING)
     s = DesignSession(resolution = :coarse)
     bt = s.beams
     up = upper(bt.beams[])
     @test all(isequal(a.aim, b.aim) for (a, b) in zip(bt.beams[], cone)) && bt.beams[] == cone
     @test bt.aim_frame[] == [u ? top : bot for u in up] && all(bt.enabled[])
-    # the drive equals the drive of the same beams held at TCC (the former preset), bitwise
+    # The drive is identical to the drive of the same beams held at TCC, the earlier preset.
     s0 = DesignSession(resolution = :coarse, beams = cone)
     @test all(==(:tcc), s0.beams.aim_frame[])
     build_scenario!(s)
@@ -190,9 +196,9 @@ end
     om = preset_pointing(:omega_hohlraum; target = s.target)
     old = Controllers._cone_pointing(omega_beams(power = 0.5), Dict(g => (0.0, 10.1 / 2) for g in (:cone1, :cone2, :cone3)))
     @test om.beams == old && om.aim_frame == [u ? top : bot for u in upper(om.beams)]
-    @test all(==(:tcc), preset_pointing(:nif_quads).aim_frame)   # no target: at TCC
+    @test all(==(:tcc), preset_pointing(:nif_quads).aim_frame)   # no target, so at TCC
 
-    # the hohlraum moved: its beams by the same displacement
+    # When the hohlraum moves, its beams move by the same displacement.
     loc = copy(bt.aim_local[])
     aims = [b.aim for b in bt.beams[]]
     i = part_index(s.target, :hohlraum)
@@ -200,8 +206,9 @@ end
     d = V(0.4, 0, -0.25)
     @test maximum(norm(b.aim - (a + d)) for (a, b) in zip(aims, bt.beams[])) < 1e-12 && bt.aim_local[] == loc
 
-    # the shock tube: upper beams in the upper halfraum's hole, lower in the lower one's,
-    # at the default design's offsets in those frames
+    # In the shock tube the upper beams aim in the hole of the upper halfraum and the
+    # lower beams in that of the lower one, at the offsets of the default design in those
+    # frames.
     st = DesignSession(starter = :shock_tube, resolution = :coarse)
     sb = st.beams
     ft, fb = Symbol("halfraum_top.leh_top"), Symbol("halfraum_bottom.leh_bottom")
@@ -220,13 +227,14 @@ end
     @test nudge_part!(st.target, part_index(st.target, :halfraum_top), 0.3; frame = :tcc, axis = :z)
     moved = [norm(b.aim - a) for (a, b) in zip(a0, sb.beams[])]
     @test all(abs(m - (u ? 0.3 : 0.0)) < 1e-12 for (m, u) in zip(moved, upper(sb.beams[])))
-    # another preset: the OMEGA beams at each hole's center
+    # Another preset aims the OMEGA beams at the center of each hole.
     load_preset!(st, :omega_hohlraum)
     fr = part_frames(st.target)
     @test all(b.aim == fr[f].origin for (b, f) in zip(sb.beams[], sb.aim_frame[])) &&
           sb.aim_frame[] == [u ? ft : fb for u in upper(sb.beams[])]
 
-    # the opacity halfraum: one hole, facing up; the lower beams are disabled at TCC
+    # The opacity halfraum has one hole, facing up, and the lower beams are disabled at
+    # TCC.
     op = DesignSession(starter = :opacity, resolution = :coarse)
     ob = op.beams
     u = upper(ob.beams[])
@@ -252,8 +260,8 @@ end
     @test new_target!(e, :hohlraum)
     @test eb.beams[] == cone && eb.aim_frame[] == [u ? top : bot for u in up]
 
-    # sessions: the frames and local aims round trip; an older session (aims at TCC) loads
-    # as saved, not aimed again
+    # In sessions the frames and local aims round-trip. An older session, with aims at
+    # TCC, loads as saved and is not aimed again.
     f = joinpath(mktempdir(), "lehs.briar.toml")
     save_session(f, st)
     s2 = DesignSession(resolution = :coarse)
@@ -269,9 +277,9 @@ end
 end
 
 @testset "per-cavity wall temperature (no GL)" begin
-    # the default design, one cavity: its drive and drive history equal those computed
-    # without cavities (the path before them), bitwise, and the cavity's wall
-    # temperature is the history's wall temperature
+    # The default design has one cavity. Its drive and drive history are identical to
+    # those computed without cavities, the path before them, and the wall temperature of
+    # the cavity is the wall temperature of the history.
     sess = DesignSession(resolution = :coarse)
     ts = sess.target
     @test cavity_walls(ts) == [:hohlraum => [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]]
@@ -298,7 +306,8 @@ end
     @test isequal((h.Tr, h.legendre, h.fields, h.range, h.energy), (h0.Tr, h0.legendre, h0.fields, h0.range, h0.energy)) &&
           isequal([(d.Tr, d.intensity) for d in h.diagnostics], [(d.Tr, d.intensity) for d in h0.diagnostics])
     @test [c.name for c in h.cavities] == [:hohlraum] && h.cavities[1].Tr == h.history.wall_Tr
-    # one cavity: the drive chart as before (the observed surface's Tr is the headline)
+    # With one cavity the drive chart is as before, with the Tr of the observed surface as
+    # the headline.
     @test !any(q -> endswith(q.label, "wall Tr"), time_chart(sess, :drive).left.series)
 
     # the shock tube, two cavities, half the lower beams off: each halfraum's wall temperature
@@ -326,8 +335,8 @@ end
     @test drive_cavity(st) === :halfraum_top
     @test set_drive_cavity!(st, :halfraum_bottom) && drive_cavity(st) === :halfraum_bottom
     @test !set_drive_cavity!(st, :package) && drive_cavity(st) === :halfraum_bottom
-    # the drive history: each halfraum's wall temperature per step, against the core
-    # history's recorded incident flux reduced here
+    # The drive history gives the wall temperature of each halfraum per step, checked
+    # against the incident flux recorded by the core history and reduced in this test.
     use_pulse_shape!(st; step = 1.0)
     start_history!(st)                            # Dante 1 (the default): the whole target in a 60 mm field
     hs = st.time.history[]
@@ -341,20 +350,21 @@ end
     @test [c.name for c in hs.cavities] == first.(walls)
     @test all(isapprox(c.Tr, [direct(first(r), last(w)) for r in core.record]; rtol = 1e-12)
               for (c, w) in zip(hs.cavities, walls))
-    # the drive chart: a wall series per cavity
+    # The drive chart has a wall series per cavity.
     ser = Dict(q.label => q for q in time_chart(st, :drive).left.series)
     @test ser["halfraum_top wall Tr"].y == hs.cavities[1].Tr && ser["halfraum_bottom wall Tr"].y == hs.cavities[2].Tr
     @test ser["halfraum_top wall Tr"].color != ser["halfraum_bottom wall Tr"].color
-    # Dante 1 over the whole pair: from below it sees the lower halfraum through its hole
-    # (the package is black, every one-sided outside dark), as the view through that hole
+    # Dante 1 over the whole pair sees the lower halfraum from below through its hole, as
+    # the view through that hole does, since the package is black and every one-sided
+    # outside is dark.
     whole = only(x for x in hs.diagnostics if x.id == "nif_dante1")
     @test isempty(whole.note) && whole.view.field_of_view == 60.0 && whole.view.through === :halfraum_bottom_leh_bottom
     @test all(>(0), whole.intensity) && isapprox(whole.intensity, last.(core.record); rtol = 2e-3)   # 3.5e-4
 end
 
 @testset "per-cavity balancing (no GL)" begin
-    # the shock tube: each halfraum and the package face closing its open end form a
-    # cavity (the package's outer face in neither), each balanced separately
+    # In the shock tube each halfraum and the package face that closes its open end form
+    # a cavity, balanced separately. The outer face of the package is in neither.
     st = DesignSession(starter = :shock_tube, resolution = :coarse)
     ts = st.target
     t = ts.target[]
@@ -375,9 +385,9 @@ end
     F0 = view_factors(s.target)                         # the raw view factors
     @test all(c -> maximum(abs.(rows(F0, c.elements) .- 1)) > 1e-5, cs)
     @test all(c -> maximum(abs.(rows(F, c.elements) .- 1)) < 1e-10, cs)
-    # energy, exactly per cavity: a source in the upper halfraum's wall alone; its power
-    # equals what its elements absorb and its hole lets out, Σ (1 − α) H A over them,
-    # and the lower cavity receives nothing
+    # Energy balances exactly per cavity. With a source only in the wall of the upper
+    # halfraum, its power equals what its elements absorb and its hole lets out, Σ (1 − α) H
+    # A over them, and the lower cavity receives nothing.
     P = zeros(nelements(t))
     P[elements(t, :halfraum_top_wall)] .= 1.0
     sol = solve(s.model, P)
@@ -385,7 +395,7 @@ end
     @test absorbed(cs[1].elements) ≈ sum(sol.source .* t.elem_area) rtol = 1e-12
     @test absorbed(cs[2].elements) == 0
 
-    # the default design: one cavity of every element, balanced as the whole target
+    # The default design has one cavity of every element, balanced as the whole target.
     ts = TargetSetup(resolution = :coarse)
     cs = Controllers._closed_cavities(ts)
     @test length(cs) == 1 && cs[1].balanced && length(cs[1].elements) == nelements(ts.target[])
@@ -406,7 +416,8 @@ end
     @test set_excluded!(ts, :hohlraum_2_leh_top, false) && set_excluded!(ts, :capsule_2, true)
     @test closed_design(ts)
 
-    # the opacity halfraum: open where the sample does not close its end, so not balanced
+    # The opacity halfraum is open where the sample does not close its end, so it is not
+    # balanced.
     ts = TargetSetup(starter = :opacity, resolution = :coarse)
     c = only(Controllers._closed_cavities(ts))
     @test !c.balanced && c.leak > 0.05
@@ -456,20 +467,20 @@ end
     sess = DesignSession(resolution = :coarse)
     ts = sess.target
     cap, walls = :hohlraum_cap_top, [:hohlraum_wall, :hohlraum_cap_bottom]
-    # defaults: the wall and caps hold the wall role, the holes none
+    # By default the wall and caps have the wall role and the holes have no role.
     p = ts.parts[][part_index(ts, :hohlraum)]
     @test [piece_role(p, s) for s in hohlraum_pieces(p)] == [:wall, :wall, :wall, :none, :none]
     @test piece_roles(ts, cap).roles == PIECE_ROLES && piece_roles(ts, :hohlraum_wall).roles == (:none, :wall)
     @test piece_roles(ts, :hohlraum_leh_top).roles == (:none,) && piece_roles(ts, :capsule) === nothing
-    # refused: an aperture, a curved piece observed, the component of a part
+    # An aperture, an observed curved piece and the component of a part are refused.
     @test !set_piece_role!(ts, :hohlraum_leh_top, :wall) && occursin("aperture", ts.error[])
     @test !set_piece_role!(ts, :hohlraum_wall, :observed) && occursin("curved", ts.error[])
     @test !set_piece_role!(ts, :capsule, :wall)
     @test_throws ArgumentError set_piece_role!(ts, cap, :foil)
     target = ts.target[]
     record!(sess)
-    # the top cap observed: the capsule gives the role up, the cap leaves the walls, and
-    # the cavity holding it is the hohlraum
+    # With the top cap observed, the capsule loses the role, the cap leaves the walls,
+    # and the cavity that contains the cap is the hohlraum.
     @test set_piece_role!(ts, cap, :observed) && record!(sess)
     @test ts.target[] === target                              # the geometry is unchanged
     @test observed_name(ts) === cap && observed_flat(ts) && !ts.parts[][part_index(ts, :capsule)].observed
@@ -478,8 +489,9 @@ end
     @test closed_design(ts)
     row = only(r for r in model_tree(sess) if r.id == Controllers.component_id(ts, cap))
     @test occursin("observed", row.detail)
-    # the drive: the cap's face map and statistics, no modes; its mean flux and the
-    # cavity's wall temperature against Σ H A / Σ A over elements found by name here
+    # The drive gives the face map and statistics of the cap without modes. Its mean flux
+    # and the wall temperature of the cavity are checked against Σ H A / Σ A over
+    # elements found by name in this test.
     build_scenario!(sess)
     res = sess.drive.result[]
     s = sess.drive.scenario[]
@@ -498,8 +510,9 @@ end
     @test Controllers._retune_kind(s, nothing, :auto) === :face
     @test_throws ArgumentError Controllers._make_objective(Controllers._objective_settings(sess.optimize; observed = cap),
                                                            s, nothing, 0.5)
-    # the drive history: the face's Tr per step, the cavity's from its walls, and the
-    # energy kept apart for the cap, against core histories on the same scenario
+    # The drive history gives the Tr of the face per step, the Tr of the cavity from its
+    # walls, and the energy kept apart for the cap, checked against core histories on the
+    # same scenario.
     use_pulse_shape!(sess; step = 1.0)
     start_history!(sess)
     h = sess.time.history[]
@@ -512,7 +525,7 @@ end
     @test isapprox(h.Tr, [radiation_temperature(mean(r, named((cap,)))) for r in core.record]; rtol = 1e-12)
     @test isapprox(h.cavities[1].Tr, [radiation_temperature(mean(r, named(walls))) for r in core.record]; rtol = 1e-12)
     eb = energy_budget(h.history)
-    byp = energy_budget(core)                       # by part: the cap summed into the hohlraum
+    byp = energy_budget(core)                       # by part, with the cap summed into the hohlraum
     @test haskey(eb.heating, cap) && !haskey(byp.heating, cap)
     @test sum(values(eb.heating)) ≈ sum(values(byp.heating)) rtol = 1e-12
     @test sum(v for (k, v) in eb.heating if startswith(String(k), "hohlraum_")) ≈ byp.heating[:hohlraum] rtol = 1e-12
@@ -522,8 +535,8 @@ end
     @test undo!(sess) && observed_name(ts) === :capsule
     @test cavity_walls(ts) == [:hohlraum => [:hohlraum_wall, cap, :hohlraum_cap_bottom]]
     @test redo!(sess) && observed_name(ts) === cap
-    # sessions: the role round trips (version 11); a version-10 session loads with the
-    # pieces' default roles
+    # In sessions the role round-trips (version 11), and a version-10 session loads with
+    # the default roles of the pieces.
     f = joinpath(mktempdir(), "cap.briar.toml")
     save_session(f, sess)
     saved = TOML.parsefile(f)
@@ -576,7 +589,8 @@ end
     ev0 = evaluate(sub, sess.beams.beams[][r.indices])
     @test r.initial_value ≈ 1 + 10 * (clipped_fraction(ev0)^2 + missed_fraction(ev0)^2 +
                                       power_fraction(ev0, :sample)^2) rtol = 1e-12
-    # and the shape counts at weight 1 (measured 7.3e-5 → 3.0e-7, missed light 12.1% → 4.5%)
+    # The shape counts at weight 1. The measured value falls from 7.3e-5 to 3.0e-7, and the
+    # missed light from 12.1% to 4.5%.
     @test r.after.face.rms < 0.05 * r.before.face.rms
     @test missed_fraction(evaluate(sub, r.beams)) < missed_fraction(ev0)
     # the setting round trips in a session; an older one loads with the default weight
@@ -626,8 +640,8 @@ end
     # reference shape's at that level, as predicted at the reference's albedos
     @test all(abs.(ru.retune.drive[solved] .- 1) .< 1e-10) && all(abs.(rr.retune.drive[solved] .- 1) .< 1e-10)
     @test all(ru.retune.rms[solved] .< rr.retune.rms[solved])
-    # (measured on the coarse sample: RMS 7e-17 uniform, 1.3e-4 for the reference shape)
-    # the face's mean from a drive history of the retuned pulses, the albedos following
-    # the drive (fixed ones here): the level
+    # On the coarse sample the measured RMS is 7e-17 uniform and 1.3e-4 for the reference
+    # shape. The mean of the face from a drive history of the retuned pulses, with the
+    # albedos following the drive (fixed albedos in this test), checks the level.
     @test all(abs.(ru.after.mean[solved] ./ to_Wcm2(I0) .- 1) .< 1e-9)
 end

@@ -14,9 +14,10 @@ using SpecialFunctions: erfc
                                         aim = (x0, 0.0, 0.0))
     right(x0) = erfc(-x0 / a) / 2
     x0 = [0.0, 0.2, -0.35]
-    # the ray trace: every beam's power on the foils, split by the closed form to its
-    # sampling (a column of the 121 × 121 spot grid straddling the edge lands whole on one
-    # foil: ~h/(2√π) = 0.025 of the power), and mirrored exactly with the aim
+    # The ray trace splits the power of every beam on the foils as the closed form does,
+    # within its sampling, and mirrors it exactly with the aim. A column of the 121 × 121
+    # spot grid that straddles the edge is deposited whole on one foil, ~h/(2√π) = 0.025 of
+    # the power.
     R = raytrace_component_power(t, beam.(x0); nspot = 121)
     @test size(R) == (3, 2)
     @test sum(R; dims = 2) ≈ fill(2.0, 3, 1) rtol = 1e-7
@@ -28,7 +29,8 @@ using SpecialFunctions: erfc
     M = beam_component_power(op, beam.(x0))
     @test sum(M; dims = 2) ≈ fill(2.0, 3, 1) rtol = 2e-3
     @test M[:, 2] ./ 2 ≈ right.(x0) rtol = 5e-3
-    # the rows are per beam: linear in power, and the per-beam totals of `deposit`
+    # The rows are per beam. They are linear in power and sum to the per-beam totals of
+    # `deposit`.
     @test beam_component_power(op, [beam(0.2; P = 6.0)]) ≈ 3 .* M[2:2, :] rtol = 1e-12
     d = deposit(op, [beam(0.2)])
     @test sum(M[2, :]) ≈ sum(d.element) + sum(d.backside) rtol = 1e-12

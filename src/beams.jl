@@ -1,11 +1,12 @@
-# Laser beams: port geometry, focal-spot profiles, pointing, and defocus.
+# This file defines laser beams, with port geometry, focal-spot profiles, pointing and
+# defocus.
 #
 # Conventions
 # * A beam enters from its port, a unit vector `port` from target-chamber center (TCC)
 #   toward the final optics; it propagates along `k = -port`. Pointing translates the
-#   beam axis to pass through `aim`; the direction stays fixed (the final optics are
-#   meters away, so mm-scale repointing changes the direction by ≲1e-4 rad).
-# * The best-focus plane sits at `aim + defocus * k`: positive defocus places focus
+#   beam axis to pass through `aim`, and the direction stays fixed. The final optics are
+#   meters away, so mm-scale repointing changes the direction by ≲1e-4 rad.
+# * The best-focus plane lies at `aim + defocus * k`. Positive defocus places focus
 #   beyond the aim point, so the beam is still converging there.
 # * Spot axes: `a` lies along `cos(ψ) θ̂ + sin(ψ) φ̂` of the port, `b` perpendicular,
 #   where θ̂ and φ̂ are the spherical unit vectors at the port.
@@ -15,13 +16,13 @@
                       halo_order = 2.0)
 
 Elliptical super-Gaussian best-focus intensity `I ∝ exp(-[(u/a)² + (v/b)²]^(order/2))`
-with 1/e semi-axes `a`, `b` (mm). `angle` (radians) rotates the `a` axis from the
-port's θ̂ toward φ̂.
+with 1/e semi-axes `a`, `b` (mm). `angle` (radians) rotates the `a` axis from θ̂ of the
+port toward φ̂.
 
 Measured phase-plate spots have low-level wings beyond the super-Gaussian core fit.
 A fraction `halo` of the power can be put in a second, broader component with semi-axes
-`halo_scale·(a, b)` and order `halo_order` — the halo matters for clearance and
-clipping checks, not for drive symmetry.
+`halo_scale·(a, b)` and order `halo_order`. The halo matters for clearance and clipping
+checks; drive symmetry is insensitive to it.
 """
 struct SuperGaussianSpot{T<:Real}
     a::T
@@ -62,13 +63,17 @@ One laser beam entering from the port at polar angle `theta` and azimuth `phi`
 pointing parameters (e.g. a cone). `wavelength` is the nominal vacuum wavelength (µm)
 and `dlambda` the detuning from it (Å), used by laser–plasma models.
 
-The axis keeps the port's direction and passes through `aim`, so direct-drive pointings
-are aims: a point `s` on a target sphere about `c` is `aim = s` (the axis first meets
-the sphere there when `s` faces the port, `port · (s - c) > 0`; for a point on the
-sphere at polar angle θ and azimuth φ, `s = c + R * port_vector(θ, φ)`), a shift `Δ`
-normal to the beam is `aim = c + Δ * u` with `u ⟂ port` (toward the equator for a
-northern port: `u = θ̂` of `port_basis`), and an axis crossing the polar axis at height
-`z` is `aim = (0, 0, z)`. Best focus is at `aim + defocus * k` in each case.
+The axis has the direction of the port and passes through `aim`, so direct-drive
+pointings are aims:
+
+- a point `s` on a target sphere about `c` is `aim = s`. The axis first meets the sphere
+  there when `s` faces the port, `port · (s - c) > 0`. For a point on the sphere at polar
+  angle θ and azimuth φ, `s = c + R * port_vector(θ, φ)`;
+- a shift `Δ` normal to the beam is `aim = c + Δ * u` with `u ⟂ port`, for example
+  toward the equator for a northern port with `u = θ̂` of `port_basis`;
+- an axis crossing the polar axis at height `z` is `aim = (0, 0, z)`.
+
+Best focus is at `aim + defocus * k` in each case.
 """
 struct Beam{T<:Real}
     name::String
@@ -110,9 +115,9 @@ direction(b::Beam) = -b.port
 """
     port_basis(port) -> (θ̂, φ̂)
 
-Spherical unit vectors at the port; the transverse frame for spot orientation. A beam's
-spot `a` axis at `angle` is `cos(angle) θ̂ + sin(angle) φ̂` ([`spot_axes`](@ref)); an aim
-displaced along the port's θ̂ by `d` mm:
+Spherical unit vectors at the port, which are the transverse frame for spot orientation.
+The spot `a` axis of a beam at `angle` is `cos(angle) θ̂ + sin(angle) φ̂`
+([`spot_axes`](@ref)). An aim displaced along θ̂ of the port by `d` mm is:
 
 ```julia
 eθ, eφ = port_basis(b.port)
@@ -130,8 +135,8 @@ end
 """
     spot_axes(beam) -> (a, b)
 
-Unit vectors of the spot's `a` and `b` axes, transverse to the beam: the port's θ̂ and
-φ̂ turned by the spot's `angle` toward φ̂.
+Unit vectors of the `a` and `b` axes of the spot, transverse to the beam. They are θ̂
+and φ̂ of the port turned by the `angle` of the spot toward φ̂.
 """
 function spot_axes(b::Beam)
     eθ, eφ = port_basis(b.port)
@@ -142,8 +147,8 @@ end
 """
     remake(beam; aim, power, defocus, spot, dlambda, port, fnumber, group, name)
 
-Copy of `beam` with the given fields replaced; the element type widens as needed (so
-ForwardDiff duals can flow through pointing parameters).
+Copy of `beam` with the given fields replaced. The element type widens as needed, so
+that ForwardDiff duals can flow through pointing parameters.
 """
 function remake(b::Beam; aim = b.aim, power = b.power, defocus = b.defocus, spot = b.spot,
                 dlambda = b.dlambda, port = b.port, fnumber = b.fnumber, group = b.group,
@@ -170,11 +175,6 @@ _fmt(x) = string(ForwardDiff.value(x))
 # Intensity evaluation
 # ---------------------------------------------------------------------------------------
 
-"""
-    BeamFrame(beam)
-
-Precomputed quantities for evaluating a beam's intensity at many points.
-"""
 # One super-Gaussian component of a spot in a beam frame.
 struct _SGComponent{T}
     a2::T
@@ -183,7 +183,7 @@ struct _SGComponent{T}
     defocus_c::Float64        # (1/(2F))² / (4 m_n): adds s²·c to a², b²
     power_norm::T             # component power / (2π Γ(2/n)/n)
     qcut::Float64             # (u/a)² + (v/b)² beyond which the profile is < e⁻⁴⁰ of peak
-    peak::T                   # power_norm / (a b): the best-focus peak intensity
+    peak::T                   # power_norm / (a b), the best-focus peak intensity
 end
 
 function _SGComponent(a2, b2, halfn, defocus_c, power_norm)
@@ -201,9 +201,9 @@ end
     return c.peak * exp(-_pow(q, c.halfn))
 end
 
-# `q^h` for q > 0 as exp(h log q): half the cost of `^` (whose extra accuracy, ~1e-15
-# relative, the profile does not need), and a quarter on duals, where `^` takes a
-# second power for the derivative.
+# Computes `q^h` for q > 0 as exp(h log q). This costs half as much as `^`, whose extra
+# accuracy (about 1e-15 relative) the profile does not need, and a quarter as much on
+# duals, where `^` takes a second power for the derivative.
 @inline _pow(q, h) = exp(h * log(q))
 
 # Whether (u, v) is inside the cutoff of the profile (`_sg_focal` is nonzero there).
@@ -215,6 +215,11 @@ end
     return c.power_norm / sqrt(a2 * b2) * exp(-(u^2 / a2 + v^2 / b2)^c.halfn)
 end
 
+"""
+    BeamFrame(beam)
+
+Precomputed quantities for evaluating the intensity of a beam at many points.
+"""
 struct BeamFrame{T}
     k::Vec3
     e1::Vec3
@@ -247,8 +252,8 @@ Beam intensity (TW/mm², per unit area normal to the beam) at point `x`. Away fr
 focus the spot is the focal profile convolved with the geometric f-cone disk; this is
 approximated by widening the semi-axes so second moments add exactly
 (`a(s)² = a² + s²/(16 F² m_n)` with `m_n = Γ(4/n)/(2Γ(2/n))`) at fixed order `n`, for
-the core and halo components separately. This smooth profile serves envelope and
-clearance estimates; far from focus its shape departs from the convolution, so
+the core and halo components separately. This smooth profile is used for envelope and
+clearance estimates. Far from focus its shape departs from the convolution, so
 deposition (`DepositionOperator`, `raytrace_deposition`) sums over the cone directions
 instead.
 """
@@ -292,18 +297,18 @@ end
 intensity(b::Beam, x) = intensity(BeamFrame(b), x)
 
 # ---------------------------------------------------------------------------------------
-# VisRad's beam profile
+# The VisRad beam profile
 # ---------------------------------------------------------------------------------------
 
 """
     VisRadProfile(; envelope = nothing, taper = 0)
 
-VisRad 21's beam model, for deposition that reproduces VisRad's
-(`DepositionOperator(...; profile)`). The beam is not the focal spot convolved over the
-f-cone, as in Briareus's default model, but the manual's analytic profile
+The beam model of VisRad 21, for deposition that reproduces the VisRad deposition
+(`DepositionOperator(...; profile)`). The beam is the analytic profile of the manual
 (`VR/power_sources/set_laser_profile_props.html`), a super-Gaussian blended toward a
-square away from best focus. At a distance `z` from best focus, with (u, v) along the
-spot axes,
+square away from best focus. The default model of Briareus instead convolves the focal
+spot over the f-cone. At a distance `z` from best focus, with (u, v) along the spot
+axes,
 
     I = I₀(z) exp(−α),   α = f [(|u|/ΔL)^M + (|v|/ΔL)^M] + (1 − f) [(u/a)² + (v/b)²]^(n/2).
 
@@ -312,52 +317,57 @@ For focal 1/e semi-axes a₀ ≥ b₀, exponent n₀, f-number F and envelope ra
 
 - a(z)² = a₀² + z²/(2F²), and likewise b(z);
 - ``n(z) = n_0 (1 + 0.2 |z|/z_A)``;
-- the square's weight ``f(z) = |z| / \\sqrt{z^2 + z_A z_B}``;
+- the weight of the square, ``f(z) = |z| / \\sqrt{z^2 + z_A z_B}``;
 - its half-width ΔL(z) = ρ a₀/√2 + 0.99605 |z|/(2F);
 - its exponent ``M(z) = 10 (1 + |z|/\\sqrt{z_A z_B})``.
 
 The profile is cut where α reaches ln 1000 (10⁻³ of its local peak), and I₀(z) puts the
-beam's power in every transverse plane. A surface absorbs I |n·k| of the beam axis, where
-the axis reaches it unobstructed.
+power of the beam in every transverse plane. A surface absorbs I |n·k| of the beam axis,
+where the axis reaches it unobstructed.
 
-The forms of a, b, n, f and ΔL are those of the VisRad parameters, which it exports
+The forms of a, b, n, f and ΔL are those of the VisRad parameters, which VisRad exports
 with the beam–target intersection points. These were exported at 299 beam hits
 (|z| ≤ 15 mm), and the forms reproduce them to 5 × 10⁻⁵ in a and b, 1.4 × 10⁻⁴ in n,
-5 × 10⁻⁴ in f, and 1.3 × 10⁻³ in ΔL. Only M and the cut were fitted, to VisRad's
+5 × 10⁻⁴ in f, and 1.3 × 10⁻³ in ΔL. Only M and the cut were fitted, to the VisRad
 deposition on 48 plates normal to single NIF beams (0.06–0.22% rms per element). On
-32 tilted plates and on normal plates up to 15 mm past focus the model is then within
-0.12–0.27% rms of VisRad, against 1.3–4.6% for the tabulated profile it replaces
+32 tilted plates and on normal plates up to 15 mm past focus, the model is then within
+0.12–0.27% rms of VisRad, against 1.3–4.6% for the tabulated profile that it replaces
 (`reference/research-notes.md`, "VisRad's beam profile law").
 
-`envelope` sets ρ for every beam (a number), per beam name (a `Dict`; beams not in it
-take the default), or `nothing` for VisRad's default (ln 1000)^(1/n₀). The default puts
-the focal profile at 10⁻³ of its peak, and it reproduces the NIF plates' ratios 1.53645,
-1.49576, 1.27326 and 1.28955. VisRad 21 replaced larger ratios (2 and 3) with the
-default, so ρ is capped there. ρ enters ΔL only: a smaller ratio, 1.2, shows no
-cut-off at q = ρ in VisRad's deposition. `visrad_profile` takes the envelopes from a
-workspace.
+`envelope` sets ρ for every beam (a number), per beam name (a `Dict`, where beams not in
+it take the default), or `nothing` for the VisRad default (ln 1000)^(1/n₀). The default
+puts the focal profile at 10⁻³ of its peak, and it reproduces the ratios 1.53645,
+1.49576, 1.27326 and 1.28955 of the NIF plates. VisRad 21 replaced larger ratios (2 and
+3) with the default, so ρ is capped there. ρ enters only ΔL: with a smaller ratio, 1.2,
+the VisRad deposition does not show a cut-off at q = ρ. `visrad_profile` takes the envelopes
+from a workspace.
 
-`taper` is an option for optimization, not part of VisRad's model; the default, 0, is
-VisRad's hard cut. At the cut the profile drops from 10⁻³ of its local peak to zero, so
-as an aim moves, the deposition (and every objective or constraint computed from it)
-jumps wherever an operator point crosses the cut: finite differences and line searches
-see steps that derivatives miss. A positive `taper` multiplies exp(−α) by the quintic
-smoothstep S(t) = 10t³ − 15t⁴ + 6t⁵ of t = (ln 1000 − α)/taper (S = 1 for t ≥ 1), and
-I₀(z) is renormalized so that each plane still holds the beam's power. The profile is
-then twice continuously differentiable across the cut, and its support, which the
-operator's sampling and screens use, is unchanged. The band lies where the law is
-least constrained (VisRad's deposition fits a cut at α = ln 1000 or none equally
-well). `taper = 1` (one e-fold, intensities between 10⁻³ and e × 10⁻³ of the local
-peak) changes the element rms against VisRad on 59 probe plates by at most 0.011
-percentage points, and NIF wall deposition by at most 7 × 10⁻⁵ of its peak
-(`reference/research-notes.md`, "VisRad's beam profile law").
+`taper` is an option for optimization and is not part of the VisRad model. The default,
+0, is the hard cut of VisRad. At the cut the profile drops from 10⁻³ of its local peak
+to zero. As an aim moves, the deposition, and every objective or constraint computed
+from it, therefore jumps wherever an operator point crosses the cut, and finite
+differences and line searches encounter steps that derivatives miss. A positive `taper`
+multiplies exp(−α) by the quintic smoothstep S(t) = 10t³ − 15t⁴ + 6t⁵ of
+t = (ln 1000 − α)/taper (S = 1 for t ≥ 1), and I₀(z) is renormalized so that each plane
+still contains the power of the beam. The profile is then twice continuously
+differentiable across the cut, and its support, which the sampling and screens of the
+operator use, is unchanged. The band lies where the law is least constrained, since the
+VisRad deposition fits a cut at α = ln 1000 or none equally well. `taper = 1` (one
+e-fold, intensities between 10⁻³ and e × 10⁻³ of the local peak) changes the element rms
+against VisRad on 59 probe plates by at most 0.011 percentage points, and NIF wall
+deposition by at most 7 × 10⁻⁵ of its peak (`reference/research-notes.md`, "VisRad's
+beam profile law").
 
-Not identified: any dependence on the final-optic distance (every run had 769.5 cm) or on
-the f-number beyond F itself (every run had f/20.755, where the ΔL slope was measured);
-the square's orientation for a beam whose spot VisRad rotates (taken on the spot axes);
-and occultation by VisRad's ray grid (here the beam axis through each point determines
-it). VisRad also renormalizes each beam's deposited total, which per-plane normalization
-misses on steep surfaces (+0.2% at 40° incidence, +2.2% at 78°).
+Some dependences were not identified:
+- any dependence on the final-optic distance (every run had 769.5 cm) or on the
+  f-number beyond F itself (every run had f/20.755, where the ΔL slope was measured);
+- the orientation of the square for a beam whose spot VisRad rotates, which is taken
+  on the spot axes;
+- occultation by the ray grid of VisRad, which here is set by the beam axis through each
+  point.
+
+VisRad also renormalizes the deposited total of each beam, which per-plane
+normalization misses on steep surfaces (+0.2% at 40° incidence, +2.2% at 78°).
 """
 struct VisRadProfile
     envelope::Union{Nothing,Float64,Dict{String,Float64}}
@@ -380,13 +390,15 @@ Base.hash(p::VisRadProfile, h::UInt) = hash(p.envelope, hash(p.taper, hash(:VisR
 """
     visrad_envelope(order) -> Float64
 
-VisRad's default envelope ratio for a super-Gaussian of exponent `order`: the radius,
-in 1/e units, where the focal profile falls to 10⁻³ of its peak, (ln 1000)^(1/n).
-Inferred: it reproduces every NIF plate's ratio in VisRad 21 workspaces.
+The default envelope ratio of VisRad for a super-Gaussian of exponent `order`. It is the
+radius, in 1/e units, where the focal profile falls to 10⁻³ of its peak,
+(ln 1000)^(1/n). The value is inferred, and it reproduces the ratio of every NIF plate
+in VisRad 21 workspaces.
 """
 visrad_envelope(order) = log(1000.0)^(1 / order)
 
-# The envelope ratio `prof` gives beam `b`, capped at the default as VisRad caps it.
+# Returns the envelope ratio that `prof` gives beam `b`, capped at the default as VisRad
+# caps it.
 function _vr_envelope(prof::VisRadProfile, b::Beam)
     e = prof.envelope
     ρd = visrad_envelope(b.spot.order)
@@ -395,17 +407,17 @@ function _vr_envelope(prof::VisRadProfile, b::Beam)
     return ρd
 end
 
-# Constants of the law (`VisRadProfile`): the square's exponent at focus, the slope of its
-# half-width in units of 1/(2F) (measured at f/20.755), the cut-off α
+# Constants of the law (`VisRadProfile`): the exponent of the square at focus, the slope
+# of its half-width in units of 1/(2F) (measured at f/20.755), and the cut-off α
 const _VR_M0 = 10.0
 const _VR_DL_SLOPE = 0.99605
 const _VR_CUT = log(1000.0)
 
-# One component of a beam under VisRad's profile. a2, b2 are the component's focal 1/e
-# semi-axes squared, along its axes (the first may be the minor one). The law's lengths
-# are taken from the major and minor axes. ntab is the normalization ∫∫ exp(−α) du dv
-# (times the taper, when there is one) over a(z) b(z) at |z| = 0, h, 2h, …, held
-# constant beyond the table.
+# One component of a beam under the VisRad profile. a2, b2 are the squared focal 1/e
+# semi-axes of the component, along its axes, and the first may be the minor one. The
+# lengths of the law are taken from the major and minor axes. ntab is the normalization
+# ∫∫ exp(−α) du dv (times the taper, when there is one) over a(z) b(z) at
+# |z| = 0, h, 2h, …, held constant beyond the table.
 struct _VRComponent{T}
     a2::T
     b2::T
@@ -415,12 +427,12 @@ struct _VRComponent{T}
     zab::T                    # z_A z_B
     dl0::T                    # ρ a₀/√2
     dls::Float64              # dΔL/d|z|
-    power::T                  # the component's power (TW)
+    power::T                  # power of the component (TW)
     ntab::Vector{Float64}
     h::Float64
-    taper::Float64            # width in α of the taper below the cut (0: the hard cut)
-    qfar::Float64             # `_vr_far`'s bound on the Gaussian term's q
-    gk::Int                   # n₀/2 ≥ gk + gj/4: `_vr_far`'s power of q in its bound
+    taper::Float64            # width in α of the taper below the cut (0 for the hard cut)
+    qfar::Float64             # bound of `_vr_far` on the q of the Gaussian term
+    gk::Int                   # n₀/2 ≥ gk + gj/4, the power of q in the bound of `_vr_far`
     gj::Int
 end
 
@@ -438,16 +450,16 @@ function _VRComponent(c::_SGComponent, F, env, taper, active::Bool)
                         max(1.0, _VR_FAR_CUT^(1 / c.halfn)), _vr_far_powers(c.halfn)...)
 end
 
-# The integer and quarter parts (k, j) of a Gaussian exponent n₀/2 ≥ k + j/4, for
-# `_vr_far`'s bound q^(n₀/2) ≥ q^k (q^(1/4))^j at q ≥ 1.
+# Returns the integer and quarter parts (k, j) of a Gaussian exponent n₀/2 ≥ k + j/4, for
+# the bound q^(n₀/2) ≥ q^k (q^(1/4))^j of `_vr_far` at q ≥ 1.
 function _vr_far_powers(hn)
     k = floor(Int, hn)
     return k, floor(Int, 4 * (hn - k))
 end
 
-const _VR_NONE = Float64[]           # no table (an inactive halo; shared, never mutated)
+const _VR_NONE = Float64[]           # empty table for an inactive halo (shared, never mutated)
 
-# The law's α at (u, v) a distance s from best focus, and a(z)², b(z)², |z|.
+# Returns the α of the law at (u, v) a distance s from best focus, and a(z)², b(z)², |z|.
 @inline function _vr_alpha(c::_VRComponent, u, v, s)
     z = abs(s)
     a2, b2 = c.a2 + z^2 * c.g2, c.b2 + z^2 * c.g2
@@ -462,7 +474,7 @@ const _VR_NONE = Float64[]           # no table (an inactive halo; shared, never
     return f * sq + (1 - f) * gauss, a2, b2, z
 end
 
-# Normalization over a(z) b(z) at |z|, interpolated linearly in the table
+# Returns the normalization over a(z) b(z) at |z|, interpolated linearly in the table.
 @inline function _vr_norm(c::_VRComponent, z)
     t = c.ntab
     x = z / c.h
@@ -473,10 +485,10 @@ end
     return @inbounds t[k] + (t[k+1] - t[k]) * w
 end
 
-# Intensity (per unit area normal to the beam) at focal-frame coordinates (u, v), a
-# distance s from best focus; 0 beyond the cut-off. With a taper, exp(−α) is multiplied
-# by the smoothstep of (ln 1000 − α)/taper, which reaches zero at the cut with its first
-# two derivatives: the support is unchanged.
+# Returns the intensity (per unit area normal to the beam) at focal-frame coordinates
+# (u, v), a distance s from best focus, and 0 beyond the cut-off. With a taper, exp(−α)
+# is multiplied by the smoothstep of (ln 1000 − α)/taper, which reaches zero at the cut
+# with its first two derivatives, so the support is unchanged.
 @inline function _vr_eval(c::_VRComponent, u, v, s)
     α, a2, b2, z = _vr_alpha(c, u, v, s)
     α >= _VR_CUT && return zero(c.power * α)
@@ -490,21 +502,22 @@ end
 
 @inline _vr_outside(c::_VRComponent, u, v, s) = _vr_alpha(c, u, v, s)[1] > _VR_CUT * (1 + 1e-9)
 
-# Whether (u, v, s) lies beyond the cut-off by a bound that takes no logarithm or
-# exponential: α = f sq + (1 − f) gauss with 0 ≤ f < 1; sq ≥ r^M with r = max(|u|, |v|)/ΔL
-# and M ≥ M₀ = 10, so sq ≥ r^10 for r ≥ 1; gauss = q^hn with hn ≥ n₀/2 ≥ k + j/4, so
-# gauss ≥ q^k (q^(1/4))^j for q ≥ 1. First the smaller of the two terms (both at least c:
-# r ≥ c^(1/10) and q ≥ max(1, c^(2/n₀))), then their weighted sum with f = z/√(z² + z_A z_B),
-# against c = ln 1000 (1 + 1e-6), far above the screens' allowance of 1e-9 and the
-# rounding of α. A point it passes lies beyond `_vr_outside`'s cut (and `_vr_eval` would
-# give an exact zero there).
+# Whether (u, v, s) lies beyond the cut-off, by a bound that needs no logarithm or
+# exponential. With α = f sq + (1 − f) gauss and 0 ≤ f < 1:
+# - sq ≥ r^M with r = max(|u|, |v|)/ΔL and M ≥ M₀ = 10, so sq ≥ r^10 for r ≥ 1;
+# - gauss = q^hn with hn ≥ n₀/2 ≥ k + j/4, so gauss ≥ q^k (q^(1/4))^j for q ≥ 1.
+# The test first requires both terms to be at least c, with r ≥ c^(1/10) and
+# q ≥ max(1, c^(2/n₀)). It then tests their weighted sum with f = z/√(z² + z_A z_B)
+# against c = ln 1000 (1 + 1e-6), far above the allowance of 1e-9 of the screens and the
+# rounding of α. A point that passes lies beyond the cut of `_vr_outside`, and
+# `_vr_eval` would give an exact zero there.
 const _VR_FAR_CUT = _VR_CUT * (1 + 1e-6)
 const _VR_FAR_T = _VR_FAR_CUT^(1 / _VR_M0)
 @inline _vr_far(c::_VRComponent, u, v, s) = (z = abs(s); _vr_far(c, abs(u), abs(v), z, z))
 
-# The same bound over a set of points with |u| ≥ au, |v| ≥ av and zlo ≤ |s| ≤ zhi: ΔL, a(z)
-# and b(z) grow with |z|, so r and q are least at zhi, and f (growing with |z|) is taken
-# at whichever end gives the smaller sum.
+# The same bound over a set of points with |u| ≥ au, |v| ≥ av and zlo ≤ |s| ≤ zhi. ΔL, a(z)
+# and b(z) grow with |z|, so r and q are least at zhi. f also grows with |z|, and it is
+# taken at whichever end gives the smaller sum.
 @inline function _vr_far(c::_VRComponent, au, av, zlo, zhi)
     r = max(au, av) / (c.dl0 + c.dls * zhi)
     q = au^2 / (c.a2 + zhi^2 * c.g2) + av^2 / (c.b2 + zhi^2 * c.g2)
@@ -531,11 +544,12 @@ end
 # The normalization table of a component with focal semi-axes a, b (along its axes),
 # exponent n, f-number F, envelope env and taper, on |z| = 0:h:zmax. Each node integrates
 # exp(−α) over the quarter plane in scaled polar coordinates (u = a(z) r cos θ,
-# v = b(z) r sin θ), out to the cut-off radius along each θ (α grows with r), by
-# composite Gauss–Legendre rules in θ and r; a taper's share is subtracted, integrated
-# on the taper band. Built once per (a, b, n, F, env, taper) and cached; frames are built
-# per beam and work unit, so reads take no lock and allocate nothing: a miss copies the
-# cache, adds the entry and swaps it in under the lock.
+# v = b(z) r sin θ), out to the cut-off radius along each θ, since α grows with r. The
+# integral uses composite Gauss–Legendre rules in θ and r, and the share of a taper is
+# subtracted, integrated on the taper band. The table is built once per
+# (a, b, n, F, env, taper) and cached. Frames are built per beam and work unit, so reads
+# take no lock and allocate nothing. On a miss, the cache is copied, the entry is added
+# and the copy is swapped in under the lock.
 const _VR_NTAB_H = 0.1
 const _VR_NTAB_ZMAX = 60.0
 const _VRNormKey = NTuple{6,Float64}
@@ -576,7 +590,7 @@ function _vr_norm_at(c::_VRComponent, z, xg, wg)
     nθ, nr = 3, 3                                    # panels
     for pθ in 1:nθ, (xθ, wθ) in zip(xg, wg)
         θ = (π / 2) * (pθ - 1 + (xθ + 1) / 2) / nθ
-        # cut-off radius along θ: α(r) = ln 1000, bracketed and bisected
+        # the cut-off radius along θ, where α(r) = ln 1000, is bracketed and bisected
         hi = 1.0
         while α(hi, θ) < _VR_CUT
             hi *= 2
@@ -601,8 +615,8 @@ function _vr_norm_at(c::_VRComponent, z, xg, wg)
     return 4 * total * (π / 2) / (2nθ)
 end
 
-# ∫ r exp(−α) (1 − smoothstep) dr over the taper's band along one direction: from the
-# radius where α = ln 1000 − taper (bisected) to the cut-off radius R.
+# Returns ∫ r exp(−α) (1 − smoothstep) dr over the band of the taper along one direction,
+# from the radius where α = ln 1000 − taper (bisected) to the cut-off radius R.
 function _vr_taper_loss(α, R, taper, xg, wg)
     lo, hi = 0.0, R
     for _ in 1:44
@@ -628,10 +642,10 @@ struct _VRFrame{T}
     core::_VRComponent{T}
     halo::_VRComponent{T}
     has_halo::Bool
-    c0::SVector{3,T}          # the origin's coordinates: their partials are every point's
+    c0::SVector{3,T}          # coordinates of the origin, whose partials every point shares
 end
 
-# `env`: the beam's envelope ratio (`_vr_envelope`); `taper`: the profile's
+# `env` is the envelope ratio of the beam (`_vr_envelope`), and `taper` that of the profile.
 function _VRFrame(f::BeamFrame, env, taper)
     d0 = zero(Vec3) - f.focus
     return _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, env, taper, true),
@@ -644,10 +658,10 @@ end
     return dot(d, f.e1), dot(d, f.e2), dot(d, f.k)
 end
 
-# A point's coordinates in the frame `f` from those in its Float64 frame (`uvs`, of the
-# beam's values): on duals the values with the partials of the origin's coordinates,
-# which every point shares (the frame's axes carry none), instead of three dual dot
-# products per point.
+# Returns the coordinates of a point in the frame `f` from those in its Float64 frame
+# (`uvs`, of the values of the beam). On duals these are the values with the partials of
+# the coordinates of the origin, which every point shares, since the axes of the frame
+# carry none. This replaces three dual dot products per point.
 @inline _vr_coords(f::_VRFrame{Float64}, x, uvs) = uvs
 @inline function _vr_coords(f::_VRFrame{ForwardDiff.Dual{G,Float64,N}}, x, (u, v, s)) where {G,N}
     D = ForwardDiff.Dual{G,Float64,N}
@@ -663,19 +677,20 @@ end
     return I
 end
 
-# Whether a point lies beyond the cut-off by the law itself (the reference that
-# `_vr_far`'s bound is checked against).
+# Whether a point lies beyond the cut-off by the law itself, which is the reference
+# against which the bound of `_vr_far` is checked.
 @inline _vr_beyond(f::_VRFrame, x) = _vr_beyond(f, _vr_coords(f, x)...)
 @inline _vr_beyond(f::_VRFrame, u, v, s) =
     _vr_outside(f.core, u, v, s) && (!f.has_halo || _vr_outside(f.halo, u, v, s))
 
-# `_vr_beyond` by `_vr_far`'s bound: true only where `_vr_beyond` is (a Float64 frame).
+# `_vr_beyond` by the bound of `_vr_far`, true only where `_vr_beyond` is (a Float64 frame).
 @inline _vr_far(f::_VRFrame{Float64}, x) = _vr_far(f, _vr_coords(f, x)...)
 @inline _vr_far(f::_VRFrame{Float64}, u, v, s) =
     _vr_far(f.core, u, v, s) && (!f.has_halo || _vr_far(f.halo, u, v, s))
 
-# `_vr_far` for every point of a ball (center and radius): the frame's coordinates are
-# orthonormal, so each lies within the radius of the center's.
+# `_vr_far` for every point of a ball (center and radius). The coordinates of the frame
+# are orthonormal, so the coordinates of each point lie within the radius of those of the
+# center.
 @inline function _vr_far_ball(f::_VRFrame{Float64}, (x, y, z, R)::NTuple{4,Float64})
     u, v, s = _vr_coords(f, Vec3(x, y, z))
     au, av = max(abs(u) - R, 0.0), max(abs(v) - R, 0.0)
@@ -686,8 +701,8 @@ end
 """
     intensity(profile::VisRadProfile, beam, x)
 
-Intensity (TW/mm², per unit area normal to the beam) of `beam` at point `x` under
-VisRad's beam model (`VisRadProfile`).
+Intensity (TW/mm², per unit area normal to the beam) of `beam` at point `x` under the
+VisRad beam model (`VisRadProfile`).
 """
 intensity(prof::VisRadProfile, b::Beam, x) =
     _vr_intensity(_VRFrame(BeamFrame(b), _vr_envelope(prof, b), prof.taper), x)
@@ -695,8 +710,8 @@ intensity(prof::VisRadProfile, b::Beam, x) =
 """
     cone_directions(beam, n) -> (dirs, weights)
 
-`n`-point quadrature of the beam's converging f-cone directions (center plus rings,
-equal-area weights). Directions are unit propagation vectors.
+`n`-point quadrature of the converging f-cone directions of the beam (center plus
+rings, equal-area weights). Directions are unit propagation vectors.
 """
 function cone_directions(b::Beam, n::Integer)
     k = direction(b)
@@ -708,11 +723,11 @@ function cone_directions(b::Beam, n::Integer)
     return dirs, fill(1.0 / length(dirs), length(dirs))
 end
 
-# Equal-weight points on the unit disk: the center plus rings of 6, 12, 18, … points,
-# each ring at the rms radius of its equal-area annulus. The radii are then scaled so
-# the set reproduces the disk's second moment ⟨r²⟩ = 1/2 exactly, so that the
+# Equal-weight points on the unit disk, the center plus rings of 6, 12, 18, … points,
+# with each ring at the rms radius of its equal-area annulus. The radii are then scaled
+# so that the set reproduces the second moment of the disk, ⟨r²⟩ = 1/2, exactly. The
 # defocused spot of the deposition operator and the ray trace, a sum over these
-# directions, grows at the exact geometric-optics rate.
+# directions, then grows at the exact geometric-optics rate.
 function _disk_quadrature(n)
     n <= 1 && return [(0.0, 0.0)]
     counts = Int[]

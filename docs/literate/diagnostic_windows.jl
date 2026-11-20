@@ -1,11 +1,11 @@
 # # Diagnostic windows in the hohlraum wall
 #
 # To see the capsule from the side during the implosion, a diagnostic needs a line of
-# sight through the hohlraum wall. A hole would lose too much drive, so the wall
-# carries a thin-foil window instead: a disk of gold about 2 mm across and a couple of
+# sight through the hohlraum wall. A hole would lose too much drive, so a thin-foil window
+# is set in the wall instead: a disk of gold about 2 mm across and a couple of
 # micrometers thick, backed by a low-Z material that x rays above a few keV pass
 # through. Early in the pulse the thin gold re-emits like the rest of the wall. The
-# Marshak heat front that carries the x rays into the wall eats through it during the
+# Marshak heat front that drives the x rays into the wall burns through it during the
 # drive, and from then on part of the radiation that reaches the window passes through
 # it and leaves: the waist of the capsule loses drive, and the poles, relatively, gain
 # it. Two windows facing each other on
@@ -33,19 +33,19 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 #
 # A [`WallWindow`](@ref) with a `diameter` is a disk drawn on the unrolled wall: arc
 # length ``s = R\phi`` along the wall by ``z`` along the axis. Unrolling a cylinder is
-# an isometry, so the window's area is ``\pi d^2/4``. A `gap` adds a ring of that
+# an isometry, so the window area is ``\pi d^2/4``. A `gap` adds a ring of that
 # width around it, a separate component (here the default, an open aperture).
 #
 # [`hohlraum`](@ref) cuts a square box around the window and its gap out of the
 # conforming wall grid, half a wall cell wider than the gap, and re-meshes it with
 # triangles: polar rings inside the window, one band of triangles across the gap, and a
-# band joining the gap's outer edge to the vertices the box shares with the grid
+# band joining the outer edge of the gap to the vertices the box shares with the grid
 # around it, so the mesh has no T-junctions. Every vertex lies on the cylinder. A
 # triangle with its vertices on the cylinder has a curved area of exactly ``R`` times
 # its area in ``(\phi, z)``; the radiation model already uses that exact area (see the
-# [Integrating sphere](@ref) tutorial for why curved areas matter). The window's edge
+# [Integrating sphere](@ref) tutorial for why curved areas matter). The window edge
 # is a regular polygon whose radius is enlarged to [`equal_area_radius`](@ref), so the
-# polygon's area is exactly that of the disk. The window and the gap therefore have
+# polygon area is exactly that of the disk. The window and the gap therefore have
 # exact areas, while their edges stay within a few micrometers of the circles.
 
 d, gap = 2.0, 0.05
@@ -64,9 +64,9 @@ R, L = 2.875, 10.1
         area(:wall) + area(:window_1) + area(:window_1_gap) + area(:window_2) + area(:window_2_gap),
         2π * R * L)
 
-# The unrolled mesh around the first window. The outer vertices of the box lie on
-# the grid, the gap is one band of triangles 50 µm wide, and the window's elements are about
-# the size of the wall's:
+# The unrolled mesh around the first window is plotted below. The outer vertices of the
+# box lie on the grid, the gap is one band of triangles 50 µm wide, and the window
+# elements are about the size of the wall elements:
 
 function unrolled(target, φc)
     fig = Figure(size = (800, 640))
@@ -94,7 +94,7 @@ unrolled(target, 78)
 #
 # Radiation of temperature ``T`` drives a subsonic, ablative heat front into a gold
 # wall. Hammer and Rosen solved this Marshak wave self-similarly with power-law fits to
-# gold's opacity and equation of state (Phys. Plasmas 10, 1829, 2003). At constant
+# the opacity and equation of state of gold (Phys. Plasmas 10, 1829, 2003). At constant
 # ``T`` the areal mass behind the front is
 #
 # ```math
@@ -104,7 +104,7 @@ unrolled(target, 78)
 #
 # (their eq. 112 for a constant drive), the default [`HeatFront`](@ref). A window
 # burns through when ``m_F`` reaches the window areal mass, ``19.3\ \mathrm{g/cm^3}``
-# times its thickness, 3.86 mg/cm² for 2 µm. A hohlraum's temperature is far from
+# times its thickness, 3.86 mg/cm² for 2 µm. The temperature of a hohlraum is far from
 # constant, so the front is integrated over the drive history:
 #
 # ```math
@@ -161,7 +161,7 @@ end
 # ``t^{0.15}`` under a flat laser pulse (Lindl et al., Phys. Plasmas 11, 339, 2004,
 # Fig. 4-6, which compares the data with a heat-front curve for that drive). The times
 # below are the half-signal times read from that figure, to about ±0.03 ns.
-# [`burnthrough_time`](@ref) gives the heat front's arrival for the same drive, and
+# [`burnthrough_time`](@ref) gives the arrival of the heat front for the same drive, and
 # [`BurnthroughAlbedo`](@ref) starts its transition there, reaching half transmission
 # `width/2` (0.2 ns by default) later:
 
@@ -181,7 +181,7 @@ end
 @printf("measured − front arrival: %.2f ns on average (%.2f–%.2f)\n",
         sum(offsets) / length(offsets), extrema(offsets)...)
 
-# The front tracks the data's thickness dependence: about 0.8 ns from 0.8 to 2.3 µm,
+# The front tracks the thickness dependence of the data: about 0.8 ns from 0.8 to 2.3 µm,
 # and 1.2 ns out to 3 µm. The measured half signal comes 0.1–0.25 ns after the front
 # arrives, and the default transition width puts half transmission there. A
 # constant-temperature estimate would burn the foils through three times too early.
@@ -190,7 +190,7 @@ end
 # ignition-scale drive a 1-D gold foil (`examples/tamped_foil.jl`) starts transmitting
 # about 0.6 ns after the front arrives and passes about half the energy the default
 # transition and transmission give it; [`BurnthroughAlbedo`](@ref) lists the numbers, and
-# a study of such a drive should bracket a window's start time and transmission.
+# a study of such a drive should bracket the start time and transmission of a window.
 #
 # Before the front arrives, the foil absorbs exactly what a thick wall does: in the
 # diffusion picture the cold gold ahead of a nonlinear front does not change the flux
@@ -210,12 +210,12 @@ end
 # of the flux on it (R. S. Lester et al., Phys. Rev. E 114, L023201, 2026, eq. 2;
 # [`eddington_transmission`](@ref)). Their eq. 1 sets
 # ``\tau = L/\lambda_\mathrm{Au}(T_h)``, with ``\lambda_\mathrm{Au}`` the Rosseland mean
-# free path of gold at the hohlraum's radiation temperature, and gives ``\tau \sim 5``
+# free path of gold at the radiation temperature of the hohlraum, and gives ``\tau \sim 5``
 # for ``L = 2.5`` µm (gold at an assumed density of about 1 g/cm³, ``T_h`` typically
 # 300–350 eV). [`BurnthroughAlbedo`](@ref) keeps that mean free path and scales
-# ``\tau`` with the foil's areal mass ([`optical_depth`](@ref)). A fraction
+# ``\tau`` with the areal mass of the foil ([`optical_depth`](@ref)). A fraction
 # ``\mathcal{T}`` of the flux on a burned-through window leaves the hohlraum. The rest
-# meets the foil as before and is re-emitted with the wall's Marshak albedo, so across
+# meets the foil as before and is re-emitted with the Marshak albedo of the wall, so across
 # the transition the albedo falls smoothly from ``\alpha_\mathrm{before}`` to
 # ``(1 - \mathcal{T})\,\alpha_\mathrm{before}``. For the windows below:
 
@@ -252,13 +252,13 @@ end
 # ## A pair of windows in a NIF-like hohlraum
 #
 # The hohlraum of the [Freeing a bundle for radiography](@ref) tutorial (10.1 × 5.75 mm,
-# 3.1 mm entrance holes, a 0.9 mm capsule) has a gold wall with the Marshak albedo of
-# [`WallLossAlbedo`](@ref) and a laser-to-x-ray conversion of 0.8. Its 48 quads are
-# pointed as there. Each quad follows a pulse with a picket, a long foot, a second step
-# and a 2 ns peak at 9.5 TW per quad (456 TW, 1.6 MJ in all). Two windows 2 mm across
-# sit at the waist at φ = 78° and 258°, a pair related by the 180° rotation about the
-# axis, which the NIF ports share; their foils are 1.7, 2.5 or 3.6 µm of gold.
-# The mesh is coarser than the default to keep the tutorial quick.
+# with 3.1 mm entrance holes and a 0.9 mm capsule) has a gold wall with the Marshak albedo
+# of [`WallLossAlbedo`](@ref) and a laser-to-x-ray conversion of 0.8. Its 48 quads are
+# pointed as there. Each quad follows a pulse with a picket, long foot, second step and
+# 2 ns peak at 9.5 TW per quad (456 TW, 1.6 MJ in all). Two windows 2 mm across sit at the
+# waist at φ = 78° and 258°, a pair related by the 180° rotation about the axis, which the
+# NIF ports share; their foils are 1.7, 2.5 or 3.6 µm of gold. The mesh is coarser than
+# the default to keep the tutorial quick.
 
 wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
 resolution = (; nz = 24, nphi = 32, capsule_ntheta = 12, capsule_nphi = 24)
@@ -286,15 +286,15 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 # also records the real spherical harmonics of the capsule flux. The three thicknesses
 # share one geometry, so they share its view factors and its deposition operator.
 #
-# The steps are 0.2 ns, but a window's albedo falls to
-# ``(1 - \mathcal{T})\,\alpha_\mathrm{before}`` over the 0.4 ns `width` of its
-# transition, which two steps would jump across. With `transition = 0.05` the march
-# inserts steps wherever an element's transition would advance by more than a
-# twentieth of the way in one step, planned from each element's known or predicted
-# burnthrough time. It returns the times it took in `time`.
+# The steps are 0.2 ns, but the albedo of a window falls to
+# ``(1 - \mathcal{T})\,\alpha_\mathrm{before}`` over the 0.4 ns `width` of its transition,
+# which two steps would jump across. With `transition = 0.05` the march inserts steps
+# wherever the transition of an element would advance by more than a twentieth of the way
+# in one step, planned from the known or predicted burnthrough time of each element. It
+# returns the times it took in `time`.
 #
 # The open-hole bound and the linearized scenarios below are standalone `solve`s, which
-# evaluate the wall's [`WallLossAlbedo`](@ref) at the time since the pulse start. The
+# evaluate the [`WallLossAlbedo`](@ref) of the wall at the time since the pulse start. The
 # histories do the same here (`wall_history = false`), so that every comparison is like
 # with like; by default a drive history follows the temperature history of each wall
 # element instead, which lowers the wall albedo early in the peak.
@@ -325,10 +325,11 @@ rebase(hs) = history(base_model, base_op, sort(unique(reduce(vcat, [h.time for h
 base = rebase(values(runs))
 @printf("reference steps: %d\n", length(base.time))
 
-# The change in the capsule's radiation temperature and in ``P_2`` from the hohlraum
-# without windows, the ``m = 2`` amplitude ``\sqrt{c_{22}^2 + c_{2,-2}^2}/c_{00}`` of
-# the capsule flux, and each window's heat front as a fraction of its foil. Without
-# windows the capsule's radiation temperature peaks at the value printed below:
+# The table below lists the change in the radiation temperature of the capsule and in
+# ``P_2`` from the hohlraum without windows, the ``m = 2`` amplitude
+# ``\sqrt{c_{22}^2 + c_{2,-2}^2}/c_{00}`` of the capsule flux, and the heat front of each
+# window as a fraction of its foil. Without windows the radiation temperature of the
+# capsule peaks at the value printed below:
 
 on(h, x) = x[indexin(h.time, base.time)]              # base values at the times of run h
 P2(h) = h.moments[3, :] ./ h.moments[1, :]
@@ -368,15 +369,15 @@ fig
 # size of the remeshing. Then the waist goes cold. Thinner foils burn through earlier
 # (1.7 µm during the second step of the pulse, 2.5 µm on the rise, and 3.6 µm just
 # before the peak) and transmit more. At the peak, ``P_2`` is up by 0.9–1.7%, the
-# ``m = 2`` amplitude reaches 0.7–1.3%, and the capsule's radiation temperature is
+# ``m = 2`` amplitude reaches 0.7–1.3%, and the radiation temperature of the capsule is
 # down by 2.5–4.7 eV, from 3.6 µm to 1.7 µm. An open 50 µm gap leaks from the start.
 # Before burnthrough the gaps alone give about 0.5% of ``P_2``, 0.4% of ``m = 2`` and
-# 1.3 eV; at the peak they add 0.58% and 1.7–1.8 eV to the windows' cost.
+# 1.3 eV; at the peak they add 0.58% and 1.7–1.8 eV to the cost of the windows.
 #
-# A capsule's shape integrates the drive asymmetry over the pulse. The table therefore
-# gives the change in ``P_2``, ``P_4`` and ``m = 2`` weighted by the capsule flux from
-# 5 ns on, as well as at the peak. It also gives the drive cost: the radiation
-# temperature at the peak, the capsule's absorbed energy over the pulse, and the
+# The shape of a capsule integrates the drive asymmetry over the pulse. The table
+# therefore gives the change in ``P_2``, ``P_4`` and ``m = 2`` weighted by the capsule
+# flux from 5 ns on, as well as at the peak. It also gives the drive cost: the radiation
+# temperature at the peak, the energy the capsule absorbs over the pulse, and the
 # energy that leaves through the windows and gaps (`window_loss`). Each history is
 # summed over its time steps, each step weighted by half the time to its neighbors (the
 # first and last by a whole step), which on the uniform `times` is the plain sum times
@@ -455,22 +456,22 @@ end
 # foils: 13.6 eV of radiation temperature and 5.4% of ``P_2`` without gaps. The gaps
 # add about the same in either model, 0.58–0.62% of ``P_2`` and 1.6–1.8 eV.
 #
-# The pair of windows adds no odd-``m`` harmonics, because it shares the ports' 180°
-# symmetry:
+# The pair of windows does not add odd-``m`` harmonics, because it shares the 180°
+# symmetry of the ports:
 
 h = runs[(2.5, 0.05)]
 odd = maximum(abs(h.ylm[mode_index(l, m), k]) / h.ylm[1, k]
               for l in 1:4 for m in -l:l if isodd(m) for k in eachindex(h.time))
 @printf("largest odd-m |c_lm|/c₀₀ over the pulse: %.1e\n", odd)
 
-# The capsule flux at the end of the peak, as equal-area (Hammer) maps seen from
-# outside, centered between the windows, which face the capsule's waist at φ = 78° and
-# 258° (circles). The maps are drawn from the spherical harmonics through ``l = 6``,
-# which carry the low modes a capsule responds to, rather than from the coarse capsule
-# mesh. The top row shows the flux relative to the mean flux, without windows and with
-# the 2.5 µm pair and its gaps. Without windows this untuned pointing already drives
-# the waist hot, so the bottom row subtracts that map and shows what the windows
-# change: on the left without gaps, on the right with them.
+# The capsule flux at the end of the peak is mapped below in equal-area (Hammer)
+# projections seen from outside, centered between the windows, which face the waist of the
+# capsule at φ = 78° and 258° (circles). The maps are drawn from the spherical harmonics
+# through ``l = 6``, which contain the low modes a capsule responds to; the coarse capsule
+# mesh is not used for them. The top row shows the flux relative to the mean flux, without
+# windows and with the 2.5 µm pair and its gaps. Without windows this untuned pointing
+# already drives the waist hot, so the bottom row subtracts that map and shows what the
+# windows change: on the left without gaps, on the right with them.
 
 function ylm_field(c; lmax = 6)
     C = ylm_matrix(c, lmax)
@@ -502,18 +503,18 @@ fig
 
 # Without windows this untuned pointing drives the waist hot (``P_2/P_0 \approx -12\%``,
 # which cone tuning would remove). With the windows open, the waist facing them cools to
-# about the mean while the waist between them gains, relative to the mean, and the
-# poles gain too. The waist's mean excess drops, which is the positive ``\Delta P_2``, and the
-# pattern ``\cos 2(\phi - 78°)`` is the ``m = 2`` asymmetry. The gaps add to it
-# about half again.
+# about the mean while the waist between them gains, relative to the mean, and the poles
+# gain too. The mean excess at the waist drops, which is the positive ``\Delta P_2``, and
+# the pattern ``\cos 2(\phi - 78°)`` is the ``m = 2`` asymmetry. The gaps add about half
+# again to it.
 
 # ### The window energy balance
 #
-# At any time, [`energy_balance`](@ref) splits a thin-foil window's loss
-# ``(1 - \alpha) H A`` into what it transmits, ``s\mathcal{T} H A`` with ``s`` the
-# progress of its transition (0 intact, 1 burned through), and what it absorbs like
-# the wall, ``(1 - s\mathcal{T})(1 - \alpha_\mathrm{before}) H A``. The transmitted part
-# with the open gap's escape is `window_loss`. At the end of the peak, for 2.5 µm
+# At any time, [`energy_balance`](@ref) splits the loss of a thin-foil window,
+# ``(1 - \alpha) H A``, into what it transmits, ``s\mathcal{T} H A`` with ``s`` the
+# progress of its transition (0 intact, 1 burned through), and what it absorbs like the
+# wall, ``(1 - s\mathcal{T})(1 - \alpha_\mathrm{before}) H A``. The transmitted part plus
+# the escape through the open gap is `window_loss`. At the end of the peak, for 2.5 µm
 # windows with a 50 µm gap:
 
 t = build(windows(2.5; gap = 0.05))
@@ -536,7 +537,7 @@ incident = sum(sol.H[e] * t.elem_area[e] for n in (:window_1, :window_2) for e i
         incident, (bal.transmitted[:window_1] + bal.transmitted[:window_2]) / incident,
         BurnthroughAlbedo(thickness = 2.5).transmission)
 
-# The accounting closes to round-off, and the burned-through windows transmit the
+# The accounting closes within round-off, and the burned-through windows transmit the
 # fraction ``\mathcal{T}`` of the power on them.
 
 # ### A transmission that follows the drive
@@ -572,11 +573,11 @@ end
 
 # These windows burn through while the wall is at 150–285 eV, and even at the peak it
 # stays near 310 eV, below the 325 eV the constant transmission is pinned at. The
-# transmission that follows the drive therefore loses about a tenth less: the 1.7 µm
-# pair's flux-weighted ``\Delta P_2`` drops from 1.71% to 1.49% and its capsule-energy
-# cost from 5.4% to 4.8%, and the 3.6 µm pair's from 0.68% to 0.62% and 2.3% to 2.1%.
-# The burnthrough times do not change: the transmission starts only once the front is
-# through.
+# transmission that follows the drive therefore loses about a tenth less. For the 1.7 µm
+# pair the flux-weighted ``\Delta P_2`` drops from 1.71% to 1.49% and the capsule-energy
+# cost from 5.4% to 4.8%; for the 3.6 µm pair they drop from 0.68% to 0.62% and from 2.3%
+# to 2.1%. The burnthrough times do not change: the transmission starts only once the
+# front is through.
 #
 # ### Gaps that close
 #
@@ -617,9 +618,9 @@ end
 # shapes), and per-quad pointing.
 #
 # The optimizer needs a linear model of the capsule flux at the peak, with the windows
-# burned through and the wall at its peak albedo. A [`Scenario`](@ref) with `albedo`
-# set to a solution's converged albedos is exactly that: its flux response holds the
-# albedos fixed, so it reproduces the solution it was taken from.
+# burned through and the wall at its peak albedo. A [`Scenario`](@ref) with `albedo` set
+# to the converged albedos of a solution is exactly that: its flux response uses fixed
+# albedos, so it reproduces the solution it was taken from.
 
 tpeak = 8.6
 w25 = runs[(2.5, 0.0)]
@@ -646,7 +647,8 @@ a = legendre_moments(sol_win.H, twin, capsule; lmax = 2)
 # The design without windows is the reference shape: the coefficients ``c_{lm}/c_{00}``
 # of its capsule flux at the peak. [`asymmetry_objective`](@ref) with `reference`
 # measures the departure from them for every ``(l, m)`` through ``l = 4``, and `drive`
-# holds the mean flux at the reference's. Each quad's power may change by 20%:
+# constrains the mean flux to that of the reference. The power of each quad may change by
+# 20%:
 
 ref = flux_ylm(evaluate(S_base, x0))
 restore = asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), reference = ref,
@@ -674,12 +676,12 @@ end
 # The trim moves power to the inner cones, as the cold waist needs (the 30° cone by
 # 17%), and spreads the quads within each cone over the whole ±20%. It brings the
 # ``l = 2`` departure from 1.10% to 0.07% and keeps ``l = 1`` and ``l = 3`` below
-# 0.02%, but not ``l = 4``, which stays near 0.15–0.19%: these windows' ``l = 4``
-# pattern is out of reach of quad powers within the limits. Pointing can do the same:
-# below, the quads are re-pointed at fixed power, up to 0.3 mm in ``z`` and along the
-# wall (`phi`). The windows and the NIF ports share the 180° rotation about the axis, so
-# each quad moves with its partner across the axis, and the entrance-hole and capsule
-# keep-outs hold.
+# 0.02%, but not ``l = 4``, which stays near 0.15–0.19%: the ``l = 4`` pattern of these
+# windows is out of reach of quad powers within the limits. Pointing can do the same:
+# below, the quads are re-pointed at fixed power, up to 0.3 mm in ``z`` and along the wall
+# (`phi`). The windows and the NIF ports share the 180° rotation about the axis, so each
+# quad moves with its partner across the axis, and the entrance-hole and capsule keep-outs
+# hold.
 
 partner(b) = (b.group, sign(b.port[3]), round(Int, mod(port_angles(b)[2], 180)))
 pairs = GroupPointing(peak; by = partner, fields = (:z, :phi), mirror = false)
@@ -705,10 +707,10 @@ ev = evaluate(S_pairs, repoint.x)
 #
 # Both settings were found at the peak, with the windows burned through. Before they
 # burn through, the windows cost nothing, and a trim that is on throughout the pulse
-# then makes the asymmetry it was meant to remove. NIF can set each quad's pulse shape,
-# so the power trim can instead come on with the burnthrough, across the windows'
-# 0.4 ns transition; pointing cannot change during the shot. The four designs through
-# the pulse, against the hohlraum without windows:
+# then makes the asymmetry it was meant to remove. NIF can set the pulse shape of each
+# quad, so the power trim can instead come on with the burnthrough, across the 0.4 ns
+# transition of the windows; pointing cannot change during the shot. The four designs are
+# compared below through the pulse, against the hohlraum without windows:
 
 tb_mean = sum(w25.burnthrough[:window_1]) / length(w25.burnthrough[:window_1])
 switch(τ) = (x = clamp((τ - tb_mean) / 0.4, 0, 1); x^2 * (3 - 2x))
@@ -761,52 +763,52 @@ end
 # trimmed powers keep ``P_2`` and ``m = 2`` at the no-window values before it (−0.02%
 # and 0.04%) and hold ``m = 2`` at 0.03% after it; the 0.13% of ``P_2`` left at the
 # peak is what the ±20% limits leave (the ``l = 2`` departure above). The trims cost
-# 3.3–3.9% more laser energy, the drive the windows take. The switch time comes from
-# this model's heat front, so it inherits the front's uncertainty (about 0.2 ns against
-# the Nova data, above).
+# 3.3–3.9% more laser energy, the drive the windows take. The switch time comes from the
+# heat front of this model, so it inherits the uncertainty of the front (about 0.2 ns
+# against the Nova data, above).
 
 # ## What a gray view-factor model leaves out
 #
 # The model gives the geometry of the loss exactly, but its physics after burnthrough
 # is the gray estimate above. The foil is planar and steady. Its mean free path follows
-# the temperature only through the opacity fit's ``T^{1.5}``, at a density held at the
-# assumed expansion, and the fit is extrapolated from 100–200 eV. The open hole,
+# the temperature only through the ``T^{1.5}`` of the opacity fit, at a density held at
+# the assumed expansion, and the fit is extrapolated from 100–200 eV. The open hole,
 # `after = 0`, bounds the loss from above. The heated backing absorbs part of what the
-# gold transmits and radiates part back; here all of it is lost. A closing gap needs
-# its closure time from elsewhere (a hydrodynamic estimate or a measurement). The
+# gold transmits and radiates part back; here all of it is lost. The closure time of a
+# closing gap comes from elsewhere (a hydrodynamic estimate or a measurement). The
 # restored designs are linear about the peak; they hold the no-window shape in the
 # quasi-static histories, which use the full temperature-dependent albedos. The
-# view-factor model also has no capsule hydrodynamics: it gives flux asymmetries, not
+# view-factor model also has no capsule hydrodynamics: it gives flux asymmetries but not
 # the shape they imprint.
 
 # ## What this checks
 #
 # - A circular window and its gap have the areas ``\pi d^2/4`` and
-#   ``\pi[(d/2 + g)^2 - (d/2)^2]`` to round-off. The equal-area edge polygon and the
+#   ``\pi[(d/2 + g)^2 - (d/2)^2]`` within round-off. The equal-area edge polygon and the
 #   exact curved areas of triangles on the cylinder make them exact, and wall,
 #   windows and gaps tile the cylinder exactly.
-# - The integrated heat front reproduces the constant-temperature closed form to
+# - The integrated heat front reproduces the constant-temperature closed form within
 #   round-off. For ramps it agrees with the exact self-similar solutions of Hammer
 #   and Rosen to 2.2% and of Shussman and Heizler to 0.7%, and with Hammer and
 #   Rosen's simulated ablated mass. The cause of the residual is identified.
 # - Over 0.8–3 µm, the heat front and the transition width reproduce the measured
 #   burnthrough times of gold foils on a 260 eV hohlraum wall to within the scatter
 #   of the data. A constant-temperature estimate does not.
-# - The thin-foil energy accounting closes to round-off at a single time, the
+# - The thin-foil energy accounting closes within round-off at a single time, the
 #   burned-through windows transmit the fraction ``\mathcal{T} = 4/(3\tau + 2)`` of
-#   the power on them to round-off, and the accounting agrees with the window loss
+#   the power on them within round-off, and the accounting agrees with the window loss
 #   the drive history tracks.
-# - A pair of windows related by the 180° rotation about the axis adds no odd-``m``
+# - A pair of windows related by the 180° rotation about the axis does not add odd-``m``
 #   harmonics.
 # - The temperature-following transmission equals the constant one at its 325 eV
 #   reference, and Hammer and Rosen's gold opacity fit puts the 2.5 µm foil at
 #   ``\tau = 5.9`` there, within 20% of the ``\tau \sim 5`` of Lester et al.
-# - A scenario linearized about the peak solution's albedos reproduces that solution's
-#   ``P_2`` to round-off.
+# - A scenario linearized about the albedos of the peak solution reproduces the ``P_2`` of
+#   that solution within round-off.
 #
 # The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds seven more checks.
 # The view-factor rows of a windowed hohlraum close as well as those without windows.
-# Reciprocity holds. Each window element's burnthrough time in the drive history
+# Reciprocity holds. The burnthrough time of each window element in the drive history
 # matches the standalone estimate from the temperature history of that element. Once a
 # window has burned through, the drive history sends exactly the fraction
 # ``\mathcal{T}`` of the power on it to `transmitted`. A history refined through the

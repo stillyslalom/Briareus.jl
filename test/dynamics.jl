@@ -2,7 +2,8 @@
     w = WallMotion(speed = 0.1, start = 1.0, saturation = Inf)
     @test wall_radius(w, 2.875, 0.5) == 2.875
     @test wall_radius(w, 2.875, 5.0) ≈ 2.475
-    # the default wall stops: ballistic to the knee, C¹ there, then approaching saturation
+    # The default wall stops. The motion is ballistic up to the knee, C¹ at the knee, and
+    # then approaches saturation.
     d = WallMotion()
     @test (d.speed, d.start, d.saturation, d.knee) == (0.185, 0.8, 0.45, 0.05)
     tk = d.start + (d.saturation - d.knee) / d.speed
@@ -64,7 +65,7 @@
     quads = nif_quads()[1:8]
     kf = Keyframes(build, [0.0, 4.0, 8.0], quads)
     @test length(kf.time) == 3
-    # between keyframes: interpolated exchange factors keep reciprocity and closure
+    # Between keyframes, interpolated exchange factors satisfy reciprocity and closure.
     m = model_at(kf, 3.0)
     @test m.target !== model_at(kf, 4.0).target
     @test model_at(kf, 3.0) === m                                           # kept for its time
@@ -75,7 +76,8 @@
     # only `keep` keyframe models are held
     model_at(kf, 8.0)
     @test length(kf.models) == 2
-    # deposition: the keyframes' operators at their times, one built at any other
+    # The deposition uses the keyframe operators at their times and builds an operator at
+    # any other time.
     @test deposition_at(kf, 4.0) === deposition_at(kf, 4.0)
     @test deposit(kf, quads, 2.0).element ≈ deposit(DepositionOperator(build(2.0), quads), quads).element
 
@@ -89,8 +91,9 @@
     @test dyn.moments ≈ ref.moments rtol = 1e-10
     @test dyn.Tr ≈ ref.Tr rtol = 1e-10
 
-    # a moving wall's history on keyframes at its times is the per-time rebuild
-    # (two times: each costs a target, its view factors and its deposition operator)
+    # The history of a moving wall on keyframes at its times equals the per-time rebuild.
+    # Only two times are used, since each costs a target, its view factors and its
+    # deposition operator.
     tk2 = [first(times), last(times)]
     hist = drive_history(Keyframes(build, tk2, quads), beams_at, tk2)
     for (k, τ) in enumerate(tk2)
@@ -99,8 +102,8 @@
         @test hist.moments[:, k] ≈ legendre_moments(sol.H, tk, elements(tk, :capsule); lmax = 6) rtol = 1e-10
     end
 
-    # a shrinking capsule mesh: the initial radius's counts, the area as R², and none of
-    # it without `capsule_shrink`
+    # A shrinking capsule mesh keeps the counts of the initial radius and scales the area
+    # as R². Without `capsule_shrink` the mesh does not shrink.
     for mesh in (:compact, :latlong)
         shrinking = moving_hohlraum(w; radius = 2.875, kw..., capsule_mesh = mesh,
                                     capsule_shrink = ([0.0, 5.0, 9.0], [1.0, 0.8, 0.5]))

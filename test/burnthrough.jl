@@ -1,11 +1,12 @@
-# Thin-foil burnthrough: the Marshak heat front against closed forms and published
-# self-similar solutions, the post-burnthrough transmission, the albedo transition, its
-# energy accounting, the factor cache, and the per-element tracking in `drive_history`.
+# Thin-foil burnthrough tests. The Marshak heat front is checked against closed forms and
+# published self-similar solutions; the file also covers the post-burnthrough transmission,
+# the albedo transition and its energy accounting, the factor cache, and the per-element
+# tracking in `drive_history`.
 
 @testset "heat front" begin
     f = HeatFront()
     c, a, b = f.coefficient, f.temperature_exponent, f.time_exponent
-    # constant temperature: the closed form on any grid
+    # At constant temperature the closed form holds on any grid.
     ts = [0.0, 0.03, 0.1, 0.4, 0.45, 1.0, 2.5, 3.0]
     @test heat_front(f, ts, fill(250.0, length(ts)))[2:end] ≈ c .* 2.5^a .* ts[2:end] .^ b rtol = 1e-13
     @test heat_front(f, ts, zeros(length(ts))) == zeros(length(ts))
@@ -19,12 +20,13 @@
         m = heat_front(f, ts, ramp.(k, 100.0, ts))
         @test m[end] ≈ rule(k) * (4^k)^a * 4^b rtol = 1e-4
     end
-    # against the exact self-similar solutions of the subsonic gold wave: Hammer & Rosen
-    # (Phys. Plasmas 10, 1829 (2003), eq. 112) give m₀ = 9.51e-4 at q₀ = 0 (our c) and
-    # 7.13e-4 at q₀ = 1 (k = 0.182); Shussman & Heizler (Phys. Plasmas 22, 082109 (2015),
-    # eqs. 35-36) give 10.17e-4 at constant T and 8.32e-4 at constant flux (k = 0.123).
-    # The rule's ratios m(k)/m(0) are 2.2% and 0.7% high: a single drive integral cannot
-    # carry the dependence of the profile shape on the drive history.
+    # The rule is checked against the exact self-similar solutions of the subsonic gold
+    # wave. Hammer & Rosen, Phys. Plasmas 10, 1829 (2003), eq. 112, give m₀ = 9.51e-4 at q₀
+    # = 0 (c in this package) and 7.13e-4 at q₀ = 1 (k = 0.182). Shussman & Heizler, Phys.
+    # Plasmas 22, 082109 (2015), eqs. 35-36, give 10.17e-4 at constant T and 8.32e-4 at
+    # constant flux (k = 0.123). The ratios m(k)/m(0) of the rule are 2.2% and 0.7% high,
+    # because a single drive integral cannot carry the dependence of the profile shape on
+    # the drive history.
     @test rule(0.182) / c ≈ 7.13 / 9.51 rtol = 0.025
     @test rule(0.123) / c ≈ 8.32 / 10.17 rtol = 0.01
     # and the ablated mass at 4 ns for T_s = t^0.182 heV, 2.2-2.4e-3 g/cm² in Hammer &
@@ -67,7 +69,7 @@ end
     bt = BurnthroughAlbedo(thickness = 2.0)
     @test areal_mass(bt) ≈ 19.3 * 2e-4
     f = bt.front
-    # constant temperature: t_b = (m / c T^a)^(1/b)
+    # At constant temperature, t_b = (m / c T^a)^(1/b).
     tb300 = (areal_mass(bt) / (f.coefficient * 3^f.temperature_exponent))^(1 / f.time_exponent)
     @test burnthrough_time(bt, [0.0, 0.1, 5.0], [300.0, 300.0, 300.0]) ≈ tb300 rtol = 1e-13
     @test burnthrough_time(bt, [0.0, 0.1], [300.0, 300.0]) == Inf
@@ -81,9 +83,9 @@ end
     @test burnthrough_time(BurnthroughAlbedo(thickness = 3.6), [0.0, 5.0], [300.0, 300.0]) > tb300
     @test burnthrough_time(BurnthroughAlbedo(thickness = 2.0, burnthrough = 0.1), [0.0, 5.0],
                            [300.0, 300.0]) ≈ tb300
-    # the albedo: wall-like before t_b, (1 - T) α_before from t_b + width (the transmitted
-    # part T leaves, the rest re-emits as before), a smooth step s between, along which
-    # the transmitted fraction is s T
+    # The albedo is wall-like before t_b and (1 - T) α_before from t_b + width, where the
+    # transmitted part T leaves and the rest is re-emitted as before. A smooth step s joins
+    # the two, and along it the transmitted fraction is s T.
     w = WallLossAlbedo()
     αw = albedo(w, 3.0, 250.0)
     T = bt.transmission                                             # 2 µm: τ = 4, T = 2/7
@@ -124,14 +126,16 @@ end
     laser[src] .= t.elem_area[src] .* 0.02
     ew = elements(t, :window_1)
     T = 2 / 7                                       # the default for 2 µm (τ = 4)
-    # early: intact; mid: halfway through the transition (s = 1/2); late: burned through
+    # The early foil is intact, the mid foil is halfway through the transition (s = 1/2),
+    # and the late foil is burned through.
     early, mid, late = (solve(m, laser; time) for time in (0.9, 1.2, 2.0))
-    # intact: the wall's Marshak albedo at the window temperature (to the iteration's
-    # tolerance), and nothing transmitted
+    # The intact foil has the Marshak albedo of the wall at the window temperature, within
+    # the iteration tolerance, and transmits nothing.
     wl(s) = albedo.(Ref(WallLossAlbedo()), s.time, radiation_temperature.(s.H[ew]))
     @test early.albedo[ew] == early.intact[ew] && all(==(0.0), early.transmission[ew])
     @test maximum(abs, early.albedo[ew] .- wl(early)) < 1e-4
-    # burned through: a fraction T transmitted, the rest re-emitted with the wall's albedo
+    # The burned-through foil transmits a fraction T and re-emits the rest with the wall
+    # albedo.
     @test maximum(abs, late.intact[ew] .- wl(late)) < 1e-4
     @test late.albedo[ew] == (1 - T) .* late.intact[ew] && all(≈(T; rtol = 1e-15), late.transmission[ew])
     @test mid.albedo[ew] ≈ (1 - T / 2) .* mid.intact[ew] rtol = 1e-15
@@ -234,7 +238,8 @@ end
     model = tw.components[component_index(tw, :window_1)].material.albedo
     @test [burnthrough_time(model, collect(times), Te[:, i]) for i in eachindex(e1)] ≈ tb rtol = 1e-8
     @test h.front[:window_1][end] > 1 && h.front[:window_1][1] < 0.2
-    # window loss: what the burned foils transmit plus what escapes through the open gap
+    # The window loss is the power the burned foils transmit plus the power that escapes
+    # through the open gap.
     @test h.window_loss ≈ h.transmitted[:window_1] .+ h.transmitted[:window_2] .+ h.escaped[:window_1_gap]
     @test all(==(0), h.transmitted[:window_1][times .< minimum(tb)])
     @test h.transmitted[:window_2][end] > 0 && h.transmitted[:window_2][times .<= 3.5] == zeros(count(times .<= 3.5))
@@ -328,8 +333,8 @@ end
                                                             before = 0.8))
     @test !Briareus._temperature_dependent(BurnthroughAlbedo(thickness = 2.5, before = 0.8))
 
-    # in a hohlraum: solve iterates the transmission with the albedos, and each
-    # burned-through element transmits the fraction for its converged temperature
+    # In a hohlraum, `solve` iterates the transmission with the albedos, and each
+    # burned-through element transmits the fraction for its converged temperature.
     kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
     wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
     windowed(transmission) =
@@ -362,10 +367,11 @@ end
     # the gray limit (α = 0) is Lester et al.'s eq. 2
     τs = (0.0, 0.3, 2 / 3, 1.0, 3.4, 5.0, 7.2, 20.0, 300.0)
     @test all(diffusion_transmission(τ, 0.0) ≈ eddington_transmission(τ) for τ in τs)
-    # Reference: the steady diffusion ODE integrated by RK4 from the rear (x = T⁴/T_D⁴,
-    # s the optical depth at the front's temperature): dx/ds = (3/4) t x^(-α/4), x(0) = t/2
-    # (vacuum rear), shot on t until x(τ) = 1 (front at the drive temperature). It shares
-    # only the boundary conditions with the closed-form integral.
+    # The reference is the steady diffusion ODE dx/ds = (3/4) t x^(-α/4), integrated by RK4
+    # from the rear with x(0) = t/2 for a vacuum rear. Here x = T⁴/T_D⁴ and s is the optical
+    # depth at the front temperature. The ODE is shot on t until x(τ) = 1, which puts the
+    # front at the drive temperature. It shares only the boundary conditions with the
+    # closed-form integral.
     function shoot(τ, α; n = 4000)
         front(t) = (x = t / 2; h = τ / n; f(x) = 0.75t * max(x, 0.0)^(-α / 4);
                     for _ in 1:n
@@ -393,7 +399,7 @@ end
     let τ = 5.0, t = diffusion_transmission(5.0)
         @test ForwardDiff.derivative(diffusion_transmission, τ) ≈ -(0.75t) / (0.75τ + (t / 2)^(1.5 / 4) / 2) rtol = 1e-10
     end
-    # in the albedo model: the Rosseland scaling of τ with the flux temperature
+    # The albedo model applies the Rosseland scaling of τ with the flux temperature.
     dt = DiffusionTransmission()
     bd = BurnthroughAlbedo(thickness = 2.5, transmission = dt, burnthrough = 1.0)
     @test foil_transmission(bd) == foil_transmission(bd, 325.0) == diffusion_transmission(5.0)
@@ -405,7 +411,7 @@ end
     @test (@inferred Briareus._transmission(dt, 5.0, 280.0)) isa Float64
     @test (@inferred diffusion_transmission(5.0)) isa Float64
     @test Briareus._temperature_dependent(BurnthroughAlbedo(thickness = 2.5, transmission = dt, before = 0.8))
-    # opt-in: the default and the existing choices are unchanged
+    # The option is opt-in, so the default and the existing choices are unchanged.
     @test BurnthroughAlbedo(thickness = 2.5).transmission == 4 / 17
 end
 
@@ -422,7 +428,7 @@ end
     @test Briareus._temperature_dependent(GapClosure(closure = 1.0)) &&
           !Briareus._temperature_dependent(g)
 
-    # in a hohlraum: open, the gap is the open (aperture) gap; closed, a wall patch
+    # In a hohlraum, an open gap is an aperture gap and a closed gap is a wall patch.
     kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
     wall = Material(:Au; albedo = 0.8, conversion = 0.8)
     with_gap(gap_material) = hohlraum(; kw..., wall, windows = [WallWindow(; phi = 0, diameter = 2.0,
@@ -444,7 +450,8 @@ end
     late, sw = solve(mc, laser; time = 3.0), solve(mw, laser; time = 3.0)
     @test late.H ≈ sw.H rtol = 1e-12
     @test energy_balance(late).transmitted[:window_1_gap] == 0
-    # halfway closed: half the flux on it leaves, the other half meets the wall albedo
+    # Halfway closed, the gap passes half the incident flux, and the other half meets the
+    # wall albedo.
     mid = solve(mc, laser; time = 2.2)
     Pin = sum(mid.H[eg] .* tc.elem_area[eg])
     bm = energy_balance(mid)
@@ -469,8 +476,9 @@ end
     @test !isempty(inserted) && all(τ -> 2.0 < τ < 2.4, inserted)
     steps = [Briareus._closure_step(GapClosure(closure = 2.0, after = 0.8), τ) for τ in h.time]
     @test maximum(diff(steps)) <= 0.1 + 1e-12
-    # (the laser light these beams put on the gap, 1.3 TW, is absorbed there; an aperture
-    # gap would pass it, so the history is checked against a solve, not the open gap)
+    # The gap absorbs the 1.3 TW of laser light these beams put on it, which an aperture gap
+    # would pass. The history is therefore checked against a solve; the open gap is not a
+    # valid reference.
     s1 = solve(mc, deposit(op, f(1.0)); time = 1.0)
     @test h.window_loss[findfirst(==(1.0), h.time)] ≈ energy_balance(s1).transmitted[:window_1_gap] rtol = 1e-6
 end
@@ -500,9 +508,10 @@ end
     hs = drive_history(mi, op, f, times; transition = 0.05, record = minα)
     @test issubset(times, hs.time) && minimum(diff(hs.time)) >= 1e-3
     @test minimum(hs.record) > -5          # a step of min_step (1e-3 ns) gives about -3
-    # the sliver itself, the first history's steps and the goal given as times: the
-    # albedo it makes (solved directly, and gray: the M-band's thermalized group solve,
-    # an unpreconditioned GMRES, does not converge at these albedos either)
+    # The sliver itself is checked with the steps of the first history and the goal given as
+    # times. The albedo of the sliver is solved directly and gray, because the thermalized
+    # group solve of the M-band, an unpreconditioned GMRES, does not converge at these
+    # albedos either.
     md = RadiationModel(tw; F = mi.F, solver = :direct)
     hd = drive_history(md, op, f, sort([h.time; goal]); record = minα, mband = nothing)
     @test hd.record[findfirst(==(goal), hd.time)] < -10
@@ -579,7 +588,8 @@ end
         @test α ≈ αw * (1 - tr) && E ≈ Ew * (1 - tr) && k ≈ 1 - tr
     end
     @test Ew != 0
-    # a standalone `solve` has no history: the foil's `before` is Lindl's loss at `time`
+    # A standalone `solve` does not carry a history, so the `before` albedo of the foil is
+    # Lindl's loss at `time`.
     s1 = solve(mw, deposit(op, f(2.0)); time = 2.0, tol = 1e-10)
     @test s1.albedo[ew] ≈ [albedo(wm, 2.0, T) for T in radiation_temperature.(s1.H[ew])] rtol = 1e-8
 end

@@ -34,6 +34,6 @@
         @test abs(Pfine / exact - 1) < 3e-5
         @test abs(P1 / exact - 1) > 10 * abs(P / exact - 1)
     end
-    # nothing hidden: every element whole, as before
+    # With nothing hidden, every element is whole, as before.
     @test line_of_sight_power(t, B, (0, 0, 1); elems = elements(t, :sheet)) ≈ 16 / π rtol = 1e-12
 end

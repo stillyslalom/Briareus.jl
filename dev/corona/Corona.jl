@@ -1,10 +1,11 @@
-# 3-D ray tracing through a static corona: the prototype's model (c), kept as an offline
-# study tool for coronas the package's `CoronaOperator` (model (b), spherical only)
-# cannot represent, such as a P2-perturbed critical surface or a non-spherical hydro
-# snapshot (decision 3 of reference/litreview/polar_direct_drive.md; research notes,
-# "Corona model prototype" and "Corona absorption operator"). Research code, not package
-# API. The prototype's (b) moved into src/corona.jl; a spherical-exponential copy of this
-# tracer guards it in test/corona_raytrace.jl. p2.jl runs the P2 study.
+# 3-D ray tracing through a static corona. This is model (c) of the prototype, kept as an
+# offline study tool for coronas that the `CoronaOperator` of the package (model (b),
+# spherical only) cannot represent, such as a P2-perturbed critical surface or a
+# non-spherical hydro snapshot (decision 3 of reference/litreview/polar_direct_drive.md;
+# research notes, "Corona model prototype" and "Corona absorption operator"). This is
+# research code outside the package API. Model (b) of the prototype moved into
+# src/corona.jl, and a spherical-exponential copy of this tracer guards it in
+# test/corona_raytrace.jl. p2.jl runs the P2 study.
 #
 #   `trace_ray` / `trace_beams`: RK4 integration of the ray equations in 3-D through
 #   any n_e(x) (spherical, tabulated, planar, or P2-perturbed), rays launched on a
@@ -59,9 +60,10 @@ dne(p::InvSqProfile, r) = r > p.Rout ? 0.0 : -2p.a / r^3
 g(p::InvSqProfile, r) = p.nuc * ne(p, r)^2
 
 """
-Tabulated 1-D profile: ln(n_e/n_c) and ln(g) on a uniform radius grid, cubic Hermite
-with centered-difference slopes (C¹, so ∇n_e is continuous for the ray tracer), zero
-beyond the last node. This is the form a 1-D hydro snapshot would take.
+Tabulated 1-D profile, with ln(n_e/n_c) and ln(g) on a uniform radius grid. The profile
+is cubic Hermite with centered-difference slopes, which makes it C¹ so that ∇n_e is
+continuous for the ray tracer, and zero beyond the last node. This is the form a 1-D
+hydro snapshot would take.
 """
 struct TableProfile <: RadialProfile
     r0::Float64
@@ -112,8 +114,8 @@ g3(p::RadialProfile, x) = g(p, norm(x))
 outer(p::RadialProfile) = p.Rout
 
 """
-Exponential corona whose critical radius carries a P2 perturbation about z:
-n_e/n_c = exp(-(r - rc (1 + ε P₂(cos θ)))/L), isothermal. Not representable by (b).
+Isothermal exponential corona whose critical radius carries a P2 perturbation about z,
+n_e/n_c = exp(-(r - rc (1 + ε P₂(cos θ)))/L). Model (b) cannot represent it.
 """
 struct P2ExpProfile
     rc::Float64
@@ -237,9 +239,9 @@ function AngGrid(nθ, lmax)
                    [sin(m * f) for m in 0:lmax, f in φ])
 end
 nbins(G::AngGrid) = G.nθ * G.nφ
-# Cloud-in-cell deposit of `P` at direction x onto the four nearest bin centers
-# (bilinear in θ, φ): unlike nearest-bin assignment it has no first-order bias in the
-# harmonic projection (nearest-bin was 4e-4 of the mean on a coarse (c) run).
+# Cloud-in-cell deposit of `P` at direction x onto the four nearest bin centers, bilinear in
+# θ and φ. Unlike nearest-bin assignment it does not have a first-order bias in the harmonic
+# projection; nearest-bin assignment was off by 4e-4 of the mean on a coarse (c) run.
 @inline function deposit_cic!(E, G::AngGrid, x, P)
     r = norm(x)
     θ = acos(clamp(x[3] / r, -1.0, 1.0))
@@ -312,9 +314,10 @@ function accumulate_ylm!(c, Y, Pw, L, x, P)
 end
 
 # ---------------------------------------------------------------------------------------
-# (c) on beams: a lattice of parallel rays per cone direction in the plane normal to the
-# beam through the origin (fixed by the port; aim-independent positions, so the weights
-# alone carry the beams' parameters and ForwardDiff goes through them).
+# Model (c) on beams uses a lattice of parallel rays per cone direction in the plane normal
+# to the beam through the origin. The plane is fixed by the port and the positions do not
+# depend on the aim, so only the weights carry the beam parameters and ForwardDiff goes
+# through them.
 # ---------------------------------------------------------------------------------------
 
 """

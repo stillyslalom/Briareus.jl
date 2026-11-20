@@ -1,7 +1,7 @@
 # Polar direct drive: literature, benchmarks and a staged plan (2026-10-26)
 
 ROADMAP, "Polar direct drive": benchmarked against published GA optimizers.
-This review asks what a PDD mode needs that Briareus lacks, which published optimizers
+This review examines what a PDD mode needs that Briareus lacks, which published optimizers
 and objectives exist, which published numbers a Briareus PDD mode could be checked
 against (and whether their inputs are complete), and in what order to build it. Research
 and design only; no code was changed. Updated 2026-10-27 with a second search (OMEGA
@@ -84,7 +84,7 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
 3. **Absorption versus incidence angle.** Without plasma, every model in §3 uses either
    the incident projected flux I·cos ψ (Te14, Ba24 σ₁; **L** for Ba24) or a closed-form
    absorption fraction: MN17 Eq. 29, η_a(ψ) = 1 − (1 − η)^{cos³ψ} with
-   η = 1 − exp(−8ν_ei L / 3c) (exponential corona of scale length L). The operator knows
+   η = 1 − exp(−8ν_ei L / 3c) (exponential corona of scale length L). The operator stores
    each sample's direction and normal, so a per-sample weight η_a(ψ) is cheap and
    differentiable (**L**). Done 2026-10-27: `deposit(op, beams; absorption = η⊥)`
    (research notes, "Hard-sphere direct-drive illumination"); its docstring states the
@@ -100,7 +100,7 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    parameter b and rotates with its plane: a 1-D family of kernels K(b; r, Δα) can be
    tabulated once per profile and summed over the existing beam samples, keeping the
    operator structure and differentiability (**L**). Ba24's approximation 2 (an
-   angularly averaged plasma serves for 3-D beam evaluation) is the same assumption (**H**).
+   angularly averaged plasma is used for 3-D beam evaluation) is the same assumption (**H**).
 5. **A drive proxy.** Ba24 Eq. 2 turns absorbed intensity into ablation pressure,
    P_abl = 24.7 Mbar·(F/10¹⁴ W cm⁻²)^{2/3}, with F a radial sum of r²·n_r^{2/3}·I_r
    normalized at the 351-nm critical radius and density (the n^{2/3} weight is empirical,
@@ -266,7 +266,7 @@ relative to the pole; SG 2.2 gives nearly equal pole and equator; SG 2.2 with th
 elliptical ring 3 drives the equator about 20% above the pole. *Ambiguities*: the
 caption gives (16, 21, 28) µm while the text and table give (16, 21, 68) µm; the text's
 angles (3°, 4°, 13°) are sin⁻¹(Δr/300 µm) of 16, 21 and 68 µm, so 68 is the consistent
-reading (**L**); the SG 3.7 radius is unclear (Fig. 130.5 says "383 µm", likely 183);
+reading (**L**); the SG 3.7 radius is unclear (Fig. 130.5 gives "383 µm", likely 183);
 the figure labels rings 21°, 44°, 53°; incident versus projected intensity and f-cone
 blur are not stated. Use: a digitized-shape comparison (decision 14), not a test.
 
@@ -350,16 +350,16 @@ calibrations are multipliers inside particular codes (**H** for the papers read)
   exists: the pole-to-equator ratio cancels common coupling physics.
 - Mu15: matching NIF PDD self-emission at 1.4 × 10¹⁵ W/cm² needed a 33 ± 5% cut of the
   equatorial (44.5° C&D and 50°) power in HYDRA; none at 1.0 × 10¹⁵. Model-inferred.
-- Jo22: P₂ = 0 at ΔD ≈ 5% rather than 0 (OMEGA cryogenic, low intensity; may not be
-  CBET).
+- Jo22: P₂ = 0 at ΔD ≈ 5%, offset from ΔD = 0 (OMEGA cryogenic, low intensity; the
+  offset may not be CBET).
 - Ma18: detuning raised the measured equatorial shell speed from 133 to 154 µm/ns; one
   detuning value, pointing not tabulated.
 - Ig12 (with Froula 2012, not read): measured scattered-light fraction against beam-to-
   target radius 0.5–1.09, but symmetric 60-beam drive. Cr05 Fig. 102.10: absorption
   against symmetric repointing (collisional-absorption era).
 - El18: 1-D laser-energy multipliers ≈ 0.6–0.65 lump CBET with every other shortfall.
-- Ho15's 89% → 67% is DRACO; Ra12's 140 ± 50 ps later bang time implies ~10% velocity
-  deficit, attributed to CBET by inference.
+- Ho15's drop from 89% to 67% is DRACO's; Ra12's 140 ± 50 ps later bang time implies ~10%
+  velocity deficit, attributed to CBET by inference.
 
 A Briareus PDD CBET model "fitted to data" would be fitted to another code's inference.
 
@@ -378,8 +378,8 @@ A Briareus PDD CBET model "fitted to data" would be fitted to another code's inf
   spots emulated as zero-defocus spots), a 16-parameter σ₁ optimization from the Ho15
   pointing, and the comparison of optimum, evaluations and wall time with Ba24's. Done
   2026-10-26 (`docs/literate/polar_direct_drive.jl`, `examples/ba24_pdd_optimization.jl`),
-  the optimization from Ba24's OC and from random starts rather than from Ho15 (whose
-  defocus and spots are not tabulated).
+  with the optimization started from Ba24's OC and from random starts. Ho15 is not used
+  as a start, since its defocus and spots are not tabulated.
 
 **Stage 1 — static corona.** Spherically symmetric n_e(r), T_e(r), Z̄(r) (analytic
 exponential/linear, or tabulated from a 1-D hydro snapshot); refraction and inverse
@@ -486,10 +486,10 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      dependency.
    - *Recommendation*: (a) + (c); state that Ba24 is the only published GA PDD optimizer
      and that its full objective needs Stage 3 (CBET).
-   - **Decided**: the recommendation. Done 2026-10-26 for σ₁ alone
+   - **Decided**: the recommendation. Done 2026-10-26 for σ₁ only
      (`examples/ba24_pdd_optimization.jl`): from the OC, L-BFGS-B reaches 2.6% in 50
      evaluations and 2.11% in 229, Nelder–Mead 2.1% after ~700, a particle swarm 2.5%
-     in 1 200; Ba24 report > 10 000 evaluations for σ₁ alone.
+     in 1 200; Ba24 report > 10 000 evaluations for σ₁ only.
 7. **First facility.**
    - (a) NIF 192 beams. + Every quantitative benchmark (Ba24, Ye21, Co08, Ho15, CM18) is
      NIF; ports and CPPs are in the package. − Larger problem.
@@ -506,7 +506,7 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      decision 12.
 8. **Direct-drive CBET.**
    - (a) Defer to Stage 3. + Keeps Stages 0–2 clean and validated. − PDD designs without
-     CBET are optimistic (Ho15: 89% → 67% absorption).
+     CBET are optimistic (Ho15 has absorption falling from 89% to 67%).
    - (b) A crude equatorial loss factor sooner. − An uncalibrated number with no data
      to fit it to.
    - *Recommendation*: (a); flag CBET-free results as such in docs and reports.
@@ -529,12 +529,13 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
     - *Recommendation*: (a), and (b) only if the Ba24 comparison needs better than 1%.
       **Decided**: (a), flagged for another look later.
 11. **Absorption weight η_a(ψ)** (from Stage 0; MN17 Eq. 29).
-    - (a) Add it now as an optional per-sample weight, with a dedicated bitwise check.
+    - (a) Add it now as an optional per-sample weight, with a dedicated check of identical
+      results when off.
       + Cheap; completes Stage 0's analytic cases. − A model that Stage 1's corona
       supersedes.
     - (b) Wait for Stage 1. − MN17's weighted design stays unchecked until then.
-    - *Recommendation*: (a). **Decided**: (a). Done: the `absorption` keyword of
-     `deposit`, off by default and bitwise identical when off; MN17's re-solved weighted
+    - *Recommendation*: (a). **Decided**: (a). Done: the `absorption` keyword of `deposit`,
+     off by default and identical to the former path when off; MN17's re-solved weighted
      design is reproduced (research notes).
 
 ### Open (for the user)

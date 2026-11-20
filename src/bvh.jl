@@ -1,17 +1,18 @@
-# Bounding-volume hierarchy over triangles for ray casting (closest hit and any hit).
+# This file builds a bounding-volume hierarchy over triangles for ray casting (closest
+# hit and any hit).
 
 struct BVHNode
     lo::Vec3
     hi::Vec3
-    a::Int32   # leaf: first index into `items`; interior: left child
-    b::Int32   # leaf: -(item count);           interior: right child
+    a::Int32   # first index into `items` for a leaf, left child for an interior node
+    b::Int32   # -(item count) for a leaf, right child for an interior node
 end
 
 """
     BVH(v0, e1, e2, ids)
 
 Median-split BVH over triangles given by vertex `v0` and edges `e1 = v1 - v0`,
-`e2 = v2 - v0`. `ids[k]` is the caller's identifier for triangle `k` (returned by the
+`e2 = v2 - v0`. `ids[k]` is the identifier given for triangle `k` (returned by the
 hit queries).
 """
 struct BVH
@@ -71,9 +72,10 @@ end
     return tn <= tf && tf >= 0 && tn <= tmax
 end
 
-# Parameter interval of the ray inside a node's box. Every operand is finite (`_safe_inv`),
-# so plain comparisons select the min and max (Base's handle NaN and signed zeros, and
-# cost twice as much in this, the innermost loop of every ray query).
+# Returns the parameter interval of the ray inside the box of a node. Every operand is
+# finite (`_safe_inv`), so plain comparisons select the min and max. The Base functions
+# handle NaN and signed zeros, and cost twice as much in this innermost loop of every ray
+# query.
 @inline function _slab_span(node::BVHNode, o::Vec3, inv::Vec3)
     t1 = (node.lo - o) .* inv
     t2 = (node.hi - o) .* inv
@@ -89,7 +91,7 @@ end
 
 const _BARY_TOL = 1e-10
 
-# Möller–Trumbore; returns (t, cosine sign) with t = Inf on a miss.
+# Möller–Trumbore intersection, which returns (t, cosine sign) with t = Inf on a miss.
 @inline function _intersect(o::Vec3, d::Vec3, v0::Vec3, e1::Vec3, e2::Vec3, tmax)
     p = cross(d, e2)
     det = dot(e1, p)
@@ -178,19 +180,21 @@ end
 """
     _unblocked!(open, bvh, origins, dirs, invs, cache) -> open
 
-Packet form of `any_hit` with `tmax = Inf` for rays sharing a few directions: on entry
-bit `j-1` of `open[i]` selects the ray `origins[i] + t*dirs[j]` (`length(dirs) ≤ 16`,
-`invs[j] = _safe_inv(dirs[j])`); on exit only the bits of rays that hit nothing remain,
-exactly as `!any_hit(bvh, origins[i], dirs[j])` answers. `cache[j]` is a leaf (node
-index) that blocked direction `j` before, or 0; it is tested first and updated.
+Packet form of `any_hit` with `tmax = Inf` for rays that share a few directions. On
+entry, bit `j-1` of `open[i]` selects the ray `origins[i] + t*dirs[j]`, with
+`length(dirs) ≤ 16` and `invs[j] = _safe_inv(dirs[j])`. On exit, only the bits of rays
+that hit nothing remain, exactly as `!any_hit(bvh, origins[i], dirs[j])` would give
+them. `cache[j]` is a leaf (node index) that blocked direction `j` before, or 0, and it
+is tested first and updated.
 
-The packet is traversed once. Interior nodes are culled by a slab test conservative
-over the origins' bounding box and the directions' inverse components, leaves by one
-per direction; then each ray takes a separate slab test and triangle tests. fp subtraction
-and products are monotone, so the conservative tests never cull a node a ray passes,
-and the slab test is monotone in box containment, so a ray passes a leaf's test only if
-it passes every ancestor's: each ray tests only the triangles its `any_hit`
-traversal reaches, and each of them until one blocks it.
+The packet is traversed once. Interior nodes are culled by a slab test that is
+conservative over the bounding box of the origins and the inverse components of the
+directions, and leaves by one test per direction. Each ray then takes a separate slab
+test and triangle tests. Floating-point subtraction and products are monotone, so the
+conservative tests never cull a node that a ray passes. The slab test is monotone in box
+containment, so a ray passes the test of a leaf only if it passes the test of every
+ancestor. Each ray therefore tests only the triangles that its `any_hit` traversal
+reaches, and each of them until one blocks it.
 """
 function _unblocked!(open::AbstractVector{UInt16}, b::BVH, os::AbstractVector{Vec3},
                      dirs::AbstractVector{Vec3}, invs::AbstractVector{Vec3},
@@ -261,8 +265,8 @@ function _unblocked!(open::AbstractVector{UInt16}, b::BVH, os::AbstractVector{Ve
     return open
 end
 
-# Whether the ray `o + t*d` (t > 0) passes leaf `node`'s slab test and hits one of its
-# triangles: `any_hit`'s test at that leaf.
+# Whether the ray `o + t*d` (t > 0) passes the slab test of leaf `node` and hits one of its
+# triangles, which is the test of `any_hit` at that leaf.
 @inline function _leaf_blocks(b::BVH, node::BVHNode, o::Vec3, d::Vec3, inv::Vec3)
     _slab(node, o, inv, Inf) || return false
     @inbounds for k in node.a:(node.a - node.b - 1)
@@ -272,10 +276,10 @@ end
     return false
 end
 
-# Slab test passed whenever a ray with origin in [olo, ohi] and inverse direction in
-# [ilo, ihi] passes `_slab(node, o, inv, Inf)`: per axis, the ray's plane crossings lie
-# between the extreme corner products (an axis whose inverse components change sign
-# does not cull).
+# A slab test passed whenever a ray with origin in [olo, ohi] and inverse direction in
+# [ilo, ihi] passes `_slab(node, o, inv, Inf)`. Per axis, the plane crossings of the ray
+# lie between the extreme corner products, and an axis whose inverse components change
+# sign does not cull.
 @inline function _packet_slab(node::BVHNode, olo::Vec3, ohi::Vec3, ilo::Vec3, ihi::Vec3)
     tn, tf = -Inf, Inf
     @inbounds for a in 1:3
@@ -298,10 +302,10 @@ end
 
 The same triangles as `bvh` regrouped by a binned surface-area heuristic, which
 `Target` uses for every ray query. A median-split tree has fat interior boxes inside a
-concave enclosure, so a chord across a hohlraum visits ~700 nodes and ~140 triangles;
-this tree visits ~55 and ~10. Hit answers are unchanged: the triangle tests are the
-same and only the culling boxes differ, which matters only for a ray grazing a
-triangle within round-off.
+concave enclosure, so a chord across a hohlraum visits about 700 nodes and 140
+triangles, while this tree visits about 55 and 10. Hit results are unchanged, since the
+triangle tests are the same and only the culling boxes differ. The difference matters
+only for a ray that grazes a triangle within round-off.
 """
 function _sah_bvh(b::BVH; leaf::Integer = 4, nbins::Integer = 16)
     n = length(b.v0)
@@ -335,7 +339,7 @@ function _sah_build!(nodes, items, lo, hi, cen, first, last, leaf, bins)
         return idx
     end
     push!(nodes, BVHNode(blo, bhi, 0, 0))     # placeholder
-    # split between centroid bins at the least Σ count × box area over the two sides
+    # the split between centroid bins is at the least Σ count × box area over the two sides
     bc, bl, bh, rcost = bins
     nb = length(bc)
     best, bax, bs = Inf, 0, 0

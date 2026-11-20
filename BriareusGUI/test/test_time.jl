@@ -20,7 +20,7 @@
     table = write_pulse_table(joinpath(dir, "pulses.csv"), pul)
     load_pulses!(sess, table)
     @test tm.pulses[].by === :group && tm.chart[] === :pulses
-    # the pulses chart: each group's power is the sum over its enabled beams
+    # In the pulses chart the power of each group is the sum over its enabled beams.
     ch = time_chart(sess)
     @test ch.left.label == "Laser power (TW)" && ch.xlabel == "t (ns)" && isempty(ch.empty)
     groups = unique(sess.beams.cluster[])
@@ -58,8 +58,8 @@ end
     csv = write_pulse_table(joinpath(dir, "pulses.csv"), pul)
     load_pulses!(sess, csv)
     loaded = tm.pulses[]
-    # the table's data is saved, not its path: the session opens with the CSV file gone,
-    # its pulses bitwise
+    # The session saves the data of the table instead of its path. It opens with the CSV
+    # file gone, and its pulses are unchanged.
     for f in (joinpath(dir, "p.briar.toml"), joinpath(dir, "p.briar"))
         save_session(f, sess)
     end
@@ -72,11 +72,11 @@ end
         @test p.table == loaded.table                             # PulseShape equality: times and powers
         @test session_state(s2) == session_state(sess)
     end
-    # loading pulses is an edit: undo returns to no pulses, redo to the table
+    # Loading pulses is an edit, so undo returns to no pulses and redo to the table.
     @test record!(sess)
     @test undo!(sess) && tm.pulses[] === nothing
     @test redo!(sess) && tm.pulses[].table == loaded.table
-    # the pulse shape: its step round trips
+    # The step of the pulse shape round-trips.
     use_pulse_shape!(sess; step = 0.5)
     record!(sess)
     f = joinpath(dir, "shape.briar.toml")
@@ -86,7 +86,7 @@ end
     @test s3.time.pulses[].kind === :shape && s3.time.pulses[].times == tm.pulses[].times &&
           s3.time.pulses[].shape == tm.pulses[].shape
     @test undo!(sess) && tm.pulses[].kind === :table
-    # a session before version 12 has no pulses: it loads with none
+    # A session before version 12 does not have pulses, so it loads with none.
     old = session_state(sess)
     @test haskey(old["time"], "pulses")
     delete!(old["time"], "pulses")
@@ -101,7 +101,8 @@ end
     use_pulse_shape!(sess; step = 1.0)
     @test tm.pulses[].kind === :shape && tm.pulses[].times == collect(0.0:1.0:9.0)
     @test time_step(tm) === nothing
-    # no drive yet: computed first (inline here), then the history
+    # Without a drive yet, the drive is computed first (inline in this test) and then the
+    # history.
     start_history!(sess)
     @test sess.drive.result[] !== nothing && !tm.queued[] && !tm.running[]
     h = tm.history[]
@@ -112,8 +113,8 @@ end
     @test all(M -> size(M) == (nelements(sess.drive.scenario[].target), length(h.time)), values(h.fields))
     @test Set(keys(h.fields)) == Set(DRIVE_FIELDS)
 
-    # independent check: gold's albedo is constant, so each step is the drive at the
-    # table's powers scaled by the pulse shape there
+    # For the independent check, the albedo of gold is constant, so each step is the
+    # drive at the powers of the table scaled by the pulse shape at that time.
     res = sess.drive.result[]
     for (k, τ) in enumerate(h.time)
         f = shape(τ)
@@ -126,7 +127,7 @@ end
     d1 = only(h.diagnostics)
     @test d1.id == "nif_dante1" && isempty(d1.note) && isfinite(d1.Tr[1]) &&
           0.5 < d1.Tr[argmax(h.Tr)] / maximum(h.Tr) < 1.5
-    # the energy split: cumulative, and the laser's energy accounted for
+    # The energy split is cumulative and accounts for the laser energy.
     E = Dict(s.name => s.values for s in h.energy)
     @test Set(keys(E)) == Set([:laser, :wall, :capsule, :holes])
     @test E[:laser][end] ≈ sum((h.time[k+1] - h.time[k]) * (h.history.setup[k] + h.history.setup[k+1]) / 2
@@ -144,7 +145,8 @@ end
     @test ch.left.label == "Tr (eV)" && ch.right.label == "aₗ/a₀ (%)"
     @test time_chart(sess, :energy).left.label == "Energy (kJ)"
 
-    # the cursor: the nearest solved time, clamped to the history; colors the 3D view
+    # The cursor goes to the nearest solved time, clamped to the history, and colors the
+    # 3D view.
     @test sess.view.color[] === :component
     set_time_cursor!(sess, 3.4)
     @test time_step(tm) == findfirst(==(3.0), h.time) && time_label(sess) == "t = 3.00 ns"
@@ -174,7 +176,7 @@ end
     start_history!(sess)
     @test !history_stale(sess) && tm.history[] !== h
     @test tm.history[].time[3] == 2.0 && time_label(sess) == "t = 2.00 ns"
-    # a target without a capsule: no history, and why
+    # A target without a capsule gives no history, and the status explains why.
     new_target!(sess, :foil)
     use_pulse_shape!(sess; step = 1.0)
     start_history!(sess)
@@ -197,7 +199,7 @@ end
     drain_until(() -> !tm.running[], q)
     @test tm.history[] isa DriveHistory && length(tm.history[].time) == n
     @test issorted(seen) && last(seen) == n
-    # canceled: nothing kept
+    # When canceled, nothing is kept.
     h = tm.history[]
     use_pulse_shape!(sess; step = 0.1)
     start_history!(sess)
@@ -232,7 +234,7 @@ end
     # a drive history on them is the retuned drive: the enabled beams on the retune's powers
     @test [b.power for b in Controllers._pulse_beams(tm.pulses[], beams, s.beams.enabled[], 3.0)] ==
           [on ? tm.retune[].pulses[Symbol(b.quad)](3.0) : 0.0 for (b, on) in zip(beams, s.beams.enabled[])]
-    # an edit: undo takes the pulses back (to none), redo fires them again
+    # The pulses are an edit, so undo takes them back to none and redo fires them again.
     @test record!(s) && undo!(s) && tm.pulses[] === nothing
     @test redo!(s) && tm.pulses[].label == "retuned.csv"
     # without loading, the pulses stay as they were
@@ -247,7 +249,7 @@ end
     back = read_pulse_table(out)
     for (g, r, n) in zip(groups, ref, new)
         @test r.y ≈ [count(b -> b.group === g, beams) * pul[g](τ) for τ in r.x]
-        # the retuned powers: the enabled beams on the written pulses
+        # The retuned powers are those of the enabled beams on the written pulses.
         @test n.y ≈ [sum(back[Symbol(b.quad)](τ) for (b, on) in zip(beams, s.beams.enabled[]) if on && b.group === g)
                      for τ in n.x]
         @test all(n.y .<= 1.5 .* r.y .+ 1e-9)
@@ -263,7 +265,7 @@ end
     s = DesignSession(starter = :foil, resolution = :coarse)
     build_scenario!(s)
     sc = s.drive.scenario[]
-    @test isempty(sc.observed)                                # nothing observed: the foil is held
+    @test isempty(sc.observed)                                # nothing observed, since the foil is held
     beams = s.beams.beams[]
     dir = mktempdir()
     pul = Dict(Symbol(b.name) => PulseShape([0.0, 0.5, 1.0, 1.5], [0.0, 0.3, 0.5, 0.0]) for b in beams)
@@ -273,8 +275,8 @@ end
     retune_to_reference!(s, table, out; by = :beam, cap = 2.0)
     r = s.time.retune[]
     @test r.kind === :foil && isfile(out) && occursin("foil spot worst RMS", s.drive.retune_status[])
-    # independent check: depositions of the enabled beams at the retuned powers, over the
-    # front elements within the spot radius of the foil's front centroid
+    # The independent check deposits the enabled beams at the retuned powers over the
+    # front elements within the spot radius of the front centroid of the foil.
     t = sc.target
     foil = active_foil(s.target)
     front = [e for e in elements(t, foil) if t.elem_side[e] == 1]
@@ -293,8 +295,8 @@ end
     ch = time_chart(s, :retune)
     @test ch.right.label == "Foil spot RMS, mean − reference (%)" && ch.right.series[2].y == 100 .* r.after.rms
 
-    # a uniform target at a set level: the reference's mean at 1 ns, held at both firing
-    # steps (a power limit of 3× reaches it at 0.5 ns too)
+    # A uniform target at a set level holds the mean of the reference at 1 ns at both
+    # firing steps; a power limit of 3× reaches it at 0.5 ns too.
     enabled = s.beams.enabled[]
     kw = (; by = :beam, cap = 3.0, foil, spot_radius = s.drive.spot_radius[])
     rref = retune_pulses(sc, beams, enabled, pul; kw...)
@@ -317,7 +319,8 @@ end
     @test all(abs.(rr.retune.drive[solved] .- 1) .< 1e-10)
     @test all(ru.retune.rms[solved] .< rr.retune.rms[solved]) &&
           isapprox(ru.after.rms[solved], ru.retune.rms[solved]; rtol = 1e-12)
-    # through the session: the chart's mean against the level, zero where it solved
+    # Through the session, the mean in the chart is checked against the level, with zero
+    # where the retune solved.
     retune_to_reference!(s, table, out; kw.by, kw.cap, target = :uniform, level = I0)
     r = s.time.retune[]
     @test r.target === :uniform && r.level == I0 && occursin("uniform, ", s.drive.retune_status[])

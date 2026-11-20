@@ -1,5 +1,5 @@
-# Backlighter foils placed on a diagnostic line of sight, and the check that the line
-# of sight from the foil through the object to the detector is unobstructed.
+# This file places backlighter foils on a diagnostic line of sight and checks that the
+# line of sight from the foil through the object to the detector is unobstructed.
 
 """
     backlighter_foil(los; standoff, width = 2.0, height = width, tilt = 0.0,
@@ -7,29 +7,31 @@
                      name = :backlighter, material = foil_material(),
                      two_sided = true) -> Component
 
-Rectangular backlighter foil for the diagnostic line of sight `los` = (θ, φ) in
-degrees, the direction from the object (`center`, default TCC) toward the detector. The
-foil sits on the far side, centered `standoff` mm from `center` at
-`center − standoff · port_vector(θ, φ)`, with its front face (the face the
-backlighter beams heat, whose x rays cross the object to the detector) toward the
-detector. The placement is [`foil_frame`](@ref) with the same keywords: the mesh lies in
-that frame's `x`–`y` plane, `width` along its `x` axis.
+Builds a rectangular backlighter foil for the diagnostic line of sight `los` = (θ, φ) in
+degrees, the direction from the object toward the detector. The object is at `center`,
+TCC by default. The foil is placed on the far side, centered `standoff` mm from `center`
+at `center − standoff · port_vector(θ, φ)`. Its front face is heated by the backlighter
+beams, and its x rays cross the object to the detector, which the front face is turned
+toward. The placement is [`foil_frame`](@ref) with the same keywords. The mesh lies in
+the `x`–`y` plane of that frame, with `width` along its `x` axis.
 
-By default the foil's normal lies along the line of sight. `tilt` (degrees) turns it
-off the line of sight, toward `cos(ψ) θ̂ + sin(ψ) φ̂` with `ψ = tilt_toward` (degrees,
-from the line of sight's θ̂ toward φ̂, as a spot's `angle`), rotating the whole foil
-about its center. Before the tilt, the foil's `width` edge runs along θ̂ and `height`
-along φ̂, turned by `rotation` (degrees) about the normal from θ̂ toward φ̂. A foil
-tilted by β about its `height` axis (`tilt_toward = 0`) presents `width · cos β` across
-the line of sight.
+By default the foil normal lies along the line of sight. `tilt` (degrees) rotates the whole
+foil about its center, off the line of sight toward `cos(ψ) θ̂ + sin(ψ) φ̂`. The angle
+`ψ = tilt_toward` is in degrees from θ̂ of the line of sight toward φ̂, like the `angle` of
+a spot. Before the tilt, the `width` edge of the foil lies along θ̂ and `height` along φ̂,
+and `rotation` (degrees) turns both about the normal from θ̂ toward φ̂. A foil tilted by β
+about its `height` axis (`tilt_toward = 0`) has a projected width `width · cos β` across the
+line of sight.
 
-The defaults (a 2 mm square gold foil) are generic engineering values, not a facility's
-backlighter design: real backlighter dimensions and standoffs are shot-specific. `n` sets the mesh (`n × n` patches for a square foil).
-The default `material` is [`foil_material`](@ref)`()`, directly irradiated gold (albedo
-0.8, conversion 0.8); `foil_material(:Ti)` and the other mid-Z elements give a suggested
-point inside a suggested range, not a measurement (the table there). The foil's x-ray
-emission set by this conversion is broadband radiosity; the He-α line signal comes
-from [`kshell_ce`](@ref), fitted to separate data.
+The defaults (a 2 mm square gold foil) are generic engineering values that are not taken
+from a facility backlighter design, and real backlighter dimensions and standoffs are
+shot-specific. `n` sets the mesh (`n × n` patches for a square foil). The default
+`material` is [`foil_material`](@ref)`()`, directly irradiated gold (albedo 0.8,
+conversion 0.8); `foil_material(:Ti)` and the other mid-Z elements give a suggested point
+inside a suggested range, listed in the table of `foil_material`, and none of these is a
+measurement. The x-ray
+emission of the foil set by this conversion is broadband radiosity; the He-α line signal
+comes from [`kshell_ce`](@ref), fitted to separate data.
 """
 function backlighter_foil(los; standoff::Real, width::Real = 2.0, height::Real = width,
                           tilt::Real = 0.0, tilt_toward::Real = 0.0, rotation::Real = 0.0,
@@ -46,14 +48,18 @@ end
 """
     LineOfSightReport
 
-Result of `line_of_sight`: `clear` (no ray blocked and the foil covers the object's
-disk), `rays` and `blocked` (rays in the bundle and rays obstructed), `blocked_by`
-(hardware part => rays it obstructs, in target order; a ray may count for several
-parts; rays that would leave the foil through its back count under the foil's name),
-`covered` (fraction of the disk's sample points whose image ray meets the foil's
-front), `samples` (foil and disk sample counts), `los` (unit vector toward the
-detector), `center` and `radius` (the object's disk) and `detector` (`nothing`, or the
-detector distance used).
+The result of `line_of_sight`, with fields:
+
+- `clear`, true when no ray is blocked and the foil covers the object disk;
+- `rays` and `blocked`, the rays in the bundle and the rays obstructed;
+- `blocked_by`, pairs of hardware part => rays it obstructs, in target order, where a ray
+  may count for several parts and rays that would leave the foil through its back count
+  under the foil name;
+- `covered`, the fraction of the disk sample points whose image ray meets the foil front;
+- `samples`, the foil and disk sample counts;
+- `los`, the unit vector toward the detector;
+- `center` and `radius`, the object disk;
+- `detector`, `nothing` or the detector distance used.
 """
 struct LineOfSightReport
     clear::Bool
@@ -76,9 +82,9 @@ function Base.show(io::IO, ::MIME"text/plain", r::LineOfSightReport)
     end
 end
 
-# Disk of radius `a` at `c` normal to `d`: center plus `nrings` rings of 8k points, each
-# ring starting on θ̂ of `d` (so the samples include the disk's extremes along θ̂, φ̂
-# and the diagonals).
+# Samples the disk of radius `a` at `c` normal to `d` with its center and `nrings` rings
+# of 8k points. Each ring starts on θ̂ of `d`, so the samples include the extremes of
+# the disk along θ̂, φ̂ and the diagonals.
 function _disk_samples(c::Vec3, d::Vec3, a, nrings)
     eθ, eφ = port_basis(d)
     pts = [c]
@@ -89,7 +95,8 @@ function _disk_samples(c::Vec3, d::Vec3, a, nrings)
     return pts
 end
 
-# Nearest intersection of `o + s d`, s > 0, with the triangles `tris`: (s, k), or (Inf, 0).
+# Returns the nearest intersection (s, k) of `o + s d`, s > 0, with the triangles `tris`,
+# or (Inf, 0) when the ray misses them all.
 function _first_hit(t::Target, tris, o::Vec3, d::Vec3)
     best, hit = Inf, 0
     for k in tris
@@ -105,42 +112,48 @@ end
                   hardware = nothing, level = 0, nrings = 4,
                   detector = nothing) -> LineOfSightReport
 
-Whether the diagnostic line of sight `los` (θ, φ in degrees from `center` toward the
-detector, or a direction vector) is unobstructed from the backlighter `foil` through
-the `object` to the detector. The object is represented by its disk normal to the line
-of sight through `center`, of `radius` (default: the largest distance of the object's
-vertices from the line of sight, its projected radius; give `radius` when there is no
-`object`, `object = nothing`). The foil and object parts never obstruct.
+Checks whether the diagnostic line of sight `los` is unobstructed from the backlighter
+`foil` through the `object` to the detector. `los` is θ, φ in degrees from `center`
+toward the detector, or a direction vector. The object is represented by its disk normal
+to the line of sight through `center`, of radius `radius`. The default radius is the
+projected radius of the object, the largest distance of its vertices from the line of
+sight; give `radius` when there is no object (`object = nothing`). The foil and object
+parts never obstruct.
 
-`hardware` names the parts (or components) that may obstruct; `nothing` takes every
-opaque part of the target but the foil and object. Apertures (entrance holes, open
-windows) are transparent, as for rays everywhere; a closed window is opaque.
+`hardware` names the parts or components that may obstruct, and `nothing` takes every
+opaque part of the target except the foil and object. Apertures such as entrance holes
+and open windows are transparent, as for rays everywhere; a closed window is opaque.
 
-**The bundle.** With `detector = nothing` (the default), every ray from a foil sample
-point through a disk sample point, continued without end past the disk: the x-ray
-paths from the foil's whole emitting area through the object toward any detector in
-their cone, a conservative superset of what one imager accepts. Foil samples are the
-foil mesh's vertices plus `4^level` sub-triangle points per triangle (vertices
-include the corners and edges, where the bundle's extreme rays start); disk samples
-are the center and `nrings` rings of `8k` points, starting along the line of sight's
-θ̂. A ray counts as obstructed if it meets an opaque triangle of the hardware
-anywhere past the foil, or if it would leave the foil through its back face (counted
-under the foil's name).
+**The bundle.** With `detector = nothing` (the default), the bundle consists of every ray
+from a foil sample point through a disk sample point, continued without end past the disk.
+These rays are the x-ray paths from the whole emitting area of the foil through the object
+toward any detector in their cone, a conservative superset of what one imager accepts. The
+samples are taken as follows:
 
-`detector = L` (mm from `center` along the line of sight; `Inf` for a distant
-imager) instead takes the imaging rays: from the detector point (or along the line of
-sight) through each disk point back to the foil, and checks the segment from the foil
-to the detector (unbounded for `Inf`).
+- Foil samples are the vertices of the foil mesh plus `4^level` sub-triangle points per
+  triangle. The vertices include the corners and edges, where the extreme rays of the
+  bundle start.
+- Disk samples are the center and `nrings` rings of `8k` points, starting along θ̂ of the
+  line of sight.
 
-**Coverage.** `covered` is the fraction of disk points whose image ray (parallel to
-the line of sight, or toward the detector point when `detector` is finite) meets the
-foil's front: below 1 the foil does not backlight the whole object. `clear` requires
-no obstructed ray and `covered == 1`.
+A ray counts as obstructed if it meets an opaque triangle of the hardware anywhere past
+the foil. A ray that would leave the foil through its back face also counts as
+obstructed, under the foil name.
 
-Sampling makes the result exact for obstructions whose edges meet the bundle at its
-sampled extremes (a straight edge parallel to a foil edge, a rim crossing the bundle's
-θ̂ or φ̂ extreme) and otherwise a sampled answer: raise `level` and `nrings` to resolve
-a near-grazing obstruction.
+`detector = L` takes the imaging rays instead, with `L` in mm from `center` along the
+line of sight, or `Inf` for a distant imager. Each imaging ray is traced from the
+detector point through a disk point back to the foil, or along the line of sight for
+`Inf`. The segment from the foil to the detector is then checked, unbounded for `Inf`.
+
+**Coverage.** `covered` is the fraction of disk points whose image ray meets the foil front.
+The image ray is parallel to the line of sight, or directed toward the detector point when
+`detector` is finite. Below 1 the foil does not backlight the whole object. `clear` requires
+that no ray is obstructed and that `covered == 1`.
+
+The result is exact for obstructions whose edges meet the bundle at its sampled
+extremes, such as straight edges parallel to a foil edge and rims crossing the θ̂ or φ̂
+extreme of the bundle. Elsewhere it is a sampled answer, and raising `level` and
+`nrings` resolves a near-grazing obstruction.
 """
 function line_of_sight(t::Target, los; foil::Symbol = :backlighter,
                        object::Union{Nothing,Symbol} = :capsule, center = (0.0, 0.0, 0.0),
@@ -161,7 +174,7 @@ function line_of_sight(t::Target, los; foil::Symbol = :backlighter,
         a = Float64(radius)
     end
     a > 0 || throw(ArgumentError("the object's disk radius must be positive"))
-    # hardware: parts, one entry each (in target order)
+    # List the hardware parts, one entry each, in target order.
     parts = hardware === nothing ?
             unique!([cp.part for (ci, cp) in enumerate(t.components)
                      if cp.kind === :surface && !(ci in fi) && !(ci in oi)]) :
@@ -172,12 +185,13 @@ function line_of_sight(t::Target, los; foil::Symbol = :backlighter,
     isempty(foil_tris) && throw(ArgumentError("the foil :$foil has no triangles"))
 
     disk = _disk_samples(c, d, a, nrings)
-    # rays: (origin on the foil, direction, tmax, front?)
+    # Each ray holds its origin on the foil, direction, tmax and whether it leaves the
+    # front.
     rays = Tuple{Vec3,Vec3,Float64,Bool}[]
     far = 4 * (t.scale + norm(c)) + 1
     covered = 0
     for q in disk
-        # the image ray through q, back toward the foil
+        # Trace the image ray through q back toward the foil.
         P = detector === nothing || isinf(detector) ? nothing : c + Float64(detector) * d
         o, back = P === nothing ? (q + far * d, -d) : (P, q - P)
         s, k = _first_hit(t, foil_tris, o, back)
@@ -197,7 +211,8 @@ function line_of_sight(t::Target, los; foil::Symbol = :backlighter,
         end
         pts = unique(pts)
         nfoil = length(pts)
-        # front normal at each point: of the nearest foil triangle (a flat foil: any)
+        # Take the front normal at each point from the nearest foil triangle; on a flat
+        # foil every triangle has the same normal.
         normal_at(p) = t.tri_normal[argmin(k -> norm(t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3 - p),
                                            foil_tris)]
         for p in pts

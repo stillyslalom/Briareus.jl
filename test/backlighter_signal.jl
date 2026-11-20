@@ -21,9 +21,9 @@ using Briareus, LinearAlgebra, Test
     @test abs(sum(w .* res .* pre)) < 1e-8 && abs(sum(w .* res .* .!pre)) < 1e-8
     @test m.scatter ≈ sqrt(m.tau^2 + sum(abs2, s) / 68) rtol = 1e-12
     @test 0.15 < m.tau < 0.35 && 0.3 < m.scatter < 0.45
-    # held-out check on independent data: the form fitted to the 2026-10-24 compilation
-    # alone (Workman & Kyrala, Barrios et al.) predicts Coppari et al.'s 31 OMEGA points
-    # within their stated error and the fit's predictive scatter
+    # This is a held-out check on independent data. The form fitted only to the 2026-10-24
+    # compilation (Workman & Kyrala, Barrios et al.) predicts the 31 OMEGA points of Coppari
+    # et al. within their stated error and the predictive scatter of the fit.
     c19 = d.source .== "C19"
     d0 = merge(d, (; fit = [c ? 0.0 : f for (c, f) in zip(c19, d.fit)]))
     m0 = Briareus._fit_kshell_ce(d0)
@@ -80,10 +80,10 @@ using Briareus, LinearAlgebra, Test
 
     # --- attenuation ------------------------------------------------------------------------
     @test mass_attenuation(:Be, 10.0) ≈ 0.6466                     # NIST nodes
-    @test mass_attenuation(:Cu, 8.979) ≈ 278.4                     # on an edge: above it
+    @test mass_attenuation(:Cu, 8.979) ≈ 278.4                     # on an edge, the value above it
     @test mass_attenuation(:Cu, 8.97) < 40                         # just below the K edge
     @test mass_attenuation(:Mo, 20.0 - 1e-9) ≈ 13.08 rtol = 1e-6
-    # log-log interpolation: a power law between nodes
+    # Log-log interpolation gives a power law between nodes.
     E = 12.0
     @test mass_attenuation(:Al, E) ≈ 26.23 * (7.955 / 26.23)^(log(E / 10) / log(1.5)) rtol = 1e-12
     @test mass_attenuation(:kapton, 7.0) == mass_attenuation(:mylar, 7.0)

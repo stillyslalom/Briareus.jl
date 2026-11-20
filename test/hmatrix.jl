@@ -42,7 +42,7 @@
     @test rel(ForwardDiff.value.(yd), M * x) < 1e-12
     @test rel([ForwardDiff.partials(d)[2] for d in yd], M * x .^ 2) < 1e-12
 
-    # the model: balanced through products (the scaling only), iterative
+    # The model is balanced through products, using only the scaling, and is iterative.
     m = RadiationModel(t; F, closed = true)                   # dense Float64, LU (≡ RadiationModel(t))
     mh = RadiationModel(t; storage = :hmatrix, kw...)
     @test mh.F isa HMatrix && mh.iterative
@@ -77,8 +77,8 @@
     f(mod) = p -> sum(solve(mod, (1 .+ p[1] .* z .+ p[2] .* z .^ 2) .* dep.element; albedo = α).H[cap])
     @test rel(ForwardDiff.gradient(f(mh), [0.1, 0.2]), ForwardDiff.gradient(f(m), [0.1, 0.2])) < 1e-5
 
-    # the automatic choice above Briareus.HMATRIX_MODEL[] (on a coarse target: only the
-    # storage is checked)
+    # The automatic choice above Briareus.HMATRIX_MODEL[] is checked on a coarse target,
+    # so only the storage is checked.
     ts = hohlraum(; h = 1.2, capsule_h = 0.6, wall)
     old = Briareus.HMATRIX_MODEL[]
     try
@@ -103,7 +103,8 @@ end
     @test sum(size(U, 2) for (_, _, U, _) in H.lowrank_index) > 0
     M = Matrix(H)                                    # through the products
     @test rel(M, view_factors(t)) < 2e-4
-    # entries through `getindex` (the stored blocks, not the products), in each indexed block
+    # Entries are read through `getindex` from the stored blocks, without the products, in
+    # each indexed block.
     ij = [(H.perm[a], H.perm[b]) for (rs, cs, _, _) in H.lowrank_index for a in rs for b in cs]
     @test isapprox([H[i, j] for (i, j) in ij], [M[i, j] for (i, j) in ij]; rtol = 1e-12)
     G = A .* M
@@ -130,7 +131,7 @@ end
     f1 = [Briareus._receiver_vf(p, n, r) for r in rs for (p, n) in zip(ps, ns)]
     f2 = [Briareus._receiver_vf(p, n, Briareus._soa_receiver(r)) for r in rs for (p, n) in zip(ps, ns)]
     @test count(>(0), f1) > length(f1) ÷ 10
-    # (absolute below ~1e-6: the contour's terms cancel there)
+    # The tolerance is absolute below ~1e-6, where the terms of the contour cancel.
     @test all(abs.(f2 .- f1) .<= 1e-12 .* abs.(f1) .+ 1e-15)
     # the adaptive rule's distance test by the loop: the triangles' verdict, also at
     # distances just either side of the exact one and in the sector's plane
@@ -151,7 +152,8 @@ end
     cavity(m) = split_mesh(m, c -> norm(c[1:2]) < R + 0.01 && abs(c[3]) < h + 1e-6)[1]
     part(name, F, size) = Component(name, cavity(remesh_mesh(orient_mesh(facet_soup(F)); size)),
                                     name === :capsule ? ablator() : gold())
-    # (coarser than partial_visibility.jl's: the sampled factors' cost is in the facets)
+    # The mesh is coarser than in partial_visibility.jl, because the cost of the sampled
+    # factors is in the facets.
     cad = Target([part(:top, cad_half(; R, Rout, Rleh, h, t = th, nphi = 180), 1.0),
                   part(:bottom, cad_mirror(cad_half(; R, Rout, Rleh, h, t = th, nphi = 180)), 1.0),
                   part(:capsule, cad_sphere(rc; ntheta = 28, nphi = 56), 0.5),
@@ -170,13 +172,13 @@ end
     end
 end
 
-# Visibility certificates of occupied shafts (a planar part's facets, a cylinder's
-# axisymmetric bounds, a convex part's balls and its elements' planes) against the
-# visibility ray itself: every segment a certificate decides is decided as the ray
-# against that part's facets alone finds it (random segments, and segments crossing a
-# washer's plane within 1e-3 to 1e-12 of its rims); the certified masks of every leaf
-# pair equal the masks by a ray per pair, and the pairs of empty shafts (those the facing
-# slack admits included) get `_vf_pair`'s factor exactly.
+# Visibility certificates of occupied shafts are checked against the visibility ray itself.
+# The certificates are the facets of a planar part, the axisymmetric bounds of a cylinder,
+# and the balls and element planes of a convex part. Every segment a certificate decides is
+# decided as the ray finds it against only the facets of that part. The segments are random,
+# or cross the plane of a washer within 1e-3 to 1e-12 of its rims. The certified masks of
+# every leaf pair equal the masks from one ray per pair. The pairs of empty shafts,
+# including those the facing slack admits, get exactly the factor of `_vf_pair`.
 @testset "hierarchical view factors: visibility certificates" begin
     B = Briareus
     rng = Xoshiro(11)
@@ -237,12 +239,13 @@ end
     end
 end
 
-# Prism certificates (a wall or bore of chord rectangles as the side lines of its cross-
-# section, `_hprism`): every segment the axisymmetric verdict decides with them, from
-# points on the facets, near the edges and polygon vertices, in the waist gap's slot and
-# anywhere about the part, is decided as the ray against that part's facets alone finds
-# it; and the side lines decide many of the segments through the gap onto a wall that the
-# bounds alone leave to the ray. The bin's arctangent is within 2e-5 rad of `atan`.
+# Prism certificates (`_hprism`) treat a wall or bore of chord rectangles as the side lines
+# of its cross-section. Every segment that the axisymmetric verdict decides with them is
+# decided as the ray finds it against only the facets of that part. The segments start from
+# points on the facets, near the edges and polygon vertices, in the slot of the waist gap
+# and anywhere about the part. The side lines also decide many of the segments through the
+# gap onto a wall that the bounds by themselves leave to the ray. The arctangent of the bin
+# is within 2e-5 rad of `atan`.
 @testset "hierarchical view factors: prism certificates" begin
     B = Briareus
     rng = Xoshiro(17)
@@ -286,11 +289,12 @@ end
     @test maximum(abs.(rem2pi.(B._atan_approx.(y, x) .- atan.(y, x), RoundNearest))) < 2e-5
 end
 
-# `:sampled` visibility: bundle certificates (a part's verdict on every segment between
-# two balls) against the ray of each of a bundle's random segments, its ends in the balls
-# (some on their surfaces), against that part's facets alone; and the certified fractions
-# of every block that takes them, and the factors of empty shafts, against `_vf_visible`
-# and `_vf_pair` (`===`), on the bored cavity (LEH bores, caps, a waist gap with washers).
+# These tests check `:sampled` visibility on the bored cavity, with LEH bores, caps and a
+# waist gap with washers. A bundle certificate is the verdict of a part on every segment
+# between two balls. It is checked against the ray of each random segment of the bundle,
+# cast against only the facets of that part, with the segment ends in the balls and some on
+# their surfaces. The certified fractions of every block that takes them, and the factors of
+# empty shafts, are checked against `_vf_visible` and `_vf_pair` with `===`.
 @testset "hierarchical view factors: sampled visibility bundles" begin
     B = Briareus
     rng = Xoshiro(13)
@@ -342,12 +346,13 @@ end
     @test npart > 1000 && !isempty(free) && all(frac) && all(free)
 end
 
-# The entries a low-rank block's check adds where G may jump (`_htier_entries`): pairs
-# off the most common quadrature tier of their row or column, the fewest-off lines
-# first. On a latitude–longitude capsule (polar slivers, several sizes larger than their
-# neighbors) against the wall: every entry returned is off its row's or column's
-# majority tier; every pair that is alone off its line's majority is returned when the
-# cap (m + n) is not reached; and a block without entries has a single tier.
+# The check of a low-rank block adds entries where G may jump (`_htier_entries`). These are
+# pairs off the most common quadrature tier of their row or column, with the lines that have
+# the fewest such pairs first. The test uses a latitude–longitude capsule, whose polar
+# slivers are several sizes larger than their neighbors, against the wall. Every entry
+# returned is off the majority tier of its row or column. Every pair that is the only one
+# off the majority of its line is returned when the cap (m + n) is not reached. A block
+# without entries has a single tier.
 @testset "hierarchical view factors: quadrature-tier entries" begin
     B = Briareus
     t = hohlraum(; h = 0.5, capsule_h = 0.12, capsule_mesh = :latlong)

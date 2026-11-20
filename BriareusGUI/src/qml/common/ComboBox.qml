@@ -13,8 +13,8 @@ T.ComboBox {
     bottomPadding: 2
     implicitHeight: Math.max(26, implicitContentHeight + topPadding + bottomPadding)
     FontMetrics { id: metrics; font: box.font }
-    // the widest entry of a list model, a JavaScript array or a list from Julia (an item
-    // model: the box width)
+    // the widest entry of a list model, a JavaScript array or a list from Julia; for an
+    // item model, the box width
     readonly property real widestEntry: {
         if (model === null || model === undefined || typeof model.length !== "number") return 0
         let w = 0
@@ -26,10 +26,11 @@ T.ComboBox {
         return w
     }
     popup.width: Math.max(width, Math.ceil(widestEntry) + 48)
-    // The FluentWinUI3 background is an ItemGroup around a nine-patch image. Placed by a
-    // positioner (the toolbar's Flow) rather than a layout, the box keeps the image at
-    // height 0 (measured: group 26 px, image 0 px), drawn as its top edge alone, so the
-    // background's children follow its size here.
+    // The FluentWinUI3 background is an ItemGroup around a nine-patch image. When a
+    // positioner such as the Flow of the toolbar places the box instead of a layout, the
+    // box keeps the image at height 0 (measured group 26 px, image 0 px), so only its top
+    // edge is drawn. The children of the background therefore follow its size in this
+    // component.
     function fitBackground() {
         if (!background) return
         for (const c of background.children) {

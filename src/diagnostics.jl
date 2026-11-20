@@ -1,8 +1,9 @@
-# Diagnostic definitions: one TOML file per diagnostic, read from a search path (the
-# built-ins in data/diagnostics, then the directories of a user configuration file and of
-# BRIAREUS_DIAGNOSTICS), checked against the schema of its kind, resolved through
-# `extends` and built into an instrument. Design: reference/diagnostics-design.md; public
-# values: research notes, "Dante-family hardware and geometry: what is public".
+# This file handles diagnostic definitions, one TOML file per diagnostic. The files are
+# read from a search path: the built-ins in data/diagnostics, then the directories of a
+# user configuration file and of BRIAREUS_DIAGNOSTICS. Each file is checked against the
+# schema of its kind, resolved through `extends` and built into an instrument. The design
+# is in reference/diagnostics-design.md, and the public values are in the research notes,
+# "Dante-family hardware and geometry: what is public".
 
 """
     DIAGNOSTIC_SCHEMA
@@ -19,10 +20,10 @@ const _BUILTIN_DIAGNOSTICS = joinpath(@__DIR__, "..", "data", "diagnostics")
 """
     DiagnosticField(type; required = false, doc = "")
 
-One key of a diagnostic kind's schema ([`register_diagnostic_kind`](@ref)): `type` is
-`Real`, `Integer`, `String`, `Bool`, `:date`, `Vector{String}`, `Vector{Real}`, a
-schema table (a `Dict{String,DiagnosticField}`) or a one-element vector holding a
-schema table (an array of tables). Keys ending in `_csv` name a CSV file, a path
+One key of the schema of a diagnostic kind ([`register_diagnostic_kind`](@ref)). `type`
+is `Real`, `Integer`, `String`, `Bool`, `:date`, `Vector{String}`, `Vector{Real}`, a
+schema table (a `Dict{String,DiagnosticField}`) or a one-element vector that contains a
+schema table (an array of tables). Keys ending in `_csv` name a CSV file, as a path
 relative to the definition file.
 """
 struct DiagnosticField
@@ -33,13 +34,13 @@ end
 DiagnosticField(type; required::Bool = false, doc::AbstractString = "") =
     DiagnosticField(type, required, String(doc))
 
-# keys every table may carry: source, confidence and note
+# keys that every table may carry, which are source, confidence and note
 const _PROVENANCE_KEYS = Dict("source" => DiagnosticField(String; doc = "citation"),
                               "confidence" => DiagnosticField(String; doc = "H, M or L"),
                               "note" => DiagnosticField(String))
 
-# top-level keys of every definition; those below the line are not inherited through
-# `extends` (they belong to the file that states them)
+# Top-level keys of every definition. Those below the line are not inherited through
+# `extends`, since they belong to the file that states them.
 const _HEADER_KEYS = Dict(
     "schema" => DiagnosticField(Integer; required = true, doc = "format version"),
     "id" => DiagnosticField(String; required = true, doc = "unique name, e.g. nif_dante1"),
@@ -65,11 +66,12 @@ const _DIAGNOSTIC_KINDS = Dict{Symbol,_Kind}()
 """
     register_diagnostic_kind(kind::Symbol, schema::Dict{String,DiagnosticField}, build)
 
-Make `kind` a diagnostic kind: definition files with `kind = "<kind>"` are checked
-against `schema` (the keys besides the header ones: `schema`, `id`, `kind`, `name`,
+Make `kind` a diagnostic kind. Definition files with `kind = "<kind>"` are checked
+against `schema` and built by `build(def::DiagnosticDefinition; kwargs...)`. The schema
+covers the keys besides the header keys, which are `schema`, `id`, `kind`, `name`,
 `facility`, `instrument`, `extends`, `public`, `valid_from`, `valid_to`, `shots`, and
-`source`, `confidence`, `note` in every table) and built by `build(def::DiagnosticDefinition;
-kwargs...)`. A kind registered again replaces the earlier one.
+`source`, `confidence` and `note` in every table. A kind registered again replaces the
+earlier one.
 """
 function register_diagnostic_kind(kind::Symbol, schema::Dict{String,DiagnosticField}, build)
     _DIAGNOSTIC_KINDS[kind] = _Kind(schema, build)
@@ -79,10 +81,10 @@ end
 """
     DiagnosticIssue
 
-A problem found in a definition file ([`check_diagnostics`](@ref)): `file`, `key` (the
-path to the value, e.g. `channel[6].filters[1].thickness_um`), `message`, and `level`:
-`:error` (the file cannot be used), `:missing` (a value the definition lacks to be
-built, e.g. one that is not public) or `:warning`.
+A problem found in a definition file ([`check_diagnostics`](@ref)), with fields `file`,
+`key` (the path to the value, e.g. `channel[6].filters[1].thickness_um`), `message` and
+`level`. `level` is `:error` when the file cannot be used, `:missing` for a value that
+the definition lacks to be built (e.g. one that is not public), or `:warning`.
 """
 struct DiagnosticIssue
     file::String
@@ -113,8 +115,8 @@ function _check_value(v, t)
     return false
 end
 
-# Check table `d` against `spec`; push issues. `required` is checked only when asked
-# (a file that extends another need not repeat what it inherits).
+# Checks table `d` against `spec` and pushes issues. `required` is checked only on
+# request, since a file that extends another need not repeat what it inherits.
 function _check_table!(issues, file, path, d::AbstractDict, spec::Dict{String,DiagnosticField};
                        required::Bool = true)
     for (k, v) in d
@@ -148,15 +150,17 @@ end
 """
     DiagnosticDefinition
 
-A diagnostic definition read from a file and resolved through `extends`: `id`, `name`,
-`kind`, `file` (the file that defines it), `chain` (the files it was resolved from,
-the base first), `public` (`false` when any file in the chain sets `public = false`) and `data` (the
-resolved table, CSV paths made absolute). [`diagnostic`](@ref) builds the instrument.
+A diagnostic definition read from a file and resolved through `extends`. The fields
+are `id`, `name`, `kind`, `file` (the file that defines it), `chain` (the files from
+which it was resolved, the base first), `public` and `data`. `public` is `false` when any
+file in the chain sets `public = false`, and `data` is the resolved table with CSV
+paths made absolute. [`diagnostic`](@ref) builds the instrument.
 
-`data["instrument"]`, when a file of the chain gives it, names the instrument the
-definition is one configuration of (NIF Dante 1's channel sets of several years and
-shots share `instrument = "NIF Dante 1"`); a definition that extends another inherits
-it, and one without it is a separate instrument ([`diagnostic_instrument`](@ref)).
+`data["instrument"]`, when a file of the chain gives it, names the instrument of which
+the definition is one configuration. For example, the channel sets of NIF Dante 1 for
+several years and shots share `instrument = "NIF Dante 1"`. A definition that extends
+another inherits the key, and a definition without it is a separate instrument
+([`diagnostic_instrument`](@ref)).
 """
 struct DiagnosticDefinition
     id::String
@@ -175,13 +179,13 @@ Base.show(io::IO, d::DiagnosticDefinition) =
 """
     diagnostic_instrument(d::DiagnosticDefinition) -> String
 
-The instrument `d` is a configuration of: its `instrument` key (set directly, or inherited
-through `extends`), else its `name`. A list of diagnostics shows each instrument once
-and offers its definitions as configurations.
+The instrument of which `d` is a configuration. It is the `instrument` key of `d` (set
+directly, or inherited through `extends`), or else its `name`. A list of diagnostics
+shows each instrument once and offers its definitions as configurations.
 """
 diagnostic_instrument(d::DiagnosticDefinition) = String(get(d.data, "instrument", d.name))
 
-# a file as read: its table with CSV paths made absolute
+# a file as read, with its table and CSV paths made absolute
 struct _Raw
     file::String
     data::Dict{String,Any}
@@ -210,7 +214,7 @@ function _read_raw(file::AbstractString, issues)
     return _raw(d, file, dirname(abspath(file)), issues)
 end
 
-# a parsed table: its header checked, CSV paths made absolute against `dir`
+# a parsed table, with its header checked and CSV paths made absolute against `dir`
 function _raw(d::AbstractDict, file::AbstractString, dir::AbstractString, issues)
     for (k, f) in _HEADER_KEYS
         haskey(d, k) && !_check_value(d[k], f.type) &&
@@ -226,7 +230,8 @@ function _raw(d::AbstractDict, file::AbstractString, dir::AbstractString, issues
     return _Raw(String(file), _absolute_csv!(d, dir))
 end
 
-# merge child into parent: tables key by key, channels by number, other values replaced
+# Merges child into parent: tables key by key, channels by number, and other values
+# replaced.
 function _merge(parent::AbstractDict, child::AbstractDict)
     out = deepcopy(Dict{String,Any}(parent))
     for k in _OWN_KEYS
@@ -235,8 +240,8 @@ function _merge(parent::AbstractDict, child::AbstractDict)
     for (k, v) in child
         k in ("extends", "remove_channels") && continue
         if k == "channel" && haskey(out, "channel")
-            # a channel of the same number takes the child's keys (each value replaced
-            # whole: filters, mirror); a new number is added
+            # A channel of the same number takes the keys of the child, with each value
+            # (filters, mirror) replaced whole, and a new number is added.
             byn = Dict(c["number"] => c for c in out["channel"] if haskey(c, "number"))
             for c in v
                 n = get(c, "number", 0)
@@ -256,8 +261,8 @@ function _merge(parent::AbstractDict, child::AbstractDict)
     return out
 end
 
-# keys that exclude each other: in each group, alternatives (a key, or keys given
-# together); a file that gives one alternative drops the others it inherits
+# Keys that exclude each other, as alternatives within each group (a key, or keys given
+# together). A file that gives one alternative drops the others that it inherits.
 const _EXCLUSIVE_KEYS = ((("area_mm2",), ("area_part",), ("area_open",), ("area_history_csv",)),
                          (("center_part",), ("center_mm",)),
                          (("port",), ("theta_deg", "phi_deg")))
@@ -266,13 +271,13 @@ const _EXCLUSIVE_KEYS = ((("area_mm2",), ("area_part",), ("area_open",), ("area_
 _given_alternatives(d::AbstractDict) =
     [[alt for alt in group if any(k -> haskey(d, k), alt)] for group in _EXCLUSIVE_KEYS]
 
-# whether `d` gives another alternative of a group that holds key `k` (a required key
-# is then not missing: `port` stands for `theta_deg` and `phi_deg`)
+# Whether `d` gives another alternative of a group that contains key `k`. A required key
+# is then not missing, since `port` stands for `theta_deg` and `phi_deg`.
 _alternative_given(d::AbstractDict, k) =
     any(group -> any(alt -> k in alt, group) &&
                  any(alt -> !(k in alt) && any(x -> haskey(d, x), alt), group), _EXCLUSIVE_KEYS)
 
-# a table that gives two alternatives of a group: the error, keyed by `path`
+# returns the error, keyed by `path`, for a table that gives two alternatives of a group
 function _check_exclusive(d::AbstractDict, path)
     for (group, given) in zip(_EXCLUSIVE_KEYS, _given_alternatives(d))
         length(given) > 1 &&
@@ -330,9 +335,10 @@ end
 """
     diagnostic_config_path() -> String
 
-The user configuration file that stores the diagnostic search path (key
-`diagnostics.paths`): `BRIAREUS_CONFIG` if set, else `%APPDATA%\\Briareus\\config.toml` on
-Windows, `~/Library/Application Support/Briareus/config.toml` on macOS and
+The user configuration file that stores the diagnostic search path, under the key
+`diagnostics.paths`. It is `BRIAREUS_CONFIG` if set, and otherwise
+`%APPDATA%\\Briareus\\config.toml` on Windows,
+`~/Library/Application Support/Briareus/config.toml` on macOS and
 `\$XDG_CONFIG_HOME/briareus/config.toml` (default `~/.config`) elsewhere.
 """
 function diagnostic_config_path()
@@ -356,12 +362,12 @@ const _PATHS_LOCK = ReentrantLock()
 """
     diagnostic_paths(; builtin = true) -> Vector{String}
 
-The diagnostic search path, in order of precedence (a later definition of an `id`
-shadows an earlier one): the built-in definitions (`data/diagnostics`, unless `builtin =
-false`), the directories saved in the configuration file
-([`diagnostic_config_path`](@ref)), those of the environment variable
-`BRIAREUS_DIAGNOSTICS` (separated by `;` on Windows, `:` elsewhere), and those added for
-this Julia session ([`add_diagnostic_path`](@ref) with `save = false`).
+The diagnostic search path, in order of precedence, where a later definition of an
+`id` shadows an earlier one. The path consists of the built-in definitions
+(`data/diagnostics`, unless `builtin = false`), the directories saved in the
+configuration file ([`diagnostic_config_path`](@ref)), those of the environment
+variable `BRIAREUS_DIAGNOSTICS` (separated by `;` on Windows, `:` elsewhere), and those
+added for this Julia session ([`add_diagnostic_path`](@ref) with `save = false`).
 """
 function diagnostic_paths(; builtin::Bool = true)
     env = filter(!isempty, split(get(ENV, "BRIAREUS_DIAGNOSTICS", ""), Sys.iswindows() ? ';' : ':'))
@@ -383,10 +389,11 @@ end
 """
     add_diagnostic_path(dir; save = true) -> Vector{String}
 
-Add the directory `dir` to the diagnostic search path, after those already on it:
-`save = true` stores it in the configuration file ([`diagnostic_config_path`](@ref)),
-so later sessions find it; `save = false` adds it for this Julia session only. Returns
-the search path ([`diagnostic_paths`](@ref)).
+Add the directory `dir` to the diagnostic search path, after those already on it. With
+`save = true`, the directory is stored in the configuration file
+([`diagnostic_config_path`](@ref)), so later sessions find it. With `save = false`, it
+is added only for this Julia session. Returns the search path
+([`diagnostic_paths`](@ref)).
 """
 function add_diagnostic_path(dir::AbstractString; save::Bool = true)
     isdir(dir) || throw(ArgumentError("no such directory: $dir"))
@@ -407,8 +414,8 @@ end
 """
     remove_diagnostic_path(dir; save = true) -> Vector{String}
 
-Remove `dir` from the saved search path (`save = true`) or from this session's
-([`add_diagnostic_path`](@ref)). Returns the search path.
+Remove `dir` from the saved search path (`save = true`) or from the search path of this
+session ([`add_diagnostic_path`](@ref)). Returns the search path.
 """
 function remove_diagnostic_path(dir::AbstractString; save::Bool = true)
     d = normpath(abspath(dir))
@@ -425,7 +432,7 @@ function remove_diagnostic_path(dir::AbstractString; save::Bool = true)
     return diagnostic_paths()
 end
 
-# the definition files of a path entry: a file, or the .toml files under a directory
+# the definition files of a path entry, which is a file or the .toml files under a directory
 function _definition_files(p::AbstractString)
     isfile(p) && return [p]
     isdir(p) || return String[]
@@ -437,8 +444,8 @@ function _definition_files(p::AbstractString)
     return out
 end
 
-# read every file on `paths`; later ids shadow earlier ones (a warning names both),
-# two files in one entry with one id are an error
+# Reads every file on `paths`. Later ids shadow earlier ones, with a warning that names
+# both, and two files in one entry with one id are an error.
 function _read_all(paths, issues)
     raws = Dict{String,_Raw}()
     for p in paths
@@ -468,8 +475,8 @@ end
 
 Every diagnostic definition on the search path (directories, read recursively, or
 single files), resolved through `extends`, by `id`. A later definition of an `id`
-shadows an earlier one, with a warning naming both files; a file with errors is left
-out with a warning ([`check_diagnostics`](@ref) reports them all).
+shadows an earlier one, with a warning that names both files. A file with errors is
+left out with a warning, and [`check_diagnostics`](@ref) reports all the errors.
 """
 function diagnostics(; paths = diagnostic_paths())
     issues = DiagnosticIssue[]
@@ -483,8 +490,8 @@ end
 
 _definitions(paths, issues) = _checked(_read_all(paths, issues), issues)
 
-# resolve and check every definition of `raws`, leaving out those with errors or
-# missing values
+# Resolves and checks every definition of `raws`, leaving out those with errors or
+# missing values.
 function _checked(raws::Dict{String,_Raw}, issues)
     out = Dict{String,DiagnosticDefinition}()
     for id in sort(collect(keys(raws)))
@@ -499,7 +506,8 @@ function _checked(raws::Dict{String,_Raw}, issues)
         spec = _DIAGNOSTIC_KINDS[d.kind].schema
         body = Dict(k => v for (k, v) in d.data if !haskey(_HEADER_KEYS, k) && !haskey(_PROVENANCE_KEYS, k) &&
                     k != "remove_channels")
-        # the keys the file sets first (so an error names it), then the resolved whole
+        # The keys that the file sets come first, so that an error names the file, then
+        # the resolved whole.
         own = Dict(k => v for (k, v) in raws[id].data if !haskey(_HEADER_KEYS, k) &&
                    !haskey(_PROVENANCE_KEYS, k))
         _check_table!(issues, d.file, "", own, spec; required = false)
@@ -516,10 +524,10 @@ end
     diagnostic(def::DiagnosticDefinition; kwargs...)
 
 Build the instrument of definition `id` found on `paths` ([`diagnostics`](@ref)), or of
-`def`: for `kind = "xray_power"` a [`DanteView`](@ref). `kwargs` go to the kind's
-builder (for `xray_power`, those of `DanteView`, e.g. `pixels`), replacing the
-definition's values. A definition that lacks a value the instrument needs (e.g. a
-channel set that is not public) throws, naming the key to supply.
+`def`, such as a [`DanteView`](@ref) for `kind = "xray_power"`. `kwargs` go to the
+builder of the kind, for `xray_power` those of `DanteView` such as `pixels`, and replace
+the values of the definition. A definition that lacks a value that the instrument needs,
+such as a channel set that is not public, throws an error that names the key to supply.
 """
 function diagnostic(id::AbstractString; paths = diagnostic_paths(), kwargs...)
     issues = DiagnosticIssue[]
@@ -535,11 +543,12 @@ diagnostic(def::DiagnosticDefinition; kwargs...) = _DIAGNOSTIC_KINDS[def.kind].b
 """
     check_diagnostics(; paths = diagnostic_paths()) -> Vector{DiagnosticIssue}
 
-Read every definition on `paths`, resolve `extends`, check each against its kind's
-schema and build it, and return the problems found ([`DiagnosticIssue`](@ref)): errors
-(unknown keys, wrong types, unreadable CSV files, unknown materials), values a
-definition lacks to be built (`:missing`) and warnings (shadowed ids, CSV tables that do
-not cover a channel's energy range). An empty result means every definition builds.
+Read every definition on `paths`, resolve `extends`, check each definition against the
+schema of its kind and build it, and return the problems found
+([`DiagnosticIssue`](@ref)). The problems are errors (unknown keys, wrong types,
+unreadable CSV files, unknown materials), values that a definition lacks to be built
+(`:missing`) and warnings (shadowed ids, CSV tables that do not cover the energy range
+of a channel). An empty result means that every definition builds.
 """
 function check_diagnostics(; paths = diagnostic_paths())
     issues = DiagnosticIssue[]
@@ -570,7 +579,7 @@ end
 Base.showerror(io::IO, e::_MissingValue) = print(io, "[", e.key, "] ", e.msg)
 Base.showerror(io::IO, e::_KeyedError) = print(io, "[", e.key, "] ", e.msg)
 
-# CSV tables that do not cover 50 eV – 20 keV (the unfold's range)
+# CSV tables that do not cover 50 eV – 20 keV, the range of the unfold
 function _coverage!(issues, d::DiagnosticDefinition)
     for c in get(d.data, "channel", Any[])
         for (k, f) in _csv_keys(c)
@@ -608,11 +617,11 @@ end
 """
     diagnostic_table(def::DiagnosticDefinition; csv = identity) -> Dict{String,Any}
 
-The resolved definition as one standalone table, with no `extends`: the table of a
-definition file that [`diagnostic_definition`](@ref) reads back to the same definition
-(a session embeds its diagnostics this way; `TOML.print` writes it as a file). Each CSV
-path (absolute in `def`) is replaced by `csv(path)`, e.g. the name of a copy stored
-beside the table.
+The resolved definition as one standalone table, with no `extends`. It is the table of
+a definition file that [`diagnostic_definition`](@ref) converts back to the same
+definition. A session embeds its diagnostics this way, and `TOML.print` writes the table
+as a file. Each CSV path (absolute in `def`) is replaced by `csv(path)`, e.g. the name of
+a copy stored beside the table.
 """
 function diagnostic_table(def::DiagnosticDefinition; csv = identity)
     d = deepcopy(def.data)
@@ -638,11 +647,11 @@ end
 """
     diagnostic_definition(table; file = "", dir = pwd()) -> DiagnosticDefinition
 
-The definition of a standalone table ([`diagnostic_table`](@ref): a definition file's
-table with `kind` and no `extends`), checked as a file on the search path is; CSV
-paths are relative to `dir`. `file` names the table in the definition and in errors.
-Throws `ArgumentError` listing the problems when the table has errors or lacks values
-it needs.
+The definition of a standalone table, which is the table of a definition file with
+`kind` and no `extends` ([`diagnostic_table`](@ref)). The table is checked as a file on
+the search path is, and CSV paths are relative to `dir`. `file` names the table in the
+definition and in errors. Throws an `ArgumentError` that lists the problems when the
+table has errors or lacks values that it needs.
 """
 function diagnostic_definition(table::AbstractDict; file::AbstractString = "", dir::AbstractString = pwd())
     issues = DiagnosticIssue[]
@@ -660,8 +669,9 @@ end
     diagnostic_diff(a::DiagnosticDefinition, b::DiagnosticDefinition) -> Vector{String}
 
 The keys whose values differ between two definitions (as in [`DiagnosticIssue`](@ref),
-e.g. `channel[6].filters`), sorted; empty when they define the same instrument and
-sources. CSV files are compared by content, not path; `name` and `public` count.
+e.g. `channel[6].filters`), sorted. The result is empty when the definitions define the
+same instrument and sources. CSV files are compared by content, and their paths are
+ignored. `name` and `public` count as differences.
 """
 function diagnostic_diff(a::DiagnosticDefinition, b::DiagnosticDefinition)
     fa, fb = _flat(diagnostic_table(a)), _flat(diagnostic_table(b))
@@ -672,10 +682,10 @@ function diagnostic_diff(a::DiagnosticDefinition, b::DiagnosticDefinition)
     return sort!(out)
 end
 
-# a CSV path's value is its content
+# the value of a CSV path is its content
 _leaf(k, v) = endswith(k, "_csv") && v isa AbstractString && isfile(v) ? read(v) : v
 
-# key paths => leaf values; arrays of tables by `number` where they have one
+# Returns key paths => leaf values, with arrays of tables keyed by `number` where they have one.
 function _flat(d::AbstractDict, path = "", out = Dict{String,Any}())
     for (k, v) in d
         key = isempty(path) ? k : path * "." * k
@@ -720,7 +730,7 @@ const _CHANNEL_SPEC = Dict(
     "response_csv" => DiagnosticField(String; doc = "measured whole-channel response (energy eV, V/GW)"),
     "field_of_view_mm" => DiagnosticField(Real; doc = "collimated field of the channel, in place of the view field"))
 
-# a line of sight: a NIF diagnostic port by name, or its angles
+# a line of sight, given as a NIF diagnostic port by name or as its angles
 const _LOS_SPEC = Dict(
     "port" => DiagnosticField(String; doc = "a NIF diagnostic port, e.g. P143-274 (NIF_DIAGNOSTIC_PORTS); replaces theta_deg and phi_deg"),
     "theta_deg" => DiagnosticField(Real; required = true),
@@ -751,8 +761,8 @@ function _curve(path, key; extrapolate = :hold)
     end
 end
 
-# filter tables (`_FILTER_SPEC`) as `filter_transmission` pairs and measured curves;
-# `key(suffix)` names a value in errors
+# Converts filter tables (`_FILTER_SPEC`) to `filter_transmission` pairs and measured
+# curves, with `key(suffix)` naming a value in errors.
 function _filters(fs::AbstractVector, key)
     filters = Pair{Symbol,Any}[]
     tables = TabulatedCurve[]
@@ -837,12 +847,12 @@ function _channel(c::AbstractDict)
                                       field_of_view = fov))
 end
 
-# a channel without a nominal energy takes its response's peak
+# a channel without a nominal energy takes the peak of its response
 _peak_energy(c::DanteResponse) =
     isnan(c.energy) ? DanteResponse(c.number, c.E[argmax(c.R)], c.filters, c.tables, c.grid, c.mirror, c.cathode,
                                     c.response, c.solid_angle, c.E, c.R, c.field_of_view) : c
 
-# channels built once per content (the responses take ~0.1 s per channel set)
+# channels built once per content, since the responses are costly to build
 const _CHANNEL_CACHE = Dict{UInt,Vector{DanteResponse}}()
 const _CHANNEL_CACHE_LOCK = ReentrantLock()
 
@@ -857,9 +867,9 @@ function _channels(cs::AbstractVector)
     return ch
 end
 
-# (θ, φ) of a definition's line of sight: its `port` in NIF's diagnostic port table
-# (`port_angles(:nif, port)`; Omega's diagnostic ports, H16I and the rest, are not
-# tabulated), or `theta_deg` and `phi_deg`
+# Returns (θ, φ) of the line of sight of a definition, from its `port` in the NIF
+# diagnostic port table (`port_angles(:nif, port)`) or from `theta_deg` and `phi_deg`.
+# The diagnostic ports of Omega, H16I and the rest, are not tabulated.
 function _line_of_sight(d::AbstractDict)
     los = d["line_of_sight"]
     _check_exclusive(los, "line_of_sight")
@@ -881,7 +891,7 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     mode = get(get(d, "recording", Dict{String,Any}()), "mode", "history")
     mode == "history" || throw(_KeyedError("recording.mode", "xray_power records a history"))
     cs = get(d, "channel", Any[])
-    # (a definition without channels builds when the call supplies them: `dante2()`)
+    # (A definition without channels builds when the call supplies them, as `dante2()` does.)
     isempty(cs) && !haskey(kwargs, :channels) &&
         throw(_MissingValue("channel", "no channels: supply [[channel]] tables (extend \"$(def.id)\")"))
     _check_exclusive(v, "view")
@@ -894,8 +904,8 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     else
         center = haskey(v, "center_part") ? Symbol(v["center_part"]) : zero(Vec3)
     end
-    # without a field of view the view looks through an aperture (default the lower
-    # entrance hole); with one, `through` is only the reference for Tr
+    # Without a field of view, the view looks through an aperture (by default the lower
+    # entrance hole). With one, `through` is only the reference for Tr.
     through = haskey(v, "through") ? Symbol(v["through"]) : fov === nothing ? :leh_bottom : nothing
     area = haskey(v, "area_mm2") ? Float64(v["area_mm2"]) :
            haskey(v, "area_part") ? Symbol(v["area_part"]) :
@@ -910,15 +920,16 @@ end
 
 register_diagnostic_kind(:xray_power, _XRAY_POWER_SPEC, _build_xray_power)
 
-# the built-in definitions alone (the public ones; user files cannot change these)
+# only the built-in definitions, which are the public ones and which user files cannot change
 _builtin_diagnostic(id; kwargs...) = diagnostic(_builtin_definition(id); kwargs...)
 function _builtin_definition(id)
     issues = DiagnosticIssue[]
     raws = _read_all([normpath(_BUILTIN_DIAGNOSTICS)], issues)
     defs = _checked(raws, issues)
     haskey(defs, id) && return defs[id]
-    # a built-in that lacks values that are not public (nif_dante2's channels), resolved
-    # for a constructor that supplies them; errors in a built-in are never expected
+    # A built-in may lack values that are not public, such as the channels of nif_dante2,
+    # and is resolved for a constructor that supplies them. Errors in a built-in are
+    # never expected.
     any(i -> i.level === :error, issues) && error("built-in diagnostic definitions: " * join(sprint.(show, issues), "\n"))
     return _resolve(id, raws, issues)
 end
@@ -955,7 +966,7 @@ const _XRAY_IMAGER_SPEC = Dict(
         "gate_ns" => DiagnosticField(Real; doc = "gated: the gate's FWHM"),
         "gate_shape" => DiagnosticField(String; doc = "gated: gaussian (default) or square"))))
 
-# the detector's absorbing layer or measured efficiency (a `detector` table), as
+# the absorbing layer or measured efficiency of the detector (a `detector` table), as
 # `_detection` takes it
 function _detector(det::AbstractDict)
     if haskey(det, "efficiency_csv")
@@ -976,7 +987,7 @@ function _detector(det::AbstractDict)
     throw(_MissingValue("detector", "the detector's absorber and absorber_um, or efficiency_csv"))
 end
 
-# the object-plane field's center (a `view` table)
+# the center of the object-plane field (a `view` table)
 function _view_center(v::AbstractDict)
     haskey(v, "center_part") && haskey(v, "center_mm") &&
         throw(_KeyedError("view.center_mm", "give one of center_part, center_mm"))
@@ -984,7 +995,7 @@ function _view_center(v::AbstractDict)
            haskey(v, "center_mm") ? Vec3(Float64.(v["center_mm"])...) : zero(Vec3)
 end
 
-# the recording's mode and gates (a `recording` table) as the instrument's keywords
+# the mode and gates of the recording (a `recording` table), as keywords of the instrument
 function _recording(rec::AbstractDict, kind)
     mode = Symbol(get(rec, "mode", "integrated"))
     mode in (:integrated, :gated) || throw(_KeyedError("recording.mode", "$kind records integrated or gated"))

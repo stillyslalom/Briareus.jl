@@ -10,7 +10,7 @@ using Printf: @sprintf
     total_area(m) = sum(k -> tri_area(m, k), eachindex(m.triangles); init = 0.0)
 
     @testset "round trip" begin
-        # a small hohlraum: wall, end caps, two LEH apertures, a capsule
+        # A small hohlraum has a wall, end caps, two LEH apertures and a capsule.
         t = hohlraum(nz = 6, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
         names = [String(c.name) for c in t.components]
         @test any(c -> c.kind === :aperture, t.components)
@@ -36,7 +36,7 @@ using Printf: @sprintf
                 end
             else
                 solids = read_stl_solids(path; scale)
-                @test first.(solids) == ["h_true_$scale"]      # binary: one solid, the file name
+                @test first.(solids) == ["h_true_$scale"]      # one solid, named for the file
                 @test startswith(String(read(path)[1:80]), "Briareus.jl")   # not "solid"
             end
         end
@@ -47,7 +47,7 @@ using Printf: @sprintf
         @test first.(read_stl_solids(path)) == ["plate"]
         bpath = write_stl(joinpath(dir, "plate.stl"), c)
         @test reinterpret(Float32, read(bpath)[85:96]) == Float32[0, 0, 1]
-        # apertures: written as their own solids by default, left out on request
+        # Apertures are written as separate solids by default and left out on request.
         noleh = read_stl_solids(write_stl(joinpath(dir, "noleh.stl"), t; binary = false, apertures = false))
         @test first.(noleh) == [String(c.name) for c in t.components if c.kind !== :aperture]
         # closing lips are written with their entrance holes: each hole whole
@@ -62,7 +62,8 @@ using Printf: @sprintf
         lone = read_stl_solids(write_stl(joinpath(dir, "lone.stl"), [tl.components[component_index(tl, :leh_top_lip)]];
                                          binary = false))
         @test first.(lone) == ["leh_top_lip"]
-        # a two-sided component is written once; a mesh alone, pairs, a component vector
+        # A two-sided component is written once. A bare mesh, pairs and a component vector
+        # are written as well.
         f = foil(:f, (1.0, 0.0, 0.0), (1, 0, 0); width = 1.0, n = 2)
         @test f.two_sided
         @test ntri(read_stl(write_stl(joinpath(dir, "f.stl"), f))) == ntri(f.mesh)
@@ -134,7 +135,8 @@ using Printf: @sprintf
         write(nohdr, vcat(fill(0x01, 80), reinterpret(UInt8, [UInt32(3)]), zeros(UInt8, 7)))
         @test_throws ArgumentError read_stl(nohdr)
 
-        # the fast number parser agrees with Base's parse bitwise, in every format
+        # The fast number parser gives results identical to `parse` from Base in every
+        # format.
         rng = Random.MersenneTwister(7)
         xs = [randn(rng) * 10.0^rand(rng, -30:30) for _ in 1:2000]
         strs = vcat(string.(xs), [@sprintf("%e", x) for x in xs], [@sprintf("%.9E", x) for x in xs],

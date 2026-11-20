@@ -5,10 +5,11 @@
 # 25 µm pinholes, differentially filtered; the channel of 75 µm Be + 50 µm Ti (3–5 keV,
 # ≈ 60 µm resolution); a thinned, back-illuminated Si CCD, 15 µm thick, 24 µm pixels,
 # 2k × 2k. Port P161-326 (NIF User Guide 2024-09; Chen 2020 §II.1). The diffraction energy
-# 4 keV is the middle of the paper's 3–5 keV (derived). The CCD is modeled as 15 µm of Si
-# absorbing every photon it stops (no dead layer; the paper's calibrated QE, Fig. 2a, is
-# not tabulated): give detector.efficiency_csv for a measured curve. The soft channel
-# (W/B4C multilayer at 870 eV) needs the mirror's reflectivity, not modeled here.
+# 4 keV is the middle of the 3–5 keV of the paper (derived). The CCD is modeled as 15 µm of
+# Si that absorbs every photon it stops, with no dead layer, since the calibrated QE of the
+# paper (Fig. 2a) is not tabulated. Give detector.efficiency_csv for a measured curve. The
+# soft channel (W/B4C multilayer at 870 eV) needs the reflectivity of the mirror, which is
+# not modeled.
 
 schema = 1
 id = "nif_sxi_lower"

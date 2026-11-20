@@ -1,9 +1,8 @@
-# Saving and restoring a design: the session as plain data (`session_state`), written to
-# and read from a session file (a zip of the TOML and the CAD files it reads, or the TOML
-# alone, with the diagnostic definitions the design records), and the undo/redo history
-# built on the same snapshots. Results (the drive, an
-# optimization, a clearance report) are not saved: they are computed again from the
-# restored design.
+# Saving and restoring a design. The session is kept as plain data (`session_state`) and
+# written to and read from a session file, either a zip of the TOML and the CAD files it
+# reads or only the TOML, with the diagnostic definitions the design records. The undo/redo
+# history is built on the same snapshots. Results, such as the drive, an optimization or a
+# clearance report, are not saved; they are computed again from the restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
 const SESSION_VERSION = 13              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
@@ -186,7 +185,7 @@ Older sessions convert as they load, through this one path:
   wall role with its wall.
 - Before version 3 a part placed in the old foil frame (`anchor = "foil"`: `z` along the
   foil's back normal) is re-expressed in the foil's frame, so it stays where it was in
-  the chamber (to round-off); other anchors are frame names already. A beam that followed
+  the chamber (within round-off); other anchors are frame names already. A beam that followed
   a component (`aim_ref`) aims in that component's frame when it has one, else in `:tcc`;
   the saved chamber aims are kept as they are and re-expressed in their frames.
 - Before version 5 the part with the role of the backlighter foil was named
@@ -212,7 +211,8 @@ function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
              nothing
     parts = PartSpec[_state_part(p, version < 3 ? params : nothing; named_foil = version < 5,
                                    named_capsule = version < 7) for p in t["parts"]]
-    # sessions before version 8: the template as parts, and its names as theirs
+    # Sessions before version 8 get the template as parts, with its names mapped to those
+    # of the parts.
     names, renamed = Dict{Symbol,Symbol}(), Dict{Symbol,Symbol}()
     if version < 8
         parts, names, renamed = _template_parts(Symbol(get(t, "kind", "custom")), params,
@@ -233,8 +233,9 @@ function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
     _assign!(sess.visrad_source, get(state, "visrad_source", ""))
     b = state["beams"]
     rows = b["beam"]
-    # aims in their frames: version 3 saves the local aims; before it, a beam that followed
-    # a component aims in that component's frame (the saved chamber aims are kept)
+    # Aims are held in their frames. Version 3 saves the local aims; before it, a beam that
+    # followed a component aims in the frame of that component, and the saved chamber aims
+    # are kept.
     frames = part_frames(ts)
     function frame_of(r)
         f = rf(get(r, "aim_frame", get(r, "aim_ref", "tcc")))
@@ -261,12 +262,13 @@ function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
         # sessions before the unconverted-light deposition: off
         set_unconverted_ratio!(sess.drive, Float64.(get(d, "unconverted_ratio", [0.0, 0.0]))...)
     end
-    # (an optimization result stays: it is current while the design is the one it ran on)
+    # An optimization result stays, since it is current while the design is the one it
+    # ran on.
     if haskey(state, "optimize")
         o, op = state["optimize"], sess.optimize
         _assign!(op.by, Symbol(o["by"]))
         _assign!(op.fields, _syms(o["fields"]))
-        # (sessions before the frame fields: their default bounds)
+        # Sessions before the frame fields take the default bounds of those fields.
         _assign!(op.deltas, merge(DEFAULT_DELTAS, Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in o["deltas"])))
         _assign!(op.objective, Symbol(o["objective"]))
         _assign!(op.weights, Dict{Int,Float64}(parse(Int, k) => v for (k, v) in o["weights"]))
@@ -275,7 +277,7 @@ function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
             obs = getfield(op, k)
             _assign!(obs, convert(typeof(obs[]), o[String(k)]))
         end
-        # (sessions before the face objective: its default weight)
+        # Sessions before the face objective take its default weight.
         _assign!(op.uniformity, Float64(get(o, "uniformity", 1.0)))
     end
     # the checks' component roles once the saved design's target is in place (a target
@@ -322,12 +324,12 @@ function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
     vp = Dict{String,Dict{String,String}}(String(id) => Dict{String,String}(String(k) => String(v) for (k, v) in d)
                                           for (id, d) in get(tms, "view_parts", Dict()))
     _assign!(sess.time.view_parts, vp)
-    # (sessions saved before the prepulse and the irradiance threshold: their defaults)
+    # Sessions saved before the prepulse and the irradiance threshold take their defaults.
     p1, p2, a, b = Float64.(get(tms, "prepulse", collect(DEFAULT_PREPULSE)))
     set_prepulse!(sess.time, p1, p2; start = a, stop = b)
     set_irradiance_threshold!(sess.time, Float64(get(tms, "threshold", DEFAULT_THRESHOLD)))
-    # the pulses (sessions before version 12 saved none: no pulses); pulses equal to the
-    # loaded ones stay as they are
+    # The pulses: sessions before version 12 saved none, so they load without pulses.
+    # Pulses equal to the loaded ones stay as they are.
     p = get(tms, "pulses", nothing)
     if p != _pulse_state(sess.time.pulses[])
         p === nothing ? (sess.time.pulses[] = nothing) : _set_pulses!(sess, _state_pulses(p))
@@ -357,9 +359,9 @@ function _restore_view!(sess::DesignSession, v::AbstractDict; rn = Symbol, rf = 
                                        kind = Symbol(get(v, "cut_kind", "sector")),
                                        axis = Symbol(get(v, "cut_axis", "z")),
                                        range = Tuple(Float64.(get(v, "cut_range", [-Inf, Inf]))))
-    # sessions before the plane's offset and line of sight kept the shifted point and
-    # no line (the plane is set without making the cut a plane cut on the way: a sector
-    # cut briefly a plane cut redrew the 3D view twice on every undo)
+    # Sessions before the plane offset and line of sight kept the shifted point and no
+    # line. The plane is set without making the cut a plane cut on the way, since a sector
+    # cut that briefly became a plane cut redrew the 3D view twice on every undo.
     if haskey(v, "cut_normal")
         _set_plane!(vs, Vec3(Float64.(v["cut_normal"])...), Float64.(v["cut_point"]),
                     Float64(get(v, "cut_shift", 0.0)))
@@ -384,9 +386,9 @@ function _restore_view!(sess::DesignSession, v::AbstractDict; rn = Symbol, rf = 
     return sess
 end
 
-# The window as it was left (`session_state`'s `window`): the camera pose (none: the
-# default view), the drive's view (`:scene`, `:map`, `:image`) with the x-ray image's
-# camera, and the Time chart.
+# The window as it was left (`session_state`'s `window`): the camera pose (none for the
+# default view), the view of the drive (`:scene`, `:map`, `:image`) with the camera of
+# the x-ray image, and the Time chart.
 function _window_state(sess::DesignSession)
     w = Dict{String,Any}("drive_view" => String(sess.drive.view[]), "time_chart" => String(sess.time.chart[]))
     c = sess.view.camera[]
@@ -550,7 +552,8 @@ session, the path it had when the session was saved; otherwise `file` itself.
 """
 cad_source(sess::DesignSession, file::AbstractString) = get(sess.cad_sources, file, String(file))
 
-# The CAD files the design reads: its STL and VisRad parts and the VisRad export template.
+# The CAD files the design reads, from its STL and VisRad parts and the VisRad export
+# template.
 function _cad_files(sess::DesignSession)
     files = String[p.file for p in sess.target.parts[] if p.kind in (:mesh, :visrad) && !isempty(p.file)]
     isempty(sess.visrad_source[]) || push!(files, sess.visrad_source[])
@@ -644,7 +647,7 @@ function _read_diagnostic_state(state, zr, bad::Vector{String})
     return out
 end
 
-# The zip entry of a CAD file: its hash and its source's extension.
+# The zip entry of a CAD file, named by its hash and the extension of its source.
 _cad_entry(hash, source) = "cad/" * hash * lowercase(splitext(source)[2])
 
 function _write_toml(io::IO, state)
@@ -666,7 +669,7 @@ Write the design ([`session_state`](@ref), view included) to a session file.
   (`diagnostics/<sha256>.csv`), so the session records the same instruments
   anywhere; the status names those from outside the built-ins and those not public,
   which the file then carries.
-- `embed = false` (a `.briar.toml` file): the TOML alone, plain text that can be read
+- `embed = false` (a `.briar.toml` file): only the TOML, plain text that can be read
   and edited by hand. CAD parts are referenced by path, so the file travels without
   its geometry (for CAD that may not leave the computer it is on); diagnostic
   definitions are saved in it, their CSV files referenced by path.
@@ -866,7 +869,7 @@ function record!(sess::DesignSession)
     if !isempty(h.undo) && isempty(h.redo)
         now, last = _numeric_view_change(h.current, state), _numeric_view_change(h.undo[end], h.current)
         if now !== nothing && now == last
-            h.current = state                 # the same drag: the step keeps its start
+            h.current = state                 # the same drag, so the step keeps its start
             return false
         end
     end
@@ -908,7 +911,7 @@ function redo!(sess::DesignSession)
 end
 
 # A snapshot of the edit history: the session state without the diagnostics recorded
-# and the window (camera, views and charts: not undo steps).
+# and the window (camera, views and charts), which are not undo steps.
 function _history_state(sess::DesignSession)
     state = session_state(sess)
     delete!(state["time"], "diagnostics")
@@ -948,7 +951,7 @@ function _step_to!(sess::DesignSession, state)
                               union(keys(state), keys(cur)))
         _restore_view!(sess, state["view"])
     else
-        # (the diagnostics ticked stay as they are: they are not steps)
+        # The ticked diagnostics stay as they are, since they are not steps.
         tm = merge(get(state, "time", Dict{String,Any}()),
                    Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[])))
         _restore!(sess, merge(state, Dict{String,Any}("time" => tm)),

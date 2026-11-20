@@ -1,6 +1,6 @@
-// Properties of a user frame: name, where it is, the frame it is placed in, its origin
-// and axis angles (a port frame: its roll alone), placement steps, a move along any
-// frame's axis, its axes drawn in the 3D view.
+// The properties of a user frame are its name, where it is, the frame it is placed in,
+// its origin and axis angles (only the roll for a port frame), placement steps, a move
+// along the axis of any frame, and whether its axes are drawn in the 3D view.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

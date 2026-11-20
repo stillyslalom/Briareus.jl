@@ -1,13 +1,13 @@
-# Dante channel responses built from their parts (filters, grids, grazing-incidence
-# mirrors, x-ray diode cathodes) and the Dante unfold: channel voltages back to a
-# spectrum, a flux and a radiation temperature. Research notes, "Dante channel responses
-# and the unfold (2026-10-24)".
+# This file builds Dante channel responses from their parts, which are filters, grids,
+# grazing-incidence mirrors and x-ray diode cathodes. It also holds the Dante unfold,
+# which turns channel voltages back into a spectrum, a flux and a radiation temperature.
+# See the research notes, "Dante channel responses and the unfold (2026-10-24)".
 
-# Energy grid of the responses and of the unfold (eV): 50 eV – 30 keV, 0.21% steps.
+# The energy grid of the responses and of the unfold spans 50 eV – 30 keV in 0.21% steps.
 const _DANTE_GRID = exp.(range(log(50.0), log(29_990.0), 3001))
 
-# Digitized curves of Rubery et al., RSI 2023 (OSTI 1975922), Figs. 3 and 8
-# (`data/rubery2023_dante.csv`): curve name => (energy eV, value).
+# The digitized curves of Rubery et al., RSI 2023 (OSTI 1975922), Figs. 3 and 8, are read
+# from `data/rubery2023_dante.csv` as curve name => (energy eV, value).
 const _RUBERY_DANTE = Ref{Union{Nothing,Dict{String,Tuple{Vector{Float64},Vector{Float64}}}}}(nothing)
 const _RUBERY_LOCK = ReentrantLock()
 
@@ -26,18 +26,22 @@ end
 
 # ---- x-ray diode cathodes ---------------------------------------------------------------
 #
-# Sensitivity (V/GW into 50 Ω) S(E) = K (E/1 keV)^γ x/(1 + x), x = L ρ μ_s(E): Henke's
-# total-electron-yield form (yield ∝ the energy absorbed within an escape depth L, so
-# S ∝ μ while μL ≪ 1; Henke, Knauer & Premaratne, J. Appl. Phys. 52, 1509, 1981) with a
-# surface layer of mass fractions w_C carbon and w_O oxygen over the bulk metal (μ_s the
-# mixture's μ/ρ, ρ the metal's density) and a power-law correction E^γ. Fitted in log
-# (`examples/dante_channels.jl`) to the measured curves digitized from Rubery 2023: L,
-# w_C, w_O, γ and K for Cr to Fig. 3b (0.075–1 keV, rms 12% against the median-read
-# curve; it does not reproduce the edge spikes); K and γ for Al to Fig. 8b (1–4.5 keV,
-# Al K edge, rms 7%) with Cr's surface layer. Ni (no published curve) takes Cr's
-# parameters on the Ni bulk (*assumed*), and above 1 keV for Cr and below 1 keV for Al
-# the model is an extrapolation, as Rubery's "representative sensitivity shapes"
-# are above 2.2 keV.
+# The sensitivity in V/GW into 50 Ω is S(E) = K (E/1 keV)^γ x/(1 + x), with
+# x = L ρ μ_s(E). This is Henke's total-electron-yield form, with a surface layer and a
+# power-law correction E^γ (Henke, Knauer & Premaratne, J. Appl. Phys. 52, 1509, 1981).
+# The yield is proportional to the energy absorbed within an escape depth L, so S ∝ μ
+# while μL ≪ 1. The surface layer has mass fractions w_C of carbon and w_O of oxygen over
+# the bulk metal; μ_s is the μ/ρ of the mixture, and ρ is the density of the metal.
+#
+# The parameters are fitted in log (`examples/dante_channels.jl`) to the measured curves
+# digitized from Rubery 2023:
+# - For Cr, L, w_C, w_O, γ and K are fitted to Fig. 3b over 0.075–1 keV. The rms is 12%
+#   against the median-read curve, and the fit does not reproduce the edge spikes.
+# - For Al, K and γ are fitted to Fig. 8b over 1–4.5 keV, across the Al K edge, with the
+#   surface layer of Cr. The rms is 7%.
+# - Ni has no published curve and takes the Cr parameters on the Ni bulk (*assumed*).
+# Above 1 keV for Cr and below 1 keV for Al the model is an extrapolation, since the
+# "representative sensitivity shapes" of Rubery are above 2.2 keV.
 const _XRD_SURFACE = (L = 33.64, wC = 0.2742, wO = 0.2504)     # nm, mass fractions
 const _XRD_FIT = Dict(:Cr => (K = 15.84e6, γ = -0.2442), :Al => (K = 35.12e6, γ = 0.1018),
                       :Ni => (K = 15.84e6, γ = -0.2442))
@@ -54,11 +58,12 @@ end
 """
     xrd_sensitivity(cathode, E) -> V/GW
 
-Sensitivity of a NIF Dante XRD-31 x-ray diode with an `:Al`, `:Cr` or `:Ni` cathode at
-photon energy `E` (eV): volts into 50 Ω per GW of x-rays on the cathode (1 MV/GW =
-2 × 10⁻⁵ A/W). A Henke total-yield model fitted to the curves digitized from Rubery et
-al., RSI 2023 (Cr: Fig. 3b, 0.075–1 keV; Al: Fig. 8b, 1–4.5 keV); Ni takes Cr's
-parameters (*assumed*: no published curve). See `data/rubery2023_dante.csv` and the
+Returns the sensitivity of a NIF Dante XRD-31 x-ray diode with an `:Al`, `:Cr` or `:Ni`
+cathode at photon energy `E` (eV). The sensitivity is in volts into 50 Ω per GW of x-rays
+on the cathode, where 1 MV/GW = 2 × 10⁻⁵ A/W. The model is a Henke total-yield model
+fitted to the curves digitized from Rubery et al., RSI 2023. Cr is fitted to Fig. 3b over
+0.075–1 keV and Al to Fig. 8b over 1–4.5 keV. Ni takes the Cr parameters as an
+*assumption*, since no curve is published for it. See `data/rubery2023_dante.csv` and the
 research notes, "Dante channel responses and the unfold".
 """
 function xrd_sensitivity(cathode::Symbol, E::Real)
@@ -69,17 +74,19 @@ end
 
 # ---- mirrors ------------------------------------------------------------------------------
 #
-# SiO2 grazing-incidence mirrors: Fresnel reflectivity (Henke f1, f2) at the nominal angle
-# × 0.584 with 4.25 nm rms roughness, fitted to Rubery 2023 Fig. 3a's measured "3.5° SiO2"
-# curve (rms 0.037 in reflectivity over 0.06–1 keV). At the nominal 3.5° the Fresnel
-# cutoff sits at ~0.5 keV where the measured one is at ~0.9 keV, so the published angle
-# is not the grazing angle of a bulk SiO2 surface (or the surface is not bulk SiO2);
-# the same scale is applied to the 2.5° mirror (*assumed*).
+# SiO2 grazing-incidence mirrors take the Fresnel reflectivity (Henke f1, f2) at the
+# nominal angle × 0.584 with 4.25 nm rms roughness. These values are fitted to the measured
+# "3.5° SiO2" curve of Rubery 2023 Fig. 3a, with an rms of 0.037 in reflectivity over
+# 0.06–1 keV. At the nominal 3.5° the Fresnel cutoff lies at ~0.5 keV, where the measured
+# one is at ~0.9 keV. Either the published angle is not the grazing angle of a bulk SiO2
+# surface, or the surface is not bulk SiO2. The same scale is applied to the 2.5° mirror
+# (*assumed*).
 const _SIO2_ANGLE_SCALE = 2.044 / 3.5
 const _SIO2_ROUGHNESS = 4.25
 
-# the Cr/Sc multilayer of channel 2 (1.9°): Rubery 2023 Fig. 8a digitized (1.2–4.5 keV),
-# held at its end values outside (below 1.2 keV the 47 µm polyimide passes < 1e-5)
+# The Cr/Sc multilayer of channel 2 (1.9°) is digitized from Rubery 2023 Fig. 8a over
+# 1.2–4.5 keV and held at its end values outside. Below 1.2 keV the 47 µm polyimide
+# transmits < 1e-5.
 function _mlm_reflectivity(E::Real)
     Et, R = _rubery_dante()["mlm_reflectivity"]
     E <= Et[1] && return R[1] / 100
@@ -91,12 +98,12 @@ end
 """
     GrazingMirror(material, angle; roughness = 0, density = nothing)
 
-A grazing-incidence mirror of `material` (an element or compound of
-[`henke_mass_attenuation`](@ref), e.g. `:C`, `:Be`, `:B4C`) at `angle` (degrees from
-the surface), its reflectivity [`mirror_reflectivity`](@ref) with `roughness` (nm rms)
-and `density` (g/cm³; default the material's): Fresnel from Henke's constants,
-*uncalibrated*. The SiO₂ mirrors of NIF Dante take `(:SiO2, angle)` instead, the model
-calibrated to Rubery et al. 2023 Fig. 3a ([`DanteResponse`](@ref)).
+A grazing-incidence mirror of `material` at `angle` (degrees from the surface). The material
+is an element or compound of [`henke_mass_attenuation`](@ref), such as `:C`, `:Be` and
+`:B4C`. Its reflectivity is [`mirror_reflectivity`](@ref) with `roughness` (nm rms) and
+`density` (g/cm³), which defaults to that of the material. The reflectivity is Fresnel from
+Henke's constants and is *uncalibrated*. The SiO₂ mirrors of NIF Dante take `(:SiO2, angle)`
+instead, the model calibrated to Rubery et al. 2023 Fig. 3a ([`DanteResponse`](@ref)).
 """
 struct GrazingMirror
     material::Symbol
@@ -126,23 +133,23 @@ end
                   solid_angle, tables = [], field_of_view = nothing)
     DanteResponse(number, energy; solid_angle, response::TabulatedCurve, field_of_view = nothing)
 
-One Dante channel built from its hardware: `filters` (`material => thickness` pairs,
-thickness in mm, or `material => (thickness, density)`; transmission from Henke's
-tables, [`filter_transmission`](@ref) with `table = :henke`), measured filter
-transmissions `tables` ([`TabulatedCurve`](@ref)s), a 25 µm tantalum mesh of open
-fraction `grid` (opaque wires), a `mirror` (`(:SiO2, angle°)` grazing-incidence,
-calibrated to Rubery 2023 Fig. 3a; `(:mlm, 1.9)` for channel 2's Cr/Sc multilayer; a
-[`GrazingMirror`](@ref) of another material; or a measured reflectivity as a
-`TabulatedCurve`) and a `cathode`: an XRD (`:Al`, `:Cr`, `:Ni`;
-[`xrd_sensitivity`](@ref)) or a measured sensitivity (a `TabulatedCurve` in V/GW). The
-second form takes a measured whole-channel `response` (V/GW). `energy` (eV) is the
-nominal band energy and `solid_angle` (sr) the channel's. Fields `E` (eV) and `R` (V/GW)
+One Dante channel built from its hardware. `filters` are `material => thickness` pairs
+(thickness in mm) or `material => (thickness, density)`, with transmission from Henke's
+tables ([`filter_transmission`](@ref) with `table = :henke`); `tables` are measured
+filter transmissions ([`TabulatedCurve`](@ref)s); `grid` is the open fraction of a 25 µm
+tantalum mesh (opaque wires). The `mirror` is `(:SiO2, angle°)` for grazing incidence,
+calibrated to Rubery 2023 Fig. 3a; `(:mlm, 1.9)` for the Cr/Sc multilayer of channel 2;
+a [`GrazingMirror`](@ref) of another material; or a measured reflectivity as a
+`TabulatedCurve`. The `cathode` is an XRD, `:Al`, `:Cr` or `:Ni`
+([`xrd_sensitivity`](@ref)), or a measured sensitivity as a `TabulatedCurve` in V/GW. The
+second form takes a measured whole-channel `response` (V/GW). `energy` (eV) is the nominal
+band energy and `solid_angle` (sr) that of the channel. Fields `E` (eV) and `R` (V/GW)
 tabulate the response on 50 eV – 30 keV; a spectrum `dI/dE` (GW/sr/eV) gives the voltage
 `V = Ω ∫ (dI/dE) R dE` (Harris et al., RSI 92, 033505, 2021, eq. 1).
 
-`field_of_view` (mm) is the collimated field of the channel, the diameter of the disk it
-sees at the view's center, in place of the view's ([`DanteView`](@ref)); `nothing`
-(default) takes the view's.
+`field_of_view` (mm) is the collimated field of the channel, the diameter of the disk
+seen at the view center in place of the field of the view ([`DanteView`](@ref)). With
+`nothing`, the default, the channel takes the field of the view.
 """
 struct DanteResponse <: AbstractDanteChannel
     number::Int
@@ -196,8 +203,8 @@ end
 _sensitivity(c::Symbol, E) = xrd_sensitivity(c, E)
 _sensitivity(c::TabulatedCurve, E) = c(E)
 
-# a channel with field of view `f` (mm, or `nothing` for the view's); other channel
-# types have none
+# Returns a channel with field of view `f` (mm), or with the field of the view for
+# `nothing`. Other channel types have no field of view.
 _with_field(c::DanteResponse, f) =
     DanteResponse(c.number, c.energy, c.filters, c.tables, c.grid, c.mirror, c.cathode, c.response,
                   c.solid_angle, c.E, c.R, f === nothing ? nothing : Float64(f))
@@ -219,7 +226,7 @@ function Base.show(io::IO, c::DanteResponse)
           ", ", c.cathode isa Symbol ? "$(c.cathode) XRD" : "detector " * _show_part(c.cathode), fov, ")")
 end
 
-# response at E (linear interpolation on the grid, 0 outside it)
+# Returns the response at E by linear interpolation on the grid, 0 outside it.
 function _response(c::DanteResponse, E::Real)
     (E < c.E[1] || E > c.E[end]) && return 0.0
     i = min(searchsortedlast(c.E, E), length(c.E) - 1)
@@ -229,17 +236,18 @@ end
 """
     dante1_responses() -> Vector{DanteResponse}
 
-The 18 NIF Dante 1 channels as configured for ICF experiments from October 2021 (Rubery
-et al., RSI 2023, Fig. 4: filters, 8.8% grids, two SiO₂ mirrors and the 2–4 keV
-multilayer, Al/Cr/Ni XRDs, solid angles), each built as a [`DanteResponse`](@ref) from
-the built-in definition `nif_dante1_2021` ([`diagnostic`](@ref); the file
-`data/diagnostics/nif_dante1_2021.toml` records the transcription and its assumptions).
-Built once.
+Returns the 18 NIF Dante 1 channels as configured for ICF experiments from October 2021
+(Rubery et al., RSI 2023, Fig. 4). The configuration covers the filters, the 8.8% grids,
+two SiO₂ mirrors and the 2–4 keV multilayer, the Al, Cr and Ni XRDs, and the solid
+angles. Each channel is built as a [`DanteResponse`](@ref) from the built-in definition
+`nif_dante1_2021` ([`diagnostic`](@ref)). The transcription and its assumptions are
+recorded in `data/diagnostics/nif_dante1_2021.toml`. The channels are built once.
 """
 dante1_responses() = _channels(_builtin_definition("nif_dante1_2021").data["channel"])
 
-# W[c, g]: channel c's voltage per GW/sr in group g, spread over the group as a
-# Planckian at `T` (eV; flat for `nothing`), solid angle included
+# Fills W[c, g] with the voltage of channel c per GW/sr in group g, including the solid
+# angle. The power is spread over the group as a Planckian at `T` (eV), or flat for
+# `nothing`.
 function _channel_matrix(ch::Vector{<:DanteResponse}, E::Vector{Float64}; T = nothing)
     G = length(E) - 1
     W = zeros(length(ch), G)
@@ -260,7 +268,7 @@ function _channel_matrix(ch::Vector{<:DanteResponse}, E::Vector{Float64}; T = no
     return W
 end
 
-# Planck spectrum per eV, normalized to 1 (x³/(eˣ − 1) · 15/π⁴ / T)
+# Returns the Planck spectrum per eV, normalized to 1, as x³/(eˣ − 1) · 15/π⁴ / T.
 _planck_shape(E, T) = (x = E / T; x > 700 ? 0.0 : _PLANCK_NORM * x^3 / expm1(x) / T)
 
 # ---- unfold --------------------------------------------------------------------------------
@@ -270,39 +278,45 @@ _planck_shape(E, T) = (x = E / T; x > 700 ? 0.0 : _PLANCK_NORM * x^3 / expm1(x) 
                  below = 1500, mband = (1.0, 2500.0, 600.0), λ = 1e-3, knots = 48,
                  tol = 1e-4, maxiter = 50) -> NamedTuple
 
-Unfold Dante channel `voltages` (V; channels of type [`DanteResponse`](@ref); nonpositive
-or non-finite entries are dropped) into a spectrum, as the data are processed. `area`
-(mm²) and `cos` (of the angle between the line of sight and the emitter's normal) turn
-the power per steradian into a radiation temperature, `Tr = (π I / (σ A cos))^¼`.
+Unfolds Dante channel `voltages` (V) into a spectrum, as the data are processed. The
+channels are of type [`DanteResponse`](@ref), and nonpositive or non-finite entries are
+dropped. `area` (mm²) and `cos`, the cosine of the angle between the line of sight and
+the emitter normal, turn the power per steradian into a radiation temperature,
+`Tr = (π I / (σ A cos))^¼`.
 
-Both methods start as Dante's analysis does (Rubery et al., RSI 2023 §II.C; Harris et
-al., RSI 92, 033505, 2021 §II): each channel below `below` eV (nominal energy) is
-matched alone by a Planckian (its `channel_temperatures`), and the start temperature is
-their mean.
+Both methods start as the Dante analysis does (Rubery et al., RSI 2023 §II.C; Harris et al.,
+RSI 92, 033505, 2021 §II). Each channel below `below` eV in nominal energy is matched by a
+separate Planckian, which gives its `channel_temperatures` entry, and the start temperature
+is their mean.
 
-- `method = :traditional` (Harris's algorithm): the start spectrum is that Planckian
-  plus a Gaussian M-band `mband = (amplitude GW/sr/eV, center eV, FWHM eV)` (Harris:
-  amplitude 1 at 2.5 keV, "width" 600 eV, taken here as the FWHM). Each channel's
-  response is replaced by a unit-peak Gaussian (here centered between its half-maximum
-  points, FWHM their distance), and the Gaussians' amplitudes are adjusted until every
-  channel's computed voltage equals the measured one: by Harris's sweeps (from the
-  highest-energy channel down, each amplitude set to match its channel; up to `maxiter`
-  sweeps, to `tol`), and where the sweeps do not converge (duplicate channels, e.g.
-  Dante 1's 1/8, 10/14 and 7/15, give identical Gaussians, and the sweep then diverges)
-  by solving the same equations directly (least squares in the relative voltages,
-  minimum-norm amplitudes; the result's `solver` records which ran). The spectrum may go negative locally,
-  as in the original.
-- `method = :smooth`: a positive, smooth unfold: the start Planckian (no M-band) times a
-  piecewise-linear factor on `knots` log-spaced knots (50 eV – 20 keV), fitted by
-  nonnegative least squares to the relative voltages with a second-difference penalty
-  `λ` on the factor, so a Planckian is recovered exactly (cf. the cubic-spline unfold of
-  Barnak et al., RSI 91, 073102, 2020, which uses no prior).
+- `method = :traditional` is Harris's algorithm. The start spectrum is that Planckian plus a
+  Gaussian M-band `mband = (amplitude GW/sr/eV, center eV, FWHM eV)`. Harris uses amplitude
+  1 at 2.5 keV and a "width" of 600 eV, which `dante_unfold` takes as the FWHM. The response
+  of each channel is replaced by a unit-peak Gaussian, centered between its half-maximum
+  points with their distance as the FWHM, and the Gaussian amplitudes are adjusted until the
+  computed voltage of every channel equals the measured one. In Harris's sweeps the
+  amplitudes are set from the highest-energy channel down, each to match its channel, for up
+  to `maxiter` sweeps and to `tol`. Duplicate channels (e.g. Dante 1's 1/8, 10/14 and 7/15)
+  have identical Gaussians, and the sweep then diverges; where the sweeps do not converge,
+  the same equations are solved directly by least squares in the relative voltages, with
+  minimum-norm amplitudes. The `solver` field of the result is the method that ran. The
+  spectrum may go negative locally, as in the original.
+- `method = :smooth` gives a positive, smooth unfold. The spectrum is the start
+  Planckian, without an M-band, times a piecewise-linear factor on `knots` log-spaced
+  knots over 50 eV – 20 keV. The factor is fitted by nonnegative least squares to the
+  relative voltages with a second-difference penalty `λ`, so a Planckian is recovered
+  exactly. The cubic-spline unfold of Barnak et al. (RSI 91, 073102, 2020) is similar
+  but does not use a prior.
 
-Returns `energy` (eV grid), `spectrum` (GW/sr/eV), `intensity` (TW/sr, 50 eV – 20 keV),
-`Tr` (eV), `start_temperature`, `channel_temperatures` (per channel, `NaN` above
-`below`), `fit` (V, the voltages of the unfolded spectrum), `misfit` (largest
-|fit/V − 1| over the channels used), `solver` (`:sweep`, `:direct` or `:nnls`) and
-`iterations` (sweeps).
+Returns a named tuple with fields:
+
+- `energy` (eV grid), `spectrum` (GW/sr/eV) and `intensity` (TW/sr, 50 eV – 20 keV);
+- `Tr` (eV) and `start_temperature`;
+- `channel_temperatures`, per channel, `NaN` above `below`;
+- `fit` (V), the voltages of the unfolded spectrum;
+- `misfit`, the largest |fit/V − 1| over the channels used;
+- `solver`, which is `:sweep`, `:direct` or `:nnls`;
+- `iterations`, the number of sweeps.
 """
 function dante_unfold(ch::AbstractVector{<:DanteResponse}, V::AbstractVector{<:Real}; area::Real,
                       cos::Real = 1.0, method::Symbol = :traditional, below::Real = 1500.0,
@@ -401,7 +415,7 @@ function dante_unfold(ch::AbstractVector{<:DanteResponse}, V::AbstractVector{<:R
             misfit = maximum(abs(fit[c] / V[c] - 1) for c in use), solver, iterations)
 end
 
-# Lawson–Hanson nonnegative least squares: min ‖Ax − b‖, x ≥ 0
+# Solves min ‖Ax − b‖ subject to x ≥ 0 by Lawson–Hanson nonnegative least squares.
 function _nnls(A::AbstractMatrix, b::AbstractVector; tol = 1e-12, maxiter = 10 * size(A, 2))
     n = size(A, 2)
     x = zeros(n)

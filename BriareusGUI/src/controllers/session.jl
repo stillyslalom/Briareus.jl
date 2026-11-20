@@ -249,8 +249,8 @@ function _connect!(sess::DesignSession)
         rn = ts.renames[]
         isempty(rn) && return
         follow_renames!(sess, rn)
-        # (and the role holders below: a renamed wall is not a new wall; they wait for the
-        # target of the new names)
+        # The role holders below wait for the target of the new names, since a renamed
+        # wall is not a new wall.
         r(s) = Set{Symbol}(get(rn, n, n) for n in s)
         foils[] = r(foils[])
         held[] = map(r, held[])
@@ -282,7 +282,7 @@ function _connect!(sess::DesignSession)
         c === nothing || c in names || select!(sess.view, "target")
         _drive_inputs_changed!(sess)
     end
-    # a beam selection whose beams went away (a preset, a split, a regrouping)
+    # a beam selection whose beams went away, after a preset, a split or a regrouping
     onany(bt.beams, bt.cluster) do _...
         kind, _ = selection_kind(sess.view.selection[])
         kind in (:beam, :quad, :group) || return
@@ -304,8 +304,9 @@ function _connect!(sess::DesignSession)
     active = Ref{Union{Nothing,Symbol}}(active_foil(ts))
     renamed = Ref{Any}(nothing)                   # the target of a rename's old names
     onany(ts.parts, ts.target, ts.active_foil) do _...
-        # (a renamed part is committed before the target of its new names: the roles
-        # follow the rename itself, not a comparison with the target of the old names)
+        # A renamed part is committed before the target of its new names, so the roles
+        # follow the rename itself; a comparison with the target of the old names would
+        # not.
         if renamed[] !== nothing
             ts.target[] === renamed[] && return
             renamed[] = nothing
@@ -324,8 +325,8 @@ function _connect!(sess::DesignSession)
             end
             foils[] = now
         end
-        # (walls and the observed surface: a role the checks give a new component by
-        # default, as after a rebuild, is left as it is)
+        # For walls and the observed surface, a role that the checks give a new component
+        # by default, as after a rebuild, is left as it is.
         now = _held_sets(ts)
         if now != held[]
             was = held[]
@@ -564,7 +565,7 @@ function optimize_stale(sess::DesignSession)
     return _optimum_stale(sess.beams.beams[], r)
 end
 
-# After an undo or redo: the optimization result is applied when the beam table holds its
+# After an undo or redo, the optimization result is applied when the beam table holds its
 # optimized beams.
 function _restored_optimum!(sess::DesignSession)
     r = sess.optimize.result[]
@@ -618,7 +619,7 @@ seconds), on a worker when `spawn[]` is set, then evaluate the current pointing.
 the drive's cavity on ([`set_cavity!`](@ref)) the scenario is built on the cavity's
 elements, and its laser deposition uses the drive's beam model ([`set_beam_model!`](@ref)).
 A target too large for the x-ray view factors ([`radiation_size`](@ref)) gets
-the laser deposition alone, and `status` says why and what to do.
+only the laser deposition, and `status` explains why and what to do.
 """
 function build_scenario!(sess::DesignSession)
     dr = sess.drive
@@ -743,8 +744,9 @@ function _in_cavity(v::_CavityVolume, t::Target, e::Integer)
     return _in_volume(v, x, tol) && _in_volume(v, x + 1e-3 * v.length * t.elem_normal[e], tol)
 end
 
-# Whether element `e` of the cavity lies on its boundary: one element size behind its
-# centroid lies outside the volume (a wall, a cap, a package face), not inside (a capsule).
+# Whether element `e` of the cavity lies on its boundary, as walls, caps and package faces
+# do: the point one element size behind its centroid lies outside the volume. For a
+# capsule that point lies inside.
 _on_boundary(v::_CavityVolume, t::Target, e::Integer) =
     !_in_volume(v, t.elem_centroid[e] - sqrt(t.elem_area[e]) * t.elem_normal[e], 1e-6 * v.length)
 
@@ -825,7 +827,7 @@ factors"). `bytes` must fit in half of this machine's memory; `limit` is the lar
 element count that does (or [`RADIATION_MAX_ELEMENTS`](@ref), which then sets
 `feasible`): about 160,000 elements on 32 GB. The mesh presets of the starters stay far
 below (16,000 elements at `:fine`), but an imported CAD workspace can hold 10⁵ elements.
-Above the limit [`build_scenario!`](@ref) computes the laser deposition alone.
+Above the limit [`build_scenario!`](@ref) computes only the laser deposition.
 """
 function radiation_size(t::Target)
     N = nelements(t)
@@ -903,7 +905,7 @@ The unconverted power of each beam of the table as a fraction of its 3ω power,
 `(; omega1, omega2)` (vectors in table order): the drive's ratio
 ([`set_unconverted_ratio!`](@ref)) for the beams whose 1ω or 2ω light takes part
 ([`participates`](@ref)), zero for the others; `nothing` when no unconverted light takes
-part (the drive is then bitwise the 3ω drive alone).
+part (the drive is then identical to the drive of only the 3ω light).
 """
 function unconverted_ratios(sess)
     bt = sess.beams
@@ -994,7 +996,7 @@ assembly's (the parts of its subtree: the model tree's include and exclude); a p
 back comes back whole. A CAD part left out is drawn from its file's facets;
 putting it back repairs its windings and remeshes it, which takes tens of seconds for
 10⁵ facets: with `spawn` that runs on worker threads, with progress in `meshing`, and
-the target is replaced when it is ready. A rejected change sets the target's `error`.
+the target is replaced when it is ready. A rejected change sets the `error` of the target.
 """
 function include_components!(sess::DesignSession, names, include::Bool; spawn::Bool = sess.spawn[])
     ts = sess.target
@@ -1064,8 +1066,8 @@ out of reach, see [`radiation_size`](@ref)) and tens of seconds of remeshing. Wi
 the farthest aim point of the beams VisRad fires is left out of the calculations too,
 drawn from its file's facets; `status` names these parts, and
 [`include_components!`](@ref) or *Include in calculations* puts one back (laser,
-clearance and the x-ray drive then see it). `display_only = :none` follows VisRad's
-flags alone.
+clearance and the x-ray drive then see it). `display_only = :none` follows only the
+VisRad flags.
 
 Reading a CAD workspace and remeshing its parts takes seconds, so with `spawn` (a
 window sets it) the file is read and the parts meshed on worker threads, with progress
@@ -1188,7 +1190,7 @@ Write the design's target as an STL file in millimeters (`Briareus.write_stl`): 
 components in the calculations (those left out are not written), each triangle wound
 toward its radiating side. Binary STL by default; `binary = false` writes ASCII STL with
 one named solid per component, which `read_stl_solids` (or a CAD tool) reads back as
-parts. Apertures (entrance holes, open windows) are written as their own solids unless
+parts. Apertures (entrance holes, open windows) are written as separate solids unless
 `apertures = false`.
 """
 function export_target_stl(sess::DesignSession, path::AbstractString; binary::Bool = true,
@@ -1301,8 +1303,8 @@ it. `prepulse` adds light not proportional to the 3ω pulse, `(; omega1, omega2,
 window)`: per color a power per beam of `beams` (TW, a vector), flat over `window =
 (start, stop)` (ns); the histories and the retune take it as `drive_history`'s and
 `retune_drive`'s `prepulse`, keyed by `by` (the beams of one key must carry the same
-prepulse), and the retune does not retune it. Without either they are bitwise the 3ω
-ones.
+prepulse), and the retune does not retune it. Without either they are identical to the
+3ω ones.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
@@ -1352,8 +1354,9 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     lkw = (; by, limits, stay, nominal = stay > 0 ? nominal : nothing, target, level = lv)
     refbeams(τ) = _table_beams(beams, pulses, τ; by = ref_by, shares = rsh)
     oldbeams(τ) = _table_beams(kept, pulses, τ; by = ref_by, shares = rsh[keep])
-    # the unconverted light of every beam (the reference's) and of the kept beams, as
-    # `drive_history`'s keywords, and the latter as the retune's (with a separate `by`)
+    # The unconverted light of every beam (for the reference) and of the kept beams, as
+    # keywords of `drive_history`; the light of the kept beams also goes to the retune,
+    # with a separate `by`.
     uc = _light_kw(unconverted, prepulse, beams; by)
     uck = _light_kw(_kept_unconverted(unconverted, keep), _kept_unconverted(prepulse, keep), kept; by)
     ucr = Base.structdiff(uck, NamedTuple{(:by,)})
@@ -1437,7 +1440,7 @@ function _retune_level(kind::Symbol, text::AbstractString)
     return kind === :capsule ? Briareus.SIGMA_SB * x^4 : x
 end
 
-# Why a drive cannot be retuned: nothing to hold.
+# The status that explains why a drive cannot be retuned when there is nothing to hold.
 const _RETUNE_NONE = "the retune holds an observed surface's x-ray drive or a backlighter foil's laser " *
                      "irradiance: observe a part (Properties ▸ Role), or make one a backlighter foil"
 
@@ -1850,8 +1853,8 @@ function insert_starter!(sess::DesignSession, kind::Symbol; frame::Symbol = :tcc
     return true
 end
 
-# Abandon jobs in flight: their results are dropped when they arrive (a closing
-# window restores inline delivery).
+# Abandon jobs in flight. Their results are dropped when they arrive, and a closing window
+# restores inline delivery.
 function _abandon_jobs!(sess::DesignSession)
     sess.mesh_generation[] += 1
     _assign!(sess.meshing, "")

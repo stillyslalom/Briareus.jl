@@ -1,10 +1,11 @@
-// The model tree: target components (with their colors in the 3D view) under their
-// parts and assemblies, beams by group and quad, analyses. Click selects (in the 3D view
-// too), Ctrl + click adds to the selection, Shift + click a range, double click fits the
-// view to it, the arrow expands, a beam row's dots switch its 1ω, 2ω and 3ω light in the
-// calculations (top) and in the view (bottom), a component's box (its color, filled by
-// its display mode) shows or hides it, right click opens the row's commands. The menu is
-// built for the row clicked, so it holds only the commands that apply to it.
+// The model tree lists target components, with their colors in the 3D view, under their
+// parts and assemblies, beams by group and quad, and analyses. A click selects, in the 3D
+// view too. Ctrl + click adds to the selection, Shift + click adds a range, a double click
+// fits the view to the row, and the arrow expands it. The dots of a beam row switch its 1ω,
+// 2ω and 3ω light in the calculations (top) and in the view (bottom). The box of a
+// component, in its color and filled by its display mode, shows or hides it, and a right
+// click opens the commands of the row. The menu is built for the row clicked, so it holds
+// only the commands that apply to it.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -94,11 +95,12 @@ Pane {
                         nodeId: node.nodeId
                         Layout.preferredWidth: implicitWidth
                     }
-                    // a component: one box in its color, checked while drawn; the fill is its
-                    // display mode (solid opaque, pale semi-transparent, an outline as
-                    // wireframe, empty hidden). A click shows or hides it; its menu sets the mode.
-                    // A part in pieces or an assembly: its components' box together ("mixed": some
-                    // shown, some hidden; a click shows them all).
+                    // A component has one box in its color, checked while drawn. The fill
+                    // shows the display mode: solid for opaque, pale for semi-transparent,
+                    // an outline for wireframe and empty for hidden. A click shows or hides
+                    // it, and its menu sets the mode. A part in pieces or an assembly has
+                    // one box for its components together, "mixed" when some are shown and
+                    // some hidden; a click shows them all.
                     Rectangle {
                         id: compBox
                         visible: model.drawmode !== ""
@@ -182,7 +184,7 @@ Pane {
         let last = null
         for (const e of entries) {
             if (e === null && last === null) continue             // no leading or doubled separator
-            // (created under the tree, an item: the menu takes them over)
+            // The entries are created under the tree, an item, and the menu takes them over.
             menu.addItem(e === null ? menuSeparator.createObject(tree)
                                     : menuItem.createObject(tree, { text: e.text, run: e.run, checkable: !!e.checkable,
                                                                     checked: !!e.checked, enabled: e.enabled !== false }))
@@ -288,7 +290,8 @@ Pane {
         }
     }
 
-    // Move into assembly: the selected parts and assemblies, kept where they are
+    // Move into assembly moves the selected parts and assemblies and keeps them where they
+    // are.
     Dialog {
         id: assemblyDialog
         title: "Move into assembly"

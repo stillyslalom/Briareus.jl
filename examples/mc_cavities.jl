@@ -117,8 +117,8 @@ apertures(t) = findall(e -> t.components[t.elem_comp[e]].kind === :aperture, 1:n
 ratios(a) = (a[1], 100a[3] / a[1], 100a[5] / a[1])            # a₀, a₂/a₀ (%), a₄/a₀ (%)
 se(x, w) = (m = sum(w .* x) / sum(w); sqrt(sum(w .^ 2 .* (x .- m) .^ 2)) / sum(w))
 
-# references: capsule moments (per unit wall power) and the aperture loss (per unit x-ray
-# source), batch by batch, over several runs (paths per receiver, seed)
+# The references are the capsule moments per unit wall power and the aperture loss per
+# unit x-ray source, batch by batch, over several runs (paths per receiver, seed).
 const REFS = Dict("bored" => () -> bored(0.1, 29; curved = false), "windowed" => () -> windowed(0.1, 0.035; curved = false))
 const RUNS = Dict("bored" => [(320, 1), (2000, 2), (2000, 3)], "windowed" => [(1500, 1), (2500, 2), (2500, 3)])
 const ESC_RUNS = Dict("bored" => [(1000, 1), (25000, 2)], "windowed" => [(6000, 2)])

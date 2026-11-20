@@ -1,12 +1,13 @@
-# VisRad workspace (`.vrw`) reader: target components (primitives and CAD meshes) and
-# laser beams with their pointing and spots.
+# Reader for VisRad workspaces (`.vrw`). It reads the target components (primitives and
+# CAD meshes) and the laser beams with their pointing and spots.
 #
 # The workspace layout is undocumented (VR/files/workspace_files.html says only that it
-# is a text file). Everything here was read off two workspaces (Workspace Format ID 11,
-# target-component format 29): a NIF hohlraum with bundled CAD (VisRad 20.0.0, laser-beam
-# format 22) and a primitive hohlraum + foil (VisRad 21.0.0, laser-beam format 23). Details those files
-# do not fix are labeled *assumption*; see `reference/research-notes.md`, "VisRad
-# workspace files".
+# is a text file). The format handling in this file was read off two workspaces with
+# Workspace Format ID 11 and target-component format 29. One is a NIF hohlraum with
+# bundled CAD (VisRad 20.0.0, laser-beam format 22), and the other is a primitive hohlraum
+# with a foil (VisRad 21.0.0, laser-beam format 23). Details those files do not fix are
+# labeled *assumption*; see
+# `reference/research-notes.md`, "VisRad workspace files".
 
 """
     VisRadObject
@@ -17,7 +18,7 @@ Fields: `name`; VisRad's object `type` code and the `kind` Briareus recognizes
 (`:mesh` for CAD/generalized meshes, `:sphere`, `:rectangle`, `:cylindrical_hohlraum`,
 `:other`); the `folder` path in VisRad's component tree (`""` at the top); `params`,
 every `key = value` line of the object verbatim; `rotation` and `position` (mm), the
-object's frame in the target-chamber frame (`x_chamber = rotation * x_object +
+object frame in the target-chamber frame (`x_chamber = rotation * x_object +
 position`); `mesh`, the surface in the chamber frame (mm) for meshes (one patch per
 VisRad surface element) and `nothing` otherwise; `albedo`, `conversion` (x-ray
 conversion efficiency) and `reflectivity` (laser); the flags `radiosity`, `laser`
@@ -72,9 +73,9 @@ function Base.show(io::IO, ws::VisRadWorkspace)
 end
 
 # VisRad object type codes seen in workspaces. Meanings of 1, 4 and 5 are inferred from
-# their parameters and element counts (*assumption* for the code itself); 13 holds an
+# their parameters and element counts (*assumption* for the code itself); 13 is an
 # explicit node/connectivity mesh. 11 is the small invisible "reference cone" VisRad
-# creates for a multi-shape STEP import, which the shapes use as their reference frame
+# creates for a multi-shape STEP import, and the shapes are placed in its reference frame
 # (VR/grid/import_export_cad_files.html); it is not meshed.
 const _VRW_KINDS = Dict(1 => :sphere, 4 => :rectangle, 5 => :cylindrical_hohlraum, 11 => :cone,
                         13 => :mesh)
@@ -91,7 +92,7 @@ end
 
 # A numeric parameter of VisRad object `name`. Without `default` the key is required: a
 # missing, empty or malformed value throws, naming the key and the object. With
-# `default`, a missing or empty value takes it; a malformed one still throws.
+# `default`, a missing or empty value is replaced by it; a malformed one still throws.
 function _vrw_float(d, k, name)
     v = strip(get(d, k, ""))
     isempty(v) && throw(ArgumentError("VisRad object $name: no value for \"$k\""))
@@ -107,7 +108,7 @@ function _vrw_int(d, k, name, default...)
     return Int(x)
 end
 
-# "... # table times = N ..." -> N
+# Extracts N from "... # table times = N ...".
 function _vrw_table_count(line)
     m = match(r"#\s*table\s+times\s*=\s*(\d+)", line)
     return m === nothing ? 0 : parse(Int, m[1])
@@ -124,15 +125,16 @@ end
 # Target components
 # ---------------------------------------------------------------------------------------
 
-# Rotation of VisRad's orientation angles (VR/grid/specifying_orient_angles.html):
-# rotate about z by the Rotation angle, then about the original y by the Polar angle,
-# then about the original z by the Azimuthal angle. The workspace stores "Tilt angle",
+# VisRad's orientation angles (VR/grid/specifying_orient_angles.html) define a rotation
+# about z by the Rotation angle, then about the original y by the Polar angle, then about
+# the original z by the Azimuthal angle. The workspace stores "Tilt angle",
 # "Rotation angle" and "Spin angle"; reading them as Polar, Azimuthal and Rotation, and
 # the right-hand sense, are an *assumption* (the workspaces seen have only a 90° tilt).
 # The rotation is `euler_rotation(tilt, rot, spin)` (src/frames.jl).
 
-# Position (cm, degrees) in Cartesian (0), cylindrical (1: r, z, φ, as in the summary
-# table; *assumption*) or spherical (2: r, θ, φ) coordinates, to mm.
+# Position (cm, degrees) converted to mm. The coordinates are Cartesian (0), cylindrical
+# (1, with r, z and φ as in the summary table, an *assumption*) or spherical (2, with r,
+# θ and φ).
 function _vrw_point(geom::Integer, p1, p2, p3)
     v = geom == 0 ? Vec3(p1, p2, p3) :
         geom == 1 ? Vec3(p1 * cosd(p3), p1 * sind(p3), p2) :
@@ -141,7 +143,7 @@ function _vrw_point(geom::Integer, p1, p2, p3)
     return 10 * v
 end
 
-# Raw object block -> (params, nodes, faces)
+# Parses a raw object block into (params, nodes, faces).
 function _vrw_object_block(lines, i, stop)
     params = Dict{String,String}()
     nodes = Vec3[]
@@ -189,8 +191,8 @@ function _vrw_object_block(lines, i, stop)
     throw(ArgumentError("unterminated object block (truncated file?)"))
 end
 
-# Directory tree: "Number of target components = n", n names, "Number of child folders
-# = m", then m × (folder name, subtree).
+# The directory tree is stored as "Number of target components = n", n names,
+# "Number of child folders = m", then m × (folder name, subtree).
 function _vrw_folders!(out, lines, i, path)
     n = parse(Int, last(_vrw_kv(lines[i])))
     for k in 1:n
@@ -211,12 +213,13 @@ function _vrw_flip(m::Mesh)
 end
 
 # Primitive surfaces in the object frame (mm), as Briareus components.
-# Grid conventions inferred from the VisRad element counts (power-source table of the
-# primitive workspace): a rectangle with 10 × 10 mesh points has 81 elements, a
-# cylindrical hohlraum with mesh points (11, 12, 4) has 216 — 10 × 12 wall, 2 × 3 × 12
-# end-cap and 2 × 12 laser-entrance-hole elements. Periodic azimuths count elements,
-# other directions count nodes. With `h` (mm) the grid is Briareus's for elements of
-# about that size instead (`hohlraum_counts`, `capsule_counts`; VisRad's counts ignored).
+# The grid conventions are inferred from the VisRad element counts in the power-source
+# table of the primitive workspace. A rectangle with 10 × 10 mesh points has 81 elements,
+# and a cylindrical hohlraum with mesh points (11, 12, 4) has 216: 10 × 12 wall,
+# 2 × 3 × 12 end-cap and 2 × 12 laser-entrance-hole elements. Periodic azimuths count
+# elements, and other directions count nodes. With `h` (mm) the grid is instead
+# Briareus's grid for elements of about that size (`hohlraum_counts`, `capsule_counts`),
+# and VisRad's counts are ignored.
 function _vrw_primitive(kind, name, p, mat; h = nothing)
     L(k) = 10 * _vrw_float(p, "Length $k value", name)
     N(k) = _vrw_int(p, "Number of mesh pts $k", name)
@@ -243,8 +246,9 @@ function _vrw_primitive(kind, name, p, mat; h = nothing)
         # axial nodes, 2 = azimuthal elements, 3 = radial nodes on each end cap. VisRad
         # hohlraum normals point in by default. Each LEH is one ring of elements.
         R, H, r = L(1), L(2), L(3)
-        # VisRad's grid: one ring of LEH elements; Briareus's: `hohlraum`'s (LEH rings of
-        # about h, the wall's azimuthal count: matching the caps' inner edges at every vertex)
+        # VisRad's grid has one ring of LEH elements. Briareus's grid follows `hohlraum`:
+        # the LEH rings are about h wide and take the azimuthal count of the wall, so they
+        # match the inner edges of the caps at every vertex.
         nz, nphi, nr, nr_leh, nphi_leh = if h === nothing
             max(1, N(1) - 1), max(3, N(2)), max(1, N(3) - 1), 1, max(3, N(2))
         else
@@ -290,9 +294,10 @@ function _vrw_objects(lines, a, b)
     return _vrw_build_objects(blocks, folders)
 end
 
-# `VisRadObject`s from parsed object blocks — (; name, params, nodes (cm, object
-# frame), faces (1-based vertex lists)) with `params` keyed as in the text format — and
-# each object's folder path. Shared by the text and JSON readers.
+# `VisRadObject`s from parsed object blocks and the folder path of each object. A block
+# is a named tuple `(; name, params, nodes, faces)`. Its nodes are in cm in the object
+# frame, its faces are 1-based vertex lists, and its `params` are keyed as in the text
+# format. The text and JSON readers share this function.
 function _vrw_build_objects(blocks, folders)
     byname = Dict(blk.name => blk for blk in blocks)
     frames = Dict{String,Tuple{SMatrix{3,3,Float64,9},Vec3}}()
@@ -318,9 +323,9 @@ function _vrw_build_objects(blocks, folders)
         R, t = frame(blk.name)
         mesh = nothing
         if kind === :mesh
-            # nodes are in the object frame (cm), centered on its centroid; the
-            # "Gen. mesh object origin" (= -Position) maps them back to the CAD file's
-            # frame and is not needed here
+            # The nodes are in the object frame (cm), centered on its centroid. The
+            # "Gen. mesh object origin", equal to -Position, maps them back to the frame
+            # of the CAD file and is not needed for this conversion.
             vs = [R * (10 * v) + t for v in blk.nodes]
             tris = NTuple{3,Int}[]
             patches = UnitRange{Int}[]
@@ -383,9 +388,10 @@ function _vrw_beam_row(line)
     return NamedTuple{_VRW_BEAM_COLUMNS}(Tuple(vals))
 end
 
-# Built-in phase plate with these radii (µm) and exponent, if any: the workspace stores
-# a profile-model number with the plate's tabulated numbers copied into the row, so
-# the numbers identify the plate (and with it the intensity level the radii refer to).
+# The built-in phase plate with these radii (µm) and exponent, if any. The workspace
+# stores a profile-model number with the tabulated numbers of the plate copied into the
+# row, so the numbers identify the plate and with it the intensity level the radii refer
+# to.
 function _vrw_plate_name(major, minor, order)
     for (k, v) in VISRAD_PHASE_PLATES
         isapprox(v.major, major; rtol = 1e-6) && isapprox(v.minor, minor; rtol = 1e-6) &&
@@ -438,10 +444,11 @@ function _vrw_beams(lines, a, b)
 end
 
 # Fraction of the power column that is in the blue (3ω) cone. VisRad's red/green power
-# models (VR/power_sources/set_laser_beam_energetics.html), numbered in the dialog's
-# order: 0 None, 1 Absolute Power (TW), 2 Fraction of Total Beam Power, 3 Relative to
-# Blue Cone Power. Only under model 2 is the power column the total, with the blue cone
-# carrying 1 - f_G - f_R of it; the fractions count whether or not those cones are on.
+# models (VR/power_sources/set_laser_beam_energetics.html) are numbered in the order of
+# the dialog: 0 None, 1 Absolute Power (TW), 2 Fraction of Total Beam Power, 3 Relative
+# to Blue Cone Power. Only under model 2 is the power column the total, and the blue cone
+# then carries 1 - f_G - f_R of it; the fractions apply whether or not those cones are
+# on.
 # The numbering and the on/off rule are read off the foil workspace, where four 1 TW
 # beams with f_G = f_R = 0.05 (green off) deposit 3.60 TW.
 _vrw_blue_fraction(r) = round(Int, r.rg_model) == 2 ? 1 - r.power_green - r.power_red : 1.0
@@ -480,22 +487,22 @@ end
     read_visrad_workspace(path; template = nothing, absent = :off, spot_definition = :auto,
                           rotation_sense = :beam, angle_tol = 0.05) -> VisRadWorkspace
 
-Read a VisRad workspace (`.vrw`): its target components, including CAD imported as
-generalized meshes, and its laser beams. Both of VisRad's formats are read: the text format of
-VisRad 20–21 ("Workspace Format ID = 11") and the JSON format VisRad 21 writes when it
-saves a computed workspace ("Workspace Format ID": 1001). The two give the same objects,
-meshes, beam rows and beams, except that the JSON file stores each beam's port angles and
-f-number to full precision (the text table rounds them to 3 decimals) and colors to 6
-digits. Lengths are converted from cm to mm; every object and beam frame is resolved to
-the target-chamber frame. Build a Briareus target from the components with
+Read a VisRad workspace (`.vrw`) with its target components, including CAD imported as
+generalized meshes, and its laser beams. Both of VisRad's formats are read: the text
+format of VisRad 20–21 ("Workspace Format ID = 11") and the JSON format VisRad 21 writes
+when it saves a computed workspace ("Workspace Format ID": 1001). The two formats contain
+the same objects, meshes, beam rows and beams, except that the JSON file stores the beam
+port angles and f-numbers to full precision (the text table rounds them to 3 decimals) and
+colors to 6 digits. Lengths are converted from cm to mm; every object and beam frame is
+resolved to the target-chamber frame. Build a Briareus target from the components with
 `visrad_target`.
 
 **Components** become `VisRadObject`s. CAD meshes keep VisRad's surface elements as
 patches (one per triangle). Spheres, rectangles and cylindrical hohlraums are meshed on
 VisRad's grid when converted by `visrad_target`. Objects are placed by VisRad's
 orientation angles and position (`VR/grid/specifying_orient_angles.html`), relative to the
-chamber or to another component. The parameters that set an object's geometry and
-material (its position, coordinate type and orientation angles, the lengths and mesh
+chamber or to another component. The parameters that set the geometry and material of
+an object (its position, coordinate type and orientation angles, the lengths and mesh
 counts its primitive uses, the albedo, conversion and reflectivity values, and the
 radiosity and laser-deposition flags) are required: a missing or malformed one throws
 an `ArgumentError` naming the key and the object. Flags that only modify (normals
@@ -503,19 +510,21 @@ flipped, wall thickness, time-dependent models, the key-point reference) default
 visibility to on and the color to gray; a malformed value of any key throws.
 
 **Beams.** Port angles and f-number come from the file. Pointing at TCC or at a point
-given in the chamber's or a component's frame is supported; the point is the aim and
-the focus offset (cm) the defocus (mm), as in `read_visrad_summary`. Power is the 3ω
-(blue cone) power in TW for beams with 3ω on, and 0 otherwise: the power column times
-the beam's power multiplier when enabled and, under VisRad's "Fraction of Total Beam
-Power" red/green model (where that column is the total), times ``1 - f_G - f_R``. Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis
-rotation, converted as in `read_visrad_summary`: radii that match a built-in phase
-plate (`VISRAD_PHASE_PLATES`) are read at that plate's level (HWHM for NIF CPPs), others
-at `spot_definition` (`:auto` = 1/e), and a NIF beam's rotation is relative to its quad's
-horizontal (the quad from the template or, without one, from the beam's name). Unconverted light, time-dependent powers, energy
-normalization and DPR are warned about and not imported.
+given in the chamber frame or a component frame is supported; the point becomes the aim
+and the focus offset (cm) becomes the defocus (mm), as in `read_visrad_summary`. Power is
+the 3ω (blue cone) power in TW for beams with 3ω on, and 0 otherwise. It is the power
+column times the beam power multiplier when enabled and, under VisRad's "Fraction of Total
+Beam Power" red/green model, where that column is the total, also times ``1 - f_G - f_R``.
+Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis rotation, converted
+as in `read_visrad_summary`. Radii that match a built-in phase plate
+(`VISRAD_PHASE_PLATES`) are taken at the level of that plate (HWHM for NIF CPPs) and other
+radii at `spot_definition` (`:auto` = 1/e). The rotation of a NIF beam is relative to the
+horizontal of its quad; the quad comes from the template or, without one, from the beam
+name. Unconverted light, time-dependent powers, energy normalization and DPR are warned
+about and not imported.
 
-With a `template` (e.g. `nif_beams()`), the file's pointing, power and spots are
-applied to the template's beams by name and its other properties (halo, wavelength,
+With a `template` (e.g. `nif_beams()`), the pointing, power and spots in the file are
+applied to the template beams by name, and their other properties (halo, wavelength,
 quad, group) are kept; port angles are checked to `angle_tol` degrees and `absent`
 handles template beams missing from the file, as in `read_visrad_summary`. Without one,
 beams are built from the file, grouped by VisRad cluster.
@@ -567,8 +576,8 @@ end
 """
     visrad_profile(workspace) -> VisRadProfile
 
-VisRad's beam model with the workspace's envelope ratio for each beam (by name; VisRad's
-default ratio differs by phase plate, 1.27–1.54 for the NIF plates). Pass it to
+VisRad's beam model with the envelope ratio from the workspace for each beam (by name;
+VisRad's default ratio differs by phase plate, 1.27–1.54 for the NIF plates). Pass it to
 `DepositionOperator(target, beams; profile)`, or to a `Scenario` through
 `deposition_kw = (; profile)`.
 """
@@ -582,34 +591,36 @@ visrad_profile(ws::VisRadWorkspace) =
                      fit = remesh !== nothing, primitive_h = nothing) -> Vector{Component}
 
 Briareus components for one `VisRadObject`, in the chamber frame (mm). The material
-defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
-component radiating from the front of VisRad's surface elements (counterclockwise
+defaults to the albedo and x-ray conversion efficiency of the object. A CAD mesh becomes
+one component radiating from the front of VisRad's surface elements (counterclockwise
 winding, *assumption*), or from both sides when `two_sided`. VisRad does not let users
 edit the normals of imported CAD (`VR/grid/import_export_cad_files.html`), and tessellated
 CAD often faces the wrong way: in the NIF workspace this reader was built from, the
-inner hohlraum wall faces away from the cavity. `orient = true` repairs the winding
-with `orient_mesh`: consistent across shared edges, closed solids facing out of their
-material, open sheets facing the point `toward` (mm, chamber frame; by default the
-target chamber center). `two_sided = true` instead radiates from both sides (thin
-shells are then modeled as two radiating sides). CAD needs fewer, compact elements
-before view factors: `remesh` (mm) divides the surface into near-planar elements of
-about that size whatever the facets' shapes (`remesh_mesh`; long slivers are cut),
-while `coarsen` (mm) only merges whole near-coplanar facets up to that size
-(`coarsen_mesh`; slivers longer than the size stay). `fit` (on by default with
-`remesh`; or a named tuple of `curved_components` and `fit_surfaces` keywords) then
-splits a remeshed CAD part into its cylinders, cones and spheres, each with its exact
-surface fitted to the CAD facets, and the rest (`curved_components`; curved faces of
-under 10⁻³ of the part's area stay flat unless `minfraction = 0`), so the radiation
-model integrates on the curved walls as it does for a primitive hohlraum. The pieces,
-`<name>/cyl1`, …, `<name>/rest`, keep the object's name as their `part`, which the
-name-taking functions and reports use (see `cad_target`); `fit = false` keeps one flat
-component. Rectangles give one component (normal +z before orientation), spheres one with
-a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
-`_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
-`hohlraum` uses, all on VisRad's grid (`Number of mesh pts`, which reproduces VisRad's
-element table), or with `primitive_h` (mm) on Briareus's grid for elements of about
-that size (`hohlraum_counts`, `capsule_counts`), e.g. to resolve a spot on a foil that
-VisRad meshes coarsely. Other object types return no components (with a warning).
+inner hohlraum wall faces away from the cavity. `orient = true` repairs the winding with
+`orient_mesh`, so that it is consistent across shared edges, closed solids face out of
+their material and open sheets face the point `toward` (mm, chamber frame; by default the
+target chamber center). With `two_sided = true` the surfaces instead radiate from both
+sides, and thin shells are then modeled as two radiating sides. CAD needs fewer, compact
+elements before view factors: `remesh` (mm) divides the surface into near-planar elements
+of about that size whatever the facet shapes (`remesh_mesh`; long slivers are cut), while
+`coarsen` (mm) only merges whole near-coplanar facets up to that size (`coarsen_mesh`;
+slivers longer than the size stay). `fit` is on by default with `remesh`, or is a named
+tuple of `curved_components` and `fit_surfaces` keywords. It then splits a remeshed CAD
+part into its cylinders, cones and spheres and the rest (`curved_components`). Each curved
+piece is given its exact surface fitted to the CAD facets, and curved faces of under 10⁻³ of
+the part area stay flat unless `minfraction = 0`. The radiation model then integrates on
+the curved walls as it does for a primitive hohlraum. The pieces, `<name>/cyl1`, …,
+`<name>/rest`, keep the object name as their `part`, which the name-taking functions and
+reports use (see `cad_target`); `fit = false` keeps one flat component.
+
+A rectangle becomes one component (normal +z before orientation) and a sphere one with a
+`SphereSurface`. A cylindrical hohlraum becomes five components, `<name>_wall`,
+`_cap_top`, `_cap_bottom` and the apertures `_leh_top` and `_leh_bottom`, with the curved
+surfaces `hohlraum` uses. All are meshed on VisRad's grid (`Number of mesh pts`, which
+reproduces VisRad's element table), or with `primitive_h` (mm) on Briareus's grid for
+elements of about that size (`hohlraum_counts`, `capsule_counts`), e.g. to resolve a
+spot on a foil that VisRad meshes coarsely. No components are made for other object
+types, and a warning is issued.
 """
 function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
                           orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
@@ -625,7 +636,7 @@ function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool =
         c = Component(o.name, mesh, mat; two_sided)
         fit === nothing && (fit = remesh !== nothing)
         fit === false && return [c]
-        # fitted on the CAD facets, whose vertices lie on the surfaces
+        # The surfaces are fitted on the CAD facets, whose vertices lie on them.
         return curved_components(c; reference = mesh === facets ? nothing : facets,
                                  (fit === true ? (;) : fit)...)
     end
@@ -642,42 +653,42 @@ end
                   coarsen = nothing, remesh = nothing, fit = remesh !== nothing,
                   inside = nothing, visibility = :sampled, closed = false) -> Target
 
-Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
-which `select(object)` is true — by default those that VisRad includes in its radiosity or
+Target built from the components of a VisRad workspace (`read_visrad_workspace`) for which
+`select(object)` is true — by default those that VisRad includes in its radiosity or
 direct-laser calculation. `materials` maps object names (`String`s or `Symbol`s) to a
-`Material` overriding the file's albedo and conversion efficiency; a name that is not an
-object of the workspace is an error. `two_sided` (a `Bool`, or a function of the
-object) makes surfaces radiate from both sides; see `visrad_component` for why CAD
-meshes often need it, and for `orient`, `toward`, `remesh`, `coarsen` and `fit` (which
-apply to CAD meshes: repaired windings, elements of about `remesh` or `coarsen` mm, and
-exact cylinders, cones and spheres for the radiation model).
+`Material` overriding the albedo and conversion efficiency in the file; a name that is not
+an object of the workspace is an error. `two_sided` (a `Bool`, or a function of the
+object) makes surfaces radiate from both sides; see `visrad_component` for why CAD meshes
+often need it, and for `orient`, `toward`, `remesh`, `coarsen` and `fit`. These apply to
+CAD meshes and give repaired windings, elements of about `remesh` or `coarsen` mm, and
+exact cylinders, cones and spheres for the radiation model.
 
 CAD meshes can hold hundreds of thousands of triangles, and each becomes a radiating
-element. That is fine for ray tracing (deposition, clearance, imaging) but too many for
-view factors; select the parts that matter for the radiation problem, e.g.
-`select = o -> o.folder == "Hohlraum"` or by name, and remesh them. `inside`, a point
-(mm, chamber frame) in the cavity, keeps only the elements that bound the free space
-around it (`enclosure` with its defaults; call it on the full target for the options
-and a per-component account of what was dropped). It needs consistent windings
-(`orient = true`). The selection runs on the CAD facets as oriented, `remesh` or
-`coarsen` then divide only the facets kept (much cheaper when most of the assembly lies
-outside the cavity), and a second selection on the resulting elements drops those
-that average too little flux. `fit` then applies to the elements kept, fitted on the
-kept facets. The CAD meshes go through these steps in `cad_target`, which takes the
-other components as they are (into the selection, but not remeshed or fitted); it
-does the same for CAD read from STL files. `visibility` is the target's default
-`view_factors` visibility rule (`:sampled`, as for `cad_target`: workspaces carry
-entrance-hole washers and CAD with rims), and `closed = true` declares the target a
-closed enclosure (balanced view factors), as for `cad_target`: only when apertures
-close every opening (see [`open_fraction`](@ref)).
+element. That is fine for ray tracing, as in deposition, clearance and imaging, but too
+many for view factors; select the parts that matter for the radiation problem, e.g.
+`select = o -> o.folder == "Hohlraum"` or by name, and remesh them. `inside`, a point (mm,
+chamber frame) in the cavity, keeps only the elements that bound the free space around it,
+as `enclosure` does with its defaults; `enclosure` called on the full target gives the
+options and a per-component account of what was dropped. It needs consistent windings
+(`orient = true`). The selection runs on the CAD facets as oriented. `remesh` or `coarsen`
+then divides only the facets kept (much cheaper when most of the assembly lies outside the
+cavity), and a second selection on the resulting elements drops those that average too
+little flux. `fit` then applies to the elements kept and fits them on the kept facets. The
+CAD meshes go through these steps in `cad_target`, which takes the other components as
+they are (into the selection, but not remeshed or fitted); it does the same for CAD read
+from STL files. `visibility` is the default `view_factors` visibility rule of the target.
+It is `:sampled`, as for `cad_target`, because workspaces contain entrance-hole washers and
+CAD with rims. `closed = true` declares the target a closed enclosure (balanced view
+factors), as for `cad_target`; it applies only when apertures close every opening (see
+[`open_fraction`](@ref)).
 
-A comparison with VisRad and a radiation study usually take two targets from the same
-workspace. [`visrad_deposition`](@ref) maps VisRad's per-element deposition only onto
-components on the VisRad elements, so it takes a target built without `remesh`,
-`coarsen`, `fit` and `inside` (e.g. `visrad_target(ws)`, with the same `select`), on
-which a `DepositionOperator` reproduces VisRad's calculation element by element; the
-view factors take the remeshed, cut target. The beams serve both, with one
-`DepositionOperator` per target.
+Two targets from the same workspace are usually built, one for a comparison with VisRad
+and one for a radiation study. [`visrad_deposition`](@ref) maps VisRad's per-element
+deposition only onto components on the VisRad elements, so it takes a target built
+without `remesh`, `coarsen`, `fit` and `inside` (e.g. `visrad_target(ws)`, with the same
+`select`). On that target a `DepositionOperator` reproduces VisRad's calculation per
+element, and the view factors are computed on the remeshed, cut target. The same beams
+are used for both, with one `DepositionOperator` per target.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
@@ -685,7 +696,8 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
                        remesh = nothing, fit = nothing, inside = nothing, visibility::Symbol = :sampled,
                        closed::Bool = false)
     _check_coarsen_remesh(coarsen, remesh)
-    # object names as `String`s or `Symbol`s; a name that is no object is a mistake
+    # Object names may be `String`s or `Symbol`s; a name that is not an object of the
+    # workspace is an error.
     materials = Dict{String,Material}(String(k) => v for (k, v) in materials)
     for k in keys(materials)
         any(o -> o.name == k, ws.objects) ||
@@ -705,7 +717,8 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
                 f = _vrw_miswound(o)
                 f > 0.1 && push!(miswound, o.name => f)
             end
-            # the CAD part as VisRad has it (material, sidedness); cad_target does the rest
+            # The CAD part is built with the material and sidedness that VisRad gives it;
+            # cad_target does the rest.
             c = only(visrad_component(o; material, two_sided = ts))
             push!(parts, c.name => c.mesh)
             mats[c.name], sides[c.name] = c.material, c.two_sided
@@ -720,13 +733,14 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
                       visibility, closed)
 end
 
-# Share of a CAD mesh's area wound against the rest of its surface: what `orient_mesh`
-# without a reference point (each open surface kept in its majority winding, closed
-# solids facing out of their material) turns over; 0 for a consistent mesh. Read
-# one-sided as stored, such a mesh radiates and absorbs on the front of each triangle as
-# the file winds it, and CAD windings are often inconsistent: about half the area of the
-# hohlraum parts of a NIF CAD workspace, where the VisRad laser deposition does not
-# depend on the winding (research notes, "VisRad JSON workspaces") but Briareus then puts
+# Share of the area of a CAD mesh that is wound against the rest of its surface, which is
+# the share `orient_mesh` turns over without a reference point. Without one, each open
+# surface is left in its majority winding, and closed solids are turned to face out of
+# their material. The share is 0 for a consistent mesh. A mesh read one-sided as stored
+# radiates and absorbs on the front of each triangle as the file winds it, and CAD
+# windings are often inconsistent. In a NIF CAD workspace about half the area of the
+# hohlraum parts is wound against the rest. The VisRad laser deposition does not depend
+# on the winding (research notes, "VisRad JSON workspaces"), but Briareus then puts
 # nearly all the laser power on back sides.
 function _vrw_miswound(o::VisRadObject)
     m = o.mesh
@@ -739,13 +753,14 @@ function _vrw_miswound(o::VisRadObject)
 end
 
 # ---------------------------------------------------------------------------------------
-# Results: power-source tables
+# Power-source result tables
 # ---------------------------------------------------------------------------------------
 
-# Column names and units from a power-source table's comment header: the first line
-# names the columns (cells separated by 2+ spaces, which also fixes where each column
-# starts), later lines add words or "(unit)" cells to the column starting nearest them.
-# "Direct Laser" / "Pwr Source" / "(TW/cm2)" -> :direct_laser_pwr_source, "TW/cm2".
+# Column names and units from the comment header of a power-source table. The first
+# line names the columns. Its cells are separated by 2+ spaces, which also fixes where
+# each column starts. Later lines add words or "(unit)" cells to the column that starts
+# nearest them. For example, "Direct Laser" / "Pwr Source" / "(TW/cm2)" becomes
+# :direct_laser_pwr_source with the unit "TW/cm2".
 function _vrw_ps_columns(header, ncol)
     cells(l) = [(m.offset, String(m.match)) for m in eachmatch(r"\S+(?: \S+)*", l[2:end])]
     generic = ([Symbol("col", k) for k in 1:ncol], fill("", ncol))
@@ -773,30 +788,30 @@ end
     visrad_power_sources(workspace; stale = :error) -> (; time, units, tables)
 
 VisRad's power-source results saved in a computed workspace (a `.vrw` path or a
-`VisRadWorkspace`, re-read from its `path`): the `[Power Source Data]` section, which
-VisRad writes after computing the power sources. Per object it lists one row per
+`VisRadWorkspace`, re-read from its `path`), taken from the `[Power Source Data]` section
+that VisRad writes after computing the power sources. Per object it lists one row per
 surface element: index (0-based), direct laser power source (TW/cm², the laser power
 absorbed per area averaged over the element), uniform source, albedo, x-ray conversion
-efficiency, laser reflectivity, pre-reflection laser power, numbers of red and blue
-cones hitting the element, and minimum overlap angles at 1ω and 3ω.
+efficiency, laser reflectivity, pre-reflection laser power, numbers of red and blue cones
+hitting the element, and minimum overlap angles at 1ω and 3ω.
 
-`tables` maps each object's name to a `NamedTuple` of column vectors, named from the
+`tables` maps each object name to a `NamedTuple` of column vectors, named from the
 section header (`:surface_index`, `:direct_laser_pwr_source`, `:uniform_source`,
 `:albedo`, `:x_ray_conv_efficiency`, `:laser_reflectivity`, `:pre_reflect_laser_pwr`,
 `:n_red_cones_hitting_surf`, `:n_blue_cones_hitting_surf`, `:min_angle_overlap_1w`,
 `:min_angle_overlap_3w` in VisRad 20–21); integer columns are `Int`. `units` maps
-column names to the header's units (`"TW/cm2"`, `"deg"`, `""`), and `time` is the
+column names to the header units (`"TW/cm2"`, `"deg"`, `""`), and `time` is the
 simulation time (ns) the sources were computed for.
 
 A workspace saved before computing, or changed since, shows "Power sources are not up to
-date" and holds no tables: that is an error, or `nothing` with `stale = :nothing`.
+date" and has no tables: that is an error, or `nothing` with `stale = :nothing`.
 Tables of the same layout in other sections (beam capture and clearance data) are not
 read. Map the direct laser source onto a Briareus target with `visrad_deposition`.
 
-JSON workspaces (VisRad 21's format for a computed workspace) give the same tables. Their
-"Power source data" lists the objects in the target components' order without names,
-and values at full precision (the text table rounds the direct source to 5 decimals,
-5 × 10⁻⁷ relative on a NIF wall).
+JSON workspaces (VisRad 21's format for a computed workspace) contain the same tables.
+Their "Power source data" lists the objects in the order of the target components without
+names, with values at full precision (the text table rounds the direct source to 5
+decimals, 5 × 10⁻⁷ relative on a NIF wall).
 """
 function visrad_power_sources(path::AbstractString; stale::Symbol = :error)
     stale in (:error, :nothing) || throw(ArgumentError("stale must be :error or :nothing, not :$stale"))
@@ -851,12 +866,13 @@ end
 
 visrad_power_sources(ws::VisRadWorkspace; kw...) = visrad_power_sources(ws.path; kw...)
 
-# Briareus patch of each VisRad surface element (row) of an object's component, or
-# `nothing` when the order is not established. CAD meshes: one patch per VisRad surface
-# element, in file order (the row order is the connectivity order; checked on the NIF
-# workspaces, where Briareus's deposition matches VisRad's element by element).
-# Rectangles: VisRad runs the local x fastest, `rectangle_mesh` the local y (measured on
-# the foil workspace, research notes). Spheres and hohlraums: unknown.
+# Briareus patch of each VisRad surface element (row) of the component of an object, or
+# `nothing` when the order is not established. A CAD mesh has one patch per VisRad
+# surface element, in file order, because the row order is the connectivity order. This
+# was checked on the NIF workspaces, where Briareus's deposition matches VisRad's at
+# every element. On a rectangle VisRad runs the local x fastest and `rectangle_mesh` the
+# local y (measured on the foil workspace, research notes). The order on spheres and
+# hohlraums is unknown.
 function _vrw_row_patches(o::VisRadObject, n)
     o.kind === :mesh && return collect(1:n)
     if o.kind === :rectangle
@@ -873,29 +889,30 @@ end
                       sources = visrad_power_sources(workspace)) -> Vector{Float64}
 
 VisRad's absorbed laser power per element of `target` (TW), from the direct laser power
-source of a computed workspace (`visrad_power_sources`): each VisRad surface element's
-value (TW/cm²) times its area. This is the convention of `deposit(...).element`, so
-VisRad's and Briareus's depositions on the same target compare element by element and
-per component (`sum(P[elements(target, :wall)])`).
+source of a computed workspace (`visrad_power_sources`). Each value is the source of a
+VisRad surface element (TW/cm²) times its area. This is the convention of
+`deposit(...).element`, so VisRad's and Briareus's depositions on the same target compare
+per element and per component (`sum(P[elements(target, :wall)])`).
 
-`target` must hold the workspace's objects as `visrad_target(workspace)` or
+`target` must hold the workspace objects as `visrad_target(workspace)` or
 `visrad_component` build them, one component per object (named after it) on the
-VisRad elements. Each component is checked against the object's elements; a component
-remeshed, coarsened, fitted or cut to a cavity is refused, so the target compared with
-VisRad is not the one a radiation study remeshes (see [`visrad_target`](@ref)): build
-both from the workspace, and compare depositions on this one. Elements are matched by:
+VisRad elements. Each component is checked against the elements of its object, and a
+component remeshed, coarsened, fitted or cut to a cavity is refused. The target compared
+with VisRad is therefore not the remeshed target of a radiation study (see
+[`visrad_target`](@ref)): build both from the workspace, and compare depositions on this
+one. Elements are matched as follows.
 
-- CAD meshes (generalized meshes): one Briareus patch per VisRad surface element, in
-  the file's connectivity order. The order is that of VisRad; it is confirmed by
-  Briareus's deposition matching VisRad's at every element (correlation 1.0000,
-  0.9% rms with `VisRadProfile`) on 2388 wall elements of a NIF workspace.
-- Rectangles on VisRad's grid: VisRad's elements run the local x fastest (measured on a
-  foil workspace).
-- Spheres and cylindrical hohlraums: VisRad's element order is not established (only
-  the counts are). An object of these kinds with any laser power is refused; leave it
-  out of the target (`visrad_target(ws; select)`) to map the rest.
+- A CAD mesh (generalized mesh) has one Briareus patch per VisRad surface element, in
+  the connectivity order of the file. The order is that of VisRad. It is confirmed by
+  Briareus's deposition matching VisRad's at every element (correlation 1.0000, 0.9% rms
+  with `VisRadProfile`) on 2388 wall elements of a NIF workspace.
+- On a rectangle on VisRad's grid, VisRad's elements run the local x fastest (measured
+  on a foil workspace).
+- On spheres and cylindrical hohlraums, VisRad's element order is not established; only
+  the counts are. An object of these kinds with any laser power is refused; leave it out
+  of the target (`visrad_target(ws; select)`) to map the rest.
 
-A two-sided component takes the power on its front elements (VisRad's table has one
+On a two-sided component the power is assigned to its front elements (VisRad's table has one
 value per surface element). Objects with laser power but no component in `target` are
 warned about; components without a VisRad table stay zero.
 """
@@ -934,9 +951,9 @@ end
 
 # The element of target `t` (its front side, or the back of a back-only patch; 0 for a
 # zero-area patch) for each of VisRad object `o`'s `n` surface elements, in VisRad's row
-# order, where component `ci` of `t` is the object on the VisRad elements. Refuses an
-# object whose element order is not established and a component that is not on VisRad's
-# elements (remeshed, coarsened, fitted or cut).
+# order, where component `ci` of `t` is the object on the VisRad elements. An object
+# whose element order is not established is refused, as is a component that is not on
+# VisRad's elements because it was remeshed, coarsened, fitted or cut.
 function _vrw_row_elements(o::VisRadObject, t::Target, ci::Integer, n::Integer)
     c = t.components[ci]
     name = o.name
@@ -963,28 +980,29 @@ visrad_deposition(path::AbstractString, args...; kw...) =
 A VisRad workspace with the pointing, focus, power and on/off of `beams` written into a
 copy of the workspace `template` (a `.vrw` file, e.g. the one a design was imported
 from with `read_visrad_workspace`). Each beam row of the template whose name matches a
-beam gets that beam's aim, as a Cartesian position in the reference frame of the row
-(cm), its focus offset `defocus` (cm), its power as the 3ω power column (divided by
-the row's power multipliers and, under the "Fraction of Total Beam Power" red/green
-model, by its blue fraction, so VisRad's blue cone carries the beam's power) and on (power > 0)
-or off. Everything else is copied verbatim: the target components and their
-frames, the spots, pulse shapes and VisRad's settings stay as the template has them. Numbers are
-written in place at the template's column widths and decimals (0.1 µm for positions).
+beam is given the aim of that beam, as a Cartesian position in the reference frame of the
+row (cm), its focus offset `defocus` (cm), its power as the 3ω power column (divided by
+the power multipliers of the row and, under the "Fraction of Total Beam Power"
+red/green model, by its blue fraction, so that the beam power is in VisRad's blue cone)
+and on (power > 0) or off. Everything else is copied verbatim: the target components
+and their frames, the spots, pulse shapes and VisRad's settings stay as the template
+has them. Numbers are written in place at the column widths and decimals of the
+template (0.1 µm for positions).
 
-A computed template's results (power sources, radiosities, beam capture and clearance)
-are reset to "not up to date" when any row is written: they belong to the old beams.
-The template must be a text workspace: VisRad 21 saves computed workspaces as JSON,
-which is read (`read_visrad_workspace`) but not patched.
+The results of a computed template (power sources, radiosities, beam capture and
+clearance) are reset to "not up to date" when any row is written: they belong to the
+old beams. The template must be a text workspace: VisRad 21 saves computed workspaces
+as JSON, which is read (`read_visrad_workspace`) but not patched.
 
-A `path` that already holds VisRad's results — a JSON workspace, or a text one with
+A `path` that already contains VisRad's results — a JSON workspace, or a text one with
 power sources or radiosities up to date, including the template itself — is refused
 unless `overwrite = true`: those results exist only in that file.
 
-Rows without a matching beam are left as they were, and beams without a row are
-reported in a warning: the template sets which beams exist. A beam whose port differs
-from its row's by more than `angle_tol` degrees is refused (ports cannot be changed).
-Time-dependent power tables and energy normalization in the template are left as they
-are, so a row that uses them does not take the constant power (warned).
+Rows without a matching beam are left as they were, and beams without a row are reported
+in a warning: the template defines which beams exist. A beam whose port differs from the
+port of its row by more than `angle_tol` degrees is refused (ports cannot be changed).
+Time-dependent power tables and energy normalization in the template are left as they are,
+so a row that uses them does not take the constant power (with a warning).
 """
 function write_visrad_workspace(path::AbstractString, template::AbstractString,
                                 beams::AbstractVector{<:Beam}; angle_tol = 0.05, overwrite::Bool = false)
@@ -1036,14 +1054,15 @@ end
 
 const _VRW_CAPTURE_KINDS = ("3w Capture", "3w Clearance", "1w Clearance", "1w Footprint", "3w Footprint")
 
-# Whether a text workspace holds computed results (power sources or radiosities up to date).
+# Whether a text workspace contains computed results (power sources or radiosities up to
+# date).
 _vrw_has_results(path::AbstractString) =
     any(l -> occursin(r"(?:Power sources|Radiosities) are up to date for", l), eachline(path))
 
-# A computed template's results (power sources, radiosities, beam capture/clearance)
-# belong to its old beams: reset them to "not up to date", as VisRad writes a workspace
-# that has not been run (VisRad 21 loads such files), so
-# `visrad_power_sources` cannot read them back as current. Keeps the line endings.
+# The results of a computed template (power sources, radiosities, beam capture and
+# clearance) belong to its old beams. They are reset to "not up to date", as VisRad
+# writes a workspace that has not been run (VisRad 21 loads such files), so
+# `visrad_power_sources` cannot read them back as current. The line endings are kept.
 function _vrw_stale_results(text::AbstractString)
     nl = occursin("\r\n", text) ? "\r\n" : "\n"
     m = match(r"(?:Power sources|Radiosities) are (?:not )?up to date for (time\s*=\s*\S+)", text)
@@ -1061,9 +1080,10 @@ end
 
 const _VRW_DECIMALS = Dict(:p1 => 6, :p2 => 6, :p3 => 6, :focus => 6, :power_blue => 4)
 
-# A beam row with the given columns rewritten in place: each value right-aligned where
-# the old token ended, with the old token's decimals (integers for integer tokens), at
-# least `_VRW_DECIMALS` of them (the VisRad precision: 0.1 µm for positions in cm).
+# A beam row with the given columns rewritten in place. Each value is right-aligned where
+# the old token ended and is written with the decimals of the old token, at least
+# `_VRW_DECIMALS` of them (the VisRad precision, 0.1 µm for positions in cm); integer
+# tokens stay integers.
 function _vrw_patch_row(line::AbstractString, new::AbstractDict)
     cr = endswith(line, '\r')
     s = cr ? chop(line) : String(line)
@@ -1079,7 +1099,7 @@ function _vrw_patch_row(line::AbstractString, new::AbstractDict)
         old = s[sp]
         d = occursin('.', old) ? max(length(old) - findfirst('.', old), get(_VRW_DECIMALS, k, 0)) : 0
         txt = d == 0 ? string(round(Int, v)) : @sprintf("%.*f", d, v)
-        from = i == 1 ? 1 : last(spans[i-1]) + 1       # the field: its leading spaces and token
+        from = i == 1 ? 1 : last(spans[i-1]) + 1  # start of field and spaces
         w = last(sp) - from + 1
         s = s[1:from-1] * lpad(txt, max(w, length(txt) + 1)) * s[last(sp)+1:end]
     end

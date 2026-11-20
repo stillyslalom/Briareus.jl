@@ -1,6 +1,7 @@
 # Ray casting through the bounding-volume hierarchies (median split and surface-area
-# heuristic) against brute force over every triangle, with an intersection written out
-# here (plane, then barycentric coordinates) rather than the package's Möller–Trumbore.
+# heuristic) is checked against brute force over every triangle. The brute force uses an
+# intersection written out in this file (plane, then barycentric coordinates) instead of the
+# Möller–Trumbore routine of the package.
 
 # The ray parameter where o + t d meets the triangle (v0, e1, e2), or Inf.
 function _brute_t(o, d, v0, e1, e2)
@@ -51,7 +52,7 @@ end
         @test !any(any_hit(b, rays[i]..., ref[i][1] * (1 - 1e-6)) for i in hit)
         @test all(any_hit(b, rays[i]..., ref[i][1] * (1 + 1e-6)) for i in hit)
         @test all(closest_hit(b, rays[i]..., ref[i][1] * (1 - 1e-6))[2] == 0 for i in hit)
-        # skipping the nearest triangle: any_hit then answers for the others
+        # With the nearest triangle skipped, any_hit reports on the others.
         @test all(any_hit(b, rays[i]..., Inf, id -> id == ref[i][2]) ==
                   (_brute_closest(rays[i]..., v0, e1, e2, ids; skip = id -> id == ref[i][2])[2] != 0) for i in hit)
         # t is in units of |dir|

@@ -1,36 +1,40 @@
-# VisRad's per-element results on a target built from its workspace, and their comparison
-# with a Briareus radiation solution element by element: laser deposition (the
-# workspace's power sources), incident and emitted flux and their temperatures (VisRad's
-# Surface Element Properties export), and the observed component's modes.
+# This file maps VisRad's per-element results onto a target built from its workspace and
+# compares them per element with a Briareus radiation solution. The comparison covers:
+# - laser deposition, from the power sources of the workspace;
+# - incident and emitted flux and their temperatures, from VisRad's Surface Element
+#   Properties export;
+# - the modes of the observed component.
 
-# Column of a VisRad element table matching `re`, or `nothing`.
+# Returns the column of a VisRad element table that matches `re`, or `nothing`.
 _vr_find_col(tbl, re::Regex) = findfirst(h -> occursin(re, h), tbl.header)
 
-# Whether a header names a flux (TW/cm², TW/mm², W/cm²) rather than a temperature or a count.
+# Checks whether a header names a flux in TW/cm², TW/mm² or W/cm².
 _vr_is_flux(h) = occursin(r"w\s*/\s*(cm|mm)"i, h)
 
 """
     visrad_element_values(workspace, target, tables, column; index_base = nothing) -> Vector{Float64}
 
-One column of VisRad's per-element results mapped onto the elements of `target`, a
-target on the VisRad elements (`visrad_target(workspace)` or a selection of its
-objects, without `remesh`, `coarsen`, `fit` or `inside`; see [`visrad_deposition`](@ref)
-for the element orders established). `tables` maps object names to VisRad's Surface
-Element Properties export of that object (File | Save Data for Object, or a run's
-`*.sed` file): a path, or a table as [`read_visrad_table`](@ref) returns it. `column` is
-a `Regex` matched against the table's header (e.g. `r"flux\\s*out"i`, `r"rad\\s*t"i`).
+Maps one column of VisRad's per-element results onto the elements of `target`. The target
+must be built on the VisRad elements, from `visrad_target(workspace)` or a selection of
+its objects without `remesh`, `coarsen`, `fit` or `inside`. [`visrad_deposition`](@ref)
+describes the element orders that result. `tables` maps object names to VisRad's Surface
+Element Properties export of that object, which is saved with File | Save Data for
+Object or as the `*.sed` file of a run. Each entry is a path, or a table as
+[`read_visrad_table`](@ref) returns it. `column` is a
+`Regex` matched against the table header (e.g. `r"flux\\s*out"i`, `r"rad\\s*t"i`).
 
-Rows are matched to VisRad's surface elements by the table's "Surf Index" column, which
-may list a subset in any order; without one the rows must be the object's elements in
-order. Whether the index counts from 0 (as in the workspace's power-source tables) or
-from 1 is not documented (*assumption*): `index_base = nothing` takes 0 when an index
-is 0 and 1 when the largest index equals the element count, and otherwise throws an
-`ArgumentError`; pass `index_base = 0` or `1` to fix it. Fluxes (headers in TW/cm², TW/mm²
-or W/cm²) are converted to Briareus's TW/mm², the units of a `RadiationSolution`'s
-`H` and `B`; other columns (temperatures in eV) are returned as they are. A two-sided
-component takes the values on its front elements. Elements without a value are `NaN`;
-an object named in `tables` that is not in the workspace is an error, one without a
-component in `target` is skipped with a warning.
+Rows are matched to VisRad's surface elements by the "Surf Index" column of the table,
+which may list a subset in any order. Without that column the rows must be the elements
+of the object in order. VisRad does not document whether the index counts from 0, as in
+the power-source tables of the workspace, or from 1 (*assumption*). With
+`index_base = nothing`, the base is 0 when an index is 0 and 1 when the largest index
+equals the element count; otherwise an `ArgumentError` is thrown. Pass `index_base = 0`
+or `1` to fix it. Fluxes, with headers in TW/cm², TW/mm² or W/cm², are converted to the
+Briareus unit TW/mm², the unit of `H` and `B` in a `RadiationSolution`. Other columns,
+such as temperatures in eV, are returned as they are. A two-sided component takes the
+values on its front elements. Elements without a value are `NaN`. An object named in
+`tables` that is not in the workspace throws an error, and one without a component in
+`target` is skipped with a warning.
 """
 function visrad_element_values(ws::VisRadWorkspace, t::Target, tables::AbstractDict, column::Regex;
                                index_base::Union{Nothing,Integer} = nothing)
@@ -61,7 +65,8 @@ function visrad_element_values(ws::VisRadWorkspace, t::Target, tables::AbstractD
     return out
 end
 
-# VisRad element (1-based) of each row of an element table of an object with `n` elements.
+# Returns the VisRad element (1-based) of each row of an element table of an object with
+# `n` elements.
 function _vr_element_rows(tbl, n, base, name)
     ji = _vr_find_col(tbl, r"surf\w*\s*ind|^index$"i)
     nr = size(tbl.data, 1)
@@ -82,7 +87,8 @@ function _vr_element_rows(tbl, n, base, name)
     return k
 end
 
-# Area-weighted agreement of VisRad's values `v` with Briareus's `b` on elements with area `a`.
+# Returns the area-weighted agreement of the VisRad values `v` with the Briareus values
+# `b` on elements with area `a`.
 function _vr_element_stats(object, quantity, unit, b, v, a)
     A = sum(a)
     mb, mv = sum(a .* b) / A, sum(a .* v) / A
@@ -103,42 +109,46 @@ const _VR_ELEMENT_QUANTITIES = (
                    observe = :capsule, lmax = 4, center = nothing, index_base = nothing, io = nothing)
         -> (; rows, elements)
 
-Compare a Briareus radiation solution `sol` with VisRad's results for the same workspace,
-per element. `sol` is solved on a target with the VisRad elements
-(`visrad_target(workspace)`, or a selection of its objects; see
-[`visrad_deposition`](@ref)), for instance from the VisRad deposition
-(`solve(RadiationModel(t), visrad_deposition(workspace, t))`) to isolate the radiation
-solve, or from Briareus's.
+Compares a Briareus radiation solution `sol` with VisRad's results for the same
+workspace, per element. `sol` is solved on a target with the VisRad elements, from
+`visrad_target(workspace)` or a selection of its objects (see
+[`visrad_deposition`](@ref)). The solve can start from the VisRad deposition, as in
+`solve(RadiationModel(t), visrad_deposition(workspace, t))`, to isolate the radiation
+solve, or from the Briareus deposition. Three comparisons are made:
 
-- Laser deposition, from the workspace's power sources (`sources`; `nothing` skips it):
-  per object, the absorbed power ("Laser Pwr Dep", TW: Σ source × area against
-  `sol.laser`) and the element-by-element agreement of the absorbed flux (TW/cm²) on
-  the elements either side lights.
-- `elements`: VisRad's Surface Element Properties export per object (a `Dict` of object
-  names to paths or [`read_visrad_table`](@ref) tables, mapped as in
-  [`visrad_element_values`](@ref)). Each column the table has among "Flux In" (`sol.H`),
-  "Flux Out" (`sol.B`), "Rad T" and "Emis T" (the radiation temperatures of `H` and
-  `B`) is compared element by element on the elements the table lists. Per object the
-  rows add the incident and emitted powers ("Incident Rad Pwr", "Emitted Rad Pwr": Σ
-  flux × area, TW) and "Rad T", the radiation temperature (eV) of the area-mean incident
-  flux, each from the elements both sides have.
-- `observe`: the component (a VisRad object, e.g. the capsule) whose incident flux is
-  analyzed in spherical harmonics on both sides with the same exact solid-angle weights
-  ([`ylm_weights`](@ref) to `lmax`, about `center`, by default the object's position:
-  the origin of the VisRad angles for it, the bounding-box center of a CAD mesh):
-  rows "P2/P0" and so on (the m = 0 coefficient as a Legendre ratio `aₗ/a₀`) and "mode
-  amplitude l=2" and so on (`√((2l+1) Σₘ cₗₘ²) / c₀₀` for the orthonormal coefficients
-  `cₗₘ`, which is `|aₗ/a₀|` for an axisymmetric field) for l = 1, …, `lmax`, all in
-  percent. It needs that object's
-  "Flux In" over all its elements. A table that VisRad fits itself (Analysis |
-  Statistics) fits element centroids by least squares (`visrad_ylm_fit`); the weights
-  here integrate each element's solid angle exactly, so both sides are analyzed alike.
+- **Laser deposition** comes from the power sources of the workspace, `sources`, and
+  `nothing` skips it. Per object, the rows give the absorbed power ("Laser Pwr Dep", TW)
+  as Σ source × area against `sol.laser`. They also give the per-element agreement of the
+  absorbed flux (TW/cm²) on the elements that either side lights.
+- **`elements`** holds VisRad's Surface Element Properties export per object, as a
+  `Dict` from object names to paths or [`read_visrad_table`](@ref) tables, mapped as in
+  [`visrad_element_values`](@ref). Each column of the table among "Flux In" (`sol.H`),
+  "Flux Out" (`sol.B`), "Rad T" and "Emis T" is compared per element on the elements
+  that the table lists; "Rad T" and "Emis T" are the radiation temperatures of `H` and
+  `B`. Per object, rows are added for the incident and emitted powers ("Incident Rad
+  Pwr", "Emitted Rad Pwr"), Σ flux × area in TW. A row is also added for "Rad T", the
+  radiation temperature (eV) of the area-mean incident flux. Each of these rows uses the
+  elements that both sides have.
+- **`observe`** names the component whose incident flux is analyzed in spherical
+  harmonics, such as the capsule. Both sides use the same exact solid-angle weights
+  ([`ylm_weights`](@ref) to `lmax`, about `center`). `center` defaults to the object
+  position, the origin of the VisRad angles for that object; for a CAD mesh it is the
+  bounding-box center. The rows are "P2/P0" and so on, the m = 0 coefficient as a
+  Legendre ratio `aₗ/a₀`. Rows "mode amplitude l=2" and so on give
+  `√((2l+1) Σₘ cₗₘ²) / c₀₀` for the orthonormal coefficients `cₗₘ`, which is `|aₗ/a₀|`
+  for an axisymmetric field. All modes for l = 1, …, `lmax` are in percent. The analysis
+  needs the "Flux In" of that object over all its elements. A table that VisRad fits
+  itself (Analysis | Statistics) fits element centroids by least squares
+  (`visrad_ylm_fit`). The weights in `compare_visrad` integrate the solid angle of each
+  element exactly, so both sides are analyzed alike.
 
-Returns `rows`, `(; quantity, unit, briareus, visrad, difference, relative)` as the kit
-form of `compare_visrad` gives them (modes in percent), and `elements`, one
+Returns `rows` and `elements`. `rows` holds
+`(; quantity, unit, briareus, visrad, difference, relative)` entries, as the kit form of
+`compare_visrad` gives them, with modes in percent. `elements` holds one
 `(; object, quantity, unit, n, briareus, visrad, rms, max, correlation)` per object and
-quantity: the area-weighted means of both sides, the area-weighted rms and the largest
-absolute difference as fractions of VisRad's mean, and the area-weighted correlation.
+quantity. Its fields are the area-weighted means of both sides, the area-weighted rms
+and the largest absolute difference as fractions of VisRad's mean, and the area-weighted
+correlation.
 Both are printed to `io` when given.
 """
 function compare_visrad(ws::VisRadWorkspace, sol::RadiationSolution; elements::AbstractDict = Dict{String,Any}(),

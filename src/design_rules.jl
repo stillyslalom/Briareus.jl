@@ -1,19 +1,19 @@
-# Capture and clearance rules as quantities of an evaluation, for objectives and
-# constraints written by hand: each a pure function of the evaluation (or of its beams),
-# generic in the number type and thread-safe, with a natural limit (a fraction at most a
-# ceiling or at least a floor, a clearance at least a minimum).
+# This file defines capture and clearance rules as quantities of an evaluation, for
+# objectives and constraints written by hand. Each rule is a pure function of the
+# evaluation or of its beams, generic in the number type and thread-safe. Each has a
+# natural limit, such as a ceiling or a floor on a fraction, or a minimum clearance.
 
 """
     direct_fraction(ev) -> Real
     direct_fraction(ev, names) -> Real
 
-Fraction of the delivered laser power absorbed by the scenario's observed elements (the
+Fraction of the delivered laser power absorbed by the observed elements of the scenario (the
 capsule whose drive is measured), or with `names` (a collection of part or component
-names) by those parts instead: the fraction whose square the `direct` penalty of
-[`symmetry_objective`](@ref), [`asymmetry_objective`](@ref) and
-[`face_flux_objective`](@ref) weighs (`direct_names` there is `names` here). A name that
-is not in the target is an `ArgumentError`. Relative to the effective (post-LPI) power,
-as every deposition fraction; see [`clipped_fraction`](@ref) and
+names) by those parts instead. The `direct` penalty of [`symmetry_objective`](@ref),
+[`asymmetry_objective`](@ref) and [`face_flux_objective`](@ref) weighs the square of this
+fraction, and the `direct_names` of those objectives corresponds to `names`. A name that
+is not in the target is an `ArgumentError`. The fraction is relative to the effective
+(post-LPI) power, as every deposition fraction is; see [`clipped_fraction`](@ref) and
 [`missed_fraction`](@ref) for the other two penalized fractions.
 """
 direct_fraction(ev::Evaluation, names = nothing) = _direct_fraction(ev, names)
@@ -29,9 +29,9 @@ absorbed on their elements, the sum
     power_fraction(ev, names...) + clipped_fraction(ev, names...)
 
 is all the laser light the parts receive, from either side: the quantity of a ceiling
-on hardware meant to stay dark (a closed window, a shield, a stalk: at most the value
-of an accepted design) or of a floor on capture by a part meant to be hit. Both are
-totals over the beams, in the evaluation's number type (differentiable), and relative
+on hardware meant to stay dark, such as closed windows, shields and stalks (at most the
+value of an accepted design), or of a floor on capture by a part meant to be hit. Both are
+totals over the beams, in the number type of the evaluation (differentiable), and relative
 to the effective (post-LPI) power, as [`component_power`](@ref) reports the same powers
 in TW (`name` and `Symbol(name, "_outside")`). An open window is an aperture: light
 passes through it, so it receives none.
@@ -44,7 +44,8 @@ clipped_fraction(ev::Evaluation, names::Symbol...) =
 # Keep-out for named hardware
 # ---------------------------------------------------------------------------------------
 
-# A group of a keep-out's triangles: a bounding sphere, the triangles and their edges.
+# A cluster is a group of the triangles of a keep-out, with a bounding sphere, the
+# triangles and their edges.
 struct _TriangleCluster
     center::Vec3
     radius::Float64
@@ -59,27 +60,28 @@ end
                     margin = 0.0, tolerance = 0.0, pivot = :tcc, miss = :aim,
                     minimum = 0.0, weight = 100.0)
 
-Keep-out constraint for named hardware (a shield, a stalk, a diagnostic snout, a closed
-window): [`hardware_clearance`](@ref)`(keepout, beams)` gives each beam's worst-case
-clearance (mm) from `parts` (a name or a collection of part or component names; a part
-stands for all its pieces), judged as [`clearance`](@ref) judges it with `wings = []`.
-The beam envelope is the best-focus contour at `peak_fraction` of the peak (or at
-`intensity`, W/cm²) grown by the f-cone radius `|s|/(2F)` and `margin`; the clearance is
-the smallest signed distance from the parts' surface to the envelope (transverse to the
-beam, negative inside it), less the transverse error radius `pointing + target_offset +
-hardware_tolerance` and `focus/(2F)` for the focus error. Only the surface upstream of
-the beam's landing counts: the plane normal to the beam where its nominal axis first
-meets one of `targets` (by default every opaque surface not among `parts`), as in
-`clearance`; a beam whose axis meets none of them is judged up to its aim plane, or
-along its whole length with `miss = :all`, and a beam that lands on one of `parts`
-itself (when `targets` names it) gets `Inf`. The defaults are those of
-[`ApertureKeepOut`](@ref): engineering defaults (the 1% contour is the level of the
-TaLIS 3ω clearance rule), not facility criteria.
+Keep-out constraint for named hardware such as shields, stalks, diagnostic snouts and closed
+windows. [`hardware_clearance`](@ref)`(keepout, beams)` gives the worst-case clearance (mm)
+of each beam from `parts`, judged as [`clearance`](@ref) judges it with `wings = []`.
+`parts` is a name or a collection of part or component names, and a part stands for all its
+pieces. The beam envelope is the best-focus contour at `peak_fraction` of the peak, or at
+`intensity` (W/cm²), grown by the f-cone radius `|s|/(2F)` and `margin`. The clearance is
+the smallest signed distance from the surface of the parts to the envelope, transverse to
+the beam and negative inside it, less the transverse error radius
+`pointing + target_offset + hardware_tolerance` and `focus/(2F)` for the focus error.
+
+Only the surface upstream of the landing of the beam counts. As in `clearance`, the landing
+is the plane normal to the beam where its nominal axis first meets one of `targets`, by
+default every opaque surface not among `parts`. A beam whose axis meets none of them is
+judged up to its aim plane, or along its whole length with `miss = :all`. A beam whose
+landing is on one of `parts` itself (when `targets` names it) gets `Inf`. The defaults are
+those of [`ApertureKeepOut`](@ref). They are engineering defaults and are not set by a
+facility criterion; the 1% contour is the level of the TaLIS 3ω clearance rule.
 
 `tolerance` (degrees) is the rule tolerance of [`talis_check`](@ref): the parts may sit
-rotated off nominal by up to that angle about `pivot` (`:tcc`, `:aim` the beam's aim
+rotated off nominal by up to that angle about `pivot` (`:tcc`, `:aim` the beam aim
 point, `:max` the farther of the two, or a point), which costs each point `r·tan α`, `r`
-its distance from the pivot, subtracted point by point inside the minimization (so the
+its distance from the pivot, subtracted at each point inside the minimization (so the
 clearance stays continuous where the closest point jumps). With `targets` the capture
 components, `miss = :all`, `tolerance = 0.5` and `minimum = 0.5` (all other defaults
 equal) the keep-out is the TaLIS 3ω clearance rule of `talis_check` for each beam:
@@ -88,7 +90,7 @@ equal) the keep-out is the TaLIS 3ω clearance rule of `talis_check` for each be
                     minimum = 0.5)
 
 a surrogate checked against `talis_check` in this package (its `:clearance_3w` worst
-values; see the research notes), not against the facility's tool. `talis_check` reports
+values; see the research notes), not against the facility tool. `talis_check` reports
 each hardware part on a separate row, where the keep-out takes the minimum over its parts
 (one keep-out per part gives the rows), and it passes a clearance strictly above
 0.5 mm; on an `leh` component its failure is a review, which a keep-out does not
@@ -98,47 +100,49 @@ The distance to the envelope ellipse is exact (the point–ellipse distance `cle
 uses), and the minimum over the parts is found, not sampled. On a triangle not crossing
 best focus the distance is convex (a convex function of the transverse position less a
 linear one of the axial), and it has no stationary point inside the triangle except on
-the medial strip, where it is not differentiable: the major axis's segment between
+the medial strip, where it is not differentiable: the segment of the major axis between
 `±(A² − B²)/A` (the axis itself for a round spot) swept along the beam, at least
-`B²/A` inside the envelope. So the minimum lies on the triangles' edges, their crossings
+`B²/A` inside the envelope. So the minimum lies on the triangle edges, their crossings
 with the medial strip, or their cuts by the landing plane, each split at best focus:
 line segments on which the distance is convex. The triangles are grouped in spatially
 compact clusters of up to 16; clusters and segments are taken best first by a lower
-bound (the circumscribed circle and the homothetic ellipse through a cluster's center
-or a segment's midpoint, less the Lipschitz constant `√(1 + 1/(2F)²)` times its radius
+bound (the circumscribed circle and the homothetic ellipse through the center of a cluster
+or the midpoint of a segment, less the Lipschitz constant `√(1 + 1/(2F)²)` times its radius
 or half length), and each segment is minimized by a safeguarded root search on the
 derivative, until the bound reaches the smallest value found. The result is the exact
 minimum to about 1e-12 mm.
 
-The tolerance term `−r·tan α` is concave in the point. It keeps the minimum off the
-triangles' interiors (off the medial strip the distance's Hessian has rank one, so in
-every plane the sum curves down along some direction), but it spoils the convexity along
-a segment: each segment is minimized with the term replaced by its chord, a lower bound
-equal to it at the ends, and split at the chord's minimizer until the two agree to
+The tolerance term `−r·tan α` is concave in the point. With it the minimum still lies off
+the triangle interiors, because off the medial strip the Hessian of the distance has rank
+one, so in every plane the sum curves down along some direction. The term does spoil the
+convexity along a segment. Each segment is therefore minimized with the term replaced by
+its chord, a lower bound
+equal to it at the ends, and split at the minimizer of the chord until the two agree to
 1e-14 mm; the bounds of clusters and segments subtract `tan α (r + radius)`.
 
-The clearance is continuous in the beams' aim, defocus and spot size (a minimum over a
-fixed surface), and its derivatives are the distance's at the closest point (Danskin's
-theorem); on the medial strip, where two points of the ellipse are equally near, they
-are the mixture of theirs that leaves the distance stationary at the minimum, as at a
-minimax's saddle. They are one-sided only where two separate points of the parts are
-equally close (a kink of the minimum itself). The landing is found on the nominal
-beam: the clearance jumps where the axis's landing moves from one component to another
+The clearance is continuous in the aim, defocus and spot size of the beams (a minimum over a
+fixed surface), and its derivatives are those of the distance at the closest point
+(Danskin's theorem); on the medial strip, where two points of the ellipse are equally near,
+they are the mixture of theirs that leaves the distance stationary at the minimum, as at the
+saddle of a minimax. They are one-sided only where two separate points of the parts are
+equally close (a kink of the minimum itself). The landing is found on the nominal beam: the
+clearance jumps where the landing of the axis moves from one component to another
 while the parts reach past the landing plane, and the cut by the landing plane does
 not move with the beam in the derivatives.
 
-Two departures from `clearance`, both conservative: every point of the parts upstream
-of the landing counts, also where opaque surfaces hide it from the beam (`clearance`
-skips points the beam cannot reach; `talis_check` judges 3ω clearance as this keep-out
-does), and the clearance-only far-field wings are not modeled. Pass it as `keepout` to
-the objectives (alone, or in a tuple with other keep-outs), which then add
+The keep-out departs from `clearance` in two ways, both conservative. Every point of the
+parts upstream of the landing counts, also where opaque surfaces hide it from the beam;
+`clearance` skips points the beam cannot reach, and `talis_check` judges 3ω clearance as
+this keep-out does. The clearance-only far-field wings are not modeled. Pass the keep-out
+as `keepout` to the objectives, by itself or in a tuple with other keep-outs; the
+objectives then add
 `weight × Σᵢ max(0, minimum − cᵢ)²` ([`keepout_penalty`](@ref)).
 """
 struct HardwareKeepOut
     names::Vector{Symbol}
     target::Target
     parts::Set{Int}                      # the parts' components
-    others::Set{Int}                     # components a beam lands on
+    others::Set{Int}                     # components a beam can land on
     clusters::Vector{_TriangleCluster}   # the parts' triangles
     peak_fraction::Union{Nothing,Float64}
     intensity::Union{Nothing,Float64}
@@ -175,7 +179,7 @@ function _part_names(parts)
     return names
 end
 
-# The triangles of the components `idx`, as vertex triples.
+# Return the triangles of the components `idx` as vertex triples.
 function _part_triangles(t::Target, idx)
     tris = NTuple{3,Vec3}[]
     for k in eachindex(t.tri_area)
@@ -186,9 +190,10 @@ function _part_triangles(t::Target, idx)
     return tris
 end
 
-# Triangles (or segments) in spatially compact groups of at most `leaf` (halved at the
-# median centroid along the longest extent), each with a bounding sphere and its edges
-# (once each; the segments themselves).
+# Group triangles, or segments, into spatially compact clusters of at most `leaf`. A group
+# that is too large is halved at the median centroid along its longest extent. Each
+# cluster has a bounding sphere and its edges, each edge listed once; for segments the
+# edges are the segments themselves.
 function _clusters(tris::Vector{NTuple{N,Vec3}}; leaf::Int = 16) where {N}
     out = _TriangleCluster[]
     isempty(tris) && return out
@@ -219,15 +224,16 @@ end
 
 Worst-case clearance (mm) of each beam from the parts of a [`HardwareKeepOut`](@ref),
 the rule tolerance included; `Inf` for a beam whose landing lies upstream of all of them
-or on one of them. Differentiable in the beams' aim, defocus and spot size; in their
-number type.
+or on one of them. The clearance is differentiable in the aim, defocus and spot size of
+the beams and has their number type.
 """
 hardware_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) =
     [_hardware_clearance(k, b) for b in beams]
 
 keepout_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) = hardware_clearance(k, beams)
 
-# A beam's envelope on values: best focus, axes, semi-axes, cone slope and margin.
+# The envelope of a beam on values, with the best focus, axes, semi-axes, cone slope and
+# margin.
 struct _EnvelopeFrame
     focus::Vec3
     k::Vec3
@@ -239,9 +245,9 @@ struct _EnvelopeFrame
     margin::Float64
 end
 
-# A beam's envelope on values at the contour of rule `k` (its `intensity` or
-# `peak_fraction`, and `margin`), the contour's radius in units of the spot's semi-axes,
-# and the aim point on values.
+# Return the envelope of a beam on values at the contour of rule `k`, which sets the
+# `intensity` or `peak_fraction` and the `margin`. Also return the contour radius in units
+# of the spot semi-axes and the aim point on values.
 function _envelope_frame(k, b::Beam)
     bv = _value_beam(b)
     ρ = envelope_radius(bv.spot, bv.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
@@ -252,7 +258,8 @@ function _envelope_frame(k, b::Beam)
            Vec3(bv.aim)
 end
 
-# The axis of an envelope frame as a `BeamEnvelope` (all `_landing_hit` uses).
+# Return the axis of an envelope frame as a `BeamEnvelope`, which is all that
+# `_landing_hit` uses.
 _axis_envelope(ef::_EnvelopeFrame, aim::Vec3) = BeamEnvelope(ef.focus, aim, ef.k, ef.e1, ef.e2, ef.A, ef.B, ef.cone, 0.0)
 
 function _hardware_clearance(k::HardwareKeepOut, b::Beam)
@@ -262,18 +269,19 @@ function _hardware_clearance(k::HardwareKeepOut, b::Beam)
     return _envelope_clearance(k, b, ef, ρ, aim, k.clusters, s_stop)
 end
 
-# The worst-case clearance of beam `b` (its envelope `ef` at the contour radius `ρ`, its
-# aim on values `aim`) from the triangles and segments of the clusters `cls` upstream of
-# `s_stop`, less the error set and rule tolerance of rule `k`: the distance at the point
-# found on values, in the beam's number type; `Inf` if no point counts.
+# Return the worst-case clearance of beam `b` from the triangles and segments of the
+# clusters `cls` upstream of `s_stop`, less the error set and rule tolerance of rule `k`.
+# The envelope of the beam is `ef` at the contour radius `ρ`, and its aim on values is
+# `aim`. The result is the distance at the point found on values, in the number type of
+# the beam, and `Inf` if no point counts.
 function _envelope_clearance(k, b::Beam, ef::_EnvelopeFrame, ρ, aim::Vec3, cls, s_stop)
     found, x, w = _hardware_closest(cls, k.tolerance, ef, s_stop, aim)
     found || return _no_clearance(b)
     τ = k.tolerance
     kv, e1, e2 = ef.k, ef.e1, ef.e2
-    # the tolerance's slope along `w` (it enters the balance on the medial strip)
+    # The slope of the tolerance along `w` enters the balance on the medial strip.
     gw = iszero(τ.tanα) ? 0.0 : -dot(_tol_gradient(τ, x, aim), w)
-    # the distance at the closest point, in the beams' number type
+    # Evaluate the distance at the closest point in the number type of the beams.
     δ = x - (b.aim + b.defocus * kv)
     δ0 = x - ef.focus
     u0, v0, σ = dot(δ0, e1), dot(δ0, e2), dot(δ0, kv) < 0 ? -1 : 1
@@ -281,14 +289,15 @@ function _envelope_clearance(k, b::Beam, ef::_EnvelopeFrame, ρ, aim::Vec3, cls,
     X0, X1, onaxis = _ellipse_closest(u0, v0, ef.A, ef.B)
     n1, n2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, X0, X1)
     E = _ellipse_signed(u, v, A, B, ef.A, ef.B, X0, X1, n1, n2)
-    # the closest point's mirror image across the major axis
+    # Mirror the closest point across the major axis.
     Y0, Y1 = ef.A >= ef.B ? (X0, -X1) : (-X0, X1)
     if onaxis || _medial_tie(u0, v0, ef.A, ef.B, X0, X1, Y0, Y1)
-        # on the medial axis two closest points are equally near: the derivative is the
-        # mixture of theirs that leaves the distance stationary along `w` (the segment's
-        # direction, or across the medial strip in the triangle's plane), as at a
-        # minimax's saddle (stationary along `w`, the mixture's value at a point found
-        # next to the kink is the value at the kink)
+        # On the medial axis two closest points are equally near. The derivative is then
+        # the mixture of their derivatives that leaves the distance stationary along `w`,
+        # as at the saddle of a minimax. `w` is the direction of the segment, or the
+        # direction across the medial strip in the plane of the triangle. Because the
+        # mixture is stationary along `w`, its value at a point found next to the kink
+        # equals the value at the kink.
         m1, m2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, Y0, Y1)
         h⁺ = dot(_envelope_gradient(ef, n1, n2, σ), w) + gw
         h⁻ = dot(_envelope_gradient(ef, m1, m2, σ), w) + gw
@@ -300,8 +309,8 @@ function _envelope_clearance(k, b::Beam, ef::_EnvelopeFrame, ρ, aim::Vec3, cls,
     return iszero(τ.tanα) ? c : c - _tol_value(τ, x, b.aim)
 end
 
-# The rule tolerance's allowance r·tan α at `x`, in the number type of `aim` (the pivot
-# `:aim` and `:max` move with it).
+# Return the allowance r·tan α of the rule tolerance at `x`, in the number type of `aim`.
+# The pivots `:aim` and `:max` move with the aim.
 function _tol_value(τ::_TaLISTol, x::Vec3, aim::SVector{3,T}) where {T}
     p = τ.pivot === :tcc ? zero(aim) : τ.pivot === :aim ? aim :
         τ.pivot === :point ? SVector{3,T}(τ.point) :
@@ -309,8 +318,8 @@ function _tol_value(τ::_TaLISTol, x::Vec3, aim::SVector{3,T}) where {T}
     return τ.tanα * norm(x - p)
 end
 
-# The allowance's gradient in `x`, and an upper bound of it on the ball of radius `ρ`
-# about `x` (r is 1-Lipschitz in the point).
+# `_tol_gradient` returns the gradient of the allowance in `x`, and `_tol_bound` an upper
+# bound of the allowance on the ball of radius `ρ` about `x`; r is 1-Lipschitz in the point.
 function _tol_gradient(τ::_TaLISTol, x::Vec3, aim::Vec3)
     d = τ.pivot === :tcc ? x : τ.pivot === :aim ? x - aim : τ.pivot === :point ? x - τ.point :
         norm(x) >= norm(x - aim) ? x : x - aim
@@ -319,15 +328,17 @@ function _tol_gradient(τ::_TaLISTol, x::Vec3, aim::Vec3)
 end
 _tol_bound(τ::_TaLISTol, x::Vec3, aim::Vec3, ρ) = τ(x, aim) + τ.tanα * ρ
 
-# The point of the clusters' triangles and segments upstream of `s_stop` closest to the
-# envelope `ef`, less the rule tolerance `τ` (its pivot `aim` the beam's): whether there
-# is one, the point, and the direction along which the distance is stationary there (the
-# segment's, or across the medial strip in a triangle's plane); see `HardwareKeepOut`.
+# Find the point of the triangles and segments of the clusters upstream of `s_stop` that is
+# closest to the envelope `ef`, less the rule tolerance `τ`, whose pivot `aim` is the aim of
+# the beam. Return whether such a point exists, the point, and the direction along which
+# the distance is stationary at the point. That direction is the segment direction, or the
+# direction across the medial strip in the plane of a triangle (see `HardwareKeepOut`).
 function _hardware_closest(clusters::Vector{_TriangleCluster}, τ::_TaLISTol, ef::_EnvelopeFrame,
                            s_stop::Float64, aim::Vec3)
     L = sqrt(1 + ef.cone^2)
-    # best first over the clusters (bounded by their spheres) and the segments of those
-    # opened: (bound, ends, balancing direction, whether a medial-strip crossing, cluster)
+    # Search best first over the clusters, bounded by their spheres, and the segments of
+    # the opened clusters. Each heap entry contains the bound, the ends, the balancing
+    # direction, whether the entry is a medial-strip crossing, and the cluster.
     heap = Tuple{Float64,Vec3,Vec3,Vec3,Bool,Int}[]
     for (i, c) in enumerate(clusters)
         _axial(ef, c.center) - c.radius > s_stop && continue
@@ -347,15 +358,17 @@ function _hardware_closest(clusters::Vector{_TriangleCluster}, τ::_TaLISTol, ef
                 sl < best && _heap_push!(heap, (sl, sp, sq, sw, ss, 0))
             end
         elseif iszero(τ.tanα)
-            # a crossing's ends lie on edges or cuts, whose own search finds them with
-            # the direction a minimum there is stationary along
+            # The ends of a crossing lie on edges or cuts. The search on those edges and
+            # cuts finds the ends, with the direction along which a minimum at an end is
+            # stationary.
             v, x = _segment_min(ef, p, q, best, !strip)
             v < best && ((best, xbest, wbest) = (v, x, w))
         else
-            # less the tolerance −r·tan α, concave: the distance less its chord, convex,
-            # bounds it from below and equals it at the ends; where the chord's minimum
-            # lies inside and below the best by more than the gap there, the segment is
-            # split at that point (whose value is then known) and both halves requeued
+            # The tolerance term −r·tan α is concave. The distance less the chord of the
+            # term is convex, bounds the true value from below and equals it at the ends.
+            # Where the minimum of that bound lies inside the segment and below the best
+            # by more than the gap at that point, the segment is split there, and both
+            # halves go back on the heap.
             gp, gq = -τ(p, aim), -τ(q, aim)
             v, x = _segment_min(ef, p, q, best, !strip, gp, gq)
             isfinite(v) || continue
@@ -380,24 +393,26 @@ function _hardware_closest(clusters::Vector{_TriangleCluster}, τ::_TaLISTol, ef
     return isfinite(best), xbest, wbest
 end
 
-# The segments of cluster `c` on which the envelope distance's minimum over its
-# triangles upstream of `s_stop` lies (see `HardwareKeepOut`), pushed onto `segs` as
-# (bound, ends, balancing direction, whether a medial-strip crossing).
+# Push onto `segs` the segments of cluster `c` on which the minimum of the envelope
+# distance over its triangles upstream of `s_stop` lies (see `HardwareKeepOut`). Each
+# entry contains the bound, the ends, the balancing direction, and whether the segment is
+# a medial-strip crossing.
 function _cluster_segments!(segs, cl::_TriangleCluster, ef::_EnvelopeFrame, s_stop)
     for (p, q) in cl.edges
         _segment_pieces!(segs, ef, s_stop, p, q, q - p, false)
     end
-    # the medial strip: the plane through the axis and the major axis, within ±tmax of it
+    # The medial strip is the plane through the axis and the major axis, within ±tmax of
+    # the axis.
     amaj, tmax = ef.A >= ef.B ? (ef.e1, (ef.A^2 - ef.B^2) / ef.A) : (ef.e2, (ef.B^2 - ef.A^2) / ef.B)
     nm = cross(ef.k, amaj)
     for (a, b, c) in cl.tris
         sa, sb, sc = _axial(ef, a), _axial(ef, b), _axial(ef, c)
-        # the cut by the landing plane
+        # Add the cut by the landing plane.
         if max(sa, sb, sc) > s_stop && min(sa, sb, sc) < s_stop
             p, q, n = _plane_cut((a, b, c), (sa - s_stop, sb - s_stop, sc - s_stop))
             n == 2 && _segment_pieces!(segs, ef, s_stop, p, q, q - p, false)
         end
-        # the crossing with the medial strip, clipped to its width
+        # Add the crossing with the medial strip, clipped to its width.
         h = (dot(nm, a - ef.focus), dot(nm, b - ef.focus), dot(nm, c - ef.focus))
         (minimum(h) > 0 || maximum(h) < 0) && continue
         p, q, n = _plane_cut((a, b, c), h)
@@ -416,9 +431,9 @@ end
 
 _axial(ef::_EnvelopeFrame, x) = dot(x - ef.focus, ef.k)
 
-# The crossing of triangle `tri` with the plane on which the signed heights `h` of its
-# vertices vanish: its two end points and how many there are (0, 1 or 2; a vertex on
-# the plane counts once, an edge in it by its ends).
+# Return the crossing of triangle `tri` with the plane on which the signed heights `h` of
+# its vertices vanish. The function returns the two end points and their number, 0, 1 or
+# 2. A vertex on the plane counts once, and an edge in the plane counts by its ends.
 function _plane_cut(tri, h)
     p = q = tri[1]
     n = 0
@@ -449,9 +464,10 @@ function _segment_pieces!(segs, ef::_EnvelopeFrame, s_stop, p, q, w, strip::Bool
     return segs
 end
 
-# A lower bound of the envelope distance at `x`: the distance to the circumscribed
-# circle, and outside the gap (g − 1) min(A, B) to the homothetic ellipse through it
-# (both at most the distance to the ellipse, and both 1-Lipschitz across the beam).
+# Return a lower bound of the envelope distance at `x`. The bound is the larger of the
+# distance to the circumscribed circle and, outside the ellipse, the gap (g − 1) min(A, B)
+# to the homothetic ellipse through `x`. Both are at most the distance to the ellipse, and
+# both are 1-Lipschitz across the beam.
 function _point_bound(ef::_EnvelopeFrame, x)
     d = x - ef.focus
     u, v, s = dot(d, ef.e1), dot(d, ef.e2), dot(d, ef.k)
@@ -463,16 +479,16 @@ function _point_bound(ef::_EnvelopeFrame, x)
     return lo - ef.cone * abs(s) - ef.margin
 end
 
-# A lower bound of the envelope distance on segment `p`–`q`: the midpoint's, less the
-# Lipschitz constant √(1 + cone²) times the half length.
+# Return a lower bound of the envelope distance on segment `p`–`q`, the bound at the
+# midpoint less the Lipschitz constant √(1 + cone²) times the half length.
 _segment_bound(ef::_EnvelopeFrame, p, q) =
     _point_bound(ef, (p + q) / 2) - sqrt(1 + ef.cone^2) * norm(q - p) / 2
 
-# The gradient of the envelope distance where the ellipse's unit normal is (n1, n2), on
-# the side `σ` (±1) of best focus.
+# Return the gradient of the envelope distance where the unit normal of the ellipse is
+# (n1, n2), on the side `σ` (±1) of best focus.
 _envelope_gradient(ef::_EnvelopeFrame, n1, n2, σ) = n1 * ef.e1 + n2 * ef.e2 - (σ * ef.cone) * ef.k
 
-# The envelope distance at `x` and its gradient (on the side `σ` of best focus).
+# Return the envelope distance at `x` and its gradient on the side `σ` of best focus.
 function _envelope_value_gradient(ef::_EnvelopeFrame, x, σ)
     d = x - ef.focus
     u, v = dot(d, ef.e1), dot(d, ef.e2)
@@ -482,10 +498,11 @@ function _envelope_value_gradient(ef::_EnvelopeFrame, x, σ)
            _envelope_gradient(ef, n1, n2, σ)
 end
 
-# The smallest envelope distance on segment `p`–`q` (on one side of best focus, so
-# convex along it) and its point, or with `ends = false` the smallest inside it (`Inf`
-# if that is at an end); a bound at or above `best` ends the search early. With `gp`,
-# `gq`, of the distance plus the linear function taking those values at `p` and `q`.
+# Return the smallest envelope distance on segment `p`–`q` and its point. The segment lies
+# on one side of best focus, so the distance is convex along it. With `ends = false` the
+# function returns the smallest value inside the segment, or `Inf` if that value is at an
+# end. A bound at or above `best` ends the search early. With `gp` and `gq` the function
+# minimizes the distance plus the linear function that takes those values at `p` and `q`.
 function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true, gp = 0.0, gq = 0.0)
     Δ = q - p
     σ = _axial(ef, (p + q) / 2) < 0 ? -1 : 1
@@ -495,9 +512,9 @@ function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true, gp = 0.
     va, xa = !ends ? (Inf, p) : fa <= fb ? (fa, p) : (fb, q)
     ha, hb = dot(ga, Δ) + (gq - gp), dot(gb, Δ) + (gq - gp)
     (ha >= 0 || hb <= 0) && return va, xa                  # the minimum at an end
-    # the tangents at the ends bound the convex function from below
+    # The tangents at the ends bound the convex function from below.
     fa + ha * (fb - hb - fa) / (ha - hb) >= min(best, va) && return va, xa
-    # Illinois regula falsi on the derivative, bisection when it stalls
+    # Use Illinois regula falsi on the derivative, and bisection when it stalls.
     a, b = 0.0, 1.0
     side = 0
     for _ in 1:100
@@ -524,13 +541,15 @@ function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true, gp = 0.
     return va, xa
 end
 
-# (`_ellipse_closest` and `_ellipse_unit_normal`, the closest point of an ellipse and the
-# normal there: `clearance.jl`, beside `_ellipse_distance`, which shares them.)
+# `_ellipse_closest` and `_ellipse_unit_normal` give the closest point of an ellipse and
+# the normal there. They are defined in `clearance.jl`, beside `_ellipse_distance`, which
+# shares them.
 
-# Whether (u, v) lies on the medial axis of the ellipse with semi-axes (A, B) to within
-# a distance of 1e-10 of the semi-major axis: inside the major axis's segment between the
-# centers of curvature, with the mirror image (Y0, Y1) of its closest point (X0, X1)
-# across the major axis as near as that point to within the tolerance. A minimum the
+# Whether (u, v) lies on the medial axis of the ellipse with semi-axes (A, B), to within
+# a distance of 1e-10 of the semi-major axis. The point must lie inside the segment of the
+# major axis between the centers of curvature. The mirror image (Y0, Y1) of its closest
+# point (X0, X1) across the major axis must also be as near as that point, to within the
+# tolerance. A minimum the
 # search finds on the medial strip lies within ~1e-13 mm of the axis (3e-14 measured on
 # the test mock-up), its mirror point within 1e-13 mm as near. Next to a center of
 # curvature the two points nearly coincide, and so do their distances and derivatives.
@@ -540,16 +559,16 @@ function _medial_tie(u, v, A, B, X0, X1, Y0, Y1)
     return hypot(u - Y0, v - Y1) - hypot(u - X0, v - X1) <= 1e-10 * e0
 end
 
-# The signed distance (negative inside) from (u, v) to the ellipse with semi-axes
-# (A, B), in their number type: the projection on the unit normal (n1, n2) at the
-# closest point (X0, X1), found on the values (semi-axes `A0`, `B0`) and held by its
-# parameter. The value is the distance, and the first derivatives are those of the distance (the
-# closest point is stationary: Danskin's theorem).
+# The signed distance, negative inside, from (u, v) to the ellipse with semi-axes (A, B),
+# in their number type. It is the projection on the unit normal (n1, n2) at the closest
+# point (X0, X1). That point is found on the values, the semi-axes `A0` and `B0`, and is
+# held by its parameter. The value is the distance, and the first derivatives are those of
+# the distance, because the closest point is stationary (Danskin's theorem).
 _ellipse_signed(u, v, A, B, A0::Float64, B0::Float64, X0, X1, n1, n2) =
     n1 * (u - A * (A0 > 0 ? X0 / A0 : 0.0)) + n2 * (v - B * (B0 > 0 ? X1 / B0 : 0.0))
 
 # ---------------------------------------------------------------------------------------
-# Capture by the part a beam lands on
+# Capture by the struck part
 # ---------------------------------------------------------------------------------------
 
 """
@@ -558,12 +577,13 @@ _ellipse_signed(u, v, A, B, A0::Float64, B0::Float64, X0, X1, n1, n2) =
                   margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5,
                   weight = 100.0)
 
-Capture constraint for the parts beams are meant to land on (backlighter foils, capture
-plates): [`capture_margin`](@ref)`(keepin, beams)` gives each beam's worst-case margin
-(mm) by which its envelope stays inside the substrate edge of the part it lands on, the
-TaLIS 3ω capture rule of [`talis_check`](@ref) (`:capture_3w`, its `capture` the
-`parts` here) as a quantity. The part landed on is the first of `parts` (a name or a
-collection of part or component names) the beam's nominal axis meets; its substrate
+Capture constraint for the parts meant to be struck by beams, such as backlighter foils
+and capture plates. [`capture_margin`](@ref)`(keepin, beams)` gives the worst-case margin
+(mm) by which the envelope of each beam stays inside the substrate edge of the struck
+part. The margin is the TaLIS 3ω capture rule of [`talis_check`](@ref) (`:capture_3w`) as
+a quantity, with `parts` in the role of the `capture` of `talis_check`. The struck part is
+the first of `parts` (a name or a collection of part or component names) that the nominal
+beam axis meets; its substrate
 edge is its free edges (edges of a single opaque triangle, as `talis_check` takes them).
 The margin is the smallest signed distance from that edge to the beam envelope (the
 best-focus contour at `peak_fraction` of the peak, or at `intensity` W/cm², grown by the
@@ -571,29 +591,30 @@ f-cone and `margin`; negative inside it), less the transverse error radius `poin
 target_offset + hardware_tolerance`, `focus/(2F)` for the focus error and the rule
 tolerance `r·tan(tolerance)` (`r` the distance from `pivot`, as in
 [`HardwareKeepOut`](@ref)), point by point. It is minimized over the edge as
-`HardwareKeepOut` minimizes over its parts' segments: exactly, continuous in the beams'
-aim, defocus and spot size, with the derivatives of the distance at the closest point.
+`HardwareKeepOut` minimizes over the segments of its parts: exactly, continuous in the
+aim, defocus and spot size of the beams, with the derivatives of the distance at the
+closest point.
 A part without a free edge (a closed surface) gives `Inf`, as `talis_check` passes it.
 
-A beam whose axis meets none of `parts` fails the rule (`talis_check` reports `-Inf`).
-The quantity continues the margin there, to keep a stray beam's penalty finite and its
-gradient pointing back: the margin from the outline of the part nearest the axis, less
-twice the axis's transverse distance `d` from that outline. Where the axis crosses the
+A beam whose axis meets none of `parts` fails the rule (`talis_check` reports `-Inf`). The
+quantity continues the margin there, to keep the penalty of a stray beam finite and its
+gradient pointing back: the margin from the outline of the part nearest the axis, less twice
+the transverse distance `d` of the axis from that outline. Where the axis crosses the
 outline `d` vanishes, so the margin is continuous there (on a straight edge it continues
-linearly), and it falls at least as fast as the axis moves away. `-Inf` when no part has
-a free edge. The margin jumps where the landing moves from one part to another.
+linearly), and it falls at least as fast as the axis moves away. The margin is `-Inf` when
+no part has a free edge. The margin jumps where the landing moves from one part to another.
 
 The defaults are the TaLIS values (the 10% contour at least 0.5 mm inside the edge
 with a 0.5° tolerance about TCC; `talis_check` passes a margin at or above 0.5 mm). The
 quantity is a surrogate checked against `talis_check` in this package (see the
-research notes), not against the facility's tool. Pass it as `keepout` to the objectives,
+research notes), not against the facility tool. Pass it as `keepout` to the objectives,
 which add `weight × Σᵢ max(0, minimum − mᵢ)²` ([`keepout_penalty`](@ref)).
 """
 struct CaptureKeepIn
     names::Vector{Symbol}
     target::Target
     comps::Set{Int}                              # the parts' components
-    part_of::Dict{Int,Int}                       # component → part (index into `names`)
+    part_of::Dict{Int,Int}                       # part of each component (in `names`)
     clusters::Vector{Vector{_TriangleCluster}}   # each part's free edges
     peak_fraction::Union{Nothing,Float64}
     intensity::Union{Nothing,Float64}
@@ -623,10 +644,10 @@ end
 """
     capture_margin(keepin, beams) -> Vector
 
-Worst-case capture margin (mm) of each beam on the part of a [`CaptureKeepIn`](@ref) it
-lands on, the rule tolerance included; continued past the part's outline for a beam
-whose axis misses every part, `Inf` on a part without a free edge. Differentiable in the
-beams' aim, defocus and spot size; in their number type.
+Worst-case capture margin (mm) of each beam on the part of a [`CaptureKeepIn`](@ref) struck
+by the beam, the rule tolerance included; continued past the outline of the part for a beam
+whose axis misses every part, `Inf` on a part without a free edge. The margin is
+differentiable in the aim, defocus and spot size of the beams and has their number type.
 """
 capture_margin(k::CaptureKeepIn, beams::AbstractVector{<:Beam}) = [_capture_margin(k, b) for b in beams]
 
@@ -638,8 +659,9 @@ function _capture_margin(k::CaptureKeepIn, b::Beam)
     ef, ρ, aim = _envelope_frame(k, b)
     _, hit = _landing_hit(k.target, _axis_envelope(ef, aim), k.comps; miss = Inf)
     hit > 0 && return _envelope_clearance(k, b, ef, ρ, aim, k.clusters[k.part_of[hit]], Inf)
-    # the axis misses: the part whose outline lies nearest it (the envelope of a
-    # point-like spot along the axis, without the f-cone)
+    # When the axis misses, find the part whose outline lies nearest the axis. The
+    # distance is taken to the envelope of a point-like spot along the axis, without the
+    # f-cone.
     ax = _EnvelopeFrame(aim, ef.k, ef.e1, ef.e2, 0.0, 0.0, 0.0, 0.0)
     j, d, xa = 0, Inf, aim
     for (i, cl) in enumerate(k.clusters)
@@ -654,7 +676,7 @@ function _capture_margin(k::CaptureKeepIn, b::Beam)
 end
 
 # ---------------------------------------------------------------------------------------
-# Incidence on the part a beam lands on
+# Incidence on the struck part
 # ---------------------------------------------------------------------------------------
 
 """
@@ -663,36 +685,39 @@ end
                   max_incidence = 70.0, sharpness = 100.0, level = 2, minimum = 0.0,
                   weight = 100.0)
 
-Incidence limit on the parts beams land on: [`incidence_angle`](@ref)`(rule, beams)`
-gives each beam's worst-case incidence (degrees) on the part it lands on (the first of
-`parts` its nominal axis meets), the TaLIS 3ω incidence rule of [`talis_check`](@ref)
-(`:incidence_3w`, at most `max_incidence`) as a quantity. As `talis_check` judges it, the
-part is cut into `4^level` sub-triangles per mesh triangle, each with its normal (exact
-on sphere, cylinder, cone and torus surfaces), and the incidence is the largest angle
-between the beam axis and the normal of a sub-triangle visible from upstream that the
-worst-case footprint reaches (the envelope at `peak_fraction` of the peak grown by the
-f-cone and `margin`, enlarged by the transverse error radius `pointing + target_offset +
-hardware_tolerance` and `focus/(2F)`; no rule tolerance), plus the f-cone's half-angle
-`atan(1/(2F))`, at most 90°.
+Incidence limit on the parts struck by beams. [`incidence_angle`](@ref)`(rule, beams)`
+gives the worst-case incidence (degrees) of each beam on the struck part, the first of
+`parts` that the nominal beam axis meets. The quantity is the TaLIS 3ω incidence rule of
+[`talis_check`](@ref) (`:incidence_3w`, at most `max_incidence`). As in `talis_check`, the
+part is cut into `4^level` sub-triangles per mesh triangle, each with its normal, which is
+exact on sphere, cylinder, cone and torus surfaces. The incidence is the largest angle
+between the beam axis and the normal of a sub-triangle that is visible from upstream and
+within reach of the worst-case footprint, plus the f-cone half-angle `atan(1/(2F))`, at
+most 90°. The worst-case footprint is the envelope at `peak_fraction` of the peak, grown
+by the f-cone and `margin` and enlarged by the transverse error radius
+`pointing + target_offset + hardware_tolerance` and `focus/(2F)`. The rule tolerance does
+not enter.
 
-The set of sub-triangles the footprint reaches changes as a beam moves, so the largest
-angle over it steps. The quantity smooths the step: each sub-triangle `f` enters with its
-angle less `sharpness × max(0, d_f)` (degrees, `d_f` in mm the clearance of the
-sub-triangle from the footprint, from its exact minimum over the sub-triangle as
-[`HardwareKeepOut`](@ref) finds it), so a sub-triangle counts in full once the footprint
-reaches it and fades over `Δθ/sharpness` mm outside it. The incidence is continuous in
-the beams' aim, defocus and spot size, never below `talis_check`'s (to its resolution),
-and equal to it where no sub-triangle outside the footprint lies within `Δθ/sharpness`
-of it, `Δθ` its angle above the reached ones'. On a flat part it is the part's tilt to
-the beam plus the half-angle, independent of the pointing. `sharpness` (100°/mm) is an
-engineering default, not a facility criterion; the other defaults are those of
-`talis_check`. A beam whose axis meets none of `parts` has no incidence (`-Inf`; see
-[`CaptureKeepIn`](@ref) for the capture rule that fails it).
+The set of sub-triangles within reach of the footprint changes as a beam moves, so the
+largest angle over it steps. The quantity smooths the step. Each sub-triangle `f` enters
+with its angle less `sharpness × max(0, d_f)` in degrees, where `d_f` (mm) is the
+clearance of the sub-triangle from the footprint. `d_f` is the exact minimum over the
+sub-triangle, found as in [`HardwareKeepOut`](@ref). A sub-triangle thus counts in full
+once the footprint reaches it, and its weight fades over `Δθ/sharpness` mm outside it. The
+incidence is continuous in the aim, defocus and spot size of the beams, and it is never
+below the incidence of `talis_check`, to its resolution. It equals that incidence where no
+sub-triangle outside the footprint lies within `Δθ/sharpness` of it, with `Δθ` the amount
+by which the angle of that sub-triangle exceeds those of the reached sub-triangles. On a
+flat part the incidence is the tilt of the part to the beam plus the half-angle,
+independent of the pointing. `sharpness` (100°/mm) is an engineering default and is not set
+by a facility criterion. The other defaults are those of `talis_check`. A beam whose axis
+meets none of `parts` has no incidence (`-Inf`); [`CaptureKeepIn`](@ref) gives the capture
+rule that such a beam fails.
 
-As a keep-out ([`keepout_clearance`](@ref), [`keepout_penalty`](@ref)) the rule's quantity
-is the margin `max_incidence − incidence` in degrees, held at or above `minimum`.
-The quantity is a surrogate checked against `talis_check` in this package (see the
-research notes), not against the facility's tool.
+As a keep-out ([`keepout_clearance`](@ref), [`keepout_penalty`](@ref)) the quantity of the
+rule is the margin `max_incidence − incidence` in degrees, held at or above `minimum`. The
+quantity is a surrogate checked against `talis_check` in this package (see the research
+notes), not against the facility tool.
 """
 struct IncidenceRule
     names::Vector{Symbol}
@@ -706,7 +731,7 @@ struct IncidenceRule
     transverse::Float64
     focus::Float64
     margin::Float64
-    tolerance::_TaLISTol                         # none: incidence takes no rule tolerance
+    tolerance::_TaLISTol                         # zero: incidence has no tolerance
     max_incidence::Float64
     sharpness::Float64
     minimum::Float64
@@ -738,9 +763,10 @@ end
 """
     incidence_angle(rule, beams) -> Vector
 
-Worst-case incidence (degrees) of each beam on the part of an [`IncidenceRule`](@ref) it
-lands on, the f-cone's half-angle included; `-Inf` for a beam that lands on none.
-Continuous in the beams' aim, defocus and spot size; in their number type.
+Worst-case incidence (degrees) of each beam on the part of an [`IncidenceRule`](@ref)
+struck by the beam, the f-cone half-angle included; `-Inf` when no part is struck.
+The incidence is continuous in the aim, defocus and spot size of the beams and has their
+number type.
 """
 incidence_angle(k::IncidenceRule, beams::AbstractVector{<:Beam}) = [_incidence_angle(k, b) for b in beams]
 
@@ -758,8 +784,8 @@ function _incidence_angle(k::IncidenceRule, b::Beam{T}) where {T}
     L = sqrt(1 + ef.cone^2)
     far = 4 * (t.scale + norm(aim)) + 1
     ε = 1e3 * _ray_eps(t)
-    # best first by an upper bound of each sub-triangle's smoothed angle (its angle less
-    # sharpness × a lower bound of its clearance from the footprint)
+    # Search best first by an upper bound of the smoothed angle of each sub-triangle. The
+    # bound is its angle less sharpness × a lower bound of its clearance from the footprint.
     θs = [acosd(clamp(abs(dot(n, ef.k)), 0.0, 1.0)) for n in normals]
     heap = Tuple{Float64,Int}[]
     for (i, (a, bb, c)) in enumerate(leaves)
@@ -785,7 +811,7 @@ function _incidence_angle(k::IncidenceRule, b::Beam{T}) where {T}
     hc = atand(1 / (2b.fnumber))
     a, bb, c = leaves[ibest]
     cl = _clusters([leaves[ibest]])
-    # the clearance in the beams' number type where the smoothing acts
+    # Evaluate the clearance in the number type of the beams where the smoothing acts.
     d = _envelope_clearance(k, b, ef, ρ, aim, cl, Inf)
     θ = θs[ibest] - k.sharpness * max(zero(d), d)
     return min(θ + hc, T(90))
@@ -802,28 +828,29 @@ end
                   lens_distance = 7700.0, offsets = nothing, resolution = 1e-9,
                   minimum = 0.2, weight = 100.0)
 
-Keep-out of named parts from the beams' 1ω footprints: [`omega1_clearance`](@ref)`(keepout,
-beams)` gives each beam's worst-case clearance (mm) of `parts` (a name or a collection
-of part or component names) from the 10% contour of its unconverted 1ω light, the TaLIS
-1ω clearance rule of [`talis_check`](@ref) (`:clearance_1w`, more than 0.2 mm) as a
-quantity. The footprint and its keywords are `talis_check`'s (see its "1ω footprint":
-per beamlet of a NIF quad a square whose near edge lies `omega1_edge` from the 3ω axis,
-tapering to the 1ω focus `omega1_focus` beyond the 3ω focus, moved by `±focus` with the
-3ω focal plane), and the clearance is the smallest transverse distance from the parts to
-it less the transverse error radius `pointing + target_offset + hardware_tolerance` and
-the rule tolerance `r·tan(tolerance)` about `pivot`, point by point. Beams without a NIF
+Keep-out of named parts from the 1ω footprints of the beams.
+[`omega1_clearance`](@ref)`(keepout, beams)` gives the worst-case clearance (mm) of `parts`
+from the 10% contour of the unconverted 1ω light of each beam, where `parts` is a name or
+a collection of part or component names. The quantity is the TaLIS 1ω clearance rule of
+[`talis_check`](@ref) (`:clearance_1w`, more than 0.2 mm). The footprint and its keywords
+are those of `talis_check`, described there under "1ω footprint". Per beamlet of a NIF
+quad, the footprint is a square whose near edge lies `omega1_edge` from the 3ω axis. It
+tapers to the 1ω focus `omega1_focus` beyond the 3ω focus and moves by `±focus` with the
+3ω focal plane. The clearance is the smallest transverse distance from the parts to the
+footprint, less the transverse error radius `pointing + target_offset + hardware_tolerance`
+and the rule tolerance `r·tan(tolerance)` about `pivot` at each point. Beams without a NIF
 quad name or an `offsets` entry have no 1ω footprint and get `Inf`.
 
 The minimum over the parts is found by `talis_check`'s branch and bound on the Lipschitz
 constant of the footprint distance, to `resolution` (mm), not by an exact search: the
 clearance is the smallest value found, within `resolution` of the minimum and
-continuous in the beams' aim and defocus to that accuracy. Its derivatives are the
-footprint distance's at that point (Danskin's theorem; one-sided at the footprint's
-corners and where two beamlets' footprints are equally near). Not clearing calls for
-unconverted-light management (`:management_1w`), a review this quantity does not
-decide. The defaults are `talis_check`'s; the quantity is a surrogate checked against
-`talis_check` in this package (see the research notes), not against the facility's
-tool.
+continuous in the aim and defocus of the beams to that accuracy. Its derivatives are
+those of the footprint distance at that point (Danskin's theorem; one-sided at the
+corners of the footprint and where the footprints of two beamlets are equally near). Not
+clearing calls for unconverted-light management (`:management_1w`), a review outside the
+scope of this quantity. The defaults are `talis_check`'s; the quantity is a surrogate
+checked against `talis_check` in this package (see the research notes), not against the
+facility tool.
 """
 struct Omega1KeepOut{O,B}
     names::Vector{Symbol}
@@ -866,9 +893,10 @@ end
 """
     omega1_clearance(keepout, beams) -> Vector
 
-Worst-case clearance (mm) of the parts of an [`Omega1KeepOut`](@ref) from each beam's
-1ω footprint, the rule tolerance included; `Inf` for a beam without a 1ω footprint.
-Differentiable in the beams' aim and defocus; in their number type.
+Worst-case clearance (mm) of the parts of an [`Omega1KeepOut`](@ref) from the 1ω
+footprint of each beam, the rule tolerance included; `Inf` for a beam without a 1ω
+footprint. The clearance is differentiable in the aim and defocus of the beams and has
+their number type.
 """
 omega1_clearance(k::Omega1KeepOut, beams::AbstractVector{<:Beam}) = [_omega1_clearance(k, b) for b in beams]
 
@@ -884,8 +912,8 @@ function _omega1_clearance(k::Omega1KeepOut, b::Beam{T}) where {T}
     f = x -> _omega1_distance(x, bl, cx)[2] - k.transverse - τ(x, aim)
     lb, x = _lipschitz_minimum(f, k.tris, k.lip + τ.tanα, (k.resolution, 0.0, k.minimum), aim)
     isfinite(lb) || return T(Inf)
-    # the footprint distance at that point in the beams' number type: each beamlet's 3ω
-    # focus moves with the aim and defocus
+    # Evaluate the footprint distance at that point in the number type of the beams. The
+    # 3ω focus of each beamlet moves with the aim and defocus.
     d = T(Inf)
     for (kb, _, ô) in bl
         fb = b.aim + b.defocus * kb

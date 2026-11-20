@@ -1,6 +1,6 @@
-// Properties of a free part: name, size, placement (the frame it is placed in, center,
-// axis angles, rotation, placement steps), a move along any frame's axis, material,
-// sidedness, element size.
+// The properties of a free part are its name, size, placement (the frame it is placed in,
+// center, axis angles, rotation, placement steps), a move along the axis of any frame,
+// material, sidedness and element size.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -78,7 +78,8 @@ ColumnLayout {
         Info { topic: "part.role" }
     }
     CheckLine {
-        // with two or more foils: the one the foil analyses take (Drive ▸ Active foil too)
+        // With two or more foils, this sets the one the foil analyses take (also in
+        // Drive ▸ Active foil).
         visible: app.partRole === 2 && app.foilNames.length > 1
         text: "Active foil (the foil analyses take it)"
         checked: app.foilNames[app.activeFoil] === app.partName
@@ -200,7 +201,7 @@ ColumnLayout {
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }
-    // a hohlraum part: each end an entrance hole or closed, and the closing holes
+    // For a hohlraum part, each end is an entrance hole or closed, with the closing holes.
     Repeater {
         model: hohlraum ? [{ k: "top_end", t: "Top end", v: app.partTopEnd },
                            { k: "bottom_end", t: "Bottom end", v: app.partBottomEnd }] : []
@@ -265,7 +266,7 @@ ColumnLayout {
         checked: app.partAperture
         onToggled: Julia.br_part_flag("aperture", checked)
     }
-    DisplayRow { visible: !hohlraum }      // (a hohlraum's pieces have their own, in the tree)
+    DisplayRow { visible: !hohlraum }      // the pieces of a hohlraum have separate rows in the tree
     ErrorText { text: app.targetError }
     RowLayout {
         spacing: 8

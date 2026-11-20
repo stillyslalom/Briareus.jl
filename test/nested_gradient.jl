@@ -18,7 +18,7 @@ ForwardDiff.tagcount(::Type{ForwardDiff.Tag{_EarlyTag,V}}) where {V} = UInt(0)
     # separate tag (`derivative`) or one that counts before the optimizer's
     inner(ev) = ForwardDiff.derivative(u -> sin(Q(ev) * u), 1.0)
     function early(ev)
-        g(v) = sin(v[1] * Q(ev))              # (the inner dual first: either order nests)
+        g(v) = sin(v[1] * Q(ev))              # the inner dual first; either order nests
         T = ForwardDiff.Tag{_EarlyTag,Float64}
         cfg = ForwardDiff.GradientConfig(g, [1.0], ForwardDiff.Chunk(1), T())
         return ForwardDiff.gradient(g, [1.0], cfg, Val(false))[1]
@@ -33,7 +33,7 @@ ForwardDiff.tagcount(::Type{ForwardDiff.Tag{_EarlyTag,V}}) where {V} = UInt(0)
     end
     gq, q = grad(Q)
     @test any(!iszero, gq)
-    # the reference: the chain rule on the gradient of Q itself, (cos Q − Q sin Q) ∇Q
+    # The reference is the chain rule on the gradient of Q itself, (cos Q − Q sin Q) ∇Q.
     ref = (cos(q) - q * sin(q)) .* gq
     rel(g) = maximum(abs.(g .- ref)) / maximum(abs.(ref))
     gi, vi = grad(inner)

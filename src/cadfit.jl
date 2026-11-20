@@ -1,7 +1,7 @@
-# Analytic surfaces in imported (CAD) meshes: patches that lie on one plane, cylinder,
-# cone, sphere or torus are found by region growing with least-squares fits, and the curved ones
-# are attached to their components as `CurvedSurface`s, so the radiation model
-# integrates on the true surface as it does for primitive targets.
+# This file finds analytic surfaces in imported (CAD) meshes. Patches that lie on one
+# plane, cylinder, cone, sphere or torus are found by region growing with least-squares
+# fits. The curved regions are attached to their components as `CurvedSurface`s, so that
+# the radiation model integrates on the true surface as it does for primitive targets.
 
 """
     SurfaceRegion
@@ -12,16 +12,16 @@ Patches of a mesh lying on one analytic surface, as found by [`fit_surfaces`](@r
 - `surface`: the fitted `CylinderSurface`, `ConeSurface`, `SphereSurface` or
   `TorusSurface` (`nothing` for a plane)
 - `centroid`: area-weighted centroid of the patches (mm)
-- `normal`: a plane's unit normal, on the side most of its area faces (zero for
-  curved surfaces)
+- `normal`: the unit normal of a plane, on the side that most of its area faces (zero
+  for curved surfaces)
 - `patches`: indices of the patches in the mesh
 - `area`: total area of the patches (mm², flat facets)
-- `rms`, `maxdev`: rms and largest distance of the patches' vertices from the surface
-  (mm)
-- `facing`: for curved surfaces, `-1` when every patch faces the axis, center or spine
-  (the inside of a hohlraum wall or of a cone, a fillet in a cavity's corner), `+1` when every patch faces away from it, `0`
-  when mixed;
-  for planes `+1`, or `0` when some patches face the other way
+- `rms`, `maxdev`: rms and largest distance of the vertices of the patches from the
+  surface (mm)
+- `facing`: for curved surfaces, `-1` when every patch faces the axis, center or spine,
+  as on the inside of a hohlraum wall or of a cone or on a fillet in the corner of a
+  cavity; `+1` when every patch faces away from it; `0` when mixed. For planes, `+1`, or
+  `0` when some patches face the other way
 """
 struct SurfaceRegion
     kind::Symbol
@@ -50,10 +50,13 @@ function Base.show(io::IO, r::SurfaceRegion)
             r.kind, geo, length(r.patches), r.area, r.rms, r.maxdev, side)
 end
 
-# A fitted surface: plane (point c, unit normal u), cylinder (axis point c, unit axis
-# u, radius R), cone (axis point c, unit axis u, radius R at c and slope k = dρ/dz along
-# u: ρ = R + k z, either sign, so a cone tends to a cylinder as k → 0), sphere
-# (center c, radius R) or torus (center c, unit axis u, major radius R, minor radius k).
+# A fitted surface. It is one of:
+# - a plane, with point c and unit normal u;
+# - a cylinder, with axis point c, unit axis u and radius R;
+# - a cone, with axis point c, unit axis u, radius R at c and slope k = dρ/dz along u, so
+#   that ρ = R + k z. k has either sign, and a cone tends to a cylinder as k → 0;
+# - a sphere, with center c and radius R;
+# - a torus, with center c, unit axis u, major radius R and minor radius k.
 struct _SurfaceModel
     kind::Symbol
     c::Vec3
@@ -95,14 +98,14 @@ _model_surface(m::_SurfaceModel) =
     m.kind === :sphere ? SphereSurface(m.c, m.R) :
     m.kind === :torus ? TorusSurface(m.c, m.u, m.R, m.k) : nothing
 
-# Radius of curvature across the surface (a cone's at its reference circle, R/cos θ; a
-# torus's across its tube, the minor radius).
+# Returns the radius of curvature across the surface. For a cone it is R/cos θ at its
+# reference circle, and for a torus it is the minor radius, across its tube.
 _model_radius(m::_SurfaceModel) = m.kind === :cone ? m.R * sqrt(1 + m.k^2) : m.kind === :torus ? m.k : m.R
 
-# Least-squares fits to points X (with the patch normals N and areas W for the
-# cylinder's and the cone's axis). `nothing` when the points do not determine the
-# surface, or give a radius beyond 1000 times their extent (a plane in disguise; for a
-# cone, also an apex that far: a cylinder in disguise).
+# Least-squares fits to points X, with the patch normals N and areas W for the axis of
+# the cylinder and the cone. Returns `nothing` when the points do not determine the
+# surface, or give a radius beyond 1000 times their extent, which is a plane in
+# disguise. For a cone, an apex that far also gives `nothing`, as a cylinder in disguise.
 function _fit_model(kind::Symbol, X::Vector{Vec3}, N::Vector{Vec3}, W::Vector{Float64}, Cn = nothing)
     m = sum(X) / length(X)
     ext = maximum(x -> norm(x - m), X)
@@ -126,8 +129,8 @@ function _fit_model(kind::Symbol, X::Vector{Vec3}, N::Vector{Vec3}, W::Vector{Fl
     end
 end
 
-# Algebraic fit (|x|² = 2c·x + k, linear in c and k), refined by Gauss–Newton on the
-# geometric distances |x − c| − R.
+# Fits a sphere by an algebraic fit (|x|² = 2c·x + k, linear in c and k), refined by
+# Gauss–Newton on the geometric distances |x − c| − R.
 function _fit_sphere(X, m, ext)
     M = zeros(SMatrix{4,4,Float64})
     g = zeros(SVector{4,Float64})
@@ -163,9 +166,10 @@ function _fit_sphere(X, m, ext)
     return _SurfaceModel(:sphere, m + c, zero(Vec3), R)
 end
 
-# Axis from the patch normals (perpendicular to it on a cylinder: the eigenvector of
-# Σ w n nᵀ with the least eigenvalue), a circle fit across the axis, then Gauss–Newton
-# on the geometric distances over the axis direction, its position and the radius.
+# Fits a cylinder. The axis comes from the patch normals, which are perpendicular to it
+# on a cylinder, as the eigenvector of Σ w n nᵀ with the least eigenvalue. A circle fit
+# across the axis follows, and then Gauss–Newton on the geometric distances over the axis
+# direction, its position and the radius.
 function _fit_cylinder(X, N, W, m, ext)
     S = zeros(SMatrix{3,3,Float64})
     for (n, w) in zip(N, W)
@@ -215,15 +219,19 @@ function _fit_cylinder(X, N, W, m, ext)
     return _SurfaceModel(:cylinder, m + o, a, R)
 end
 
-# Cone: from two axis directions, the axis of the circle the normals trace (on a cone
-# they make a fixed angle with the axis: the least principal direction of the centered
-# normals, right for a band around the axis) and the cylinder's (the direction the
-# normals are perpendicular to, right for a small patch of a gentle cone), an algebraic
-# fit of ρ = R + k z across the axis (u² + v² linear in the axis point, R², 2Rk and k²;
-# or without the k² z² term, z being centered, when that fits better: on a band of two
-# rims z² is a combination of 1 and z), then Gauss–Newton (step halving when the
-# residual grows) on the geometric distances (ρ − R − kz)/√(1+k²) over the axis
-# direction, its position, R and k. The better of the two is kept.
+# Fit a cone, ρ = R + k z about an axis, from each of two starting axis directions, and
+# keep the better fit. The two starting directions are:
+# - The circle axis. On a cone the normals make a fixed angle with the axis, so they
+#   trace a circle. Its axis is the least principal direction of the centered normals.
+#   This start works for a band around the axis.
+# - The cylinder axis, the direction most nearly perpendicular to every normal. This
+#   start works for a small patch of a gentle cone.
+# From each start, an algebraic fit gives the axis point, R and k, since u² + v² is linear
+# in the axis point, R², 2Rk and k². A second algebraic fit drops the k² z² term (with z
+# centered), and it replaces the first when it fits better: on a band between two rims,
+# z² is a combination of 1 and z. Gauss–Newton then refines the axis direction, the axis
+# position, R and k on the geometric distances (ρ − R − kz)/√(1+k²), with the step halved
+# whenever the residual grows.
 function _fit_cone(X, N, W, m, ext)
     wt = sum(W)
     wt > 0 || return nothing
@@ -324,23 +332,25 @@ function _cone_refine(X, m, ext, a, o, R, k)
     end
     (isfinite(R) && isfinite(k) && R > 0) || return nothing
     R * sqrt(1 + k^2) < 1e3ext || return nothing     # a plane in disguise
-    abs(k) * 1e3ext > R || return nothing             # apex beyond 1000 extents: a cylinder
+    abs(k) * 1e3ext > R || return nothing             # an apex beyond 1000 extents is a cylinder
     return _SurfaceModel(:cone, m + o, a, R, k), cost
 end
 
-# Torus: candidate axes from the patch normals, each with the axis position that the
-# normals' lines come nearest to meeting, a circle fit in the meridian half-plane
-# ((ρ − R)² + (z − z₀)² = r²: ρ² + z² linear in R, z₀ and r² − R² − z₀²), and
-# Gauss–Newton (step halving when the residual grows) on the geometric distances
-# √((ρ − R)² + (z − z₀)²) − r over the axis direction, its position, z₀, R and r; the
-# best is kept. On a surface of revolution every normal lies in its meridian plane, so
-# the normal lines (patch centroid x, normal n) all meet the axis (a, p₀): with
-# ā = p₀ × a, (x × n)·a + n·ā = 0 (a linear complex). Minimizing the weighted squares
-# over ā for each a leaves a 3 × 3 form in a whose two least eigenvectors are
-# candidates (one is the axis; on a small patch the other can be, its normals also
-# nearly meeting the normal line of the patch), with the cone's two (the axis of the
-# circle the normals trace, the direction they are perpendicular to). A torus whose
-# major or minor radius exceeds 1000 extents is left to the cylinder or the cone.
+# Fits a torus. Candidate axes come from the patch normals, each with the axis position
+# that the lines of the normals come nearest to meeting. A circle is fitted in the
+# meridian half-plane, (ρ − R)² + (z − z₀)² = r², where ρ² + z² is linear in R, z₀ and
+# r² − R² − z₀². Gauss–Newton, with the step halved when the residual grows, then
+# refines the axis direction, its position, z₀, R and r on the geometric distances
+# √((ρ − R)² + (z − z₀)²) − r, and the best fit is kept.
+#
+# On a surface of revolution every normal lies in its meridian plane, so the normal lines
+# (patch centroid x, normal n) all meet the axis (a, p₀). With ā = p₀ × a, this gives
+# (x × n)·a + n·ā = 0, a linear complex. Minimizing the weighted squares over ā for each
+# a leaves a 3 × 3 form in a. Its two least eigenvectors are candidates: one is the axis,
+# and on a small patch the other can be, since its normals also nearly meet the normal
+# line of the patch. The two candidates of the cone are added: the axis of the circle
+# that the normals trace, and the direction to which they are perpendicular. A torus
+# whose major or minor radius exceeds 1000 extents is left to the cylinder or the cone.
 function _fit_torus(X, N, W, Cn, m, ext)
     Cn === nothing && return nothing
     A = zeros(SMatrix{3,3,Float64})
@@ -377,9 +387,10 @@ function _fit_torus(X, N, W, Cn, m, ext)
     end
     _torus_osculating!(starts, X, N, W, Cn, m, ext)
     sort!(starts; by = first)
-    # the three best distinct starts (major radius 2% or axis 0.02 rad apart: on a small
-    # patch neighboring starts of the scan cost nearly the same and lead to the same
-    # local minimum), until one fits to round-off
+    # The three best distinct starts are tried, until one fits within round-off. Starts
+    # count as distinct when their major radii differ by 2% or their axes by 0.02 rad,
+    # since on a small patch neighboring starts of the scan cost nearly the same and lead
+    # to the same local minimum.
     best, bestc = nothing, Inf
     tried = 0
     exact = (1e-12 * ext)^2 * length(X)
@@ -394,13 +405,14 @@ function _fit_torus(X, N, W, Cn, m, ext)
     return best
 end
 
-# Starts from the patch's curvature: the shape operator S (dn = −S dx in the tangent
-# plane at the weighted mean centroid x₀ and normal n₀, a least-squares fit over the
-# patches) gives principal curvatures κ₁, κ₂ and directions; with t₁ across the tube, the
-# spine passes through x₀ + n₀/κ₁ along t₂, and the axis lies in the plane of n₀ and t₁
-# and meets the normal line at x₀ + n₀/κ₂. That leaves the axis's tilt in that plane,
-# set by third-order terms: it is scanned by where the axis crosses the line x₀ + s t₁,
-# s = ±2ᵏ/4 extents, k = 0 … 12, for either principal direction across the tube.
+# Adds starts from the curvature of the patch. The shape operator S, with dn = −S dx in
+# the tangent plane at the weighted mean centroid x₀ and normal n₀, is a least-squares
+# fit over the patches. It gives the principal curvatures κ₁, κ₂ and their directions.
+# With t₁ across the tube, the spine passes through x₀ + n₀/κ₁ along t₂, and the axis
+# lies in the plane of n₀ and t₁ and meets the normal line at x₀ + n₀/κ₂. The tilt of the
+# axis in that plane is left, set by third-order terms. It is scanned by the point where
+# the axis crosses the line x₀ + s t₁, with s = ±2ᵏ/4 extents and k = 0 … 12, for either
+# principal direction across the tube.
 function _torus_osculating!(starts, X, N, W, Cn, m, ext)
     n1 = N[argmax(W)]
     wt = 0.0
@@ -504,9 +516,9 @@ function _torus_refine(X, m, ext, a, o, z0, R, r)
             M7 += J * J'
             g7 += J * (s - r)
         end
-        # Levenberg–Marquardt: on a small patch the torus is barely determined (its
-        # axis and major radius show only in third-order terms), so plain Gauss–Newton
-        # steps are huge and step halving stalls
+        # Levenberg–Marquardt is used, since on a small patch the torus is barely
+        # determined. Its axis and major radius show only in third-order terms, so plain
+        # Gauss–Newton steps are huge and step halving stalls.
         dg = SVector(M7[1, 1], M7[2, 2], M7[3, 3], M7[4, 4], M7[5, 5], M7[6, 6], M7[7, 7])
         accepted = false
         a2, o2, z02, R2, r2, c2 = a, o, z0, R, r, cost
@@ -548,11 +560,11 @@ function _solve_small(M, g)
     return all(isfinite, x) ? x : nothing
 end
 
-# Per-patch data on welded vertices: positions, each patch's vertices, area, unit
-# normal, centroid, and the patches at each vertex. (Neighbors are visited through the
-# vertices, each vertex once per pass: a vertex shared by d patches, the apex of a fan
-# of CAD slivers, otherwise costs d² per pass; a fill tube with fans of 800 made a capsule
-# part's fit two minutes long.)
+# Returns per-patch data on welded vertices: positions, the vertices, area, unit normal
+# and centroid of each patch, and the patches at each vertex. Neighbors are visited
+# through the vertices, each vertex once per pass. Otherwise a vertex shared by d patches,
+# such as the apex of a fan of CAD slivers, costs d² per pass, and a fill tube with fans
+# of 800 made the fit of a capsule part take minutes.
 function _fit_data(m::Mesh, weld)
     id = _welded_ids(m; tol = weld)
     P = Vector{Vec3}(undef, isempty(id) ? 0 : maximum(id))
@@ -561,8 +573,8 @@ function _fit_data(m::Mesh, weld)
     end
     pv = [unique(id[v] for k in r for v in m.triangles[k]) for r in m.patches]
     av = [_patch_area_vector(m, r) for r in m.patches]
-    # area as the sum of the facet areas: a patch folded across a curved surface has a
-    # shorter area vector
+    # The area is the sum of the facet areas, since a patch folded across a curved
+    # surface has a shorter area vector.
     area = [sum(norm(_tri_cross(triangle_vertices(m, k)...)) for k in r; init = 0.0) / 2 for r in m.patches]
     nrm = [norm(a) > 0 ? a / norm(a) : zero(Vec3) for a in av]
     cen = [_patch_centroid(m, r) for r in m.patches]
@@ -573,10 +585,10 @@ function _fit_data(m::Mesh, weld)
     return (; P, pv, area, nrm, cen, vp)
 end
 
-# Append to `out` the patches sharing a vertex with the patches `ps` that pass `keep`, in
-# the order of first occurrence over p ∈ ps, v ∈ pv[p], q ∈ vp[v], each once, skipping
-# those already stamped: patches with `pstamp[q] == s` (stamped as they are added) and
-# vertices with `vstamp[v] == s` (stamped as they are visited).
+# Appends to `out` the patches that share a vertex with the patches `ps` and pass `keep`,
+# each once, in the order of first occurrence over p ∈ ps, v ∈ pv[p], q ∈ vp[v]. Patches
+# with `pstamp[q] == s`, stamped as they are added, and vertices with `vstamp[v] == s`,
+# stamped as they are visited, are skipped.
 function _append_neighbors!(out, D, ps, keep, pstamp, vstamp, s)
     for p in ps, v in D.pv[p]
         vstamp[v] == s && continue
@@ -606,16 +618,17 @@ function _fit_patches(kind, D, ps, scratch)
     return _fit_model(kind, X, D.nrm[ps], D.area[ps], kind === :torus ? D.cen[ps] : nothing)
 end
 
-# Tolerance on the distance of vertices from a model: `rtol` of the radius or of the
-# region's extent `ext` if smaller (a gently curved face is not a sphere of any radius
-# that bends less than `rtol R` across it), at least `atol`; `atol` for a plane (CAD
-# planes are flat to round-off) and a torus (CAD tori, rolling-ball fillets, have their
-# vertices on them to round-off, while within `rtol` of a large one lie strips of the
-# cone and the cylinder it blends).
+# Returns the tolerance on the distance of vertices from a model. It is `rtol` of the
+# radius, or of the extent `ext` of the region if smaller, and at least `atol`. A gently
+# curved face is not a sphere of any radius that bends less than `rtol R` across it. The
+# tolerance is `atol` for a plane, since CAD planes are flat within round-off. It is also
+# `atol` for a torus. CAD tori, which are rolling-ball fillets, have their vertices on
+# them within round-off, while strips of the cone and the cylinder that a large torus
+# blends lie within `rtol` of it.
 _fit_tol(m::_SurfaceModel, ext, rtol, atol) =
     m.kind === :plane || m.kind === :torus ? atol : max(atol, rtol * min(_model_radius(m), ext))
 
-# Diagonal of the bounding box of the patches' vertices.
+# Returns the diagonal of the bounding box of the vertices of the patches.
 function _extent(D, ps)
     lo, hi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
     for p in ps, v in D.pv[p]
@@ -632,16 +645,17 @@ function _patch_on(m::_SurfaceModel, D, p, tol, cosmax)
     return abs(dot(D.nrm[p], _model_normal(m, D.cen[p]))) >= cosmax
 end
 
-# Grow a region of one kind from `seed` over available patches, nearest (to the seed)
-# first, refitting as it grows; `nothing` if no start around the seed fits. `refs` are
-# the rms trajectories of rejected growths covering the seed: the growth is then given
-# up at a checkpoint where it fits no better than they did (see `fit_surfaces`).
+# Grows a region of one kind from `seed` over available patches, nearest to the seed
+# first, and refits as it grows. Returns `nothing` if no start around the seed fits.
+# `refs` are the rms trajectories of rejected growths that cover the seed. The growth is
+# then given up at a checkpoint where it fits no better than they did (see
+# `fit_surfaces`).
 function _grow_region(kind, seed, D, avail, W, opts, refs = nothing)
     (; rtol, atol, cosmax) = opts
     (; mark, queued, scratch, heap) = W
     W.gid[] += 1
     gid = W.gid[]
-    # start from the seed and its neighbors (two rings, then one) facing its way
+    # start from the seed and its neighbors (two rings, then one) that face the same way
     near(q) = avail[q] && (D.area[q] == 0 || abs(dot(D.nrm[q], D.nrm[seed])) >= cosmax)
     (; pring, vring) = W
     s = W.stamp[] += 1
@@ -653,8 +667,8 @@ function _grow_region(kind, seed, D, avail, W, opts, refs = nothing)
     model = nothing
     members = Int[]
     for init in (ring2, ring1, [seed])
-        # (a torus starts from at most 64 patches: rings around the apex of a fan of CAD
-        # slivers hold hundreds, and the torus fit is the costly one)
+        # (A torus starts from at most 64 patches, since rings around the apex of a fan of
+        # CAD slivers contain hundreds, and the torus fit is the costly one.)
         kind === :torus && length(init) > 64 && continue
         mdl = _fit_patches(kind, D, init, scratch)
         mdl === nothing && continue
@@ -668,9 +682,9 @@ function _grow_region(kind, seed, D, avail, W, opts, refs = nothing)
     return _grow_from!(kind, seed, model::_SurfaceModel, members, D, avail, W, gid, opts, refs)
 end
 
-# Queue the available patches sharing a vertex with p, not yet members or queued (each
-# vertex is visited once per growth: its patches are queued, members or unavailable from
-# then on).
+# Queues the available patches that share a vertex with p and are not yet members or
+# queued. Each vertex is visited once per growth, since its patches are queued, members
+# or unavailable from then on.
 function _push_neighbors!(H, D, p, avail, mark, queued, vgrow, gid, c0)
     for v in D.pv[p]
         vgrow[v] == gid && continue
@@ -702,13 +716,15 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     end
     tol = _fit_tol(model, norm(hi - lo), rtol, atol)
     nfit = length(members)
-    # the last fit to all the members (members only grow until the final fit, so their
-    # count identifies them): the start's, then each refit's, reused by the final fit
+    # The last fit to all the members is that of the start, then that of each refit, and
+    # the final fit reuses it. Members only grow until the final fit, so their count
+    # identifies them.
     fitn, fitm = nfit, model
     rejected = Int[]
     rounds = 0
-    # checkpoints at W.check × 2^k members (k = 0, 1, …): the rms over the members of the
-    # current fit, in units of its tolerance (read only: the growth itself is unchanged)
+    # At checkpoints of W.check × 2^k members (k = 0, 1, …), the rms over the members of
+    # the current fit is recorded in units of its tolerance. The record does not change
+    # the growth.
     traj = W.traj
     empty!(traj)
     check = W.check
@@ -744,7 +760,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
                 push!(rejected, p)
                 continue
             end
-            # refit, and reconsider the rejected patches under the new fit
+            # refit, with the rejected patches reconsidered under the new fit
             mdl = _fit_patches(kind, D, members, scratch)
             fitn, fitm = length(members), mdl
             if mdl !== nothing
@@ -768,7 +784,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
         end
         empty!(rejected)
     end
-    # final fit; drop patches that it leaves out of tolerance
+    # final fit, dropping the patches that it leaves out of tolerance
     for _ in 1:2
         mdl = length(members) == fitn ? fitm : _fit_patches(kind, D, members, scratch)
         mdl === nothing && return nothing
@@ -826,69 +842,80 @@ end
                  tol = 1e-9) -> Vector{SurfaceRegion}
 
 Regions of `mesh` whose patches lie on one plane, cylinder (any axis), cone, sphere or
-torus, by decreasing area; patches in no region are on none of them (free-form faces,
-patches straddling two faces). Use it on imported CAD (raw facets or after
-`remesh_mesh`), then [`curved_components`](@ref) to give the curved regions their exact
-surface for the radiation model.
+torus, by decreasing area. Patches in no region lie on none of these surfaces, such as
+free-form faces and patches that straddle two faces. The function applies to imported
+CAD, as raw facets or after `remesh_mesh`, and [`curved_components`](@ref) then gives the
+curved regions their exact surface for the radiation model.
 
 A patch belongs to a surface when every one of its vertices lies within
-`max(atol, rtol min(R, L))` mm of it (R the radius of curvature, R/cos θ on a cone of
-half-angle θ; L the region's extent; `atol` for a plane: CAD planes are flat to
-round-off) and its normal is within `angle` degrees of the surface normal at its
-centroid (either side: windings do not matter). Regions grow from seed patches, by
-decreasing area, over patches that share a vertex (welded by position to `tol` times the
-mesh's extent), nearest first, refitting by least squares as they grow: planes by
-principal components, spheres by an algebraic fit, cylinders by the axis to which the
-patch normals are perpendicular and a circle fit across it, cones by the axis with which
-the normals make a constant angle (or the cylinder's, for a small patch) and an
-algebraic fit of the radius linear along it, all refined by Gauss–Newton on the vertex distances; tori
-by the axis the normals all meet (or, on a small patch, axes through the patch's
-centers of curvature) and a circle fit in the meridian plane, refined by
-Levenberg–Marquardt. A cone whose apex lies over 1000 extents away is left to the
+`max(atol, rtol min(R, L))` mm of it, and its normal is within `angle` degrees of the
+surface normal at its centroid, on either side, since windings do not matter. R is the
+radius of curvature (R/cos θ on a cone of half-angle θ), and L the extent of the region.
+For a plane the tolerance is `atol`, since CAD planes are flat within round-off.
+Regions grow from seed patches, by decreasing area, over patches that share a vertex,
+nearest first. Vertices are welded by position to `tol` times the extent of the mesh.
+Each region is refitted by least squares as it grows:
+
+- planes by principal components;
+- spheres by an algebraic fit;
+- cylinders by the axis to which the patch normals are perpendicular and a circle fit
+  across it;
+- cones by the axis with which the normals make a constant angle, or the cylinder axis
+  for a small patch, and an algebraic fit of a radius linear along it;
+- tori by the axis that all the normals meet, or on a small patch by axes through the
+  centers of curvature of the patch, and a circle fit in the meridian plane.
+
+Tori are refined by Levenberg–Marquardt, and the other kinds by Gauss–Newton on the
+vertex distances. A cone whose apex lies over 1000 extents away is left to the
 cylinder, as a surface whose radius of curvature does is left to the plane. From each
-seed all `kinds` are grown and the largest region kept, the earlier of plane, cylinder,
-cone, sphere, torus when within 1% of the largest: a
-narrow band with vertices only on its two rims fits a sphere as well, and a cone too
-when its rims differ in radius (the bore of an entrance hole is a cylinder, a conical
-shield tessellated as one band a cone: a tessellator puts rings of vertices inside a
-spherical zone that bulges beyond its chord tolerance). Only regions with at least
-`minpatches` patches and `minarea` mm² whose rms distance is under a quarter of the
-tolerance count: on a true surface the residual is the faceting, well inside the
-tolerance, while a fit to a free-form face (a variable-radius fillet; a torus without
-`:torus`) grows until the tolerance stops it (rms about 0.4 of it), so such patches
-stay unfitted. Regions of one kind whose
-patches all lie on each other's fits (one surface interrupted by another face) are then
-merged.
+seed all `kinds` are grown, and the largest region is kept. Among regions within 1% of
+the largest, the kind that comes first in the order plane, cylinder, cone, sphere,
+torus is kept. A narrow band with vertices only on its two rims fits a sphere as well,
+and also a cone when its rims differ in radius. The bore of an entrance hole is a
+cylinder, and a conical shield tessellated as one band is a cone, while a tessellator
+puts rings of vertices inside a spherical zone that bulges beyond its chord tolerance.
+Only regions with at least `minpatches` patches and `minarea` mm² whose rms distance is
+under a quarter of the tolerance count. On a true surface the residual is the
+faceting, well inside the tolerance. A fit to a free-form face, such as a
+variable-radius fillet or a torus without `:torus`, grows until the tolerance stops it,
+with an rms of about 0.4 of the tolerance, so such patches stay unfitted. Regions of one
+kind whose patches all lie on the fits of each other, such as one surface interrupted by
+another face, are then merged.
 
-Tori (CAD fillets: a quarter of the tube where a wall meets a cap) are held to CAD
-round-off, since with three more parameters than a sphere a torus also follows free-form
-faces and spans neighboring faces within the relative tolerance: their tolerance is
-`atol`, their rms must be under `atol/16`, their vertices must fall on at least four
-evenly spaced points of the tube circle (bands of strips with vertices only on their
-rims lie on a circle through any three of them), and patches that a plane, cylinder,
-cone or sphere fits are left to it. A fillet then becomes one region in place of a
-patchwork of small cones and spheres. Pass `kinds` without `:torus` for the fits
-before tori (2026-10-24); on the NIF CAD parts that changes only fillet regions
-(research notes, "Tori").
+Tori are CAD fillets, a quarter of the tube where a wall meets a cap. They are held to
+CAD round-off, since with three more parameters than a sphere, a torus also follows
+free-form faces and spans neighboring faces within the relative tolerance. The
+conditions for a torus are:
+- its tolerance is `atol`, and its rms must be under `atol/16`;
+- its vertices must fall on at least four evenly spaced points of the tube circle, since
+  bands of strips with vertices only on their rims lie on a circle through any three of
+  them;
+- patches that a plane, cylinder, cone or sphere fits are left to that kind.
 
-On a finely faceted face of none of the `kinds` (a tapered tube without `:cone`, a fine
-fillet without `:torus`) every patch would seed such a growth, at a cost quadratic in
-the facet count. A rejected growth of at least 512 patches therefore covers the patches near its seed
-(within half its radius, while all its patches stay available): a growth of the same
-kind from a covered seed is given up once, at 128, 256, … members, its rms reaches
-half that of the covering growth at the same size, as it does when it is retracing the
-same face. A true surface fits its patches to the faceting and keeps growing.
+A fillet then becomes one region in place of a patchwork of small cones and spheres.
+`kinds` without `:torus` gives the fits as they were before tori (2026-10-24). On the
+NIF CAD parts that change affects only fillet regions (research notes, "Tori").
+
+On a finely faceted face of none of the `kinds`, such as a tapered tube without `:cone`
+or a fine fillet without `:torus`, every patch would seed such a growth, at a cost
+quadratic in the facet count. A rejected growth of at least 512 patches therefore covers
+the patches near its seed, within half its radius, while all its patches stay
+available. A growth of the same kind from a covered seed is given up once its rms, at
+128, 256, … members, reaches half that of the covering growth at the same size, as it
+does when it retraces the same face. A true surface fits its patches to the faceting
+and keeps growing.
 
 The tolerance must exceed the faceting several times over. Facet vertices of exported
-CAD lie on the true surface, but points `remesh_mesh` adds on a facet lie up to w²/8R
-inside a curved one (w the facet's width: 0.1 µm for 50 µm strips on a 2.9 mm wall,
-5 µm for 0.3 mm strips), more than the tolerance allows once w exceeds ~0.08 R. So
-give the facets the mesh was remeshed from as `reference`: the regions are then fitted
-on them, and each patch of `mesh` joins the region whose surface all its vertices lie
-within that tolerance plus the largest distance of the region's facets from it (and
-whose bounding box holds them), with its normal within `angle`. The regions returned
-index the patches of `mesh`, with their rms and largest distances from the
-(reference) fit.
+CAD lie on the true surface, but points that `remesh_mesh` adds on a facet lie up to
+w²/8R inside a curved surface. With w the width of the facet, this is 0.1 µm for 50 µm
+strips on a 2.9 mm wall and 5 µm for 0.3 mm strips, more than the tolerance allows once
+w exceeds about 0.08 R. The facets from which the mesh was remeshed should therefore be
+given as `reference`. The regions are then fitted on them, and each patch of `mesh` joins
+the region whose surface all its vertices lie within, to that tolerance plus the largest
+distance of the facets of the region from it. The patch must also lie within the
+bounding box of the region and have its normal within `angle`. The regions returned
+index the patches of `mesh`, with their rms and largest distances from the (reference)
+fit.
 """
 function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
                       kinds = (:plane, :cylinder, :cone, :sphere, :torus), rtol::Real = 1e-3, atol::Real = 1e-4,
@@ -903,40 +930,42 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
     return _fit_surfaces(m, kinds, opts, minpatches, minarea, tol)[1]
 end
 
-# Covers (see `fit_surfaces`): a growth that the rms test rejects with at least
+# Covers (see `fit_surfaces`). A growth that the rms test rejects with at least
 # `_COVER_MIN` patches covers, for its kind, its patches nearer its seed than half the
-# region's radius, as long as all of its patches stay available. A growth of that kind
-# from a covered seed is given up at the first checkpoint (`_COVER_CHECK` × 2^k
+# radius of the region, as long as all of its patches stay available. A growth of that
+# kind from a covered seed is given up at the first checkpoint (`_COVER_CHECK` × 2^k
 # members) where its rms exceeds half that of each covering growth at the same
-# checkpoint. Measured on the NIF CAD parts (research notes, "Cost of fitting faces of
-# none of the kinds"): smaller covers change regions that only just pass the rms test.
+# checkpoint. The values were measured on the NIF CAD parts (research notes, "Cost of
+# fitting faces of none of the kinds"), where smaller covers change regions that only
+# just pass the rms test.
 const _COVER_MIN = 512
 const _COVER_CHECK = 128
 
-# Tori: a torus has three more parameters than a sphere or a cylinder and bends both
-# ways, so it follows a free-form face (a paraboloid's patches fit tori with rms 0.23 of
-# the tolerance) as closely as the other kinds follow fillets, and within the relative
-# tolerance of a large torus (r ~ 10 mm) a cone and part of a cylinder beside it; a CAD
-# torus (a rolling-ball fillet) has its vertices on it to round-off. Tori are therefore
-# accepted at rms under `_TORUS_RMS` times `atol` (6 nm by default; Float32 vertices of
-# a few-mm part are rounded by ~0.3 nm), and not on patches that a plane, cylinder,
-# cone or sphere fits (a flat ring is the top band of a torus). A torus within twice the
-# tolerance of a simpler surface across a region of extent L (a sphere: R ≤ 2 tol; a
-# cylinder: spine sagitta L²/8R ≤ 2 tol; a cone or a plane: meridian sagitta
-# L²/8r ≤ 2 tol) is left to that kind, and a torus growth that becomes one at a
-# checkpoint is given up (it would otherwise retrace every sphere and cylinder of a
-# part).
+# Tori. A torus has three more parameters than a sphere or a cylinder and bends both
+# ways. It therefore follows a free-form face as closely as the other kinds follow
+# fillets; the patches of a paraboloid fit tori with an rms of 0.23 of the tolerance.
+# Within the relative tolerance of a large torus (r ~ 10 mm) also lie a cone and part of
+# a cylinder beside it. A CAD torus, a rolling-ball fillet, has its vertices on it within
+# round-off. Tori are therefore accepted at an rms under `_TORUS_RMS` times `atol` (6 nm
+# by default, while Float32 vertices of a few-mm part are rounded by about 0.3 nm). They
+# are not accepted on patches that a plane, cylinder, cone or sphere fits, since a flat
+# ring is the top band of a torus. A torus within twice the tolerance of a simpler
+# surface across a region of extent L is left to that kind. The conditions are R ≤ 2 tol
+# for a sphere, a spine sagitta L²/8R ≤ 2 tol for a cylinder, and a meridian sagitta
+# L²/8r ≤ 2 tol for a cone or a plane. A torus growth that becomes such a surface at a
+# checkpoint is given up, since it would otherwise retrace every sphere and cylinder of a
+# part.
 const _TORUS_RMS = 1 / 16
 _torus_degenerate(m::_SurfaceModel, L, tol) = m.R <= 2tol || L^2 / 8m.R <= 2tol || L^2 / 8m.k <= 2tol
 
-# Whether the vertices of patches `ps` show the torus: their positions along the tube
-# circle (in its meridian half-plane) fall into at least four distinct points (more than
-# 10 tol apart) spaced evenly, the largest step under three times the median, past the
-# arc they leave empty. Through three points passes a circle, so bands of strips with
-# vertices only on their rims (a cylinder and a cone beside it, tessellated as CAD does)
-# fit a torus exactly when they have three rims between them, and four rims placed
-# symmetrically (two bands at either end of a cylinder) lie on one circle too; a CAD
-# torus is tessellated in bands of equal angle.
+# Whether the vertices of patches `ps` show the torus. Their positions along the tube
+# circle, in its meridian half-plane, must fall into at least four distinct points (more
+# than 10 tol apart) spaced evenly, with the largest step under three times the median,
+# not counting the arc they leave empty. A circle passes through any three points, so
+# bands of strips with vertices only on their rims fit a torus exactly when they have
+# three rims between them. Such bands are a cylinder and a cone beside it, tessellated as
+# CAD does. Four rims placed symmetrically, such as two bands at either end of a
+# cylinder, also lie on one circle. A CAD torus is tessellated in bands of equal angle.
 function _meridian_ok(m::_SurfaceModel, D, ps, tol)
     s = Float64[]
     for p in ps, v in D.pv[p]
@@ -948,13 +977,13 @@ function _meridian_ok(m::_SurfaceModel, D, ps, tol)
     g = [s[i+1] - s[i] for i in 1:length(s)-1 if s[i+1] - s[i] > 10tol]
     w = 2π * m.k - (s[end] - s[1])                   # the step across ψ = ±π
     w > 10tol && push!(g, w)
-    length(g) >= 4 || return false                   # four points on the circle: four steps
+    length(g) >= 4 || return false                   # four points on the circle give four steps
     deleteat!(g, argmax(g))                          # the arc the points leave empty
     sort!(g)
     return g[end] <= 3g[(length(g) + 1) ÷ 2]
 end
 
-# Whether the bounding boxes of the vertices of patches `ps` and `qs` overlap (to `tol`).
+# Whether the bounding boxes of the vertices of patches `ps` and `qs` overlap, within `tol`.
 function _boxes_touch(D, ps, qs, tol)
     function box(ps)
         lo, hi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
@@ -967,9 +996,9 @@ function _boxes_touch(D, ps, qs, tol)
     return all(l1 .<= h2 .+ tol) && all(l2 .<= h1 .+ tol)
 end
 
-# Whether a plane, cylinder, cone or sphere fits all the patches `ps` as a region (every
-# patch on it, rms under a quarter of the tolerance; with `exact`, under the rms tori
-# are held to).
+# Whether a plane, cylinder, cone or sphere fits all the patches `ps` as a region, with
+# every patch on it and an rms under a quarter of the tolerance. With `exact`, the rms
+# must be under the limit for tori.
 function _simpler_fits(D, ps, opts, scratch; exact::Bool = false)
     L = _extent(D, ps)
     for kind in (:plane, :cylinder, :cone, :sphere)
@@ -983,10 +1012,10 @@ function _simpler_fits(D, ps, opts, scratch; exact::Bool = false)
 end
 
 # A seed whose torus region is rejected marks the patches of the region within half its
-# radius (all of a growth given up as a simpler surface at a checkpoint, and the seed
-# alone when no torus starts there): no torus is grown from them. On a sphere, or on a
-# part's planes with no `:plane` among the kinds, every patch would otherwise grow one
-# to its first checkpoint.
+# radius, and no torus is grown from them. A growth given up as a simpler surface at a
+# checkpoint marks all its patches, and a seed where no torus starts marks only itself.
+# On a sphere, or on the planes of a part with no `:plane` among the kinds, every patch
+# would otherwise grow a torus to its first checkpoint.
 function _no_torus!(notorus, D, s, ps)
     c0 = D.cen[s]
     r = maximum(p -> norm(D.cen[p] - c0), ps)
@@ -1001,9 +1030,10 @@ end
 # (their final rms past their last checkpoint)
 _cover_rms(refs, k) = maximum(r -> r[min(k, end)], refs)
 
-# `fit_surfaces` on the mesh itself; also returns the work done (`growths`: growths
-# started, `work`: patches tested while growing, `givenup`: growths given up under a
-# cover, `covers`, `pairs`: region pairs tried for merging) for the tests of its cost.
+# `fit_surfaces` on the mesh itself. It also returns the work done, for the tests of its
+# cost: `growths` (growths started), `work` (patches tested while growing), `givenup`
+# (growths given up under a cover), `covers` and `pairs` (region pairs tried for
+# merging).
 function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin = _COVER_MIN, check = _COVER_CHECK)
     np = npatches(m)
     np == 0 && return SurfaceRegion[], (; growths = 0, work = 0, givenup = 0, covers = 0, pairs = 0)
@@ -1017,9 +1047,10 @@ function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin 
     order = sortperm(D.area; rev = true)
     ordered = [k for k in (:plane, :cylinder, :cone, :sphere, :torus) if k in kinds]
     found = Tuple{Symbol,Vector{Int},_SurfaceModel}[]
-    # covering growths: kind, rms trajectory and covered patches, whether each still
-    # stands, the covering growths of each patch and the growths each patch is in
-    # seeds near a torus growth that turned out a simpler surface grow no torus
+    # Covering growths are stored with their kind, rms trajectory and covered patches,
+    # whether each still stands, the covering growths of each patch and the growths that
+    # contain each patch. Seeds near a torus growth that turned out to be a simpler
+    # surface do not grow a torus.
     notorus = falses(np)
     covers = Tuple{Symbol,Vector{Float64},Vector{Int}}[]
     standing = Bool[]
@@ -1042,16 +1073,16 @@ function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin 
             W.degen[] = nothing
             g = _grow_region(kind, s, D, avail, W, opts, isempty(refs) ? nothing : refs)
             if g === nothing
-                # (a seed whose torus growth fails grows none again, nor do those near it
-                # when the growth found a simpler surface)
+                # (A seed whose torus growth fails does not grow another, and neither do the
+                # seeds near it when the growth found a simpler surface.)
                 kind === :torus && (W.degen[] === nothing ? (notorus[s] = true) : (notorus[W.degen[]] .= true; notorus[s] = true))
                 continue
             end
             ps, mdl = g
             A = sum(D.area[ps])
             length(ps) >= minpatches && A >= minarea || (kind === :torus && _no_torus!(notorus, D, s, ps); continue)
-            # a surface explains its vertices well within the tolerance; a fit that only
-            # grew until the tolerance stopped it (a sphere on a free-form face) does not
+            # A surface fits its vertices well within the tolerance. A fit that only grew
+            # until the tolerance stopped it, such as a sphere on a free-form face, does not.
             ext = _extent(D, ps)
             tol = _fit_tol(mdl, ext, opts.rtol, opts.atol)
             q = _deviation(mdl, D, ps, W.scratch)[1] / tol
@@ -1083,7 +1114,7 @@ function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin 
         best === nothing && continue
         avail[best[2]] .= false
         push!(found, best)
-        # a rejected growth over patches now taken no longer stands for its seed's
+        # a rejected growth over patches now taken no longer covers the patches near its seed
         for p in best[2]
             gs = pop!(touched, p, nothing)
             gs === nothing || (standing[gs] .= false)
@@ -1095,14 +1126,15 @@ function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin 
            (; growths = W.growths[], work = W.work[], givenup = W.givenup[], covers = length(covers), pairs = npairs)
 end
 
-# Merge regions of one kind lying on one surface: repeatedly, the first pair (i < j, in
-# the order found) that merges becomes region i. Whether a pair merges depends on its two
-# regions only, so a pair is tried once: each region carries a version (new when it takes
-# a merge), and row i, once scanned through without a merge, skips the regions j whose
-# versions existed then (with region i unchanged). Rescanning every pair after each merge
-# made this quadratic in the regions times the merges (73% of a 40k-facet sample of a
-# 133k-facet CAD part: research notes, "Cost of fitting large CAD parts"). The regions'
-# tolerances are kept with them. Returns the number of pairs tried.
+# Merges regions of one kind that lie on one surface. Repeatedly, the first pair (i < j,
+# in the order found) that merges becomes region i. Whether a pair merges depends only
+# on its two regions, so a pair is tried once. Each region carries a version, new when it
+# takes a merge. Row i, once scanned through without a merge, skips the regions j whose
+# versions existed then, as long as region i is unchanged. Rescanning every pair after
+# each merge made this step quadratic in the regions times the merges, 73% of the time on
+# a 40k-facet sample of a 133k-facet CAD part (research notes, "Cost of fitting large CAD
+# parts"). The tolerances of the regions are kept with them. Returns the number of pairs
+# tried.
 function _merge_regions!(found, D, opts, scratch)
     n = length(found)
     ver = collect(1:n)
@@ -1121,8 +1153,8 @@ function _merge_regions!(found, D, opts, scratch)
                 ki === kj || continue
                 npairs += 1
                 if ki === :torus
-                    # tori fitted on small pieces of one fillet are off by more than `atol`
-                    # across it: pieces whose boxes touch are merged when their union fits
+                    # Tori fitted on small pieces of one fillet are off by more than `atol`
+                    # across it, so pieces whose boxes touch are merged when their union fits.
                     _boxes_touch(D, psi, psj, opts.atol) || continue
                 else
                     ti, tj = tols[i], tols[j]
@@ -1157,16 +1189,16 @@ function _region_model(r::SurfaceRegion)
     r.kind === :sphere && return _SurfaceModel(:sphere, r.surface.center, zero(Vec3), r.surface.radius)
     r.kind === :torus &&
         return _SurfaceModel(:torus, r.surface.center, r.surface.axis, r.surface.major_radius, r.surface.minor_radius)
-    # a cone about the axis point level with the region's centroid, as fitted
+    # a cone about the axis point level with the centroid of the region, as fitted
     s = r.surface
     z = dot(r.centroid - s.apex, s.axis)
     k = tand(s.half_angle)
     return _SurfaceModel(:cone, s.apex + z * s.axis, s.axis, z * k, k)
 end
 
-# Largest distance from the model of the points of the triangle (a, b, c), sampled on a
-# barycentric grid of step 1/4 (on a cylinder, cone or sphere the distance is concave
-# across a facet whose vertices lie on it, largest inside or on an edge).
+# Returns the largest distance from the model of the points of the triangle (a, b, c),
+# sampled on a barycentric grid of step 1/4. On a cylinder, cone or sphere the distance is
+# concave across a facet whose vertices lie on it, and largest inside or on an edge.
 function _facet_deviation(m::_SurfaceModel, a, b, c)
     d = 0.0
     for i in 0:4, j in 0:4-i
@@ -1175,7 +1207,7 @@ function _facet_deviation(m::_SurfaceModel, a, b, c)
     return d
 end
 
-# Regions fitted on `ref` carried over to the patches of `m`, a remeshing of the same
+# Carries regions fitted on `ref` over to the patches of `m`, a remeshing of the same
 # surface (see `fit_surfaces`).
 function _transfer_regions(regs, ref::Mesh, m::Mesh, opts, weld)
     np = npatches(m)
@@ -1216,7 +1248,7 @@ function _transfer_regions(regs, ref::Mesh, m::Mesh, opts, weld)
     return sort!(out; by = r -> -r.area)
 end
 
-# The patches `ps` of a mesh as a mesh of their own (only the vertices they use).
+# Returns the patches `ps` of a mesh as a separate mesh with only the vertices they use.
 function _patch_submesh(m::Mesh, ps)
     vmap = zeros(Int, length(m.vertices))
     verts = Vec3[]
@@ -1241,43 +1273,44 @@ end
     curved_components(target; kwargs...) -> Target
 
 The component split into one component per cylinder, cone, sphere or torus that
-[`fit_surfaces`](@ref) finds in its mesh (other keywords are passed on to it; or give
-its `regions`), each carrying its fitted `CylinderSurface`, `ConeSurface`,
-`SphereSurface` or `TorusSurface`, and the rest: `<name>/cyl1`, `<name>/cyl2`, …,
-`<name>/cone1`, …, `<name>/sph1`, …, `<name>/tor1`, …, by decreasing area, then `<name>/rest` with the other patches (planes
-and unrecognized faces). Material, kind, sidedness and `part` are the component's. A
-component that one fitted surface covers whole keeps its name (and its mesh) and only
-gains the surface. For a remeshed CAD part pass the facets it was remeshed from as
-`reference` (see `fit_surfaces`). A component that already has a surface, or in which
-no curved region is found, is returned unchanged.
+[`fit_surfaces`](@ref) finds in its mesh, and the rest. Other keywords are passed on to
+`fit_surfaces`, or `regions` gives the regions directly. Each new component has its
+fitted `CylinderSurface`, `ConeSurface`, `SphereSurface` or `TorusSurface`. The
+components are named `<name>/cyl1`, `<name>/cyl2`, …, `<name>/cone1`, …, `<name>/sph1`,
+…, `<name>/tor1`, …, by decreasing area, then `<name>/rest` with the other patches
+(planes and unrecognized faces). Material, kind, sidedness and `part` are those of the
+component. A component that one fitted surface covers whole is returned with its name
+and its mesh, and only gains the surface. For a remeshed CAD part, the facets from which it was
+remeshed should be given as `reference` (see `fit_surfaces`). A component that already
+has a surface, or in which no curved region is found, is returned unchanged.
 
-`maxradius` and `minfraction` leave regions in the rest: those whose radius of
-curvature (R/cos θ on a cone of half-angle θ, the minor radius on a torus) exceeds
-`maxradius` times the part's extent (its bounding-box diagonal), and those of less than
-`minfraction` of the part's area. Gently curved CAD faces that are neither planar nor free-form within the fit's
-tolerance (radii of tens to hundreds of mm on a hohlraum half) otherwise each become a
-component of their own; their flat elements are close to exact (the sagitta of an
-element of size h is h²/8R). `minfraction` defaults to 1e-3: small holes and edge faces
-of CAD fit as tiny cylinders, cones and spheres (and, before tori, the fillet pieces),
-and on a NIF CAD cavity (remeshed at 0.6 and 0.3 mm) the default keeps 68 of 158–159 components, with
-the capsule's incident flux within 3e-4 and its Legendre moments within 0.04 percentage
-points of fitting everything (research notes, "Fitting CAD by default"). Pass
-`minfraction = 0` to fit every region. `maxradius` is off by default.
+With `maxradius` and `minfraction`, some regions are left in the rest. These are the
+regions whose radius of curvature (R/cos θ on a cone of half-angle θ, the minor radius
+on a torus) exceeds `maxradius` times the extent of the part (its bounding-box
+diagonal), and those of less than `minfraction` of the part area. Otherwise, gently
+curved CAD faces that are neither planar nor free-form within the tolerance of the fit
+each become a separate component, with radii of tens to hundreds of mm on a hohlraum
+half. Their flat elements are close to exact, since the sagitta of an element of size h
+is h²/8R. `minfraction` defaults to 1e-3, since small holes and edge faces of CAD fit as
+tiny cylinders, cones and spheres, as did the fillet pieces before tori. On a NIF CAD
+cavity (remeshed at 0.6 and 0.3 mm), the default keeps 68 of 158–159 components, with
+the incident flux on the capsule within 3e-4 and its Legendre moments within 0.04
+percentage points of fitting everything (research notes, "Fitting CAD by default").
+`minfraction = 0` fits every region. `maxradius` is off by default.
 
 The radiation model then integrates over the true curved surface, as it does for the
-primitive `hohlraum`: each element's sub-triangle points are projected onto the surface
-with exact curved-patch areas, whatever the element's shape (the compact,
-many-triangle elements of `remesh_mesh` included), and the facets of a cylinder, cone or
-sphere no longer occlude pairs of points inside it (a torus is not convex: its facets
-still do). Ray casting keeps the facets.
-Planar regions are not given a surface: flat elements are already exact there
-(`DiskSurface` describes polar-sector elements of primitive end caps, not general
-planar CAD faces).
+primitive `hohlraum`. The sub-triangle points of each element are projected onto the
+surface with exact curved-patch areas, whatever the shape of the element, including the
+compact, many-triangle elements of `remesh_mesh`. The facets of a cylinder, cone or
+sphere no longer occlude pairs of points inside it. A torus is not convex, so its facets
+still occlude. Ray casting uses the facets. Planar regions are not given a surface,
+since flat elements are already exact there. `DiskSurface` describes the polar-sector
+elements of primitive end caps and does not apply to general planar CAD faces.
 
-The pieces record their part (`part`), so the split is computational only:
+The pieces record their part (`part`), so the split is computational only.
 `elements(target, :part)`, the other name-taking functions and the reports
-(`energy_balance`, `component_power`, `write_results`, `report`) see the part, and
-each piece stays reachable by its name (see [`parts`](@ref)).
+(`energy_balance`, `component_power`, `write_results`, `report`) use the part, and each
+piece stays reachable by its name (see [`parts`](@ref)).
 """
 function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere, :torus), regions = nothing,
                            maxradius::Real = Inf, minfraction::Real = 1e-3, kwargs...)
@@ -1299,7 +1332,7 @@ function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere, :to
     sort!(sel; by = r -> -r.area)
     isempty(sel) && return [c]
     if length(sel) == 1 && length(unique(sel[1].patches)) == npatches(c.mesh)
-        # one surface covers the whole part: it keeps its name and its mesh
+        # one surface covers the whole part, which keeps its name and its mesh
         return [Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided,
                           surface = sel[1].surface, c.part)]
     end

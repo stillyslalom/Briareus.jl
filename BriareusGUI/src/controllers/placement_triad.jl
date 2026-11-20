@@ -113,10 +113,10 @@ end
     commit_triad!(ts::TargetSetup, i, handle, amount) -> Bool
 
 Make a placement-triad drag as one edit: [`nudge_part!`](@ref) by `amount` mm along an
-arrow's axis, or [`turn_part!`](@ref) by `amount` degrees about a ring's, in the frame
-part `i` is placed in (the edit the Move-along row's buttons make); for a square,
+arrow's axis, or [`turn_part!`](@ref) by `amount` degrees about a ring's, in the frame part
+`i` is placed in (the edit the Move-along row's buttons make); for a square,
 `amount = (a, b)` mm along its plane's two axes, one `nudge_part!` along their sum (one
-edit, one undo). A zero amount makes no edit and returns `true`; a refused one sets
+edit, one undo). A zero amount does not make an edit and returns `true`; a refused one sets
 `error` and returns `false`.
 """
 function commit_triad!(ts::TargetSetup, i::Integer, handle::Tuple{Symbol,Int}, amount)
@@ -136,8 +136,8 @@ end
 """
     triad_snap(x, step) -> Float64
 
-`x` rounded to a whole number of `step`s, as the decimal it prints as (12 significant
-digits): three steps of 0.1 mm are 0.3 mm, the move the Move-along row makes with a step
+`x` rounded to a whole number of `step`s, as the decimal it prints as with 12 significant
+digits. Three steps of 0.1 mm are 0.3 mm, the move the Move-along row makes with a step
 of 0.3.
 """
 function triad_snap(x::Real, step::Real)
@@ -152,7 +152,7 @@ end
 The design as `parts` ([`triad_parts`](@ref)) would place it, without rebuilding it:
 the components of each part whose frame changes, moved rigidly by that frame's map
 (drawn and excluded components alike), and `aims`, `beam index => aim` for the beams
-aimed in a moved frame (the aims a rebuilt design gives them, to round-off).
+aimed in a moved frame (the aims a rebuilt design gives them, within round-off).
 """
 function triad_preview(sess, parts::AbstractVector{PartSpec})
     ts, bt = sess.target, sess.beams

@@ -1,4 +1,4 @@
-// The Properties panel: a title for the selection and its page (inspector/*.qml).
+// The Properties panel shows a title for the selection and its page (inspector/*.qml).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -63,7 +63,8 @@ Pane {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
-        // the selection's name heads the page (the panel needs no separate caption)
+        // The name of the selection heads the page, so the panel does not need a separate
+        // caption.
         RowLayout {
             spacing: 6
             Layout.fillWidth: true

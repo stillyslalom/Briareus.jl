@@ -39,7 +39,7 @@ Source: full text read (H). doi:10.1063/5.0210904. Review of the HYBRID-E N22120
   in-flight radiography at ~200 µm, and for N221204 that calibration had not been done
   at the time of writing. Post-shot HYDRA under-predicted N230729 until the swing was
   reduced by hand.
-- Thicker ablators implode later and sample more of the late pole-hot drive → more
+- Thicker ablators implode later and sample more of the late pole-hot drive, so they are more
   oblate, compensated by more Δλ (more waist-hot early).
 - Mode-1 sources named: laser delivery imbalance, capsule thickness non-uniformity, DT
   thickness non-uniformity, non-axially symmetric diagnostic windows.
@@ -48,10 +48,10 @@ Source: full text read (H). doi:10.1063/5.0210904. Review of the HYBRID-E N22120
 
 ## Gaps this exposes for a view-factor code
 
-1. Static geometry: no wall motion, LEH closure or spot motion → no P2 swing. (see
-   `hohlraum_dynamics.md`)
+1. The geometry is static: without wall motion, LEH closure or spot motion there is no
+   P2 swing (see `hohlraum_dynamics.md`).
 2. CBET: constant plasma state, clamp and multiplier are free knobs; the designers
-   behind the paper could not extrapolate 2.75 → 2.9 Å. Need measured P2-vs-Δλ data to
+   behind the paper could not extrapolate from 2.75 to 2.9 Å. Need measured P2-vs-Δλ data to
    calibrate against. (see `cbet_calibration.md`)
 3. Absolute energetics: gold Marshak albedo on a U-Au wall, fixed η = 0.75, capsule
    albedo 0.3, open LEH; 245 kJ capsule absorbed energy is a checkable number. (see

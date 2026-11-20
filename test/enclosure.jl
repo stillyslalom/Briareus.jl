@@ -36,8 +36,8 @@ function thick_hohlraum(; r = 2.0, R = 2.3, zc = 4.0, zo = 4.3, a = 1.0, nphi = 
           Component(:well, box_faces((1.4, -0.1, -3.99), (1.6, 0.1, -3.69); inward = true, open_top = true), au),
           Component(:well_out, box_faces((1.4, -0.1, -3.99), (1.6, 0.1, -3.69); open_top = true), au)]
     if mount
-        # a block on the axis beyond the top hole: its near face sees the cavity through
-        # the hole (view factor ≈ (a/8)² ≈ 0.016 < 0.05), the rest nothing of it
+        # A block on the axis beyond the top hole sees the cavity only from its near face,
+        # through the hole, with a view factor ≈ (a/8)² ≈ 0.016 < 0.05.
         m = box_faces((-1.0, -1.0, 12.0), (1.0, 1.0, 14.0))
         near, far = split_mesh(m, c -> c[3] < 12.5)
         push!(cs, Component(:mount_near, near, au), Component(:mount, far, au))
@@ -66,7 +66,8 @@ end
     Ωmount = 4 * asin(1 / (1 + 12^2))
     @test enc.escape ≈ (1 - cos(atan(1 / 4.3))) / 2 - Ωmount / 4π rtol = 0.03
     @test enc.back == 1.0                  # every ray starts inside the capsule
-    # open area: the two holes (radius 1), from the kept elements' escaping rays
+    # The open area is the two holes (radius 1), computed from the escaping rays of the
+    # kept elements.
     @test enc.open_area ≈ 2π rtol = 0.1
     # the mount face sees the cavity through the hole with F ≈ 0.016: its flux,
     # about 0.9 F of the cavity's, is below the threshold
@@ -74,8 +75,8 @@ end
     @test 0.005 < only(enc.flux[near]) < 0.05
     @test all(<(0.05), enc.flux[.!enc.kept])
     @test all(>=(0.05), enc.flux[enc.kept])
-    # the outer wall gets no flux at all, the outer caps only what the mount face returns
-    # (0.9 × its flux × its view of them); the cavity about the reference
+    # The outer wall receives zero flux. The outer caps receive only what the mount face
+    # returns, 0.9 × its flux × its view of them. The cavity flux lies about the reference.
     @test all(iszero, enc.flux[t.comp_elems[component_index(t, :outer)]])
     @test maximum(enc.flux[t.comp_elems[component_index(t, :cap_out)]]) < 0.1 * only(enc.flux[near])
     @test 0.3 < minimum(enc.flux[t.comp_elems[component_index(t, :inner)]])
@@ -96,9 +97,9 @@ end
     # a point in nothing
     @test_throws ArgumentError enclosure(t, (0.0, 0.0, 50.0); radius = 5.0)
 
-    # Radiosity: elements the cavity cannot see exchange nothing with it, so the kept
-    # target reproduces the capsule flux of the full target; without the mount, to
-    # round-off. The mount face returns the little the hole sends it (leak area).
+    # Elements that the cavity cannot see do not exchange radiation with it, so the kept
+    # target reproduces the capsule flux of the full target. Without the mount the agreement
+    # is within round-off. The mount face returns the little the hole sends it (leak area).
     P = zeros(nelements(t))
     P[t.comp_elems[component_index(t, :inner)]] .= 1.0
     cap(sol, tt) = sum(sol.H[e] * tt.elem_area[e] for e in elements(tt, :capsule)) / sum(tt.elem_area[elements(tt, :capsule)])
@@ -116,8 +117,8 @@ end
     @test enc.return_area ≈ 0.9 * only(enc.flux[near]) * enc.leak_area rtol = 1e-12
     @test enc.return_area < 1e-3 * enc.open_area
 
-    # VisRad workspaces: the cavity of the synthetic workspace's hohlraum (centered at
-    # x = -4 mm) leaves out the foil and the CAD tetrahedron beside it
+    # In the synthetic VisRad workspace, the cavity of the hohlraum (centered at x = -4 mm)
+    # excludes the foil and the CAD tetrahedron beside it.
     path = joinpath(mktempdir(), "work.vrw")
     write(path, synthetic_workspace())
     ws = read_visrad_workspace(path)
@@ -135,8 +136,8 @@ end
     @test sum(tr.elem_area) ≈ sum(ec.target.elem_area) rtol = 1e-10
     @test nelements(tr) > 4nelements(ec.target)
     @test_throws ArgumentError visrad_target(ws; coarsen = 0.3, remesh = 0.3, inside = q)
-    # `fit` (on by default with `remesh`) applies to the elements kept; a tetrahedron has no
-    # curved region: the same as flat
+    # `fit` (on by default with `remesh`) applies to the elements kept. A tetrahedron does
+    # not have a curved region, so the result is the same as flat.
     tf = visrad_target(ws; select = mesh_only, orient = true, remesh = 0.3, inside = q, fit = false)
     @test [c.name for c in tf.components] == [c.name for c in tr.components] && tf.elem_area == tr.elem_area
 end

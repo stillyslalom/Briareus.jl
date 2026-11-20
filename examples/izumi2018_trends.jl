@@ -1,7 +1,8 @@
-# Izumi 2018 (LLNL-PROC-751038) single-parameter SymCap changes against Briareus's flux
-# P2 with `BubbleAbsorption`, turned into hot-spot P2 with Callahan et al. 2018's 2.7 µm
-# per 1% cone fraction over the Briareus d(flux P2/P0)/dCF. A trend check, not blind
-# (the bubble model was fitted to Izumi's data). Research notes, "Young 2020 validation".
+# This example compares the single-parameter SymCap changes of Izumi 2018 (LLNL-PROC-751038)
+# with the Briareus flux P2 under `BubbleAbsorption`. The flux P2 is turned into hot-spot P2
+# with the 2.7 µm per 1% cone fraction of Callahan et al. 2018 over the Briareus
+# d(flux P2/P0)/dCF. The check is of trends and is not blind, since the bubble model was
+# fitted to the data of Izumi (research notes, "Young 2020 validation").
 #
 #     julia --project=. -t auto examples/izumi2018_trends.jl     # ~5 min on 4 threads
 using Briareus, LinearAlgebra, Printf

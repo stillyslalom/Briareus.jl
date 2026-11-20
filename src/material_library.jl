@@ -1,15 +1,16 @@
-# A registry of named material defaults, each quantity with its data source and
-# uncertainty (research notes, "Material defaults and their sources (2026-11-18)").
+# This file holds a registry of named material defaults, each quantity with its data
+# source and uncertainty (research notes, "Material defaults and their sources
+# (2026-11-18)").
 
 """
     SourcedValue(value, basis, source, uncertainty)
 
-One quantity of a [`MaterialDefault`](@ref) with its sources: `value` (a number, an
-`AlbedoModel` or a [`Conversion`](@ref)), `basis` (how the value was obtained, one of
-[`MATERIAL_BASES`](@ref)), `source` (the citation, and the research-notes section that
-records it) and `uncertainty` (the stated or estimated spread, or the published values
-around it). `source` must not be empty: a value without a source does not enter the
-library.
+One quantity of a [`MaterialDefault`](@ref) with its sources. The fields are `value` (a
+number, an `AlbedoModel` or a [`Conversion`](@ref)), `basis` (how the value was
+obtained, one of [`MATERIAL_BASES`](@ref)), `source` (the citation, and the
+research-notes section that records it) and `uncertainty` (the stated or estimated
+spread, or the published values around it). `source` must not be empty, since a value
+without a source does not enter the library.
 """
 struct SourcedValue
     value::Any
@@ -28,26 +29,27 @@ end
 
 How a [`SourcedValue`](@ref) was obtained:
 - `:published`: a measured value, a published scaling, or the input of a published model,
-  as printed;
-- `:range`: a round value inside a published range, not itself a published number;
-- `:calibrated`: fitted in Briareus to the published data the source names;
+  as published;
+- `:range`: a round value inside a published range, which is not itself a published
+  number;
+- `:calibrated`: fitted in Briareus to the published data that the source names;
 - `:derived`: arithmetic in Briareus on published inputs;
 - `:definition`: true by construction (a perfect absorber);
-- `:suggested`: no published measurement exists; the value is a stated point (the
+- `:suggested`: no published measurement exists. The value is a stated point (the
   midpoint) of a suggested range bracketed by published values of related materials or
-  conditions, which `source` names and `uncertainty` gives. Not a measurement.
+  conditions, which `source` names and `uncertainty` gives. It is not a measurement.
 """
 const MATERIAL_BASES = (:published, :range, :calibrated, :derived, :definition, :suggested)
 
 """
     MaterialDefault
 
-A named entry of [`material_library`](@ref): `name`, a one-line `description`, the
-`material` it builds (a `Material`), the [`SourcedValue`](@ref)s `albedo` and
-`conversion` the material is built from, and `other`, recorded quantities the radiation
-model does not use (laser absorption, cold reflectance; `quantity => SourcedValue`
-pairs). Printed with `show` (`display(entry)`), it lists every quantity with its basis,
-source and uncertainty.
+A named entry of [`material_library`](@ref). The fields are `name`, a one-line
+`description`, the `material` that it builds (a `Material`), the
+[`SourcedValue`](@ref)s `albedo` and `conversion` from which the material is built, and
+`other`. `other` contains recorded quantities that the radiation model does not use,
+such as laser absorption and cold reflectance, as `quantity => SourcedValue` pairs. The
+display (`display(entry)`) lists every quantity with its basis, source and uncertainty.
 """
 struct MaterialDefault
     name::Symbol
@@ -97,40 +99,41 @@ const _UNC_NIF_CONV = "0.80/0.85/0.90 at 3/5/8 ns against Olson et al., PoP 19, 
 """
     material_library() -> Vector{MaterialDefault}
 
-The named material defaults whose every quantity has a published source, a derivation
-recorded in the research notes ("Material defaults and their sources (2026-11-18)") or,
-flagged with the basis `:suggested`, a suggested range bracketed by published values,
-freshly built on each call. Each entry is a [`MaterialDefault`](@ref);
-`material_default(name)` returns one, and its `material` is the `Material` to use. The
-entries named after a constructor build exactly the material that constructor builds:
+The named material defaults for which every quantity has a published source, a
+derivation recorded in the research notes ("Material defaults and their sources
+(2026-11-18)") or, flagged with the basis `:suggested`, a suggested range bracketed by
+published values. The defaults are built afresh on each call. Each entry is a
+[`MaterialDefault`](@ref). `material_default(name)` returns one, and its `material` is
+the `Material` to use. The entries named after a constructor build exactly the material
+that the constructor builds:
 
-- `:gold`: [`gold`](@ref)`()`, albedo 0.8 and conversion 0.9 (static solves): the gold
+- `:gold`: [`gold`](@ref)`()`, albedo 0.8 and conversion 0.9 (static solves), the gold
   wall of a published static VisRad model of a NIF hohlraum (Young et al., PoP 27,
   082702 (2020));
 - `:uranium`: [`uranium`](@ref)`()`, the Au-lined DU wall, conversion 0.9;
 - `:nif_gold`, `:nif_uranium`: [`nif_gold`](@ref)`()`, [`nif_uranium`](@ref)`()`, the
-  drive-history walls (Lindl's wall loss, the rising `nif_conversion()`);
+  drive-history walls, with the wall loss of Lindl and the rising `nif_conversion()`;
 - `:gold_foil`: [`foil_material`](@ref)`()`, the default of [`foil`](@ref) and
-  [`backlighter_foil`](@ref): directly irradiated gold, the static equivalent of
+  [`backlighter_foil`](@ref). It is directly irradiated gold, the static equivalent of
   `:gold_disk` at backlighter intensities (albedo 0.8, conversion 0.8);
 - `:titanium_foil`, `:iron_foil`, … (one per mid-Z element of [`FOIL_ELEMENTS`](@ref)):
-  `foil_material(element)`, both quantities `:suggested` (a suggested range, not a
-  measurement);
+  `foil_material(element)`, with both quantities `:suggested`. They are suggested
+  ranges, and no measurement backs them;
 - `:black`: [`BLACK`](@ref), the perfect absorber.
 
 The others are published alternatives:
-- `:gold_swadling2025`: the only published VisRad energetics calibration (albedo 0.77,
-  conversion 0.95 on a 5.75 mm gold hohlraum at 400 TW; Swadling et al., PoP 32, 052707
-  (2025));
-- `:gold_disk`: directly irradiated gold in open geometry (a foil or disk): Lindl's
-  wall loss and Dewald et al.'s (PoP 15, 072706 (2008)) conversion plateau, 0.95 at
-  10¹⁴ and 0.80 at 10¹⁵ W/cm² (an intensity table), with the 3ω laser absorption and
-  the 1ω cold reflectance recorded.
+- `:gold_swadling2025`: the only published VisRad energetics calibration, albedo 0.77
+  and conversion 0.95 on a 5.75 mm gold hohlraum at 400 TW (Swadling et al., PoP 32,
+  052707 (2025));
+- `:gold_disk`: directly irradiated gold in open geometry (a foil or disk). It uses the
+  wall loss of Lindl and the conversion plateau of Dewald et al. (PoP 15, 072706
+  (2008)), 0.95 at 10¹⁴ and 0.80 at 10¹⁵ W/cm² (an intensity table), and it records the
+  3ω laser absorption and the 1ω cold reflectance.
 
-Package defaults without a source are not in the library: the capsule's laser → x-ray
-conversion 0.3 ([`ablator`](@ref)) and the 0/0 of `Material`. `ablator`'s albedo 0.3 has
-a source (Young 2020's static model) but its conversion has none, so the material is
-left out whole.
+Package defaults without a source are not in the library. These are the laser-to-x-ray
+conversion 0.3 of the capsule ([`ablator`](@ref)) and the 0/0 of `Material`. The albedo
+0.3 of `ablator` has a source (the static model of Young 2020), but its conversion has
+none, so the whole material is left out.
 """
 function material_library()
     young_albedo = SourcedValue(0.8, :published, _SRC_YOUNG_STATIC, _UNC_GOLD_ALBEDO)
@@ -189,24 +192,26 @@ function material_library()
     ]
 end
 
-# Foils. Gold: the static equivalent of `:gold_disk` (a `Material` that serves every
-# path needs one number: the flux response, the scenarios and the Monte Carlo reference
-# take a conversion independent of intensity, and a constant albedo keeps the solve
-# linear). Mid-Z: suggested ranges, their midpoints the values (research notes,
-# "Material defaults and their sources (2026-11-18)", "Decisions of 2026-11-18").
+# Foils. Gold uses the static equivalent of `:gold_disk`. A `Material` used on every
+# path needs one number, since the flux response, the scenarios and the Monte Carlo
+# reference take a conversion independent of intensity, and a constant albedo keeps the
+# solve linear. Mid-Z elements use suggested ranges, with their midpoints as the values
+# (research notes, "Material defaults and their sources (2026-11-18)", "Decisions of
+# 2026-11-18").
 const _FOIL_ALBEDO_AU = 0.8
 const _FOIL_CONVERSION_AU = 0.8
 const _MIDZ_ALBEDO_RANGE = (0.3, 0.8)
-const _MIDZ_ALBEDO = 0.55                 # the range's midpoint
+const _MIDZ_ALBEDO = 0.55                 # midpoint of the range
 const _MIDZ_CONVERSION_RANGE = (0.1, 0.6)
-const _MIDZ_CONVERSION = 0.35             # the range's midpoint
+const _MIDZ_CONVERSION = 0.35             # midpoint of the range
 
 """
     FOIL_ELEMENTS
 
-The foil elements of [`foil_material`](@ref), as `(symbol, name, Z)`: gold first, then
-the backlighter elements of [`kshell_ce`](@ref) that are solid as pure elements (Ga, Br
-and Kr, a metal that melts at 30 °C, a liquid and a gas, are left out).
+The foil elements of [`foil_material`](@ref), as `(symbol, name, Z)`. Gold comes first,
+then the backlighter elements of [`kshell_ce`](@ref) that are solid as pure elements.
+Ga, Br and Kr are left out, since they are a metal that melts at 30 °C, a liquid and a
+gas.
 """
 const FOIL_ELEMENTS = ((:Au, "gold", 79), (:Ti, "titanium", 22), (:V, "vanadium", 23), (:Cr, "chromium", 24),
                        (:Mn, "manganese", 25), (:Fe, "iron", 26), (:Co, "cobalt", 27), (:Ni, "nickel", 28),
@@ -217,34 +222,34 @@ const FOIL_ELEMENTS = ((:Au, "gold", 79), (:Ti, "titanium", 22), (:V, "vanadium"
     foil_material(element::Symbol = :Au) -> Material
 
 The material of a directly irradiated foil (a backlighter) of `element`, one of
-[`FOIL_ELEMENTS`](@ref): the material of the [`material_library`](@ref) entry
+[`FOIL_ELEMENTS`](@ref). It is the material of the [`material_library`](@ref) entry
 `:<name>_foil` (`:gold_foil`, `:titanium_foil`, …), built without the library. The
 default of [`foil`](@ref) and [`backlighter_foil`](@ref) is `foil_material()`.
 
 | element | albedo | conversion | basis |
 |:--|:--|:--|:--|
 | `:Au` | 0.8 | 0.8 | gold disks and spheres, static equivalent (below) |
-| `:Ti` … `:Ge`, `:Zr` … `:Ag` | 0.55 (range 0.3–0.8) | 0.35 (range 0.1–0.6) | suggested range, not a measurement |
+| `:Ti` … `:Ge`, `:Zr` … `:Ag` | 0.55 (range 0.3–0.8) | 0.35 (range 0.1–0.6) | suggested range |
 
-- Gold: the conversion is Dewald et al.'s backscatter-corrected plateau at 10¹⁵ W/cm²
-  (PoP 15, 072706 (2008); 0.95 at 10¹⁴), where backlighter foils are driven (He-α
-  optima 1–5 × 10¹⁵ W/cm²); open 3ω gold disks gave 0.51–0.59 of the absorbed energy
-  at 2 × 10¹³–4 × 10¹⁴ W/cm² (Mead et al., LA-UR-86-300 (1985)). The albedo is Lindl's
-  wall loss at 1 ns, 0.76–0.85 over 150–300 eV. `material_default(:gold_disk)` keeps
-  the intensity table, for solves that pass the laser power.
+- Gold: the conversion is the backscatter-corrected plateau of Dewald et al. at
+  10¹⁵ W/cm² (PoP 15, 072706 (2008); 0.95 at 10¹⁴), where backlighter foils are driven
+  (He-α optima 1–5 × 10¹⁵ W/cm²). Open 3ω gold disks gave 0.51–0.59 of the absorbed
+  energy at 2 × 10¹³–4 × 10¹⁴ W/cm² (Mead et al., LA-UR-86-300 (1985)). The albedo is the
+  wall loss of Lindl at 1 ns, 0.76–0.85 over 150–300 eV. The intensity table is kept in
+  `material_default(:gold_disk)`, for solves that pass the laser power.
 - Mid-Z: no published 3ω broadband conversion was found for flat foils of these
-  elements. The conversion range lies below gold's open-disk 0.51–0.59 and the 0.35–0.60
-  total conversion of laser-heated Fe-oxide aerogels at 351 nm (Pérez et al., PoP 19,
-  083101 (2012); steel-lined cavities 0.60–0.75), and its floor 0.1 under the 0.13–0.26
-  that Eidmann & Kishimoto's 2% (Be) to ~50% (heaviest) at 0.53 µm (APL 49, 377
-  (1986)) give linearly in Z over Z 22–47 (the measured dependence oscillates with Z).
-  The albedo range lies between the static albedos of a low-Z ablator (0.3) and gold
-  (0.8) (Young 2020). The value is each range's midpoint: a foil's x-ray emission is a
-  wanted source in some designs and an unwanted background in others, so neither end is
-  conservative.
+  elements. The conversion range lies below the open-disk value of gold, 0.51–0.59, and
+  below the 0.35–0.60 total conversion of laser-heated Fe-oxide aerogels at 351 nm
+  (Pérez et al., PoP 19, 083101 (2012); steel-lined cavities 0.60–0.75). Its floor of 0.1
+  lies under the 0.13–0.26 obtained from the results of Eidmann & Kishimoto at 0.53 µm
+  (APL 49, 377 (1986)), 2% (Be) to about 50% (heaviest), interpolated linearly in Z over
+  Z 22–47. The measured dependence oscillates with Z. The albedo range lies between the
+  static albedos of a low-Z ablator (0.3) and gold (0.8) (Young 2020). The value is the
+  midpoint of each range, since the x-ray emission of a foil is a wanted source in some
+  designs and an unwanted background in others, so neither end is conservative.
 
-The conversion here is the broadband laser → x-ray conversion (the radiosity source);
-the He-α line signal comes from [`kshell_ce`](@ref), fitted to separate data.
+The conversion here is the broadband laser-to-x-ray conversion, the radiosity source.
+The He-α line signal comes from [`kshell_ce`](@ref), fitted to separate data.
 """
 function foil_material(element::Symbol = :Au)
     element === :Au && return Material(:Au; albedo = _FOIL_ALBEDO_AU, conversion = _FOIL_CONVERSION_AU)
@@ -296,8 +301,8 @@ end
 """
     material_default(name::Symbol) -> MaterialDefault
 
-The entry `name` of [`material_library`](@ref); its `material` field is the `Material`.
-Throws an `ArgumentError` listing the names for an unknown one.
+The entry `name` of [`material_library`](@ref), whose `material` field is the
+`Material`. An unknown name throws an `ArgumentError` that lists the names.
 """
 function material_default(name::Symbol)
     lib = material_library()

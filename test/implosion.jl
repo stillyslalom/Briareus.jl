@@ -1,7 +1,7 @@
-# Implosion metrics: mode 1 → hot-spot velocity against published transfer numbers,
-# the piston model's tolerance table, kernel and swing integrals against independent
-# quadrature, and the velocity uncertainty, inverse and penalty against full
-# evaluations.
+# This file tests implosion metrics. The hot-spot velocity from mode 1 is checked against
+# published transfer numbers, and the tolerance table of the piston model, the kernel and
+# the swing integrals against independent quadrature. The velocity uncertainty, inverse and
+# penalty are checked against full evaluations.
 
 @testset "implosion metrics: published numbers" begin
     # a dipole drive 1 + ε n·r̂ on a sphere, through the exact facet Y_lm weights
@@ -14,13 +14,14 @@
     @test mode1_vector(c) ≈ 0.0044 * n rtol = 2e-3
     v = hotspot_velocity(c)
     @test normalize(v) ≈ -n rtol = 1e-6                # away from the high-flux side
-    # Young et al. 2020, N170601: 0.44% → 37.6 km/s (3D HYDRA), 44.7 km/s (VF + G)
+    # In Young et al. 2020, N170601, a mode 1 of 0.44% gives 37.6 km/s (3D HYDRA) and
+    # 44.7 km/s (VF + G).
     @test 37.6 <= norm(v) <= 44.7
     @test abs(norm(v) / 44.7 - 1) < 0.02
-    # Kritcher et al. 2024, N230729: ~0.7% → 70–75 km/s burn-off
+    # In Kritcher et al. 2024, N230729, ~0.7% gives 70–75 km/s at burn-off.
     @test 70 * (1 - 2e-3) <= norm(hotspot_velocity(dipole(0.007))) <= 75
-    # Spears et al. 2014: 2% at peak → 120 km/s, saturated; the linear default
-    # (valid below ~0.75%, Young) over-predicts it
+    # In Spears et al. 2014, 2% at peak gives a saturated 120 km/s. The linear default,
+    # valid below ~0.75% (Young), over-predicts it.
     @test norm(hotspot_velocity(dipole(0.02))) > 1.5 * 120
 
     # Hurricane et al. 2020, Table I (v_imp = 380 km/s, near ignition, χ ≈ 1–2): the
@@ -49,11 +50,11 @@
     @test 1.6 < burn_amplification(80.0) < 1.7 && 4.5 < burn_amplification(500.0) < 4.7
     @test_throws DomainError burn_amplification(60.0)      # between the fits
     @test_throws DomainError burn_amplification(600.0)
-    # shape term: Eq. 2 (2D fit) is continuous at 0.35 to the printed digits
+    # The shape term of Eq. 2 (2D fit) is continuous at 0.35 to the published digits.
     @test shape_amplification(0.0) ≈ 0.71
     @test abs(shape_amplification(0.35 - 1e-9) - shape_amplification(0.35 + 1e-9)) < 5e-3
-    # Table I (3D): its nodes, the equatorial fold, and N130530 of Table IV (P2 −2%,
-    # flow at 90°: 1/Vhs_amp^shape = 0.965)
+    # Table I (3D) is checked at its nodes, at the equatorial fold, and for N130530 of
+    # Table IV, with P2 at −2% and flow at 90°, where 1/Vhs_amp^shape = 0.965.
     @test shape_amplification(-0.5656, 0.0) ≈ 0.046
     @test shape_amplification(0.4028, 30.0) ≈ 1.027
     @test shape_amplification(0.1607, 120.0) ≈ shape_amplification(0.1607, 60.0)
@@ -64,7 +65,8 @@
 end
 
 @testset "implosion metrics: kernels and swing" begin
-    # a mode-1 ramp along z, 0 → 1% over 10 ns, on steps that miss the kernel's edges
+    # A mode-1 ramp along z rises from 0 to 1% over 10 ns, on steps that miss the kernel
+    # edges.
     times = collect(0.0:1.5:10.5)
     ε = 0.001 .* times
     ylm = zeros(4, length(times))
@@ -81,7 +83,7 @@ end
     g(t) = sin(t)
     ref = -100 * sum(g(τ) * 0.001τ for τ in range(0, 10.5; length = 200_001)[1:end-1] .+ 10.5 / 400_000) * 10.5 / 200_000
     @test hotspot_velocity(hist; kernel = g)[3] ≈ ref rtol = 1e-4
-    # the flat kernel: a constant 1% over the window gives per_percent
+    # With the flat kernel, a constant 1% over the window gives per_percent.
     flat = (; time = times, ylm = vcat(ones(1, length(times)), zeros(1, length(times)),
                                       fill(0.01 / sqrt(3), 1, length(times)), zeros(1, length(times))),
             moments = nothing)
@@ -103,8 +105,8 @@ end
     @test sw.picket_mean ≈ 0.015 && sw.picket_max ≈ 0.05 && sw.picket_ok
     @test !swing_metrics(h2; picket = (0.0, 1.0), limit = 0.03).picket_ok
     @test sw.response == (;)
-    # Masse et al. 2019's sign structure: an early pole-hot P2 alone gives opposite
-    # hot-spot and ρR responses when the hot-spot kernel flips sign before 4.5 ns
+    # The sign structure of Masse et al. 2019: an early pole-hot P2 by itself gives
+    # opposite hot-spot and ρR responses when the hot-spot kernel flips sign before 4.5 ns.
     early = (; time = tp, moments = vcat(ones(1, 5), zeros(1, 5), [0.05 0.05 0.0 0.0 0.0]), ylm = nothing)
     r = swing_metrics(early; kernels = (; hotspot = ResponseKernel([0, 4.5, 4.5, 8], [-1, -1, 1, 1]),
                                          rhoR = ResponseKernel([0, 8], [1, 1]))).response
@@ -113,7 +115,8 @@ end
 end
 
 @testset "implosion metrics: piston factors, kernels and nToF errors" begin
-    # flat kernel: total/(t1 − t0) on the window, zero outside, its integral `total`
+    # The flat kernel is total/(t1 − t0) on the window and zero outside, with integral
+    # `total`.
     K = flat_kernel(2.0, 7.0; total = 110.0)
     @test (K(1.9), K(2.0), K(4.5), K(7.0), K(7.1)) == (0.0, 22.0, 22.0, 22.0, 0.0)
     @test_throws ArgumentError flat_kernel(3.0, 3.0)
@@ -139,8 +142,8 @@ end
     @test Σ * eφ ≈ (r * sin(θ) * deg2rad(29))^2 * eφ rtol = 1e-12
     @test ntof_covariance(zeros(3); speed = 10) == Matrix(Diagonal(fill(100.0, 3)))
 
-    # Young et al. 2020 Fig. 5 as digitized: the two panels on 0.25–7.875 ns every 0.125,
-    # and the kernel their mean (either alone where the other is hidden)
+    # Young et al. 2020 Fig. 5 as digitized has the two panels on 0.25–7.875 ns every 0.125.
+    # The kernel is their mean, or the one visible panel where the other is hidden.
     g = young2020_green()
     @test g.t ≈ 0.25:0.125:7.875 && length(g.panel_b) == length(g.panel_d) == length(g.t)
     Kg = young2020_kernel()
@@ -187,7 +190,8 @@ end
     end
     @test u.expected_total < u.expected_yield < 1
 
-    # the inverse: a 20 µm vertical target offset, measured as a full evaluation's velocity
+    # The inverse is checked on a 20 µm vertical target offset, measured as the velocity
+    # of a full evaluation.
     D = Vec3(0, 0, 0.02)
     shifted = [remake(b; aim = Vec3(b.aim) + D) for b in quads]
     vm = hotspot_velocity(evaluate(s, shifted))
@@ -195,8 +199,8 @@ end
     @test ie.positioning[3] ≈ 0.02 rtol = 0.05
     @test norm(ie.velocity.residual) < 2
     @test ie.velocity.chi2 ≈ sum(abs2, vm) / 0.25 / 3 rtol = 1e-6       # nominal is round
-    # thickness alone (Casey 2021): +x thicker moves the hot spot toward +x, opposite
-    # to a +x flux mode 1
+    # With thickness only (Casey 2021), a shell thicker at +x moves the hot spot toward
+    # +x, opposite to a +x flux mode 1.
     tt = Vec3(0.003, 0.0, 0.0)
     vt = 100 * 110 * tt
     it = infer_velocity_errors(s, quads, vt; sigma = 1.0, pointing = 0.0, thickness = 0.01)
@@ -222,8 +226,8 @@ end
 end
 
 @testset "mode analysis about an offset capsule" begin
-    # a pure P2 field about a displaced sphere has no mode 1 about the sphere's center;
-    # analyzed about the origin it would leak into one
+    # A pure P2 field about a displaced sphere has zero mode 1 about the center of the
+    # sphere. Analyzed about the origin it would leak into one.
     c = Vec3(0.3, 0.0, 0.2)
     m = translate(icosphere_mesh(0.8; n = 8), c)
     ts = Target(Component(:capsule, m, ablator(); surface = SphereSurface(0.8; center = c)))
@@ -234,7 +238,7 @@ end
     @test mode_amplitude(a, 1) < 1e-4
     @test mode_amplitude(ylm_weights(ts, els; lmax = 2, center = zero(Vec3)) * f, 1) > 5e-3
     @test legendre_moments(f, ts, els; lmax = 2)[3] ≈ 0.1 rtol = 5e-3
-    # a hohlraum's capsule carries its center; the wall alone has none
+    # The capsule of a hohlraum carries its center; the wall by itself does not have one.
     th = hohlraum(; length = 6.0, radius = 2.0, leh_radius = 1.0, capsule_radius = 0.5,
                   capsule_center = (0.1, 0.0, -0.05), h = 1.0, capsule_h = 0.4)
     @test mode_center(th, elements(th, :capsule)) == Vec3(0.1, 0.0, -0.05)

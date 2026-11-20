@@ -1,4 +1,5 @@
-# CapsuleDrive: the drive handed to a capsule-only hydrodynamics run (ROADMAP "Briareus → CompactLES").
+# CapsuleDrive is the drive handed to a capsule-only hydrodynamics run (ROADMAP item
+# "Briareus → CompactLES").
 
 @testset "capsule drive" begin
     t = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,
@@ -14,7 +15,7 @@
               (drive_history(m, op, τ -> with_pulses(qz, pulse, τ), times; lmax = 8, wall_history = false), op, qz))
     h, op, qz = run(4.0)
     d = capsule_drive(h, m; provenance = (; pulse = "test ramp", hohlraum = "coarse NIF"))
-    # shapes: a uniform grid of ≤ 50 ps over the solved times, l = 0…8
+    # The drive has a uniform grid of ≤ 50 ps over the solved times and l = 0…8.
     @test d.time[1] == 0.5 && d.time[end] == 5.5
     @test maximum(diff(d.time)) <= 0.05 + 1e-12 && length(d.time) == 101
     @test size(d.modes) == (9, 101) && all(==(1), d.modes[1, :])
@@ -22,7 +23,7 @@
     @test d.radius == 0.9 && d.area ≈ sum(t.elem_area[elements(t, :capsule)])
     @test d.provenance[:pulse] == "test ramp" && d.provenance[:code] == "Briareus"
     @test d.provenance[:observe] == [:capsule] && haskey(d.provenance, :git)
-    # round trip: on the history times the drive is the history
+    # On the history times the drive equals the history.
     dh = capsule_drive(h, m; times = h.time)
     @test dh.flux == h.flux && dh.Tr ≈ h.Tr
     @test dh.modes ≈ h.moments ./ h.moments[1:1, :]
@@ -82,7 +83,7 @@ end
     # m = 0 ↔ aₗ/a₀, exactly, and the replaced rows agreed to quadrature level
     @test all(l -> d.ylm[mode_index(l, 0), :] == d.modes[l+1, :], 0:4)
     @test all(l -> abs(sqrt((2l + 1) / 4π) * c[mode_index(l, 0)] / a[1] - a[l+1] / a[1]) < 1e-3, 1:4)
-    # the ratios recover the field's coefficients (element-constant field: ~1e-3)
+    # The ratios recover the field coefficients, to ~1e-3 for an element-constant field.
     q = d.ylm[:, 2]
     @test q[mode_index(2, 2)] ≈ 0.1 atol = 5e-3
     @test q[mode_index(3, -1)] ≈ 0.03 atol = 2e-3
@@ -91,7 +92,7 @@ end
     @test maximum(abs, q[others]) < 4e-3
     # √(Σₘ bₗₘ²) is mode_amplitude (before the m = 0 rows are replaced by modes)
     @test mode_amplitude(c, 2) ≈ sqrt(sum(abs2, sqrt(5 / 4π) * c[mode_index(2, mm)] / a[1] for mm in -2:2))
-    # round trip: a₀ Σ bₗₘ Ŷₗₘ rebuilds the field (Ŷₗₘ = √(4π/(2l+1)) Yₗₘ, orthonormal Y)
+    # The sum a₀ Σ bₗₘ Ŷₗₘ rebuilds the field, with Ŷₗₘ = √(4π/(2l+1)) Yₗₘ and orthonormal Y.
     Y = zeros(5, 9)
     err = 0.0
     for e in es
@@ -111,7 +112,7 @@ end
     @test_throws ArgumentError capsule_drive((; hs..., ylm = nothing), t; ylm = true)
     # A beam pattern rotated by 45° about the axis (the mesh is symmetric under it)
     # rotates the moments: (cₗₘ, cₗ,₋ₘ) turn by mα, and m = 0 stays.
-    qb = nif_quads()[[1, 2, 7]]                         # three quads: no azimuthal symmetry
+    qb = nif_quads()[[1, 2, 7]]                         # three quads break azimuthal symmetry
     α = π / 4
     Rz = [cos(α) -sin(α) 0; sin(α) cos(α) 0; 0 0 1]
     rot(b) = Briareus.Beam{Float64}(b.name, Briareus.Vec3(Rz * b.port...), typeof(b.aim)(Rz * b.aim...), b.power, b.defocus, b.spot,

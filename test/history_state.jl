@@ -32,7 +32,7 @@ using Briareus, Test
         s = Scenario(t, q; observe = :capsule, model = m, st.time, st.albedo)
         @test flux_moments(evaluate(s, beams_at(τ)); lmax = 4) ≈ h.moments[:, k] rtol = 1e-9
     end
-    # between steps: linear in time
+    # Between steps the state is linear in time.
     st = history_state(t, h, 1.375)
     k = findfirst(==(1.25), h.time)
     @test st.albedo ≈ (h.albedo[k] .+ h.albedo[k+1]) ./ 2 rtol = 1e-14
@@ -65,8 +65,8 @@ using Briareus, Test
     @test_logs Scenario(tc, q; observe = :capsule, model = RadiationModel(tc; F = m.F))
     @test_throws ArgumentError Scenario(t, q; observe = :capsule, model = m, albedo = :history)
 
-    # the window: intact before its burnthrough, burned through after its transition,
-    # where it transmits the foil's fraction 𝒯 of the flux on it
+    # The window is intact before its burnthrough and burned through after its
+    # transition, where it transmits the foil fraction 𝒯 of the flux on it.
     early, late = history_state(t, h, times[1]), history_state(t, h, times[end])
     @test early.windows[:window_1] == (; transition = 0.0, transmission = 0.0, burned = false)
     @test late.windows[:window_1].transition == 1 && late.windows[:window_1].burned

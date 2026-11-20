@@ -3,11 +3,11 @@
 # exact curved area of cylinder patches that window (and wall) areas rest on.
 
 @testset "cylinder patch areas" begin
-    # Reference: the radially projected area as an integral over the flat triangle,
-    # ∬ (R/ρ)|ρ̂·n| dA (ρ the distance from the axis, n the triangle normal), Duffy-mapped
-    # to the unit square and integrated by 40×40-point Gauss–Legendre in 256-bit
-    # arithmetic from the exact Float64 vertices. It shares nothing with the closed form
-    # (Green's theorem along the projected edges) but the geometry.
+    # The reference is the radially projected area as an integral over the flat triangle, ∬
+    # (R/ρ)|ρ̂·n| dA, with ρ the distance from the axis and n the triangle normal. It is
+    # Duffy-mapped to the unit square and integrated by 40×40-point Gauss–Legendre in
+    # 256-bit arithmetic from the exact Float64 vertices. It shares only the geometry with
+    # the closed form, which applies Green's theorem along the projected edges.
     setprecision(BigFloat, 256) do
         n = 40
         xs, ws = BigFloat[], BigFloat[]
@@ -132,8 +132,9 @@ end
     # caps share the wall's azimuthal grid: the rims meet at shared vertices
     rim(m, z) = sort([atan(v[2], v[1]) for v in unique(m.vertices) if abs(v[3] - z) < 1e-12 && abs(hypot(v[1], v[2]) - R) < 1e-12])
     @test rim(tw.components[1].mesh, h) ≈ rim(tw.components[2].mesh, h) atol = 1e-12
-    # watertight: rays from inside toward the wall rims and the window's edge lines all
-    # hit an opaque patch when the windows are closed; through an open window they escape
+    # The mesh is watertight. Rays from inside toward the wall rims and the edge lines of
+    # the window all hit an opaque patch when the windows are closed, and they escape
+    # through an open window.
     tr = hohlraum(capsule_radius = 0, windows = [WallWindow(phi = 30, width = w, height = ht)])
     o = Vec3(0.3, -0.2, 0.1)
     rng = MersenneTwister(7)
@@ -145,9 +146,9 @@ end
     hit = Briareus.closest_hit(tr.bvh, o, toward - o)[2]
     @test tr.components[tr.tri_comp[hit]].name === :window_1
 
-    # --- symmetry: a pair of windows related by the 180° rotation about z adds no odd-m
-    # harmonics (NIF quads share that symmetry); a single window drives mode 1 toward
-    # itself as a flux deficit
+    # --- symmetry. A pair of windows related by the 180° rotation about z does not add
+    # odd-m harmonics; NIF quads share that symmetry. A single window drives mode 1 toward
+    # itself as a flux deficit.
     q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
          for b in nif_quads()]
     kw = (; nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 24)
@@ -209,8 +210,8 @@ end
     end
     for (ww, wt) in ((2.0, 2.0), (1.0, 3.0))
         op, cl = cavity(true; ww, wt), cavity(false; ww, wt)
-        # energy balance: source = absorbed + escaped + lost, and the window's escape
-        # H_w A_w is the power all emitters send it (Σⱼ Aⱼ Fⱼ,w Bⱼ, by reciprocity)
+        # The energy balance is source = absorbed + escaped + lost. The escape through the
+        # window, H_w A_w, is the power all emitters send it, Σⱼ Aⱼ Fⱼ,w Bⱼ by reciprocity.
         bal = energy_balance(op.sol)
         @test bal.source ≈ sum(values(bal.absorbed)) + sum(values(bal.escaped)) + bal.lost rtol = 1e-12
         ew = elements(op.t, :window_1)
@@ -244,12 +245,13 @@ end
                      rt = component_power(raytrace_deposition(t, [b]; nspot = 241), t))
     end
     P = b.power
-    # closed: every bit of the beam lands (operator to its documented 1e-4)
+    # When the window is closed, all of the beam is deposited (the operator to its
+    # documented 1e-4).
     @test abs(pw[false].op[:missed]) < 2e-4 * P
     @test abs(pw[false].rt[:missed]) < 1e-12 * P
     @test pw[false].op[:window_1] > 0.9 * P
-    # open: what the closed window absorbed now leaves through it, exactly (same
-    # quadrature points, same visibility elsewhere)
+    # When the window is open, what the closed window absorbed now leaves through it
+    # exactly, with the same quadrature points and the same visibility elsewhere.
     for m in (:op, :rt)
         @test pw[true][m][:missed] - pw[false][m][:missed] ≈ pw[false][m][:window_1] rtol = 1e-10
         @test pw[true][m][:wall] ≈ pw[false][m][:wall] rtol = 1e-12
@@ -346,8 +348,8 @@ end
     Gc = tw.elem_area .* m.F
     @test maximum(abs, Gc - Gc') <= 1e-12 * maximum(Gc)
 
-    # --- a pair related by the 180° rotation about z adds no odd-m harmonics; the open
-    # gap's escape is its share of the open area
+    # --- A pair related by the 180° rotation about z does not add odd-m harmonics, and
+    # the escape through the open gap is its share of the open area.
     q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
          for b in nif_quads()]
     kwc = (; nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 24)
@@ -437,10 +439,10 @@ end
     μs = range(-1, 1; length = 400001)
     S2 = sum(μ -> K(μ) * (3μ^2 - 1) / 2, μs) / sum(K, μs)
     exact(key) = -S2 * (f * α * H / B̄) * b[key] / sqrt(4π)
-    # The closed form is first order: it leaves out the capsule's shadow in the wall-to-wall
-    # exchange (each element sends x² = 4% of its view to the capsule, and the opposed
-    # windows sit in each other's shadow), which moves the m = ±2 part by 3–4% on meshes
-    # from 30 × 60 to 60 × 120 (m = 0 by 1%).
+    # The closed form is first order. It leaves out the shadow of the capsule in the
+    # wall-to-wall exchange, where each element sends x² = 4% of its view to the capsule and
+    # the opposed windows lie in each other's shadow. The omission moves the m = ±2 part by
+    # 3–4% on meshes from 30 × 60 to 60 × 120, and the m = 0 part by 1%.
     @test Δ(2, 0) ≈ exact(:m0) rtol = 0.03
     @test Δ(2, 2) ≈ exact(:p2) rtol = 0.05
     @test Δ(2, -2) ≈ exact(:m2) rtol = 0.05

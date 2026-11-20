@@ -1,9 +1,9 @@
 @testset "picket fluence and the bubble's picket ratio" begin
-    # closed forms on a flat plate at normal incidence (collimated beams, focus on the
-    # plate): one spot of energy E with best-focus peak fluence F₀ = E/(π a b Γ(1 + 2/n))
-    # has the energy-weighted mean ∫F² dA/∫F dA = 2^(-2/n) F₀ (half for a Gaussian). The
-    # element average lowers ∫F² by about h²/(6a²) (Gaussian: 1.1e-3 at h = 0.04 mm,
-    # a = 0.5 mm), the tolerance's scale.
+    # The closed forms are on a flat plate at normal incidence, with collimated beams
+    # focused on the plate. One spot of energy E with best-focus peak fluence F₀ = E/(π a b
+    # Γ(1 + 2/n)) has the energy-weighted mean ∫F² dA/∫F dA = 2^(-2/n) F₀, which is half for
+    # a Gaussian. The element average lowers ∫F² by about h²/(6a²), which sets the scale of
+    # the tolerance. For a Gaussian this is 1.1e-3 at h = 0.04 mm and a = 0.5 mm.
     plate = Target([foil(:plate, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0); width = 4.0, n = 100)])
     sg(a, b, n) = π * a * b * Briareus.gamma(1 + 2 / n)
     for spot in (SuperGaussianSpot(0.5), SuperGaussianSpot(0.6, 0.4; order = 4.5))
@@ -17,15 +17,15 @@
         @test f.peak ≈ F0 rtol = 1e-2
         @test f.area ≈ f.energy / f.mean rtol = 1e-14
         @test all(iszero, f.fluence[setdiff(1:nelements(plate), f.elements)])
-        # the pulse form: a constant 2 TW over a 1.5 ns window is the same 3 kJ
+        # In the pulse form, a constant 2 TW over a 1.5 ns window is the same 3 kJ.
         fp = picket_fluence(op, [b], PulseShape([-1.0, 5.0], [2.0, 2.0]), (0.0, 1.5);
                             groups = b.group, components = :plate)
         @test fp.mean ≈ f.mean rtol = 1e-14
     end
 
-    # two Gaussian spots (1/e radius a) a distance d apart: ∫F² gains the cross term
-    # 2∫F₁F₂ = 2 e^(-d²/2a²) ∫F₁², so the mean is (1 + e^(-d²/2a²)) times one spot's:
-    # twice when they coincide, once when separated
+    # For two Gaussian spots of 1/e radius a, a distance d apart, ∫F² gains the cross term
+    # 2∫F₁F₂ = 2 e^(-d²/2a²) ∫F₁². The mean is therefore (1 + e^(-d²/2a²)) times that of one
+    # spot, twice when the spots coincide and once when they are separated.
     wide = Target([foil(:plate, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0); width = 6.0, n = 150)])
     g = SuperGaussianSpot(0.5)
     pair = [Beam("a"; theta = 0.0, phi = 0.0, spot = g, fnumber = 1e6, power = 1.0),
@@ -40,9 +40,10 @@
     @test_throws ArgumentError picket_fluence(opw, pair; groups = (:outer50,), components = (:plate,))
     @test_throws KeyError picket_fluence(opw, pair; groups = (pair[1].group,), components = (:capsule,))
 
-    # a 50° quad on the basecamp's cylinder, split tangentially (Izumi 2021's split-quad
-    # direction: the same energy, a lower fluence on the wall): its two pairs of beams
-    # separate along the spots' long axes, so the mean falls toward half the unsplit one
+    # A 50° quad on the basecamp cylinder is split tangentially, in the split-quad direction
+    # of Izumi 2021, which keeps the energy and lowers the fluence on the wall. The two
+    # pairs of beams separate along the long axes of the spots, so the mean falls toward
+    # half the unsplit mean.
     t = hohlraum(length = 10.13, radius = 2.875, leh_radius = 1.685, capsule_radius = 0.908, h = 0.2,
                  capsule_h = 0.6)
     q = first(b.quad for b in nif_beams() if b.group === :outer50)
@@ -76,7 +77,7 @@
     @test gd ≈ fd rtol = 1e-5
     @test gd[2] < 0                                            # splitting slows the bubble
 
-    # the pulse window: exact for a piecewise-linear pulse, zero outside the table
+    # The pulse window is exact for a piecewise-linear pulse and zero outside the table.
     P = PulseShape([0.0, 1.0, 2.0], [0.0, 2.0, 2.0])
     @test Briareus._window_energy(P, 0.5, 1.5) ≈ 1.75 rtol = 1e-15
     @test Briareus._window_energy(P, -1.0, 3.0) == pulse_energy(P)
@@ -128,7 +129,8 @@ end
         # other groups count when named
         fi = picket_fluence(s.deposition, ev.beams, pulses, w; groups = (:inner23, :inner30))
         @test picket_irradiance(ev, :wall; kw..., groups = (:inner23, :inner30)) ≈ fi.peak rtol = 1e-12
-        # the ceilings: the stand-in at the reference's peak, the reported value the peak
+        # The ceilings put the stand-in at the peak of the reference, and the reported value
+        # is the peak.
         c, cm = picket_ceiling(ref, :wall; kw...), picket_ceiling(ref, :wall; kw..., measure = :weighted)
         @test c.name === :picket_peak && cm.name === :picket_weighted && c.upper
         @test only(c.limit) == picket_irradiance(ref, :wall; kw...)
@@ -174,13 +176,14 @@ end
         @test picket_irradiance(ev, :wall; kw..., measure = :average, area = 10.0) ≈ sum(P[es]) / 10 rtol = 1e-12
         @test picket_irradiance(ev, :wall; kw..., measure = :average) ≈
               picket_fluence(s.deposition, ev.beams, pulses, w).energy / 53 rtol = 1e-12
-        # `deposit` skips the beams at exactly zero power (their light is exact zeros): the
-        # outer beams alone through the operator on their ports, and the others' totals 0
+        # `deposit` skips the beams at exactly zero power, whose light is exact zeros. The
+        # result equals the deposition of only the outer beams through the operator on their
+        # ports, and the totals of the other beams are 0.
         live = findall(b -> b.group in (:outer44, :outer50), ev.beams)
         d2 = deposit(s.deposition, outer2)
         @test isapprox(d2.element, deposit(s.deposition[live], outer2[live]).element; rtol = 1e-13) &&
               all(iszero, d2.per_beam[setdiff(eachindex(outer2), live)])
-        # net of backscatter: the effective beams at their own powers
+        # Net of backscatter, the effective beams are deposited at their effective powers.
         sb = remake(s; lpi = Backscatter(:outer50 => 0.5))
         Pb = deposit(s.deposition, [remake(b; power = b.group === :outer50 ? 4.0 : b.group === :outer44 ? 8.0 : 0.0)
                                     for b in ev.beams]).element
@@ -205,8 +208,8 @@ end
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :average, area = 0.0)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, edge = 3.0)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, inner = (:none,))
-        # the corridor: with no centroid on the soft edge, the hard mean within the
-        # distance; the distance to each inner centerline by hand
+        # With no centroid on the soft edge, the corridor is the hard mean within the
+        # distance. The distance to each inner centerline is computed by hand.
         lines = [(b.aim, -b.port / norm(b.port)) for b in ev.beams if b.group in (:inner23, :inner30)]
         dist = [minimum(norm(cross(t.elem_centroid[e] - a, k)) for (a, k) in lines) for e in es]
         ds = sort(filter(d -> 1.0 < d < 1.6, dist))      # the widest gap between centroid distances
@@ -216,19 +219,20 @@ end
         m = dist .< r
         @test picket_irradiance(ev, :wall; kw..., measure = :corridor, corridor = r, edge = e0) ≈
               sum(P[es][m]) / sum(t.elem_area[es][m]) rtol = 1e-12
-        # the soft edge: a quintic smoothstep per centerline, joined as a union
+        # The soft edge is a quintic smoothstep per centerline, joined as a union.
         sstep(u) = clamp(u, 0, 1)^3 * (6clamp(u, 0, 1)^2 - 15clamp(u, 0, 1) + 10)
         wt(d1, d2) = 1 - (1 - sstep((1.45 - d1) / 0.3)) * (1 - sstep((1.45 - d2) / 0.3))
         two = [(Briareus.SVector(0.0, 0.0, 0.0), Vec3(0, 0, 1)), (Briareus.SVector(3.0, 0.0, 0.0), Vec3(0, 0, 1))]
         pts = [Vec3(dx, 0.0, 0.7) for dx in (0.2, 1.2, 1.3, 1.4, 1.5, 1.7, 2.0)]
         @test all(p -> isapprox(Briareus._corridor_weight(p, two, 1.15, 1.45, 0.3), wt(p[1], 3 - p[1]); atol = 1e-14), pts)
-        # the hottest elements: the peak first, sorted, with their distances
+        # The hottest elements are sorted with the peak first and listed with their
+        # distances.
         hot = picket_hot_elements(ev, :wall; kw..., n = 5)
         @test length(hot) == 5 && hot[1].irradiance == picket_irradiance(ev, :wall; kw...)
         @test issorted([h.irradiance for h in hot]; rev = true)
         @test all(h -> isapprox(h.distance, dist[findfirst(==(h.element), es)]; rtol = 1e-12), hot)
         @test all(h -> h.z == t.elem_centroid[h.element][3] && 0 <= h.phi < 360, hot)
-        # the ceilings: at the reference's value, the value the measure
+        # The ceilings are set at the value of the reference, and the value is the measure.
         ca = picket_ceiling(ref, :wall; kw..., measure = :average)
         cc = picket_ceiling(ref, :wall; kw..., measure = :corridor)
         @test ca.name === :picket_average && cc.name === :picket_corridor
@@ -250,11 +254,11 @@ end
     end
 
     # Inside a constrained run the evaluations keep the element powers of the group sets
-    # that ceilings at the beam powers read (`_with_split`, per phase on a phased
-    # scenario), and the ceilings read them instead of depositing: the sums of their own
-    # deposition (bitwise where the compiler builds both loops alike; held here to
-    # 1e-12 in values and partials), and the deposition unchanged. Other powers, and
-    # setup beams that the laser–plasma model changed, deposit as before.
+    # that ceilings at the beam powers use (`_with_split`, per phase on a phased scenario).
+    # The ceilings use these powers instead of depositing again. The powers equal the sums
+    # from a separate deposition, exactly where the compiler builds both loops alike; the
+    # test holds them to 1e-12 in values and partials. The deposition is unchanged. Other
+    # powers, and setup beams that the laser–plasma model changed, are deposited as before.
     @testset "the deposition in the evaluation serves the ceilings" begin
         x = x0 .+ 0.05 .* sin.(1:length(x0))
         xd = [ForwardDiff.Dual{:split}(x[i], (sin(i), cos(i))) for i in eachindex(x)]
@@ -262,7 +266,7 @@ end
         cs = (picket_ceiling(ref, :wall), picket_ceiling(ref, :wall; measure = :weighted),
               picket_ceiling(ref, :wall; measure = :average), picket_ceiling(ref, :wall; measure = :corridor),
               picket_ceiling(ref, :wall; groups = (:outer50,), measure = :average),   # a set within another
-              picket_ceiling(ref, :wall; kw..., measure = :average),                  # picket powers: not kept
+              picket_ceiling(ref, :wall; kw..., measure = :average),                  # picket powers, which are not kept
               picket_ceiling(evaluate(sb, x0), :wall; measure = :average, lpi = true))
         req = Briareus._split_request(cs)
         @test sort(unique(last.(req))) == [[:outer44, :outer50], [:outer50]] && all(isnothing, first.(req))
@@ -279,7 +283,8 @@ end
             kept(lpi) = Briareus._split_map(evs, Briareus._OwnPower(), (:outer50, :outer44), lpi) !== nothing
             @test kept(true) && kept(false) == (sc === s)
         end
-        # a phased scenario: the phase whose constraint reads the groups keeps them
+        # In a phased scenario, the groups are kept for the phase whose constraint uses
+        # them.
         ps = PhasedScenario(p, Phase(:a, s), Phase(:b, s; power = 4.0, scaled = false))
         cb = in_phase(:b, cs[3])
         pss = Briareus._with_split(ps, Briareus._split_request((cb, in_phase(:a, cs[6]))))
@@ -314,11 +319,11 @@ end
                                feasibility = 1e-6)
         @test rm.outcome === :interior && abs(only(rm.x) - zm) < 1e-5
         @test only(rm.constraints).status === :active && only(rm.constraints).multiplier > 0
-        # the peak: its hottest element rises over 4.8–4.6 mm as the 50° spots cross the
-        # 44° ones. Its stand-in (exact = false) ends active at its root; the exact
-        # peak ends at or below the limit (here 0.4% below: the stand-in runs above the
-        # peak near this limit, and the working limit is only lowered), no lower than
-        # the peak's root
+        # The hottest element of the peak rises over 4.8–4.6 mm as the 50° spots cross the
+        # 44° spots. The stand-in (exact = false) ends active at its root. The exact peak
+        # ends at or below the limit, 0.4% below it in this run, and no lower than the root
+        # of the peak. The stand-in runs above the peak near this limit, and the working
+        # limit is only lowered.
         peak_at(z) = picket_irradiance(at(z), :wall; kw...)
         lim = (peak_at(4.65) + peak_at(4.75)) / 2
         cs = picket_ceiling(ref, :wall; kw..., limit = lim, exact = false)
@@ -337,8 +342,8 @@ end
         @test zp - 1e-6 <= only(rp.x) < zp + 0.01
         # the spatially averaged fluence falls as the 50° spots clip on the holes (above
         # ~5.6 mm); the corridor's mean falls as they move away from the inner beams' paths
-        # (and the average at the beam powers, which the run's evaluations serve from
-        # their own deposition)
+        # (and the average at the beam powers, which the evaluations of the run take from
+        # the deposition they compute)
         for (meas, zl, zbox, z0, pk) in ((:average, 6.0, (5.7, 6.4), 6.3, kw), (:corridor, 5.2, (4.9, 6.0), 5.8, kw),
                                          (:average, 6.0, (5.7, 6.4), 6.3, (;)))
             val(z) = picket_irradiance(at(z), :wall; pk..., measure = meas)
@@ -356,7 +361,7 @@ end
         linked = PicketLinkedBubble(bubble, t, quads; kw...)
         @test length(linked.beams) == count(b -> b.group in (:outer44, :outer50), quads)
         @test occursin("PicketLinkedBubble", sprint(show, linked))
-        # at the reference: bitwise the bubble itself
+        # At the reference, the linked bubble is identical to the bubble itself.
         lb = linked_bubble(linked, quads)
         @test lb.picket_ratio === bubble.picket_ratio && lb.collision === bubble.collision
         for τ in (5.0, 7.0)
@@ -400,13 +405,15 @@ end
         fd = (f(1e-6, linked) - f(-1e-6, linked)) / 2e-6
         @test ad ≈ fd rtol = 1e-5
         @test abs(ad - ForwardDiff.derivative(τ -> f(τ, bubble), 0.0)) > 1e-6 * abs(ad)   # the link counts
-        # errors: a beam the map does not know, no picket, the per-beam sensitivities
+        # Errors are raised for a beam the map does not know, for a missing picket, and for
+        # the per-beam sensitivities.
         @test_throws ArgumentError linked_bubble(linked, [remake(first(b for b in quads if b.group === :outer50); name = "X")])
         @test_throws ArgumentError PicketLinkedBubble(bubble, t, quads)
         @test_throws ArgumentError PicketLinkedBubble(bubble, t, quads; kw..., groups = (:none,))
         @test_throws ArgumentError Briareus._ridge_split(linked, s.deposition, quads[1], 7.0)
 
-        # in a drive history: bitwise the resolved bubble's (E is the same number)
+        # In a drive history the result is identical to that of the resolved bubble, since
+        # E is the same number.
         t8 = hohlraum(; geom..., h = 0.8, capsule_h = 0.4, wall = Material(:Au; albedo = 0.9, conversion = 0.8))
         model, op8 = RadiationModel(t8), DepositionOperator(t8, quads)
         times = [1.0, 6.0, 7.0]
@@ -421,7 +428,7 @@ end
         @test pr.picket_ratio == ld.picket_ratio && pr.reference_picket_ratio === 1.1
         @test pr.speed_ratio ≈ pr.fluence_ratio^0.2 rtol = 1e-12
         @test pr.collision == ld.collision && pr.reference_collision === bubble.collision && pr.history === nothing
-        # with the history: the design's P2/P0 is the linked model's history
+        # With the history, the P2/P0 of the design is the history of the linked model.
         pp = bubble_prediction(linked, design, quads; history = run, fixed = true, swing = (0.5, 8.0))
         @test pp.history.p2 == hl.moments[3, :] ./ hl.moments[1, :]
         @test pp.history.fixed_p2 == (r -> r.moments[3, :] ./ r.moments[1, :])(run(design, bubble))

@@ -32,7 +32,7 @@ import Libdl
 using Printf
 using LinearAlgebra: norm, dot, cross, normalize
 
-# Framework-free controller layer: the submodule boundary keeps Makie names out of
+# The framework-free controller layer. The submodule boundary keeps Makie names out of
 # scope, so controller code cannot grow GL dependencies by accident.
 module Controllers
 
@@ -46,7 +46,7 @@ using ZipArchives: ZipWriter, ZipReader, zip_newfile, zip_commitfile, zip_findla
 
 include("controllers/shared.jl")
 include("controllers/target_setup.jl")
-include("controllers/assemblies.jl")          # the model tree: assemblies and membership
+include("controllers/assemblies.jl")          # assemblies and membership in the model tree
 include("controllers/beam_table.jl")
 include("controllers/user_frames.jl")         # port frames' ports, the coordinate transform
 include("controllers/drive.jl")
@@ -205,8 +205,9 @@ function _replay_precompiles(path)
     return n
 end
 
-# Time-to-first-window workload: the controllers on a coarse hohlraum and the
-# canvases' Figure construction (no GL context at precompile time, so no rendering).
+# The time-to-first-window workload runs the controllers on a coarse hohlraum and builds
+# the Figures of the canvases; there is no GL context at precompile time, so nothing is
+# rendered.
 @setup_workload begin
     # BRIAREUSGUI_NO_WORKLOAD=true skips the workload (faster rebuilds while developing)
     get(ENV, "BRIAREUSGUI_NO_WORKLOAD", "") == "true" || @compile_workload begin
@@ -242,7 +243,7 @@ end
         for task in TASKS
             task_status(sess, task)
         end
-        # the time panel: pulses, a short drive history and its charts
+        # The time panel runs pulses, a short drive history and its charts.
         use_pulse_shape!(sess; step = 3.0)
         start_history!(sess)
         for c in TIME_CHARTS

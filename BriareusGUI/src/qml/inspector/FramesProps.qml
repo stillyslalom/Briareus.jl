@@ -1,4 +1,5 @@
-// The Frames folder: add a user frame or a port frame, open the coordinate transform.
+// The Frames folder page adds a user frame or a port frame and opens the coordinate
+// transform.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

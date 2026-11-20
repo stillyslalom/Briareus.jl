@@ -21,7 +21,7 @@
     y2 = copy(y)
     mul!(y, A, x, 2.0, 0.5)
     @test rel(y, 2.0 .* (Ad * x) .+ 0.5 .* y2) < 1e-14
-    # first-order duals: values and partials through one product
+    # First-order duals carry values and partials through one product.
     xd = [ForwardDiff.Dual(x[i], 1.0, x[i]^2) for i in eachindex(x)]
     yd = A * xd
     @test rel(ForwardDiff.value.(yd), Ad * x) < 1e-14
@@ -45,7 +45,7 @@ end
     X = Briareus._gmres_block(op!, B, zero(B))
     @test norm(M * X - B) <= 1e-12 * norm(B) && iszero(X[:, 3])
     @test Briareus._gmres_block(op!, B, zero(B); maxiter = 1) === nothing
-    # warm start at the solution: no iterations
+    # A warm start at the solution takes zero iterations.
     Briareus._reset_solve_stats!()
     @test Briareus._gmres_block(op!, B, X) == X && Briareus._SOLVE_STATS.iterations[] == 0
 end
@@ -63,7 +63,7 @@ end
     F64 = view_factors(t)
     F32 = view_factors(t; storage = Float32)
     @test F32 isa Float32Matrix && F32.data == Float32.(F64)
-    m = RadiationModel(t)                                   # small: dense Float64, LU
+    m = RadiationModel(t)                                   # small, so dense Float64 with LU
     @test m.F isa Matrix{Float64} && !m.iterative
     mi = RadiationModel(t; solver = :iterative)             # Float64, iterative
     @test mi.F isa Matrix{Float64} && mi.iterative && mi.F == m.F
@@ -88,12 +88,12 @@ end
     @test_throws ArgumentError RadiationModel(t; storage = Float16)
     @test_throws ArgumentError RadiationModel(t, m.F; solver = :lu)
 
-    # balancing on Float32 storage: rows to the rounding of the stored factors
+    # Balancing on Float32 storage gives rows to the rounding of the stored factors.
     @test maximum(abs, closure_error(m32.F)) < 1e-7
     G = t.elem_area .* m32.F
     @test maximum(abs.(G .- G')) < 1e-6 * maximum(G)
 
-    # solves: temperature-dependent albedo iterated on each model
+    # The solves iterate a temperature-dependent albedo on each model.
     s = solve(m, dep; time = 2.0)
     si = solve(mi, dep; time = 2.0)
     s32 = solve(m32, dep; time = 2.0)
@@ -120,7 +120,8 @@ end
     @test rel(flux_response(m32, cap; time = 2.0, weights = W), R) <= 1e-7
     @test rel(flux_response(mi, cap; albedo = α), flux_response(m, cap; albedo = α)) <= 1e-10
 
-    # derivatives through the iterative solve (dual sources: value and partials as columns)
+    # Derivatives pass through the iterative solve, with dual sources carrying the value
+    # and partials as columns.
     f(mod) = p -> sum(solve(mod, p .* dep.element; albedo = α).H[cap])
     p0 = ones(N)
     @test rel(ForwardDiff.gradient(f(mi), p0), ForwardDiff.gradient(f(m), p0)) <= 1e-9
@@ -140,7 +141,7 @@ end
     gr = ForwardDiff.gradient(x -> obj(evaluate(sc, x)), x0)
     @test rel(ForwardDiff.gradient(x -> obj(evaluate(sc32, x)), x0), gr) <= 1e-6
     e, e32 = evaluate(sc, x0), evaluate(sc32, x0)
-    @test rel(e32.flux, e.flux) <= 1e-7                           # one solve, not the response
+    @test rel(e32.flux, e.flux) <= 1e-7                           # one solve; the response is not used
     @test getfield(sc32, :_response).R === nothing
     @test rel(flux_moments(e32), flux_moments(e)) <= 1e-7
 

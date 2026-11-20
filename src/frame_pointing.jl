@@ -1,6 +1,6 @@
-# Pointing parameterized in frames: aims as local coordinates (u, v, w) of a frame per
-# beam (a foil's, an entrance hole's, a port's), with the non-aim fields of
-# `GroupPointing`.
+# This file parameterizes pointing in frames. Each aim is given in the local coordinates
+# (u, v, w) of a frame per beam, such as the frame of a foil, an entrance hole or a port.
+# The non-aim fields are those of `GroupPointing`.
 
 const _FRAME_FIELDS = (:u, :v, :w, :defocus, :power, :spot, :dlambda)
 const _FRAME_AIM = (:u, :v, :w)
@@ -9,29 +9,31 @@ const _FRAME_AIM = (:u, :v, :w)
     FramePointing(beams, frames; by = :group, fields = (:u, :v, :defocus),
                   relative = false)
 
-Maps a parameter vector to beams whose aims are local coordinates of a [`Frame`](@ref):
-beam `i` aims at `to_chamber(frame_i, (u, v, w))`, `R * SVector(u, v, w) + origin`.
+Maps a parameter vector to beams whose aims are local coordinates of a [`Frame`](@ref).
+Beam `i` aims at `to_chamber(frame_i, (u, v, w))`, which is `R * SVector(u, v, w) + origin`.
 `frames` is one `Frame` for every beam, a vector of frames (one per beam), or a function
 `beam -> Frame`. Beams are grouped by `by` (`:group`, `:quad`, `:beam`, or a function
 `beam -> key`), and each group gets one value per field:
 
-- `:u`, `:v`, `:w` — the aim's local coordinates (mm): on a foil's
-  [`foil_frame`](@ref), `u` and `v` across its face and `w` along its front normal;
+- `:u`, `:v`, `:w` — the local coordinates of the aim (mm). On the
+  [`foil_frame`](@ref) of a foil, `u` and `v` run across its face and `w` along its
+  front normal.
 - `:defocus`, `:power`, `:spot`, `:dlambda` — as for [`GroupPointing`](@ref).
 
-A group shares local coordinates, not chamber aims: beams of one group in different
-frames aim at the same local point of each. Two entrance holes' frames, the bottom one
-the top one mirrored through the equator, so give a mirrored pointing with no `mirror`
-flag. Aim coordinates that are not parameters keep the value of each beam (its template aim in
-its frame); with no aim field at all the template aims are kept exactly.
+A group shares local coordinates. Beams of one group in different frames aim at the
+same local point of each frame, so their chamber aims differ. With two entrance-hole
+frames, the bottom one the top one mirrored through the equator, a mirrored pointing is
+given without a `mirror` flag. For aim coordinates that are not parameters, the value of
+each beam is kept, which is its template aim in its frame. With no aim field at all, the
+template aims are kept exactly.
 
 `relative = true` makes the aim fields shifts added to the local coordinates
 of each beam, so a group moves rigidly in its frame; its initial aim parameters are then
 zero. The other fields stay absolute.
 
 `apply` is generic in the number type (frames are Float64, parameters may be
-ForwardDiff duals), so the parameterization serves [`Scenario`](@ref),
-[`optimize_pointing`](@ref) and [`subset`](@ref) as a `GroupPointing` does.
+ForwardDiff duals), so the parameterization can be used with [`Scenario`](@ref),
+[`optimize_pointing`](@ref) and [`subset`](@ref) in the same way as a `GroupPointing`.
 """
 struct FramePointing{K}
     template::Vector{Beam{Float64}}
@@ -41,7 +43,7 @@ struct FramePointing{K}
     relative::Bool
     frames::Vector{Frame}
     local_aims::Vector{Vec3}          # template aims in their frames
-    beam_keys::Vector{K}              # each beam's group key
+    beam_keys::Vector{K}              # group key of each beam
 end
 
 function FramePointing(beams::AbstractVector{<:Beam}, frames; by = :group,
@@ -81,9 +83,9 @@ _pidx(p::FramePointing, g, fi) = (g - 1) * length(p.fields) + fi
 """
     initial_parameters(p::FramePointing) -> Vector{Float64}
 
-Parameters reproducing the template beams: group means of the local aim coordinates
-and of the other fields (zero shifts for the aim fields of a `relative`
-parameterization).
+Parameters that reproduce the template beams. They are the group means of the local aim
+coordinates and of the other fields. The aim fields of a `relative` parameterization are
+zero shifts.
 """
 function initial_parameters(p::FramePointing)
     x = zeros(nparams(p))
@@ -104,8 +106,8 @@ end
     parameters(p::FramePointing, values::Pair...; group = (field = value, ...), ...)
         -> Vector{Float64}
 
-The parameter vector of `p` with named values, as for a `GroupPointing`: fields and
-groups not named keep [`initial_parameters`](@ref).
+The parameter vector of `p` with named values, as for a `GroupPointing`. Fields and
+groups not named are set to their [`initial_parameters`](@ref).
 """
 function parameters(p::FramePointing, values::Pair...; kwargs...)
     x = initial_parameters(p)
@@ -126,8 +128,8 @@ end
 """
     apply(p::FramePointing, x) -> Vector{Beam}
 
-Beams for parameter vector `x`: each aim `R * SVector(u, v, w) + origin` in its beam's
-frame (element type follows `x`, so this is differentiable).
+Beams for parameter vector `x`. Each aim is `R * SVector(u, v, w) + origin` in the frame
+of its beam. The element type is that of `x`, so the map is differentiable.
 """
 function apply(p::FramePointing, x::AbstractVector{T}) where {T}
     length(x) == nparams(p) || throw(DimensionMismatch("expected $(nparams(p)) parameters"))
@@ -147,8 +149,9 @@ function apply(p::FramePointing, x::AbstractVector{T}) where {T}
     return out
 end
 
-# The chamber aim of local coordinates: each of `u`, `v`, `w` a value, a shift of the
-# template's `l` (`relative`), or `nothing` (the template's).
+# Returns the chamber aim of local coordinates. Each of `u`, `v` and `w` is a value, a
+# shift of the template coordinate in `l` (with `relative`), or `nothing` for the
+# template coordinate.
 @inline function _frame_aim(f::Frame, l::Vec3, u, v, w, relative::Bool, ::Type{T}) where {T}
     c(x, l0) = x === nothing ? T(l0) : relative ? l0 + x : x
     return f.R * SVector{3,T}(c(u, l[1]), c(v, l[2]), c(w, l[3])) + f.origin
@@ -160,7 +163,7 @@ end
            -> (lower, upper)
 
 Box bounds around `x0`: `±u`, `±v`, `±w`, `±defocus` mm, relative `±power` and `±spot`
-fractions and `±dlambda` Å (engineering defaults, not facility limits), with power
+fractions and `±dlambda` Å (engineering defaults that are not facility limits), with power
 clipped to `power_min ≤ P ≤ power_max` (TW per beam). A group at zero power gets
 `[0, power · P̄]`, `P̄` the mean nonzero power, as for a `GroupPointing`.
 """
@@ -177,9 +180,9 @@ _subset_param(p::FramePointing, keep) =
 
 _nparams_shown(p::FramePointing) = nparams(p)
 
-# `p` with the frames and template aims of the beams `moved` (a Bool per beam)
-# translated by `Δ`; the local aims stay as they are, so the parameters keep their
-# meaning (a warm start of a placement sweep).
+# Returns `p` with the frames and template aims of the beams `moved` (a Bool per beam)
+# translated by `Δ`. The local aims are unchanged, so the parameters have the same
+# meaning; a placement sweep uses this for a warm start.
 function _translated(p::FramePointing, Δ::Vec3, moved::AbstractVector{Bool})
     fr = [m ? Frame(f.R, f.origin + Δ) : f for (f, m) in zip(p.frames, moved)]
     tm = [m ? remake(b; aim = b.aim + Δ) : b for (b, m) in zip(p.template, moved)]

@@ -1,25 +1,27 @@
-# Placement sweeps: step a design through a sequence of placements (a foil along its line
-# of sight, a part along a frame axis) and check each step for beam clearance, the line
-# of sight and beam capture, optionally re-optimizing the pointing at each step.
+# This file runs placement sweeps. A sweep steps a design through a sequence of
+# placements, such as foils along their line of sight and parts along a frame axis. Each
+# step is checked for beam clearance, the line of sight and beam capture, and the
+# pointing can be re-optimized at each step.
 
 """
     SweepRow
 
 One step of a [`placement_sweep`](@ref):
 
-- `value` — the swept quantity (the convenience method: the shift along the axis, mm);
-- `beams` — the step's beams (after re-optimization, when on);
+- `value` — the swept quantity, which for the convenience method is the shift along the
+  axis in mm;
+- `beams` — the beams of the step, after re-optimization when it is on;
 - `min_clearance`, `worst_beam`, `worst_component`, `fails`, `reviews` — the least
   worst-case clearance of the [`clearance`](@ref) check (mm), its beam and hardware part,
   and the numbers of `:fail` and `:review` pairs (`NaN`, `""`, `:none`, 0 when not
   checked);
-- `los_clear`, `blocked_fraction`, `covered` — the [`line_of_sight`](@ref) check: clear,
-  the fraction of its rays obstructed, the fraction of the object covered (`missing`,
-  `NaN` when not checked);
-- `min_captured` — the least fraction of a beam's power absorbed by the capture parts
+- `los_clear`, `blocked_fraction`, `covered` — the results of the
+  [`line_of_sight`](@ref) check, which are whether it is clear, the fraction of its rays
+  obstructed and the fraction of the object covered (`missing`, `NaN` when not checked);
+- `min_captured` — the least fraction of the power of a beam absorbed by the capture parts
   (`NaN` when not checked);
-- `objective_before`, `objective_after`, `x` — the objective at the step's starting
-  parameters and after re-optimization, and the optimized parameters (`NaN`, empty when
+- `objective_before`, `objective_after`, `x` — the objective at the starting parameters
+  of the step and after re-optimization, and the optimized parameters (`NaN`, empty when
   not optimized);
 - `clearance`, `los` — the full reports (`nothing` when not checked).
 """
@@ -45,10 +47,14 @@ end
 """
     SweepResult
 
-Result of [`placement_sweep`](@ref): `values` (the requested steps), `rows` (one
-[`SweepRow`](@ref) per completed step, in order) and `canceled` (a callback stopped the
-sweep; `rows` then hold the steps completed before it). [`write_sweep_csv`](@ref) writes
-the rows.
+The result of [`placement_sweep`](@ref), with fields:
+
+- `values`, the requested steps;
+- `rows`, one [`SweepRow`](@ref) per completed step, in order;
+- `canceled`, true when a callback stopped the sweep. `rows` then hold the steps
+  completed before the stop.
+
+[`write_sweep_csv`](@ref) writes the rows.
 """
 struct SweepResult
     values::Vector{Float64}
@@ -64,47 +70,54 @@ end
                     follow = false, kwargs...) -> SweepResult
 
 Steps a design through `values` and checks each step. `design(value)` returns a named
-tuple with the step's `target` and `beams`, and with `pointing`, the parameterization
-whose initial parameters give those beams, when the step is re-optimized; it may add
-`scenario_kw`, keywords of [`Scenario`](@ref) for that step alone, which follow
-`optimize.scenario_kw` (`viewfactor_kw = (; closed = cavities)` balances the step's
-cavities, whose elements move with its target).
+tuple with the `target` and `beams` of the step. When the step is re-optimized, the tuple
+also holds `pointing`, the parameterization whose initial parameters give those beams.
+It may add `scenario_kw`, keywords of [`Scenario`](@ref) for only that step, which are
+applied after `optimize.scenario_kw`. For instance, `viewfactor_kw = (; closed = cavities)`
+balances the cavities of the step, whose elements move with its target.
 
 Each check runs when its keyword is given:
 - `clearance_kw`, the keywords of [`clearance`](@ref) (`targets` among them): the least
   worst-case clearance, its beam and part, and the numbers of failing and review pairs;
 - `los`, a line of sight (θ, φ in degrees or a direction) for [`line_of_sight`](@ref)
   with keywords `los_kw`: whether it is clear, the fraction of its rays blocked and the
-  object's coverage;
-- `capture`, a part name or a tuple of them (a backlighter foil): the least fraction of
-  a beam's power those parts absorb, from [`beam_component_power`](@ref) on a
+  coverage of the object;
+- `capture`, a part name or a tuple of them, such as a backlighter foil: the least fraction
+  of the power of a beam that those parts absorb, from [`beam_component_power`](@ref) on a
   [`DepositionOperator`](@ref) built for the step with keywords `capture_kw`.
 
-`optimize`, a named tuple, re-optimizes the pointing at each step before the checks:
-`objective` (required), `scenario_kw` (keywords of [`Scenario`](@ref)), `bounds_kw`
-(keywords of `bounds`, a box about the initial parameters of the step), `warm` (default
-`true`: start from the previous step's optimum when it has the same number of
-parameters) and any keywords of [`optimize_pointing`](@ref). With a
-[`FramePointing`](@ref) in a frame that moves with the part, the parameters keep their
-meaning from step to step, which is what makes the warm start useful.
+With `optimize`, a named tuple, the pointing is re-optimized at each step before the
+checks. Its fields are:
 
-`callback((; done, total, row))` is called once with `done = 0` and `row = nothing`
-before any work, then after each step with that step's row; returning `true` cancels,
-and the result holds the completed rows with `canceled = true` (a `true` after the last
-step is ignored).
+- `objective` (required);
+- `scenario_kw`, keywords of [`Scenario`](@ref);
+- `bounds_kw`, keywords of `bounds`, a box about the initial parameters of the step;
+- `warm`, which defaults to `true` and starts from the optimum of the previous step when
+  it has the same number of parameters;
+- any keywords of [`optimize_pointing`](@ref).
 
-**Moving parts along a frame axis.** The second form moves the named `parts` (a
-`Symbol` or a collection) of `target` by `value · a` at each step, `a` the unit `axis`
-of `frame` in the chamber (`:x`, `:y`, `:z`, or a local vector). Beams selected by
-`follow` (`true` for all, `false` for none, beam indices, or a predicate `beam -> Bool`)
-move with them: their aims shift by the same vector. `beams` may be a
-[`FramePointing`](@ref) instead: its template beams are swept, followed beams' frames
-move with them, and it is the `pointing` that `optimize` re-optimizes. `value` is then the
-shift (mm) and every other keyword passes to the first form.
+With a [`FramePointing`](@ref) in a frame that moves with the part, the parameters keep
+their meaning from step to step, which is what makes the warm start useful.
 
-Each step costs a target rebuild, the clearance check and a deposition operator for the
-capture check, and the optimization when on: give these checks their quick settings
-(`clearance_kw = (; nangles = 8, nspot = 31, ...)`, a coarse `capture_kw`) for long sweeps.
+`callback((; done, total, row))` is called once with `done = 0` and `row = nothing` before
+any work, and then after each step with the row of that step. Returning `true` cancels the
+sweep, and the result contains the completed rows with `canceled = true`. A `true` returned
+after the last step is ignored.
+
+**Moving parts along a frame axis.** The second form moves the named `parts`, a `Symbol` or
+a collection, of `target` by `value · a` at each step. The vector `a` is the unit vector of
+`axis` in `frame`, expressed in the chamber; `axis` is `:x`, `:y`, `:z` or a local vector.
+The beams selected by `follow` move with the parts, and their aims shift by the same vector.
+`follow` is `true` for all beams, `false` for none, beam indices, or a predicate
+`beam -> Bool`. `beams` may be a [`FramePointing`](@ref) instead: its template beams are
+swept, the frames of followed beams move with them, and it is the `pointing` that `optimize`
+re-optimizes. `value` is then the shift (mm) and every other keyword passes to the first
+form.
+
+Each step costs a target rebuild, the clearance check, a deposition operator for the
+capture check, and the optimization when it is on. For long sweeps, give these checks
+quick settings, such as `clearance_kw = (; nangles = 8, nspot = 31, ...)` and a coarse
+`capture_kw`.
 """
 function placement_sweep(design, values::AbstractVector{<:Real}; clearance_kw = nothing,
                          los = nothing, los_kw = (;), capture = nothing, capture_kw = (;),
@@ -137,7 +150,8 @@ function _followed(bs, f::AbstractVector{<:Integer})
 end
 _followed(bs, f) = Bool[f(b) for b in bs]
 
-# The design of the convenience method: parts moved by value · dir, followed beams with them.
+# Holds the design of the convenience method, which moves the parts by value · dir and the
+# followed beams with them.
 struct _MovedParts{P}
     target::Target
     parts::Set{Symbol}
@@ -161,7 +175,7 @@ function (d::_MovedParts)(value)
     return (; target, beams, pointing)
 end
 
-# The sweep, compiled once for every design, objective and callback.
+# Runs the sweep. The function is compiled once for every design, objective and callback.
 Base.@nospecializeinfer function _sweep(@nospecialize(design), values::Vector{Float64},
                                         @nospecialize(opts::NamedTuple), @nospecialize(callback))
     rows = SweepRow[]
@@ -182,7 +196,8 @@ Base.@nospecializeinfer function _sweep(@nospecialize(design), values::Vector{Fl
         if opt !== nothing
             p = get(d, :pointing, nothing)
             p === nothing && throw(ArgumentError("re-optimizing needs the design's `pointing`"))
-            # the keywords of the step (its cavities' balancing, say) after the sweep's
+            # Apply the keywords of the step, such as the balancing of its cavities, after
+            # those of the sweep.
             s = Scenario(t, p; merge(get(opt, :scenario_kw, (;)), get(d, :scenario_kw, (;)))...)
             xi = initial_parameters(p)
             lo, hi = bounds(p, xi; get(opt, :bounds_kw, (;))...)
@@ -260,11 +275,11 @@ end
 """
     write_sweep_csv(path, result) -> path
 
-Write the rows of a [`SweepResult`](@ref) as CSV, one line per step: the value, the least
-clearance (mm), its beam and part, the failing and review pairs, the line of sight
-(clear, blocked fraction, covered fraction), the least captured fraction and the
-objective before and after re-optimization. A check that did not run leaves its cells
-empty.
+Writes the rows of a [`SweepResult`](@ref) as CSV, one line per step. Each line contains the
+value, the least clearance (mm) with its beam and part, and the failing and review pairs. It
+also contains the line-of-sight results, which are the clear flag and the blocked and
+covered fractions, the least captured fraction, and the objective before and after
+re-optimization. A check that did not run leaves its cells empty.
 """
 function write_sweep_csv(path::AbstractString, r::SweepResult)
     g(x) = isnan(x) ? "" : @sprintf("%.8g", x)

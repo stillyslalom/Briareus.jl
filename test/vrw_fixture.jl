@@ -3,8 +3,8 @@
 #
 #   synthetic_workspace(; meshes = ()) -> String (the file's text)
 
-# the CAD object: a right tetrahedron (cm), centered, outward counterclockwise faces
-# (0-based node indices)
+# The CAD object is a centered right tetrahedron in cm, with outward counterclockwise
+# faces and 0-based node indices.
 const TETRA_NODES = [Tuple(v .- 0.025) for v in [(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0), (0.0, 0.0, 0.1)]]
 const TETRA_FACES = [(0, 2, 1), (0, 1, 3), (0, 3, 2), (1, 2, 3)]
 
@@ -158,13 +158,13 @@ function power_source_section(objects; up_to_date = true)
 end
 
 # The JSON workspace VisRad 21 saves after computing ("Workspace Format ID": 1001), built
-# from a parsed text workspace in the layout of real VisRad 21.0.0 JSON files: object
-# parameters under the text format's keys, "Object color" and "Gen. mesh object origin"
-# as arrays, the node array as "Object node array[k]" and the connectivity as columns,
-# numbers in arrays as strings, beams under readable keys at the precision `ports` gives
-# (VisRad writes them unrounded; the text table rounds to 3 decimals), and the power
-# sources per object in the components' order. `sources`: per object name, the direct
-# laser source per element, or `nothing` for "not up to date".
+# from a parsed text workspace in the layout of real VisRad 21.0.0 JSON files. Object
+# parameters are under the keys of the text format, and "Object color" and "Gen. mesh object
+# origin" are arrays. The node array is "Object node array[k]", the connectivity is given as
+# columns, and numbers in arrays are strings. Beams are under readable keys at the precision
+# `ports` gives; VisRad writes them unrounded, and the text table rounds to 3 decimals. The
+# power sources are per object in the order of the components. `sources` gives, per object
+# name, the direct laser source per element, or `nothing` for "not up to date".
 function synthetic_json_workspace(ws; sources = nothing, ports = Dict{String,NTuple{3,Float64}}())
     q(x) = string(x)
     obj = Dict{String,Any}[]

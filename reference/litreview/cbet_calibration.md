@@ -51,10 +51,10 @@ removed; foot multipliers came from no-CBET shots.
 
 **P20 (H)**: CH, 0.6 mg/cc, 4.0 mm LEH, 470 TW, CF 33% at peak (11–13% picket).
 - ΔP2 between 0 and 1 Å: 27 µm at ~1.25 MJ, 23 µm at 1.56 MJ, 24 ± 3 µm/Å overall,
-  i.e. CF 33 → 41.5% (+26% waist drive) via 2.7 µm per %CF.
+  i.e. a CF change from 33 to 41.5% (+26% waist drive) at 2.7 µm per %CF.
 - Picket VISAR pair (N180522 at 0 Å, N180412 at 1 Å): equator shock 5% faster, so the
-  outers give **6% more** of their picket energy to the inners (outer share
-  0.87 → 0.82).
+  outers give **6% more** of their picket energy to the inners (the outer share falls
+  from 0.87 to 0.82).
 - HYDRA used clamp 0.01, with peak cone-fraction multipliers 0.86 (0 Å) and 0.80 (1 Å).
 - SBS fluence 0.1–0.19 J/cm² vs a damage threshold of "~1 J/cm²".
 - 0.5 Å was predicted round.
@@ -69,7 +69,7 @@ removed; foot multipliers came from no-CBET shots.
 
 **HE21 (H, preprint)**: HDC, 0.3 mg/cc ("first … with Δλ > 0"), CCR ≈ 2.7.
 - Sensitivity ~40–50 µm P2/Å; 1–2 Å suffices.
-- Shrinking the LEH 4.0 → 3.64 mm made shapes more oblate; +0.5 Å recovered them,
+- Shrinking the LEH from 4.0 to 3.64 mm made shapes more oblate; +0.5 Å recovered them,
   ending at 1.75 Å (1100 µm).
 - "No sign of 'saturation' for CBET."
 - A small P2 correction per 20 TW of peak power accounts for more transfer at lower
@@ -98,7 +98,7 @@ What exists:
     ~0.5 ns. In C₅H₁₂, C ions pass 10 keV and H stays below 4 keV after 1 ns.
   - Lasnex at peak: Ti ≈ 4 keV in the Au plasma near the LEH, ~1 keV in the He where
     the beams overlap.
-  - Flow is near sonic at the LEH and supersonic outside; outer→inner transfer
+  - Flow is near sonic at the LEH and supersonic outside; outer-to-inner transfer
     accelerates it.
   - Once heated, the gain is **linear in Δλ** (phase velocity < v_Ti).
   - High-fill era.
@@ -115,17 +115,17 @@ What exists:
 ## 3. Where transfer happens
 
 - **P20 (H, HYDRA)**, at 9.5 ns:
-  - *Outside* the LEH the transfer is inner → outer, entering the 50° cone; the 44°
-    cone barely takes part. *Inside* it is outer → inner.
+  - *Outside* the LEH the transfer is from inner to outer, into the 50° cone; the 44°
+    cone barely takes part. *Inside* it is from outer to inner.
   - The net depends on the balance, "throughout the pulse".
-- **NC24 (H)**: I-Raum needed 0.5 Å "mostly to negate the flow-induced CBET", and
-  HYBRID-E 1–1.55 Å. So Δλ = 0 is **not** zero transfer in a low-fill hohlraum.
-  Both numbers are the Δλ that *minimized hot-spot P2* ("In experiments, 1 ≤ Δλ ≤ 1.55 Å
-  was required to minimize P2 in HYBRID-E designs"), not the transfer null: HYBRID-E's
-  Δλ also compensates bubble absorption of the inner beams, so its transfer null lies
-  below 1 Å; I-Raum's 0.5 Å (little bubble absorption) bounds the null from above
-  (*L* for HYBRID-E). The same paper's pairs are steep and unsaturated: N201101 → N210307,
-  1.75 → 1.55 Å, P2 15.7 ± 0.7 → 0.68 ± 2.8 µm (≈ 75 µm/Å).
+- **NC24 (H)**: I-Raum needed 0.5 Å "mostly to negate the flow-induced CBET", and HYBRID-E
+  1–1.55 Å. So Δλ = 0 is **not** zero transfer in a low-fill hohlraum. Both numbers are the
+  Δλ that *minimized hot-spot P2* ("In experiments, 1 ≤ Δλ ≤ 1.55 Å was required to minimize
+  P2 in HYBRID-E designs"), not the transfer null: HYBRID-E's Δλ also compensates bubble
+  absorption of the inner beams, so its transfer null lies below 1 Å; I-Raum's 0.5 Å (little
+  bubble absorption) bounds the null from above (*L* for HYBRID-E). The same paper's pairs
+  are steep and unsaturated: from N201101 to N210307, 1.75 to 1.55 Å moved P2 from 15.7 ±
+  0.7 to 0.68 ± 2.8 µm (≈ 75 µm/Å).
 - **K24E Fig. 10 (H, digitized L)**, N221204 per cone, input → post-CBET (TW):
   - 23°: 62 → ~125 at the start of the peak, ~105 at 7.5 ns.
   - 30°: 62 → ~118 / ~100, then ~80 at 8.5 ns.
@@ -168,7 +168,7 @@ What exists:
 - **Clamp or multiplier?** The low-fill evidence (linear P2 vs Δλ, no roll-off, a slope
   that scales with power: HE21, I23, P20) favors a gain multiplier plus a correct
   plasma state over a clamp (L).
-- **The cliff.** K24P: 2.75 → 2.9 Å overshot by ~6 µm. Candidates (L):
+- **The cliff.** In K24P the step from 2.75 to 2.9 Å overshot by ~6 µm. Candidates (L):
   - Pump depletion: the 44° cone is already at ~45–50% of input at the start of the
     peak, so transfer saturates in power, not δn.
   - Nonlinear inner SBS: I23 saw ×5.2 SBS for +36% power.
@@ -190,9 +190,9 @@ What exists:
     LEH loss, 4.5% gas, 16.2% capsule.
   - N220919's Δλ had "a maximum limit … due to concerns with laser damage from …
     SBS".
-- **Damage criterion.** The only number found is "~1 J/cm²" SBS fluence (P20, H). HE21
-  puts 50° SBS fluence ~13× below threshold (H). Risk review compares a proposed shot
-  with a database of past shots plus extrapolation rules and asks for walk-up shots
+- **Damage criterion.** The only number found is "~1 J/cm²" SBS fluence (P20, H). HE21 puts
+  50° SBS fluence ~13× below threshold (H). In the risk review, a proposed shot is compared
+  with a database of past shots plus extrapolation rules, and walk-up shots are requested
   (Kw14, R21, M). The N220919 numbers are not public.
 - **I23 (H)**: SBS + SRS ≈ 3% (0.45 mg/cc). 30° SBS rises and 50° SBS falls with Δλ.
 
@@ -234,9 +234,9 @@ and 0.05 (0.45 mg/cc, 280 TW).
 2. **A hard-min saturation option** (`saturation = :min | :smooth`) matching S17's
    min(δn_sat, linear). Then HYDRA clamp values transfer one to one.
 3. **Two crossing zones per LEH**: an outside slab (supersonic outflow, Mach > 1, where
-   inner → outer occurs at small Δλ) and an inside slab (Mach ≲ 1), each with a separate
-   length and state. Regression test: Δλ = 0 gives net inner → outer, and an I-Raum-like
-   case needs Δλ ≈ 0.5 Å to null it (NC24). Magnitude L.
+   transfer from inner to outer occurs at small Δλ) and an inside slab (Mach ≲ 1), each with
+   a separate length and state. Regression test: Δλ = 0 gives a net transfer from inner to
+   outer, and an I-Raum-like case needs Δλ ≈ 0.5 Å to null it (NC24). Magnitude L.
 4. **Plasma state tables as calibration inputs, not defaults**: ne/nc(t), Te(t), Ti(t),
    u(t), with a He/Au/C composition option. Ship M13's (0.03, 2.8, 0.8 keV, He) as a
    documented "main-pulse start, high fill" point and mark all low-fill values L. Add
@@ -268,7 +268,7 @@ and 0.05 (0.45 mg/cc, 280 TW).
   check the published PoP 28 version.
 - How was N220919's "maximum Δλ" set (SBS fluence model, database rule)? Kirkwood 2014
   is abstract-only.
-- Does the 2.75 → 2.9 Å overshoot come from CBET nonlinearity, outer pump depletion,
+- Does the overshoot from 2.75 to 2.9 Å come from CBET nonlinearity, outer pump depletion,
   or the confounded foot/ablator changes? A Δλ scan at fixed design is not public.
 - Do CBET-driven spot displacement or beam deflection matter for P2? Nothing found.
 - How should polarization handle within-cone spread (M26), given that Briareus

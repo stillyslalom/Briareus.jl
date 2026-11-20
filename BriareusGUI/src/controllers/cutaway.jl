@@ -136,9 +136,9 @@ function cut_pieces(r::CutRegion, a, b, c)
     return [(polygon = P, edge = E, removed = _removed(r, sum(P) / length(P))) for (P, E) in polys]
 end
 
-# The part of polygon `P` (edge flags `E`, plane values `f`) on side `s` (1: f ≥ 0, −1:
-# f ≤ 0) of a plane, Sutherland–Hodgman, with the edge flags carried: a piece of an
-# input edge keeps its flag, the chord along the plane gets `false`.
+# The part of polygon `P` (edge flags `E`, plane values `f`) on side `s` of a plane, where
+# 1 means f ≥ 0 and −1 means f ≤ 0, by Sutherland–Hodgman with the edge flags carried. A
+# piece of an input edge keeps its flag, and the chord along the plane gets `false`.
 function _clip_side(P, E, f, s, tol)
     Q, F = Vec3[], Bool[]
     m = length(P)
@@ -238,7 +238,7 @@ end
     cut_through_component!(v::ViewState, t::Target, name::Symbol) -> v
 
 Cut with the plane through component `name`'s centroid ([`component_plane`](@ref)),
-with the component's normal if it is flat (a window, a foil, a disk) or else the
+with the component's normal if it is flat (windows, foils and disks) or else the
 current normal, at offset 0.
 """
 function cut_through_component!(v::ViewState, t::Target, name::Symbol)

@@ -13,25 +13,25 @@ lands; the docstrings and research notes then hold what was built.
 - Definitions (phase 1, 2026-10-29): `src/diagnostics.jl`, the docs page "Diagnostic
   definitions" (schema, search path, extends, CSV curves, kinds); the kind
   `xray_power`; built-ins `nif_dante1_2021` and `nif_dante1` in `data/diagnostics`,
-  from which `dante1()` and `dante1_responses()` build (bitwise identical to the table they
+  from which `dante1()` and `dante1_responses()` build (identical to the table they
   replaced).
 - Field of view and reference area (phase 2, 2026-10-29): `DanteView(...;
   field_of_view, center, area)`, `[view]` keys `field_of_view_mm`, `center_part`,
-  `center_mm`, `area_part`; the view through a hole is unchanged (bitwise).
+  `center_mm`, `area_part`; the view through a hole is unchanged.
 - Public definitions and the time-dependent Tr area (phase 3, 2026-10-29): Dante 1 by
   date and shot, Dante 2, Sentinel N170924, Omega Dante in `data/diagnostics`; fresnel
   mirrors (`GrazingMirror`); `area = :open` and an area history (`area_open`,
   `area_history_csv`). Research notes, "Public diagnostic definitions and the
   time-dependent Tr area".
-- The GUI (phase 4, 2026-10-29): Time lists the definitions on the search path and
-  those saved with the session (tooltip: files, origin, problems, keys changed); each
+- The GUI (phase 4, 2026-10-29): Time lists the definitions on the search path and those
+  saved with the session (a tooltip lists files, origin, problems and keys changed); each
   ticked one is recorded in the drive history (Tr and intensity per step; a *Diagnostics*
   chart). Diagnostics ▸ Folders… edits the saved folders and lists `check_diagnostics`.
   Sessions (version 6) save the ticked ids and each one's resolved definition
-  (`diagnostic_table`, CSVs in the archive as `diagnostics/<sha256>.csv`); on opening,
-  the saved definition is used, one that differs from the search path's is reported
-  (`diagnostic_diff`) and ↺ switches to the search path's; the save status names
-  definitions from outside the built-ins and non-public ones.
+  (`diagnostic_table`, CSVs in the archive as `diagnostics/<sha256>.csv`); on opening, the
+  saved definition is used, one that differs from the search path's is reported
+  (`diagnostic_diff`) and ↺ switches to the search path's; the save status names definitions
+  from outside the built-ins and non-public ones.
 - X-ray pinhole imagers (phase 5, first part, 2026-10-29): `XrayImager`, kind
   `xray_imager` (pinhole, filters, mirror, detector absorber; integrated or gated
   recording from a history); built-ins `nif_sxi_lower`, `nif_sxi_upper`, `nif_gleh2`.
@@ -72,7 +72,7 @@ lands; the docstrings and research notes then hold what was built.
    and other kinds plug in later without a schema change.
 3. **Built-ins are files.** The public definitions live in `data/diagnostics/*.toml`
    and the code constructors (`dante1()`) read them; Dante 1 reproduces today's
-   channels exactly (bitwise). Missing public values are absent, not guessed; a definition
+   channels exactly. Missing public values are absent, not guessed; a definition
    that lacks a value a calculation needs fails with the key to supply.
 4. **Overrides by inheritance.** `extends = "nif_dante1"` takes a definition and
    replaces what the file gives: channels by `number` (a campaign's filter set), the
@@ -89,7 +89,7 @@ lands; the docstrings and research notes then hold what was built.
    `$XDG_CONFIG_HOME/briareus`; key `diagnostics.paths`), from `BRIAREUS_DIAGNOSTICS`
    (a path list, for batch jobs and clusters), and from calls
    (`add_diagnostic_path(dir; save = true)`). The GUI's Diagnostics ▸ Folders… edits
-   the saved list; a shared network directory serves a whole group.
+   the saved list; a shared network directory can supply a whole group.
 7. **Checking.** `check_diagnostics(dir)` reads every file, resolves `extends`, builds
    each channel and reports errors and missing values by file and key; the GUI shows
    the same report.
@@ -100,7 +100,7 @@ lands; the docstrings and research notes then hold what was built.
    included geometry (assemblies decision 10).
 9. **Recording is part of the definition from the start.** A `[recording]` table names
    the mode: `history` (a time series per channel, Dante), `integrated` (an image or a
-   number over the shot), `gated` (frames: times, gate width, interframe time, strips),
+   number over the shot), `gated` (frames with times, gate width, interframe time and strips),
    `streaked` (one spatial axis along a slit × time: slit position, width and
    orientation on the target, sweep window, temporal and spatial resolution). The
    streaked mode exists from schema 1 because VISAR and SOP are of value only streaked
@@ -156,7 +156,8 @@ lands; the docstrings and research notes then hold what was built.
    15) or a prescribed shock, so the streaked mode is in the schema at once and those
    kinds come with the coupling.
 
-   Every kind is line of sight → optic → spectral response → recorder (research notes,
+   Every kind is a chain from the line of sight through the optic and the spectral
+    response to the recorder (research notes,
    "X-ray imagers, radiography and streaked diagnostics: what is public"), so these
    are shared tables in the schema: `optic` (pinholes with positions, sizes and filters;
    a multilayer mirror; a slit and relay), `filters`, `detector` (CCD, image plate with

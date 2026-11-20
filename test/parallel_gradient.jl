@@ -1,5 +1,5 @@
-# Concurrent gradient chunks (`_pointing_gradient!`) reproduce ForwardDiff's serial
-# chunk-mode gradient bitwise, with CBET and a keep-out on the path.
+# Concurrent gradient chunks (`_pointing_gradient!`) give a gradient identical to the
+# serial chunk-mode gradient of ForwardDiff, with CBET and a keep-out on the path.
 
 using Briareus, ForwardDiff, Test
 using Briareus: _PointingTag, _pointing_gradient!

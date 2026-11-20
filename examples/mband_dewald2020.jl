@@ -6,17 +6,19 @@
 #
 #   julia --project=. -t auto examples/mband_dewald2020.jl [h capsule_h] [spot=radiation|wall|brightness]
 #
-# Setup (Dewald 2020 §II–V): 10.1 × 5.75 mm Au hohlraum, 3.37 mm LEHs, 360 TW peak with
-# inner/outer power 1/2 (cone fraction 1/3), the wall ~0.2 mm in, the HDC ablation front
-# at 0.815 mm (4.35 ns). Their pointing is not published: the mock HYBRID-E pointing
-# (`hybride_mock_pointing`) scaled to this hohlraum, its outer aims moved along the axis
-# until the outer-beam ring sits at the measured z = ±3.3 mm (time-integrated hard x-ray
-# image, their Fig. 2; θ_o ≈ 40°, 4.4 mm from the center). Square corners, no window
-# or Mo sphere. At 5.5 ns, mid-plateau (4.9–6.0 ns): `nif_conversion()` there (0.86) and
-# gold's `WallLossAlbedo` at the wall's effective age, 0.8 ns (*L*: `drive_history`'s
-# wall history after the rise at ~4.4 ns; N221204's measured Dante gives 0.76 ns at the
-# start of its plateau), not at the 5.5 ns since the pulse start (research notes,
-# "Energetics defaults and the capsule share (2026-10-25)").
+# The setup follows Dewald 2020 §II–V: a 10.1 × 5.75 mm Au hohlraum with 3.37 mm LEHs and a
+# 360 TW peak with inner/outer power 1/2 (cone fraction 1/3). The wall has moved ~0.2 mm in,
+# and the HDC ablation front is at 0.815 mm (4.35 ns). The pointing of the paper is not
+# published. The study uses the mock HYBRID-E pointing (`hybride_mock_pointing`) scaled to
+# this hohlraum, with its outer aims moved along the axis until the outer-beam ring lies at
+# the measured z = ±3.3 mm. That position comes from the time-integrated hard x-ray image of
+# their Fig. 2, with θ_o ≈ 40° and 4.4 mm from the center. The corners are square, and there
+# is no window or Mo sphere. The study is at 5.5 ns, mid-plateau (4.9–6.0 ns), with
+# `nif_conversion()` at that time (0.86). The gold `WallLossAlbedo` is taken at the
+# effective age of the wall, 0.8 ns, instead of the 5.5 ns since the pulse start. That age
+# is *L*, the wall history of `drive_history` after the rise at ~4.4 ns; the measured Dante
+# of N221204 gives 0.76 ns at the start of its plateau (research notes, "Energetics defaults
+# and the capsule share (2026-10-25)").
 #
 # Their numbers: Dante sees 12% of the flux above 1.8 keV at the 290 eV peak (15% in
 # their Fig. 3); the wall M-band P2/P0 is +0.53 (Mo-sphere P2 0.15 / smoothing 0.28),
@@ -49,7 +51,8 @@ wall, cap = elements(t, :wall), elements(t, :capsule)
 isinner(b) = b.group in (:inner23, :inner30)
 zw = [t.elem_centroid[e][3] for e in wall]
 
-# pointing: the mock HYBRID-E table scaled to 10.1 × 5.75 mm, outer aims shifted by dz
+# The pointing is the mock HYBRID-E table scaled to 10.1 × 5.75 mm, with the outer aims
+# shifted by dz.
 function pointing(dz)
     table = Dict(k => (z = v.z * L / 11.24 + (k in (:outer44, :outer50) ? dz : 0.0),
                        r = v.r * 2.875 / 3.2, s = v.s) for (k, v) in Briareus.HYBRIDE_MOCK_POINTING)

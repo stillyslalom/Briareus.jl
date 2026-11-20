@@ -1,19 +1,19 @@
 # Desktop application
 
 The Briareus window (the BriareusGUI package and its `briareus` command) puts the
-library's design loop on screen in the manner of a CAD tool such as VisRad: a target is
+design loop of the library on screen in the manner of a CAD tool such as VisRad: a target is
 built or imported, the beams are pointed, and the laser deposition, the x-ray drive and
-the capsule's drive symmetry follow every edit. The same window optimizes the pointing,
+the capsule drive symmetry follow every edit. The same window optimizes the pointing,
 checks beam clearance from the target hardware and the NIF TaLIS target-configuration
 rules, solves the drive through a pulse, and reads and writes VisRad pointing, beam
 summary and workspace files. It serves target designers who would otherwise iterate in
-VisRad, and anyone who wants the library's results without writing a script; every
+VisRad, and anyone who wants the results of the library without writing a script; every
 action in the window is a call into the same functions the scripts and tutorials use.
 
-![The Briareus window: the NIF hohlraum starter after a pointing optimization, cut away and colored by the incident x-ray flux, with the NIF quads drawn as rays colored by cone; the model tree on the left, the drive's properties on the right, and the capsule modes and laser power accounting in the results panel below.](assets/gui/overview.png)
+![The Briareus window shows the NIF hohlraum starter after a pointing optimization, cut away and colored by the incident x-ray flux, with the NIF quads drawn as rays colored by cone. The model tree is on the left, the drive properties are on the right, and the capsule modes and laser power accounting are in the results panel below.](assets/gui/overview.png)
 
-The window is laid out as a CAD tool rather than as a sequence of steps: everything is
-reachable at any time, and each analysis reports when its result is out of date.
+The window is laid out as a CAD tool: everything is reachable at any time, and each
+analysis reports when its result is out of date.
 
 ## Install
 
@@ -30,7 +30,7 @@ The command needs Julia 1.12.7 or later and no further Julia knowledge.
    julia -e "using Pkg; Pkg.Apps.add(\"BriareusGUI\")"
    ```
 
-   or, at the Julia prompt's package mode (`]`), `pkg> app add BriareusGUI`.
+   or, in the package mode of the Julia prompt (`]`), `pkg> app add BriareusGUI`.
 3. Put Julia's app folder on the `PATH` (the install prints a warning when it is
    missing). Windows, in PowerShell:
 
@@ -50,11 +50,11 @@ The shortcut, or `briareus` in a terminal, then opens the window on a fresh desi
 `briareus design.briar` opens a saved session. The window takes about 20 s to
 open (the first start after an update compiles for a few minutes). A shortcut shows a
 splash within about a second meanwhile; `briareus` in a terminal shows nothing until
-the window, since the command's code runs only once BriareusGUI and its graphics
+the window, since the code of the command runs only once BriareusGUI and its graphics
 libraries have loaded. The command runs Julia on all threads (`--threads=auto`) and
 returns when the window closes. A shortcut has no terminal: its output goes to
-`%LOCALAPPDATA%\Briareus\briareus.log` (macOS: `~/Library/Logs/Briareus/`), and a
-failure to start shows in the splash with the log's location.
+`%LOCALAPPDATA%\Briareus\briareus.log` (on macOS, `~/Library/Logs/Briareus/`), and a
+failure to start shows in the splash with the location of the log.
 
 `pkg> app update BriareusGUI` updates the app, and `pkg> app rm BriareusGUI` removes it
 (the shortcuts are deleted by hand). A shortcut runs a script that names the Qt
@@ -81,7 +81,7 @@ and it cannot share a process with a GLMakie window or an offscreen GLMakie rend
 ### From a development checkout
 
 BriareusGUI lives in the `BriareusGUI/` directory of the Briareus repository; its
-environment takes the checkout's Briareus once that is developed into it:
+environment takes Briareus from the checkout once that is developed into it:
 
 ```
 git clone https://github.com/stillyslalom/Briareus.jl
@@ -91,575 +91,666 @@ julia --project=Briareus.jl/BriareusGUI -t auto -e "using BriareusGUI; briareus(
 ```
 
 `Pkg.develop` also writes a `[sources]` entry into `BriareusGUI/Project.toml`, which the
-`git checkout` discards (the manifest keeps the developed copy). The package carries no
-`[sources]`: an app installed from the registry would keep the entry's path `..`, which
-exists in the installed tree but holds no package, and the install would fail. The
-`briareus` command installs from the checkout with
+`git checkout` discards (the developed copy stays in the manifest). The package has no
+`[sources]` entry: an app installed from the registry would keep the path `..` of the
+entry, which exists in the installed tree but has no package in it, and the install would
+fail. The `briareus` command installs from the checkout with
 `julia -e "using Pkg; Pkg.Apps.develop(path=\"Briareus.jl/BriareusGUI\")"`.
 
 ## A first session
 
-The steps below design the drive of a NIF hohlraum from the *Hohlraum with capsule* starter; each
-names the menu entries, and the panels are described in [The window](@ref).
+The steps below design the drive of a NIF hohlraum from the *Hohlraum with capsule*
+starter. Each step names the menu entries, and the panels are described in [The
+window](@ref).
 
-1. **Open.** `briareus` opens on the *Hohlraum with capsule* starter (a hohlraum part and
-   a capsule sphere) with the 48 NIF quads at illustrative example cone aims
+1. **Open.** `briareus` opens on the *Hohlraum with capsule* starter, a hohlraum part
+   and a capsule sphere, with the 48 NIF quads at illustrative example cone aims
    (`nif_quads`). The model tree lists the hohlraum part with its pieces under it (wall,
-   caps, entrance holes), the capsule, the beams by cone and quad, and the analyses.
-2. **The target.** Selecting the hohlraum part in the tree shows its dimensions and
-   wall material in Properties, and *Target* the mesh. Target ▸ Mesh sets the element sizes:
-   presets from a work-precision study on the NIF hohlraum
-   (`examples/mesh_convergence.jl`) give the capsule P2/P0 and P4/P0 to about 0.5
+   caps and entrance holes), the capsule, the beams by cone and quad, and the analyses.
+2. **The target.** Selecting the hohlraum part in the tree shows its dimensions and wall
+   material in Properties, and *Target* shows the mesh. Target ▸ Mesh sets the element
+   sizes. Its presets come from a work-precision study on the NIF hohlraum
+   (`examples/mesh_convergence.jl`) and give the capsule P2/P0 and P4/P0 to about 0.5
    (coarse), 0.1 (standard) and 0.02 (fine, converged) percentage points.
 3. **The beams.** Selecting a cone (a group) in the tree shows its aim, defocus and
-   power, which apply to all its quads; a quad or a beam is edited the same way, and the
-   *Beam table* tab lists every one of them. View ▸ Beams ▸ Volumes draws each beam's
-   5% contour along its f-cone, cut where it meets the target, so a beam clipping an
+   power, which apply to all its quads. A quad or a beam is edited the same way, and the
+   *Beam table* tab lists every one of them. View ▸ Beams ▸ Volumes draws the 5% contour
+   of each beam along its f-cone, cut where it meets the target, so a beam clipping an
    entrance-hole lip or the capsule shows at a glance.
 4. **Compute the drive.** Compute ▸ Drive (Ctrl + R), or coloring the target by a drive
    field (View ▸ Color target by ▸ Incident x-ray flux), computes the view factors on a
-   worker thread (seconds on the standard mesh). From then on a beam edit re-evaluates
-   the drive at once: the view factors depend only on the target and the beam ports.
-5. **Read P2/P0.** The *Drive* tab lists the capsule's mode amplitudes ε₁…ε₄ and the
-   Legendre ratios ``P_l/P_0``, and the laser power accounting as [`report`](@ref)
-   prints it (absorbed in the wall, on the caps' outer faces and on the capsule, the
-   parts below 0.1% of the delivered power on one line, and the light that misses the
-   target); for a foil it lists the spot statistics instead. *Capsule θ–φ map* in the
-   drive's properties (or View ▸ Capsule θ–φ map) puts the capsule's flux map in the 3D
-   view's place. On the starter at equal power per quad (an inner-cone fraction of
-   1/3), P2/P0 starts near −15%: a static solve without cross-beam energy transfer or
-   the hohlraum's dynamics is not balanced at a fielded cone fraction (the N221204
-   benchmark's static P2/P0 at 5.5 ns is −26%; the shot's balance comes from
-   wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes).
-6. **Optimize.** Compute ▸ Optimization selects the optimization task: the free
-   parameters (aim, defocus and power per cone, quad or beam, within ± bounds), the
-   objective (axisymmetric ``P_l``, all-m 3D modes, optionally holding the drive level, a
-   flat observed face's RMS nonuniformity, [`face_flux_objective`](@ref), for a halfraum
-   package or an opacity sample, relative to its start so that a weight of 1 balances it
-   against the penalties on any face, or a foil spot's nonuniformity) and the keep-outs. *Optimize* starts
-   [`optimize_pointing`](@ref) in the background with progress and Cancel; the tab
-   then compares the modes, the clipped power and the capsule clearance before and
-   after, lists every parameter against its bounds (a parameter at a bound is marked),
-   and *Apply result* writes the optimized pointing to the beam table. The model tree
-   marks the result out of date once the beam table changes.
+   worker thread in seconds on the standard mesh. From then on a beam edit re-evaluates
+   the drive at once, because the view factors depend only on the target and the beam
+   ports.
+5. **Read P2/P0.** The *Drive* tab lists the capsule mode amplitudes ε₁…ε₄, the Legendre
+   ratios ``P_l/P_0``, and the laser power accounting as [`report`](@ref) prints it. The
+   accounting gives the power absorbed in the wall, on the outer faces of the caps and
+   on the capsule, the parts below 0.1% of the delivered power on one line, and the
+   light that misses the target. For a foil the tab lists the spot statistics instead.
+   *Capsule θ–φ map* in the drive properties (or View ▸ Capsule θ–φ map) puts the
+   capsule flux map in place of the 3D view. On the starter at equal power per quad, an
+   inner-cone fraction of 1/3, P2/P0 starts near −15%. A static solve without cross-beam
+   energy transfer or the hohlraum dynamics is not balanced at a fielded cone fraction:
+   the static P2/P0 of the N221204 benchmark at 5.5 ns is −26%, and the shot is balanced
+   by wavelength-detuned transfer, wall motion, the gold bubble and closing entrance
+   holes.
+6. **Optimize.** Compute ▸ Optimization selects the optimization task, which has three
+   parts:
 
-   ![The Optimization tab after a run on the four cone aims (z within ±2 mm, r within ±1 mm) with the capsule and entrance-hole keep-outs: the modes before and after, the parameters against their bounds, and the capsule's θ–φ flux map of the applied result in the 3D view's place.](assets/gui/optimize.png)
+   - the free parameters, which are the aim, defocus and power per cone, quad or beam
+     within ± bounds;
+   - the objective, which is axisymmetric ``P_l`` or all-m 3D modes (optionally with the
+     drive level held), the RMS nonuniformity of a flat observed face
+     ([`face_flux_objective`](@ref)) for a halfraum package or an opacity sample, or the
+     nonuniformity of a foil spot; the face objective is relative to its start, so that
+     a weight of 1 balances it against the penalties on any face;
+   - the keep-outs.
 
-7. **Check clearance.** Compute ▸ Clearance (the worst-case beam-to-hardware
-   clearance over pointing, positioning and focus errors) and Compute ▸ TaLIS (the NIF
-   target-configuration rules, on NIF beams only) run in the background and color the beams by their worst status. A result
-   is marked out of date in the tree when the beams or the target change afterward.
+   *Optimize* starts [`optimize_pointing`](@ref) in the background with progress and
+   Cancel. The tab then compares the modes, the clipped power and the capsule clearance
+   before and after, and lists every parameter against its bounds, with a mark on each
+   parameter at a bound. *Apply result* writes the optimized pointing to the beam table,
+   and the model tree marks the result out of date once the beam table changes.
 
-   ![The TaLIS rules checked on every NIF quad of the starter hohlraum: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. On the optimized pointing the eight 23.5° quads fail 3ω incidence on the wall: their axes meet it at 69.9°, and the steepest ray of a quad's f/7.9 cone is 3.6° steeper (VisRad's report measures incidence on that ray). The 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
+   ![The Optimization tab after a run on the four cone aims, with z within ±2 mm and r within ±1 mm and the capsule and entrance-hole keep-outs on. The tab shows the modes before and after and the parameters against their bounds, and the 3D view is replaced by the capsule θ–φ flux map of the applied result.](assets/gui/optimize.png)
+
+7. **Check clearance.** Compute ▸ Clearance computes the worst-case beam-to-hardware
+   clearance over pointing, positioning and focus errors. Compute ▸ TaLIS checks the NIF
+   target-configuration rules, on NIF beams only. Both run in the background and color
+   the beams by their worst status, and a result is marked out of date in the tree when
+   the beams or the target change afterward.
+
+   ![The TaLIS rules checked on every NIF quad of the starter hohlraum, with the rule-tolerance note, the per-rule summary and every check with its margin; the beams are colored by their worst status. On the optimized pointing the eight 23.5° quads fail 3ω incidence on the wall. Their axes meet the wall at 69.9°, and the steepest ray of the f/7.9 cone of a quad is 3.6° steeper; VisRad's report measures incidence on that ray. The 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
-   the analyses' settings and the view, to a `.briar` file: a zip archive of the
-   design as TOML and a copy of every CAD file it reads (STL parts, VisRad workspaces),
-   so the file opens on another computer. File ▸ Save session without CAD files writes
-   the TOML alone (`.briar.toml`, CAD files by path), for CAD that is not to travel
-   with the design. File ▸ Open session (Ctrl + O), or `briareus design.briar`, reads
-   either back; results are computed again on load. The design reads the CAD copies
-   saved with it; a source file that changed on disk since the save is offered in its
-   place, and a part's properties can relink its file or read it from the source again.
-   Sessions saved before frames (version 2 and older) load converted: a part placed in
-   the old foil frame (z along the foil's back normal) is re-expressed in the
-   backlighter foil's frame, where it was, and beams that followed a component aim in
-   that component's frame, their saved aims kept. In sessions before version 5 the
-   part with the foil role was named `backlighter`; it loads as the active foil, its
-   name kept. A session also holds the definition of each diagnostic it records (see
-   *Diagnostics* below), CSV files included, and its histories use those definitions
-   wherever it is opened; one that differs from the definition of the same id in the
-   diagnostic directories is marked `*` on its chip, whose tooltip names the keys and
-   whose menu switches to the directories' definition. The status after a save names the definitions from
-   outside the built-ins and those not public, which the file then carries.
-   Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every edit of what a session
-   saves: design edits, typed, from a menu, from a file or from an applied optimization,
-   loaded pulses, and changes of the view (display modes, the cutaway, the beam drawing
-   and hidden beams, frame axes), in one history, so an undo takes back the last thing
-   done and a part's view state follows the undo of its rename. The camera, the
-   selection and the diagnostics added for a drive history are not steps; an undo of a
-   view change leaves the target as it is. A session saves the window as it was left
-   too, so it reopens that way: the camera's pose and projection, whether the drive
-   shows the 3D view, the map or the x-ray image (with the image's camera), and the
-   Time tab's chart; a session from before version 13 opens on the default camera, the
-   3D view and the Pulses chart.
+   the settings of the analyses and the view, to a `.briar` file. The file is a zip
+   archive of the design as TOML and a copy of every CAD file the design reads (STL
+   parts, VisRad workspaces), so it opens on another computer. File ▸ Save session
+   without CAD files writes only the TOML (`.briar.toml`, with CAD files by path), for
+   CAD that is not to travel with the design. File ▸ Open session (Ctrl + O), or
+   `briareus design.briar`, reads either back, and results are computed again on load.
+   The design reads the CAD copies saved with it. A source file that changed on disk
+   since the save is offered in its place, and the properties of a part can relink its
+   file or read it from the source again.
 
-Two further steps use the drive's view factors without computing them again: an x-ray
-image of the target (Compute ▸ X-ray image along the view) and the drive through a pulse
-(the *Time* tab).
+   Sessions saved before frames (version 2 and older) are converted on load. A part
+   placed in the old foil frame, with z along the back normal of the foil, is
+   re-expressed in the frame of the backlighter foil at the same place. Beams that
+   followed a component aim are given aims in the frame of that component, with their
+   saved aims unchanged. In sessions before version 5 the part with the foil role was
+   named `backlighter`; it loads as the active foil under the same name.
+
+   A session also contains the definition of each diagnostic it records (see
+   *Diagnostics* below), CSV files included, and its histories use those definitions
+   wherever the session is opened. A saved definition that differs from the definition
+   of the same id in the diagnostic directories is marked `*` on its chip. The tooltip
+   of the chip names the differing keys, and its menu switches to the definition in the
+   directories. After a save, the status line names the definitions from outside the
+   built-ins and those that are not public, which are then stored in the file.
+
+   Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every edit of what a session
+   saves, in one history. The history covers design edits, whether typed, chosen from a
+   menu, read from a file or applied from an optimization, as well as loaded pulses and
+   changes of the view: display modes, the cutaway, the beam drawing, hidden beams and
+   frame axes. An undo therefore takes back the last thing done, and the view state of a
+   part follows the undo of its rename. The camera, the selection and the diagnostics
+   added for a drive history are not steps, and an undo of a view change leaves the
+   target as it is.
+
+   A session also saves the window as it was left, so it reopens the same way. The saved
+   state includes the camera pose and projection, whether the drive shows the 3D view,
+   the map or the x-ray image (with the image camera), and the chart of the Time tab. A
+   session from before version 13 opens on the default camera, the 3D view and the
+   Pulses chart.
+
+Two further steps use the view factors of the drive without computing them again: an
+x-ray image of the target (Compute ▸ X-ray image along the view) and the drive through a
+pulse (the *Time* tab).
 
 ![An x-ray image of the hohlraum seen through its top entrance hole, 20° off the axis, beside the 3D view with the beams drawn as volumes.](assets/gui/xray.png)
 
-![The Time tab after a drive history on N221204's pulse shape: the capsule radiation temperature, a synthetic Dante 1 and a₂/a₀, a₄/a₀ against time, with the 3D view colored by the history's step at peak temperature.](assets/gui/time_history.png)
+![The Time tab after a drive history on the N221204 pulse shape. The chart plots the capsule radiation temperature, a synthetic Dante 1, and a₂/a₀ and a₄/a₀ against time, and the 3D view is colored by the history step at peak temperature.](assets/gui/time_history.png)
 
-A backlighter design starts from File ▸ New target ▸ Backlighter foil (the *Backlighter
-foil* starter: a foil part with the foil role, 6 mm from TCC facing it, and an absorbing
-sphere at TCC standing in for the main target), which loads the OMEGA backlighter beams; the drive then reports the foil spot's mean and peak intensity,
-its nonuniformity and the fraction of the power inside the spot, and the optimization
-offers the foil-uniformity objective.
+A backlighter design starts from File ▸ New target ▸ Backlighter foil, which loads the
+OMEGA backlighter beams. The *Backlighter foil* starter is a foil part with the foil
+role, 6 mm from TCC and facing it, and an absorbing sphere at TCC that stands in for the
+main target. The drive then reports the mean and peak intensity of the foil spot, its
+nonuniformity and the fraction of the power inside the spot, and the optimization offers
+the foil-uniformity objective.
 
-![A backlighter foil 6 mm from the target chamber center with the OMEGA backlighter beams, colored by the absorbed laser intensity: the 3D view toward the foil's front, the foil's face beside it, and the spot statistics in the Drive tab.](assets/gui/backlighter.png)
+![A backlighter foil 6 mm from the target chamber center with the OMEGA backlighter beams, colored by the absorbed laser intensity. The 3D view faces the front of the foil, the foil face is shown beside it, and the spot statistics are in the Drive tab.](assets/gui/backlighter.png)
 
 ## The window
 
 ### Model tree
 
-The left panel lists the target's parts (a hohlraum part with its pieces under it: wall,
-caps, entrance holes and diagnostic windows; the capsule; other parts) with a swatch of their color in the 3D
-view, so the tree is the color key; the beams by group, quad and beam; and the analyses
-(drive, optimization, clearance, TaLIS) with their state. Selecting a node selects it in
-the 3D view and shows it in Properties; Ctrl + click adds components or beams to the
-selection and Shift + click a range, which Properties then edits together and the 3D
-view highlights together; Esc clears the selection; a double click fits the view to it.
-A right click opens the row's commands, only those that apply to it. *Remove* takes out
-every selected part, assembly, frame and window in one edit
-(`Controllers.remove_nodes!`): an assembly goes with its contents, and what was placed
-in a removed frame (a capsule in its hohlraum's) stays where it is, placed in the
-nearest frame above that remains; beams aimed in a removed frame keep their aim points.
-Removing every part leaves an empty target.
+The left panel lists the parts of the target with a swatch of their color in the 3D
+view, so the tree is the color key. A hohlraum part lists its pieces under it (wall,
+caps, entrance holes and diagnostic windows), followed by the capsule and other parts.
+The tree also lists the beams by group, quad and beam, and the analyses (drive,
+optimization, clearance and TaLIS) with their state. Selecting a node selects it in the
+3D view and shows it in Properties. Ctrl + click adds components or beams to the
+selection and Shift + click adds a range, which Properties then edits together and the
+3D view highlights together. Esc clears the selection, and a double click fits the view
+to it. A right click on a row opens its commands, only those that apply to it. *Remove*
+takes out every selected part, assembly, frame and window in one edit
+(`Controllers.remove_nodes!`). An assembly goes with its contents. What was placed in a
+removed frame, such as a capsule in the frame of its hohlraum, stays where it is and is
+placed in the nearest frame above that remains, and beams aimed in a removed frame keep
+their aim points. Removing every part leaves an empty target.
 
 Taking part in the calculations and being drawn are separate settings. Each beam row
-carries VisRad's 2 × 3 matrix of dots: the top row is whether the beams' 1ω (red), 2ω
-(green) and 3ω (blue) light takes part in the calculations, the bottom row whether it
-is drawn (a filled dot is on, a ring off, a pale dot on for some of the beams; a click
-switches the dot for the row's beams, or for the whole selection when the row is in it;
-the beam properties hold the same matrix as check boxes). 3ω participation is the beam's
-on/off switch: the drive, clearance check and optimization see only the beams that are
-on. A beam can be hidden to see the surface it lights, or its unconverted light drawn
-while it stays out of the way, without changing any result. The unconverted 1ω and 2ω
-light is drawn for NIF quads and beams as `unconverted_deposition` deposits it: per
-beamlet, the `nif_unconverted` footprint square at the 3ω best-focus plane, displaced to
-the beamlet's side of its quad, and the square beam converging to its focus
-(outlines and center lines as rays, the converging beam as a volume). Its participation
-dots switch once the drive has a power ratio for that color (below).
+shows VisRad's 2 × 3 matrix of dots. The top row shows whether the 1ω (red), 2ω (green)
+and 3ω (blue) light of the beams takes part in the calculations, and the bottom row
+whether it is drawn. A filled dot is on, a ring is off, and a pale dot is on for some of
+the beams. A click switches the dot for the beams of the row, or for the whole selection
+when the row is in it, and the beam properties show the same matrix as check boxes. 3ω
+participation switches a beam on or off, and only beams that are on enter the drive, the
+clearance check and the optimization. A beam can be hidden to show the surface it
+lights, or its unconverted light can be drawn while the beam stays out of the way,
+without changing any result. The unconverted 1ω and 2ω light is drawn for NIF quads and
+beams as `unconverted_deposition` deposits it. For each beamlet the drawing shows the
+`nif_unconverted` footprint square at the 3ω best-focus plane, displaced toward the
+position of the beamlet in its quad, and the square beam converging to its focus.
+Outlines and center lines are drawn as rays and the converging beam as a volume. The
+participation dots of a color switch once the drive has a power ratio for that color
+(below).
 
-![The beam matrix: each beam row of the model tree carries 2 × 3 dots (1ω, 2ω, 3ω; the top row in the calculations, the bottom row drawn), and the properties of the inner quad Q15T hold the same matrix as check boxes. With illustrative 1ω and 2ω power ratios of 5% each, Q15T's unconverted light is drawn (each color's outlines and center lines as rays) while its 3ω light alone takes part in the calculations; the rows of its group and of all the beams show the 1ω and 2ω drawing dots pale, on for one of their beams.](assets/gui/beam_matrix.png)
+![The beam matrix in the model tree. Each beam row shows 2 × 3 dots for 1ω, 2ω and 3ω, with the top row for participation in the calculations and the bottom row for drawing, and the properties of the inner quad Q15T show the same matrix as check boxes. With illustrative 1ω and 2ω power ratios of 5% each, the unconverted light of Q15T is drawn, with the outlines and center lines of each color as rays, while only its 3ω light takes part in the calculations. The rows of its group and of all the beams show the 1ω and 2ω drawing dots pale, on for one of their beams.](assets/gui/beam_matrix.png)
 
-A component's box, in its color, shows or hides it; the box's fill is its display mode
-(solid opaque, pale semi-transparent, an outline as wireframe, empty when hidden), which
-the context menu and Properties ▸ *Display* set: opaque, semi-transparent, wireframe or
-invisible. A click selects through semi-transparent and wireframe components to an
-opaque one behind them. *Include in calculations* is separate: a component left out is
-drawn as a gray ghost and removed from the target (which becomes an open enclosure),
-and beams left out are switched off.
+Each component has a box in its color that shows or hides it. The fill of the box shows
+the display mode: solid for opaque, pale for semi-transparent, an outline for wireframe,
+and empty when hidden. The context menu and Properties ▸ *Display* set the mode to
+opaque, semi-transparent, wireframe or invisible. A click selects through
+semi-transparent and wireframe components to an opaque one behind them. *Include in
+calculations* is a separate setting. A component left out is drawn as a gray ghost and
+removed from the target, which becomes an open enclosure, and beams left out are
+switched off.
 
 ### Properties
 
-The right panel edits the selection. A value the geometry or a check rejects is
-refused with the reason in the status line. The pages hold controls and short status
-lines; tooltips are one-line hints. An ⓘ beside a page title, a section heading or a
+The right panel edits the selection. A value the geometry or a check rejects is refused
+with the reason in the status line. The pages contain controls and short status lines,
+and tooltips are one-line hints. An ⓘ beside a page title, a section heading or a
 control shows such a hint on hover and, when clicked, opens its explanation in the Help
-window (Help ▸ Help, F1): a separate window, which resizes and stays open beside the
-design, with the explanations by page, a search field, and the mouse and key bindings.
-Help ▸ Documentation opens this page.
+window (Help ▸ Help, F1). The Help window is separate, resizes and stays open beside the
+design, and contains the explanations by page, a search field, and the mouse and key
+bindings. Help ▸ Documentation opens this page.
 
-![The Help window at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
+![The Help window at the page of the placement sweep, with the explanations behind the ⓘ marks listed by page and a link to this documentation.](assets/gui/help.png)
 
-- **Target:** the mesh: a preset (above) or element sizes in mm for the walls and parts
-  and for the capsule. A target is made of parts. File ▸ New target starts from a
-  ready-made one, listed under the facility it is a mock-up for, and loads that
-  facility's beams (imported beams are kept): for NIF, *Hohlraum with capsule*,
-  *Frustraum with capsule* (a hohlraum part with a frustraum profile), *Halfraum pair
-  with shock tube* (two halfraums facing each other across a cylinder package whose end
-  faces close them, the top face observed) and *Opacity halfraum* (a halfraum with an
-  observed sample foil in its open end); for OMEGA, *Backlighter foil*; or *Empty*, no
-  parts at all. Their dimensions are illustrative mock-ups; a session saved with the
-  former hohlraum or foil template loads as these parts. The Insert menu (and the
-  target's properties) adds to the target: a sphere, disk, washer, rectangle, cylinder,
-  cone, a bare hohlraum part or an STL mesh, placed at TCC; a diagnostic window in the
-  selected hohlraum part's wall; an assembly of the selected parts; a frame.
-  (`insert_starter!` still adds a starter's parts to a design from a script.)
-- **Hohlraum parts:** a cylindrical hohlraum ([`hohlraum`](@ref)) along the part's z,
-  in pieces named after the part (`hohlraum_wall`, `hohlraum_cap_top`, …): its length,
-  radius, entrance-hole radius (the bottom hole's may differ), wall albedo and conversion,
-  each end an entrance hole, closed (covered by its cap) or open (neither cap nor hole: a
-  halfraum, closed or not by whatever is placed there), the closing entrance holes, and
-  its windows. Each hohlraum part's cavity (its pieces, and the elements of other parts
-  inside it that face into it: a capsule, a package face closing an open end) has its
-  view factors balanced separately when under 1% of its rays leave it; elements in no
-  cavity keep their raw view factors. Its wall and
-  caps hold the *Wall* role (the drive history's wall temperature); the clearance and
-  TaLIS checks keep the caps as hardware, the entrance holes' edges. A piece's row in the
-  model tree (its properties, or the right-click menu) gives it another role: a cap
-  *Observed* (a flat face: its face map and flux statistics, and out of its cavity's
-  walls), a wall section or a cap *None*, a closed window *Wall*; the entrance holes, their
-  lips and open windows are apertures and take none. Each end has a frame
-  (`hohlraum.leh_top`, `hohlraum.leh_bottom`: origin at the end's center, z pointing out
-  of the hohlraum, so one placement or aim mirrors between the two) and each window one
-  at its center on the wall (`hohlraum.window_1`). Its *Profile* is a cylinder, a
-  frustraum (two cones meeting at the waist: the waist radius and each end's,
-  [`frustraum_profile`](@ref)) or sections (a table of breaks, each a height and a wall
-  radius, the end breaks at ±length/2: [`HohlraumProfile`](@ref)); the wall is then one
-  piece per section (`hohlraum_wall_1`, …), each holding the *Wall* role, and windows go
-  in cylindrical sections only.
-- **Windows** ([`WallWindow`](@ref)) in a hohlraum part's wall (Insert ▸ *Diagnostic
-  window*, or its properties ▸ *Add window*): azimuth, height, round (the default, with the exact disk area) or rectangular, open or closed with their own albedo and conversion
-  efficiency. Overlapping windows, or a window past the end of the wall, are refused.
+- **Target:** the mesh, set by a preset (above) or by element sizes in mm for the walls
+  and parts and for the capsule. A target is made of parts. File ▸ New target starts
+  from a ready-made target, listed under the facility it is a mock-up for, and loads the
+  beams of that facility; imported beams are kept. The NIF starters are *Hohlraum with
+  capsule*, *Frustraum with capsule* (a hohlraum part with a frustraum profile),
+  *Halfraum pair with shock tube* and *Opacity halfraum*. In the halfraum pair, two
+  halfraums face each other across a cylinder package whose end faces close them, and
+  the top face is observed; the opacity halfraum has an observed sample foil in its open
+  end. The OMEGA starter is *Backlighter foil*, and *Empty* has no parts at all. The
+  dimensions are illustrative mock-ups, and a session saved with the earlier hohlraum or
+  foil template loads as these parts. The Insert menu (and the target properties) adds
+  spheres, disks, washers, rectangles, cylinders, cones, bare hohlraum parts and STL
+  meshes, placed at TCC. It also adds diagnostic windows in the wall of the selected
+  hohlraum part, assemblies of the selected parts and frames. (`insert_starter!` still
+  adds the parts of a starter to a design from a script.)
+- **Hohlraum parts:** a cylindrical hohlraum ([`hohlraum`](@ref)) along the z axis of
+  the part, in pieces named after the part (`hohlraum_wall`, `hohlraum_cap_top`, …). The
+  properties are its length, radius, entrance-hole radius (the bottom hole radius may
+  differ), wall albedo and conversion, the closing entrance holes and its windows. Each
+  end is an entrance hole, closed by its cap or open. An open end has neither cap nor
+  hole, as in a halfraum, and is closed or not by whatever is placed there. The cavity
+  of each hohlraum part consists of the part pieces and the elements of other parts
+  inside it that face into it, such as a capsule or a package face closing an open end.
+  Its view factors are balanced separately when under 1% of its rays leave it, and
+  elements in no cavity keep their raw view factors. The wall and caps have the *Wall*
+  role, which gives the wall temperature of the drive history. The clearance and TaLIS
+  checks treat the caps, which form the edges of the entrance holes, as hardware.
+  The row of a piece in the model tree (its properties, or the right-click menu) gives
+  the piece another role. A cap can be *Observed*, which gives it a face map and flux
+  statistics and takes it out of the walls of its cavity; a wall section or a cap can be
+  *None*, and a closed window *Wall*. The entrance holes, their lips and open windows
+  are apertures and take no role. Each end has a frame (`hohlraum.leh_top`,
+  `hohlraum.leh_bottom`) with its origin at the center of the end and z pointing out of
+  the hohlraum, so one placement or aim mirrors between the two. Each window has a frame
+  at its center on the wall (`hohlraum.window_1`). The *Profile* of the part is a
+  cylinder, a frustraum or sections. A frustraum is two cones meeting at the waist, set
+  by the waist radius and the radius of each end ([`frustraum_profile`](@ref)). Sections
+  are a table of breaks, each a height and a wall radius, with the end breaks at
+  ±length/2 ([`HohlraumProfile`](@ref)). The wall is then one piece per section
+  (`hohlraum_wall_1`, …), each with the *Wall* role, and windows go in cylindrical
+  sections only.
+- **Windows** ([`WallWindow`](@ref)) in the wall of a hohlraum part (Insert ▸
+  *Diagnostic window*, or its properties ▸ *Add window*): azimuth, height, round (the
+  default, with the exact disk area) or rectangular shape, and open or closed with their
+  own albedo and conversion efficiency. Overlapping windows, or a window past the end of
+  the wall, are refused.
 - **Parts:** spheres, disks, washers, rectangles, cylinders and cones placed anywhere,
-  with their own albedo, conversion, sidedness, aperture flag and element size: a
-  shield, a stalk, a detector aperture, a second foil. A part is placed in a named
-  frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)): the chamber's, the frame
-  of another part (origin at its center, z its axis: a foil's z is its front normal),
-  or a hohlraum part's end or window frame; it moves and turns with that frame when that
-  part changes. Its position
-  is given in Cartesian, cylindrical or spherical coordinates of that frame
-  ([`coords_of`](@ref)), and its orientation by the axis polar and azimuth angles and a
-  rotation, in VisRad's order ([`euler_rotation`](@ref)). Changing the frame keeps the
-  part where it is. The *Move along* row steps the part by ± a distance along the x, y
-  or z axis of any frame (z of the part frame: along its axis), one edit per click; parts
-  placed in its frame and beams aimed in it move along. *Sweep along this axis…* sets up a
-  placement sweep of the part along that axis (below). *Placement steps* then place
-  the part relative to other frames, in order ([`PlacementStep`](@ref)): coincident
-  with a point, on or concentric with an axis, at a distance from a point, facing a
-  point, parallel to an axis, rolled from a direction, and relative offsets and
-  rotations. Each step's heading names what it fixes; a step that undoes an earlier
-  one is refused, with both named ([`placement_report`](@ref)); and the degrees of
-  freedom no step fixes keep the placement fields' values. A new step starts where it
-  leaves the part in place (the current point, distance and roll). The part follows
-  the frames its steps refer to, as it follows the frame it is placed in.
-  A *mesh* part reads an STL file (Insert ▸ Mesh from STL file), scaled to
-  mm, with its windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into
-  elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
-  solids gives one part per solid. A *VisRad object* part is a component of an imported
-  VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps the VisRad
-  element grid unless the part is given an element size. A part's *Role* marks it
-  for the analyses, and the part keeps its name: *Observed* (the surface whose x-ray drive
-  is analyzed, one at a time: a sphere, whose capsule modes, θ–φ map and keep-out the
-  drive and optimization take, or a flat face, a rectangle or disk such as a package's
-  face or an opacity sample, which gets a map of its incident flux over the face, its
-  mean, range and RMS nonuniformity, and no capsule modes; a CAD capsule is replaced in the
-  calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does not count),
-  *Backlighter foil* (a flat part or a mesh), *Wall* (a re-emitting cavity surface: the
-  drive history's wall temperature, and a surface the clearance and TaLIS checks land the
-  beams on, as a hohlraum part's wall), or *Thin film* (left out of the drive's cavity,
-  below). Any number of parts can be foils or walls; the *active
-  foil* (Drive ▸ Active foil, or the check in the part's properties, shown with two or
-  more foils) is the one whose spot statistics, map and objective the drive and the
-  optimization take and whose line of sight and captured power the sweep checks, while
-  the clearance and TaLIS checks take every foil as a surface the beams land on. The model
+  with their own albedo, conversion, sidedness, aperture flag and element size, for
+  hardware such as shields, stalks, detector apertures and second foils. A part is
+  placed in a named frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)). The
+  frame is the chamber frame, the frame of another part, or the end or window frame of a
+  hohlraum part. The frame of a part has its origin at the part center and z along its
+  axis; on a foil, z is the front normal. A part moves and turns with its frame when the
+  part that defines the frame changes. Its position is given in Cartesian, cylindrical
+  or spherical coordinates of that frame ([`coords_of`](@ref)), and its orientation by
+  the axis polar and azimuth angles and a rotation, in VisRad's order
+  ([`euler_rotation`](@ref)). Changing the frame leaves the part where it is.
+
+  The *Move along* row steps the part by ± a distance along the x, y or z axis of any
+  frame, one edit per click; z of the part frame is the axis of the part. Parts placed
+  in its frame and beams aimed in that frame move with it. *Sweep along this axis…* sets
+  up a placement sweep of the part along that axis (below).
+
+  *Placement steps* then place the part relative to other frames, in order
+  ([`PlacementStep`](@ref)). The steps are coincidence with a point, lying on or
+  concentric with an axis, a distance from a point, facing a point, being parallel to an
+  axis, a roll from a direction, and relative offsets and rotations. The heading of each
+  step names what it fixes. A step that undoes an earlier one is refused, with both
+  named ([`placement_report`](@ref)), and the degrees of freedom that no step fixes take
+  the values of the placement fields. A new step starts with the part where it is, at
+  the current point, distance and roll. The part follows the frames its steps refer to,
+  as it follows the frame it is placed in.
+
+  A *mesh* part reads an STL file (Insert ▸ Mesh from STL file), scaled to mm, with its
+  windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into elements of
+  the part element size ([`remesh_mesh`](@ref)). A multi-body ASCII STL of named solids
+  gives one part per solid. A *VisRad object* part is a component of an imported VisRad
+  workspace; a VisRad rectangle, sphere or cylindrical hohlraum retains the VisRad element
+  grid unless the part is given an element size.
+
+  The *Role* of a part marks it for the analyses, and the part name is unchanged. The
+  roles are:
+
+  - *Observed*, the surface whose x-ray drive is analyzed, one at a time. A sphere gives
+    the capsule modes, θ–φ map and keep-out that the drive and optimization take. A flat
+    face, such as a rectangle or disk for a package face or an opacity sample, gets a
+    map of its incident flux over the face, its mean, range and RMS nonuniformity, and
+    no capsule modes. A CAD capsule is replaced in the calculations by a sphere fitted
+    to it (`fit_sphere`), so a fill tube does not count.
+  - *Backlighter foil*, a flat part or a mesh.
+  - *Wall*, a re-emitting cavity surface. It enters the wall temperature of the drive
+    history, and the clearance and TaLIS checks treat it as a surface the beams land on,
+    as for the wall of a hohlraum part.
+  - *Thin film*, which is left out of the drive cavity (below).
+
+  Any number of parts can be foils or walls. The *active foil* is chosen with Drive ▸
+  Active foil, or with the check in the part properties shown when there are two or more
+  foils. Its spot statistics, map and objective are used by the drive and the
+  optimization, and its line of sight and captured power are checked by the sweep. The
+  clearance and TaLIS checks treat every foil as a surface the beams land on. The model
   tree marks the foils, and the active one among several.
-- **Frames:** the model tree's Frames folder holds user frames, named frames with no
-  geometry placed like parts (origin, axis angles, rotation and placement steps, in any
-  frame): Insert ▸ *Frame* or the folder's *Add frame* places one in the selected
-  frame. Parts are placed in a user frame, beams aim in it and a sweep steps it, as for
-  a part's frame; when a frame is removed, what was placed in it stays where it is. A
-  *port frame* (the folder's page: a port of the beam table,
-  a NIF quad at the angles of [`port_angles`](@ref)`(:nif, quad)`) has its origin at TCC
-  and z toward the port ([`port_frame`](@ref), VisRad's diagnostic-port axis), and only
-  its roll is edited. Tools ▸ *Coordinate transform* gives the coordinates of a point or
-  direction in any frame from those in another ([`transform_point`](@ref)), Cartesian,
-  cylindrical or spherical, and *Create frame* makes a user frame there. The 3D view
-  draws the selected frame's axes (x red, y green, z blue, with its name) and those of
-  the frames switched on in their page or menu.
-- **Beams** (a group, quad, beam, or any Ctrl-selected set): the aim relative to the
-  ports (z, r and a tangential offset), or a common aim point (x, y, z, as VisRad points
-  a cluster at a reference point) in the beams' *Aim frame*: the chamber, a user frame, a part, or a
-  hohlraum part's end (its entrance hole and cap) or window, listed after their part. The beams keep their coordinates in that frame
-  when it moves or turns (an aim 0.3 mm off a foil's center stays 0.3 mm off it) and when
-  the part is renamed or given a role, and
-  *Aim at the frame's center* points them at the frame's center (a part's centroid). The OMEGA
-  backlighter beams aim in the active foil's frame; defocus, power, on/off, and where the axis
-  lands. *Look along beam* views the target from the beam's
-  port. Beams belong to groups, as VisRad's clusters do: the cone by default, or any
-  named set ("backlighter") made with *Move to group*; a group is edited, switched and
-  optimized together, and its members keep their cone for the laser–plasma models. A
-  NIF quad held as one beam splits into its four beams (their own ports, a quarter of
-  the power each), so that the laser deposition is computed per beam, and merges back:
-  for one quad, a group's quads or every quad at once (the row's right-click menu, the
-  Beams menu). The quad stays the unit of pointing and power either way. Its row edits
-  its beams together, and the radial and tangential aim offsets are measured in the
-  quad's port azimuth ([`GroupPointing`](@ref)'s `unit = :quad`), so a quad's beams with
-  the same values share one aim point: the point the quad held as one beam aims at, to
-  under a micron (the mean of a quad's four ports is the quad's port to 0.004°).
-  Measured in the azimuth of each beam, the aims of a 23.5° quad would land 0.2 mm apart
-  per mm of aim r. A cone's or a quad's row, the 192-beam preset and the optimizer per
-  cone or per quad keep one aim point per quad; a quad's beams are pointed apart from
-  their own rows. A click on one of a quad's beams in the 3D view selects the quad while
-  its row is closed in the tree, and the power of rows of whole quads is given per quad
-  (`Controllers.power_unit`), so a split leaves the Beam table's numbers as they were.
-- **Facility** (Beams ▸ Facility, or the Beams properties: NIF, OMEGA, OMEGA EP or
-  Other): the beams (a facility's first preset replaces another facility's; OMEGA EP
-  and Other have no built-in set, so another facility's preset beams are taken out and
-  a beam table is imported; imported beams are kept), the presets offered (NIF quads or
-  beams at illustrative example cone aims, in a frustraum's holes at aims derived from
-  them that keep each cone's spot at the same fraction of the wall height where the
-  hole allows; the OMEGA hohlraum or backlighter sets), the instruments the Diagnostics
-  tab lists and the checks (the TaLIS rules are NIF's).
+
+- **Frames:** the Frames folder of the model tree contains user frames, named frames
+  without geometry that are placed like parts by origin, axis angles, rotation and
+  placement steps, in any frame. Insert ▸ *Frame* or *Add frame* in the folder places
+  one in the selected frame. Parts are placed in a user frame, beams aim in it and a
+  sweep steps it, as for the frame of a part. When a frame is removed, what was placed
+  in it stays where it is. A *port frame*, set on the page of the folder for a port of
+  the beam table or a NIF quad at the angles of [`port_angles`](@ref)`(:nif, quad)`, has
+  its origin at TCC and z toward the port ([`port_frame`](@ref), VisRad's
+  diagnostic-port axis); only its roll is edited. Tools ▸ *Coordinate transform* gives
+  the coordinates of a point or direction in any frame from those in another
+  ([`transform_point`](@ref)), Cartesian, cylindrical or spherical, and *Create frame*
+  makes a user frame there. The 3D view draws the axes of the selected frame (x red, y
+  green, z blue, with its name) and those of the frames switched on in their page or
+  menu.
+- **Beams** (a group, quad, beam, or any Ctrl-selected set): the aim, defocus, power and
+  on/off state, and where the axis lands. The aim is given relative to the ports (z, r
+  and a tangential offset), or as a common aim point (x, y, z) in the *Aim frame* of the
+  beams, as VisRad points a cluster at a reference point. The aim frame is the chamber,
+  a user frame, a part, or the end (its entrance hole and cap) or a window of a hohlraum
+  part, listed after their part. The beams keep their coordinates in that frame when it
+  moves or turns, so an aim 0.3 mm off the center of a foil stays 0.3 mm off it, and
+  when the part is renamed or given a role. *Aim at the frame's center* points them at
+  the center of the frame, which for a part is its centroid. The OMEGA backlighter beams
+  aim in the frame of the active foil. *Look along beam* views the target from the port
+  of the beam.
+
+  Beams belong to groups, as VisRad's clusters do: the cone by default, or any named set
+  ("backlighter") made with *Move to group*. A group is edited, switched and optimized
+  together, and its members keep their cone for the laser–plasma models. A NIF quad held
+  as one beam splits into its four beams, each with a separate port and a quarter of the
+  power, so that the laser deposition is computed per beam. It merges back from the
+  right-click menu of the row or the Beams menu, for one quad, the quads of a group or
+  every quad at once. The quad stays the unit of pointing and power either way. Its row
+  edits its beams together, and the radial and tangential aim offsets are measured in
+  the port azimuth of the quad ([`GroupPointing`](@ref)'s `unit = :quad`). The beams of
+  a quad with the same values therefore share one aim point, the point that the quad
+  held as one beam aims at, to under a micron; the mean of the four ports of a quad is
+  the quad port to 0.004°. Measured in the azimuth of each beam, the aims of a 23.5°
+  quad would land 0.2 mm apart per mm of aim r. The row of a cone or a quad, the
+  192-beam preset and the optimizer per cone or per quad keep one aim point per quad,
+  and the beams of a quad are pointed apart only from their individual rows. A click on
+  one of the beams of a quad in the 3D view selects the quad while its row is closed in
+  the tree. The power of rows of whole quads is given per quad
+  (`Controllers.power_unit`), so a split leaves the numbers in the Beam table unchanged.
+
+- **Facility** (Beams ▸ Facility, or the Beams properties): NIF, OMEGA, OMEGA EP or
+  Other. The facility sets the beams, the presets offered, the instruments the
+  Diagnostics tab lists and the checks; the TaLIS rules are NIF's. The first preset of a
+  facility replaces the preset beams of another. OMEGA EP and Other have no built-in
+  set, so the preset beams of another facility are taken out and a beam table is
+  imported; imported beams are kept. The NIF presets are quads or beams at illustrative
+  example cone aims; in the holes of a frustraum, the aims are derived from them to keep
+  the spot of each cone at the same fraction of the wall height where the hole allows.
+  The OMEGA presets are the hohlraum and backlighter sets.
 - **Analyses:** the settings and Run of the drive, the optimization, the clearance
   check, the placement sweep and the TaLIS rules.
 
 ### 3D view
 
-The center canvas navigates as a CAD tool: the wheel zooms toward the point under the
-pointer, a left or middle drag orbits about the selection or the point under the
-pointer, a right drag, Shift + drag or Ctrl + middle drag pans, a click selects a
-component or beam, a double click fits it, `f` fits everything and the arrow keys
-orbit by 15°. The near and far planes follow the eye, so nothing is clipped however
-close the view. The View menu holds the standard views, a perspective or orthographic
-projection, turntable (z up) or free rotation, the cutaway, Look from port (a beam's
-port or any θ, φ) and Save view as image. Switching the turntable back on levels a view
-that a free rotation rolled. Help ▸ Mouse and keys lists the bindings.
+The center canvas navigates as a CAD tool:
 
-A placement triad sits on the selected part, piece or assembly, in the axes of the frame
-it is placed in (Properties ▸ *Placed in*). A drag on an arrow moves the part along that
-axis in whole steps of the *Move along* row's step; a drag on a square (one between each
-pair of arrows) moves it in that plane, each component in those steps, as one move; a
-drag on a ring turns it about that axis, through the part's origin, in 15° steps; Ctrl
-held at the press snaps to a tenth of either. The handle under the pointer is drawn
-brighter and thicker. While dragging, the view previews the moved parts and the beams aimed in their
-frames; the release makes one edit (`nudge_part!` or `turn_part!`, the edits of the
-*Move along* buttons), undone as one, so the placement stays parametric and the beams
-aimed in the moved frames follow. A press on a handle released without moving is a
-click, and the triad is hidden with nothing, several things or a beam selected.
+- the wheel zooms toward the point under the pointer;
+- a left or middle drag orbits about the selection or the point under the pointer;
+- a right drag, Shift + drag or Ctrl + middle drag pans;
+- a click selects a component or beam, and a double click fits it;
+- `f` fits everything, and the arrow keys orbit by 15°.
 
-The cutaway is a pie slice or a section plane through the chosen components (the
-Cutaway button's context menu: presets, the components cut, and *Cut settings…*). A
+The near and far planes follow the eye, so nothing is clipped however close the view.
+The View menu contains the standard views, a perspective or orthographic projection,
+turntable (z up) or free rotation, the cutaway, Look from port (the port of a beam or
+any θ, φ) and Save view as image. Switching the turntable back on levels a view that a
+free rotation rolled. Help ▸ Mouse and keys lists the bindings.
+
+A placement triad is drawn on the selected part, piece or assembly, in the axes of the
+frame it is placed in (Properties ▸ *Placed in*). A drag on an arrow moves the part
+along that axis in whole multiples of the *Move along* step. A drag on a square, one
+between each pair of arrows, moves it in that plane, each component in those steps, as
+one move. A drag on a ring turns it about that axis, through the origin of the part, in
+15° steps, and Ctrl held at the press snaps to a tenth of either. The handle under the
+pointer is drawn brighter and thicker. While dragging, the view previews the moved parts
+and the beams aimed in their frames. The release makes one edit (`nudge_part!` or
+`turn_part!`, the edits of the *Move along* buttons), undone as one, so the placement
+stays parametric and the beams aimed in the moved frames follow. A press on a handle
+released without moving is a click, and the triad is hidden when nothing, several things
+or a beam is selected.
+
+The cutaway is a pie slice or a section plane through the chosen components. The context
+menu of the Cutaway button offers presets, the components cut, and *Cut settings…*. A
 slice has a center azimuth and a width about the x, y or z axis, optionally bounded
 along it. A section plane removes the side its normal points to. Its normal is a preset
-(x, y, z, toward the view), typed port angles θ, φ (Briareus's convention: θ from +z,
-φ from +x toward +y) or a typed vector; it passes through a typed point (TCC by default),
-moved along the normal by an offset slider; *Flip* keeps the other side of the same
-plane. A plane can also come from the geometry: *Through* the selected component puts
-the point at its centroid and, for a flat component (a window, a foil, a disk), takes
-its mean normal; *Facing it* turns the normal toward a direction (a beam port picked
-from the table or typed θ, φ); *Containing the line of sight* lays the plane along the
-line from TCC or the selected component's centroid toward that direction, turned about
-the line by a rotation slider (at 0° the plane is vertical, at 90° it holds the line's
-horizontal perpendicular). The last is the section through a diagnostic window along
-its view: the cut halves the window along the diagnostic's line of sight. The
-plane, its point and offset, and the line and rotation are saved with the session.
-Cut components are clipped
-exactly at the cut, not by whole elements: each triangle is split by the planes that
-bound the removed region and keeps the pieces outside it, colored as its element, and
-the cut's edges are outlined. (A slice narrower than 180° removes the intersection of two
-half-spaces, so what remains is a union that one set of GPU clip planes cannot express;
-splitting the triangles also keeps picking and the outline exact.)
+(x, y, z, toward the view), typed port angles θ and φ, or a typed vector; the port
+angles follow the Briareus convention, with θ from +z and φ from +x toward +y. The plane
+passes through a typed point (TCC by default), moved along the normal by an offset
+slider, and *Flip* selects the other side of the same plane.
 
-![Display modes and a bounded sector cut on the starter hohlraum, colored by the incident x-ray flux: the top cap drawn as a wireframe (its Display setting in Properties), the bottom cap semi-transparent, and a 120° slice of the wall toward the view removed between z = −3 mm and z = 3 mm, clipped at the cut rather than by whole elements.](assets/gui/display_cut.png)
+A plane can also come from the geometry:
 
-![A round diagnostic window 2 mm across in the wall at φ = 90°, z = 0, cut by the plane that contains its line of sight (from the window's centroid along θ = 90°, φ = 90°, at a rotation of 0°: the vertical plane with normal −x), so that the cut halves the window along the line. The drive, computed again with the window, puts 4.47 TW (1.17%) of the 384 TW delivered on it.](assets/gui/cut_plane.png)
+- *Through* the selected component puts the point at its centroid and, for a flat
+  component such as a window, foil or disk, takes its mean normal.
+- *Facing it* turns the normal toward a direction, a beam port picked from the table or
+  typed θ, φ.
+- *Containing the line of sight* lays the plane along the line from TCC or the centroid
+  of the selected component toward that direction, turned about the line by a rotation
+  slider. At 0° the plane is vertical, and at 90° it contains the horizontal
+  perpendicular to the line. This is the section through a diagnostic window along its
+  view, and the cut halves the window along the line of sight of the diagnostic.
 
-![The Cut settings popup for that plane: the normal θ = 90°, φ = 180° (the vector −1, 0, 0) through the window's centroid at (0, 2.83, 0) mm, the offset slider, and the direction θ = 90°, φ = 90° whose line from the selected component the plane contains.](assets/gui/cut_settings.png)
+The plane, its point and offset, and the line and rotation are saved with the session.
+Cut components are clipped exactly at the cut, without whole elements removed: each
+triangle is split by the planes that bound the removed region, the pieces outside it are
+kept and colored as their element, and the edges of the cut are outlined. A slice
+narrower than 180° removes the intersection of two half-spaces, so what remains is a
+union that one set of GPU clip planes cannot express; splitting the triangles also keeps
+picking and the outline exact.
 
-Beams are drawn as rays (each axis from the lens side to the surface it lands on, with
-the aim point marked) or as volumes, and colored by group or by their worst clearance or
-TaLIS status, in the tree's colors. The target is colored by component or by the
-absorbed laser intensity, the x-ray radiosity or the incident x-ray flux (W/cm²),
-which computes the drive when it is missing. Two further views share the canvas: the
-capsule's θ–φ flux map (or the foil's face), and an x-ray image (Compute ▸ X-ray image
-along the view, `xray_image!`), the radiance of the surfaces seen along the 3D
-view's direction, framed as the view frames them and seen through transparent
-apertures, so a hohlraum is imaged inside through its entrance holes. The image follows
-the drive as beams are edited. View ▸ Map or image beside the 3D view shows either in a
-second canvas next to the target.
+![Display modes and a bounded sector cut on the starter hohlraum, colored by the incident x-ray flux. The top cap is drawn as a wireframe (its Display setting in Properties) and the bottom cap semi-transparent, and a 120° slice of the wall toward the view is removed between z = −3 mm and z = 3 mm, clipped exactly at the cut.](assets/gui/display_cut.png)
+
+![A round diagnostic window 2 mm across in the wall at φ = 90°, z = 0, cut by the plane that contains its line of sight from the centroid of the window along θ = 90°, φ = 90°. At a rotation of 0° this is the vertical plane with normal −x, so the cut halves the window along the line. The drive, computed again with the window, puts 4.47 TW (1.17%) of the 384 TW delivered on it.](assets/gui/cut_plane.png)
+
+![The Cut settings popup for that plane, with the normal θ = 90°, φ = 180° (the vector −1, 0, 0) through the centroid of the window at (0, 2.83, 0) mm, the offset slider, and the direction θ = 90°, φ = 90° whose line from the selected component the plane contains.](assets/gui/cut_settings.png)
+
+Beams are drawn as rays or as volumes. A ray runs along each axis from the lens side to
+the surface it reaches, with the aim point marked. Beams are colored by group or by
+their worst clearance or TaLIS status, in the colors of the tree. The target is colored
+by component or by the absorbed laser intensity, the x-ray radiosity or the incident
+x-ray flux (W/cm²); a drive coloring computes the drive when it is missing. Two further
+views share the canvas. One is the capsule θ–φ flux map, or the foil face for a foil.
+The other is an x-ray image (Compute ▸ X-ray image along the view, `xray_image!`), the
+radiance of the surfaces seen along the direction of the 3D view, framed as the view
+frames them and seen through transparent apertures, so a hohlraum is imaged inside
+through its entrance holes. The image follows the drive as beams are edited. View ▸ Map
+or image beside the 3D view shows either view in a second canvas next to the target.
 
 ### Results
 
-The bottom panel's tabs:
+The bottom panel has the following tabs.
 
 - **Beam table:** every cone, quad or beam with its pointing, defocus, power, on/off
-  and the frame its aims are held in, edited in place; a click on a column heading
-  sorts the rows (again: descending, a third time: the table's order), a display order
-  only that leaves the beams' order in the design and the session as it is.
-- **Drive:** the view factors are computed once per target and beam ports, on a
-  worker; beam edits then re-evaluate at once. The tab shows the capsule's mode
-  amplitudes and ``P_l/P_0``, the foil spot's statistics and the laser power accounting.
-  A VisRad benchmark kit for the same case is written from a script with
-  [`write_visrad_kit`](@ref). The Drive properties take the unconverted 1ω and 2ω power
-  as fractions of each beam's 3ω power (empty: off; there is no default, as the NIF
-  User Guide gives no fraction). The beams whose 1ω or 2ω dot is on in the calculations
-  row then add [`unconverted_deposition`](@ref)'s absorbed power to the 3ω deposition,
-  wherever it enters: the absorbed-laser coloring, the power accounting, the back-side
-  losses and the x-ray source. The unconverted totals are listed separately. The
-  unconverted light's absorption and x-ray conversion are scaled by the wavelength
-  factors of [`nif_unconverted`](@ref) (see [`UnconvertedColor`](@ref): `absorption`
-  and `conversion`, relative to 3ω): its x-ray source is the material's conversion
-  efficiency times the color's `conversion`. The drive history and the retune take the
-  unconverted light of the same beams (`drive_history`'s `unconverted`, a fraction per
-  beam where only some beams' light takes part); the pointing optimization uses the 3ω
-  light alone.
-- **Time:** the drive through a pulse. *Pulses ▾* sets the pulses the beams fire: a
-  pulse table ([`read_pulse_table`](@ref): power against time, per cone group,
-  quad or beam; disabled beams stay off), or a published shape (`Controllers.PULSE_SHAPES`:
-  the delivered total power of N221204, [`n221204_pulse`](@ref), or of N191118 or
-  N210601, [`zylstra2022_fig2`](@ref)), each beam reaching its set power at the peak. A
-  cone's or a quad's column of a table is the power per quad, shared by the beams the
-  table holds of that quad, so the pulses fire the same total whether quads are split or
-  not; the box beside *Pulses ▾* switches the columns to the power per beam
-  (`Controllers.PULSE_UNITS`; `with_pulses` itself reads a table per beam), and the
-  retune reads its reference table and writes its result in the same unit. A
-  session saves the pulses: a table's data itself, so it opens without the CSV file.
-  *Run history* solves the drive at each time of the pulses on the drive's view factors
-  ([`drive_history`](@ref)), and every 0.5 ns over the prepulse window (below), so the
-  prepulse's x-rays heat the wall and capsule and the wall's memory carries that heat
-  into the main pulse; a time between two that fire where nothing fires is solved as a
-  zero-power step, the wall re-emitting what it stored. The diagnostics added in the
-  Diagnostics tab (below) are recorded with it. Five charts, in the tree's colors:
-  *Pulses* (each group's
-  power and the total, TW), *Drive history* (capsule Tᵣ and each recorded diagnostic's,
-  [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis; for a flat observed
-  face, its Tᵣ from the area-mean flux, and its RMS nonuniformity and peak and lowest
-  flux relative to the mean on the right axis),
-  *Energy* (the laser
-  energy delivered by each time and where it went, kJ, [`energy_budget`](@ref)),
-  *Irradiance* (below) and *Retune* (below). On the *Irradiance* chart, *Run checks*
-  computes the irradiance histories of the unconverted 1ω and 2ω light on the drive's
-  target ([`unconverted_history`](@ref): the drive's ratios on the beams whose light
-  takes part, plus the prepulse) and plots each part's peak against the plasma
-  threshold on a log axis, with the 3ω light's peak on the active foil. Above the chart,
-  a pass or fail line per check: *Specular* ([`specular_check`](@ref): every surface part
-  below the threshold, else the first crossing, [`threshold_crossing`](@ref)) and, on a
-  target with a foil, *Pre-plasma* ([`preplasma_check`](@ref): the unconverted light's
-  onset on the foil against the 3ω light's arrival there, from
-  [`irradiance_history`](@ref)). The Drive properties set the prepulse (a 1ω and a 2ω
-  power per beam, flat over a window, -5 to 0 ns by default; `drive_history`'s
-  `prepulse`, also taken by the drive history and the retune) and the threshold
-  (10⁸ W/cm², the NIF User Guide's guideline for the onset of plasma on a metal, an
-  engineering default). The row under the chart sets what the 3D view shows: *Beam
-  powers*, the drive at the powers set on the beams, or *Drive history*, a step of the
-  history, chosen with the slider or a click or drag on the chart, on one color scale
-  for the whole history; scrubbing computes nothing. A beam, pulse or target edit marks
-  the history out of date. File ▸ Export results writes a current history with the
-  drive (`Controllers.export_history`): the drive, the energy and each recorded
-  diagnostic against time, the fields per element at every step, and the imagers'
-  images.
-- **Diagnostics:** the synthetic diagnostics a drive history records, by category
-  (x-ray power, x-ray imagers, radiography). *Add ▾* lists the category's instruments of
-  the session's facility, from the diagnostic directories ([Diagnostic
-  definitions](reference/diagnostics.md): the built-ins, then the directories of
-  Diagnostics ▸ Diagnostic directories…, kept for later sessions) and those saved with
-  the session. An instrument is listed once, whatever the number of its definitions
-  (their `instrument` key: Dante 1's channel sets of several years and shots), and
-  recorded in one configuration, which its chip's menu changes (right click or double
-  click); NIF Dante 1 is recorded in a new session, and an instrument that cannot be
-  built (Dante 2's channels are not public) cannot be added. The dialog of the
-  directories lists the problems found in the definitions ([`check_diagnostics`](@ref)),
-  and Diagnostics ▸ Refresh reads them again. *X-ray power* charts each recorded
-  diagnostic's Tᵣ, and the intensity toward it in TW/sr on the right axis; *X-ray
-  imagers* shows the images the history holds of its imagers (at the time cursor, and
-  the recording: time-integrated, or a frame per gate), one at a time, and opens one in
-  the main image view; radiography definitions are listed and record nothing yet.
+  state and the frame its aims are held in, edited in place. A click on a column heading
+  sorts the rows; a second click sorts them in descending order, and a third restores
+  the order of the table. The sorting is a display order only, and the order of the
+  beams in the design and the session is unchanged.
+- **Drive:** the view factors are computed once per target and beam ports, on a worker,
+  and beam edits then re-evaluate the drive at once. The tab shows the capsule mode
+  amplitudes and ``P_l/P_0``, the foil spot statistics and the laser power accounting. A
+  VisRad benchmark kit for the same case is written from a script with
+  [`write_visrad_kit`](@ref).
 
-  ![The Diagnostics tab on its x-ray imagers after a drive history: the categories with the number recorded in each, the recorded instrument as a chip, the history's images of the lower SXI in a list and the one chosen beside it.](assets/gui/diagnostics.png)
+  The Drive properties take the unconverted 1ω and 2ω power as fractions of the 3ω power
+  of each beam. An empty field is off, and there is no default, because the NIF User
+  Guide does not give a fraction. The beams whose 1ω or 2ω dot is on in the calculations
+  row then add the absorbed power of [`unconverted_deposition`](@ref) to the 3ω
+  deposition wherever that deposition enters, which covers the absorbed-laser coloring,
+  the power accounting, the back-side losses and the x-ray source. The unconverted
+  totals are listed separately. The absorption and x-ray conversion of the unconverted
+  light are scaled by the wavelength factors `absorption` and `conversion` of
+  [`nif_unconverted`](@ref), relative to 3ω (see [`UnconvertedColor`](@ref)). Its x-ray
+  source is the conversion efficiency of the material times the `conversion` of the
+  color. The drive history and the retune take the unconverted light of the same beams
+  (`drive_history`'s `unconverted`, a fraction per beam where the light of only some
+  beams takes part), and the pointing optimization uses only the 3ω light. - **Time:**
+  the drive through a pulse. *Pulses ▾* sets the pulses the beams fire. They come from a
+  pulse table ([`read_pulse_table`](@ref)) of power against time per cone group, quad or
+  beam, in which disabled beams stay off, or from a published shape
+  (`Controllers.PULSE_SHAPES`). The published shapes are the delivered total power of
+  N221204 ([`n221204_pulse`](@ref)) and of N191118 and N210601
+  ([`zylstra2022_fig2`](@ref)), with each beam reaching its set power at the peak. A
+  table column for a cone or a quad is the power per quad, shared by the beams of that
+  quad in the table, so the pulses fire the same total whether quads are split or not.
+  The box beside *Pulses ▾* switches the columns to the power per beam
+  (`Controllers.PULSE_UNITS`; `with_pulses` itself takes a table per beam), and the
+  retune reads its reference table and writes its result in the same unit. A session
+  saves the pulses, including the table data, so it opens without the CSV file.
+
+  *Run history* solves the drive at each time of the pulses on the view factors of the
+  drive ([`drive_history`](@ref)), and every 0.5 ns over the prepulse window (below).
+  The x-rays of the prepulse thus heat the wall and capsule, and the wall carries that
+  heat into the main pulse. A time between two times that fire, where nothing fires, is
+  solved as a zero-power step, in which the wall re-emits what it stored. The
+  diagnostics added in the Diagnostics tab (below) are recorded with the history.
+
+  Five charts are drawn in the colors of the tree:
+
+  - *Pulses*, the power of each group and the total, in TW;
+  - *Drive history*, the Tᵣ of the capsule and of each recorded diagnostic
+    ([`dante`](@ref)) in eV, with a₂/a₀ and a₄/a₀ in % on the right axis; for a flat
+    observed face it plots its Tᵣ from the area-mean flux, and its RMS nonuniformity and
+    peak and lowest flux relative to the mean on the right axis;
+  - *Energy*, the laser energy delivered by each time and where it went, in kJ
+    ([`energy_budget`](@ref));
+  - *Irradiance* and *Retune* (both below).
+
+  On the *Irradiance* chart, *Run checks* computes the irradiance histories of the
+  unconverted 1ω and 2ω light on the target of the drive
+  ([`unconverted_history`](@ref)). The histories use the ratios set in the Drive
+  properties, on the beams whose light takes part, plus the prepulse. The chart plots
+  the peak on each part against the plasma threshold on a log axis, with the 3ω peak on
+  the active foil. Above the chart, one line per check reports pass or fail. *Specular*
+  ([`specular_check`](@ref)) passes when every surface part stays below the threshold,
+  and otherwise reports the first crossing ([`threshold_crossing`](@ref)). On a target
+  with a foil, *Pre-plasma* ([`preplasma_check`](@ref)) compares the onset of the
+  unconverted light on the foil with the arrival of the 3ω light at the foil, from
+  [`irradiance_history`](@ref).
+
+  The Drive properties set the prepulse and the threshold. The prepulse is a 1ω and a 2ω
+  power per beam, flat over a window from -5 to 0 ns by default (`drive_history`'s
+  `prepulse`, also taken by the drive history and the retune). The threshold is 10⁸
+  W/cm², the NIF User Guide's guideline for the onset of plasma on a metal, used as an
+  engineering default. The row under the chart sets what the 3D view shows. *Beam
+  powers* shows the drive at the powers set on the beams, and *Drive history* shows a
+  step of the history, chosen with the slider or a click or drag on the chart, on one
+  color scale for the whole history; scrubbing computes nothing. A beam, pulse or target
+  edit marks the history out of date. File ▸ Export results writes a current history
+  with the drive (`Controllers.export_history`): the drive, the energy and each recorded
+  diagnostic against time, the fields per element at every step, and the images from the
+  imagers. - **Diagnostics:** the synthetic diagnostics a drive history records, by
+  category (x-ray power, x-ray imagers and radiography). *Add ▾* lists the instruments
+  of the category at the facility of the session. They come from the diagnostic
+  directories ([Diagnostic definitions](reference/diagnostics.md)), which are the
+  built-ins followed by the directories set in Diagnostics ▸ Diagnostic directories… and
+  kept for later sessions, and from the definitions saved with the session. An
+  instrument is listed once, whatever the number of its definitions; the definitions
+  share an `instrument` key, as the Dante 1 channel sets of several years and shots do.
+  Each instrument is recorded in one configuration, which is changed from the menu of
+  its chip (right click or double click). NIF Dante 1 is recorded in a new session, and
+  an instrument that cannot be built cannot be added; Dante 2 is an example, because its
+  channels are not public. The dialog of the directories lists the problems found in the
+  definitions ([`check_diagnostics`](@ref)), and Diagnostics ▸ Refresh reads them again.
+  *X-ray power* charts the Tᵣ of each recorded diagnostic, with the intensity toward it
+  in TW/sr on the right axis. *X-ray imagers* shows the images of each imager in the
+  history, one at a time, at the time cursor or for the recording (time-integrated, or a
+  frame per gate), and opens one in the main image view. Radiography definitions are
+  listed and do not record anything yet.
+
+  ![The Diagnostics tab on its x-ray imagers after a drive history. The tab shows the categories with the number recorded in each, the recorded instrument as a chip, the history images of the lower SXI in a list, and the image chosen beside it.](assets/gui/diagnostics.png)
 
 - **Optimization:** the free parameters, objective and limits described in the first
-  session; a capsule keep-out ([`SphereKeepOut`](@ref), on by default) keeps every
-  beam's worst-case envelope off the capsule, and an entrance-hole keep-out
-  ([`ApertureKeepOut`](@ref)) off the hole rims. The aims are free either in the
-  chamber (z, r and the tangential offset of [`GroupPointing`](@ref)) or in each beam's
-  aim frame (u, v, w of [`FramePointing`](@ref): on the foil's frame, u and v across its
-  face and w along its normal), where a group shares one point of its frame: a group
-  converged on a foil then moves its common point across the foil's face. The run stops
-  at the iteration or the evaluation limit, whichever comes first; canceling keeps the
-  best design so far.
+  session. A capsule keep-out ([`SphereKeepOut`](@ref), on by default) penalizes a
+  worst-case beam envelope that reaches the capsule, and an entrance-hole keep-out
+  ([`ApertureKeepOut`](@ref)) penalizes one that reaches the hole rims. The aims are
+  free either in the chamber, as z, r and the tangential offset of
+  [`GroupPointing`](@ref), or in the aim frame of each beam, as u, v and w of
+  [`FramePointing`](@ref). In the foil frame, u and v run across the face and w along
+  the normal. A group shares one point of its frame, so the common point of a group
+  converged on a foil moves across the foil face. The run stops at the iteration or the
+  evaluation limit, whichever comes first, and after a cancel, the best design found
+  before it is kept.
 - **Clearance:** the worst-case beam-to-hardware clearance ([`clearance`](@ref)) over
   pointing, positioning, hardware and focus errors on the chosen components, with
-  progress per batch of beams and Cancel (keeping the beams already checked); rows
-  colored pass, review or fail, the closest beam per component, and CSV export
-  ([`write_clearance_csv`](@ref)).
-- **Sweep:** a placement sweep ([`placement_sweep`](@ref)) steps a part (or a
-  backlighter target's foil) through a range of shifts along an axis of any frame, with
-  the parts placed in its frame and the beams aimed in those frames, and checks each
-  step on a worker: the clearance check (its components, envelope and errors), the line
-  of sight from the foil through an object (by default from the foil's center through
-  the object's, [`line_of_sight`](@ref)), the least fraction of a beam's power the foil
-  captures, and optionally the pointing re-optimized with the optimization's settings
-  (warm-started from the previous step when the aims are free in their frames). The
-  quick sampling, the default, keeps a sweep's many steps short. The table lists each
-  step's least clearance and where, the failing and review pairs, the line of sight and
-  the captured power; the chart plots the least clearance and the blocked fraction of
-  the line of sight against the shift. Instead of a shift, the sweep can step a number
-  of one of the part's placement steps (a distance, an angle, a coordinate; *Sweep…* on
-  the step's heading): every part whose frame changes, the parts facing it included,
-  moves rigidly with it at each value. A click on the chart or a row selects a step,
-  drawn as an orange ghost of the moved parts beside the design, and *Apply step* (or
-  a double click) moves the part there as one edit, with the
-  re-optimized pointing when the sweep re-optimized. A sweep is marked out of date when
-  the design or a setting it used changes.
+  progress per batch of beams and Cancel, after which the beams already checked are
+  kept. The rows are colored pass, review or fail, the closest beam per component is
+  listed, and the rows are exported as CSV ([`write_clearance_csv`](@ref)).
+- **Sweep:** a placement sweep ([`placement_sweep`](@ref)) steps a part, or the foil of
+  a backlighter target, through a range of shifts along an axis of any frame. The parts
+  placed in its frame and the beams aimed in those frames move with it. Each step is
+  checked on a worker for:
 
-  ![A placement sweep of the backlighter foil along its front normal, from 2 mm farther from the target chamber center to 2 mm nearer it in 1 mm steps (the foil 8 mm to 4 mm from it), with the clearance check, the line of sight from the foil through the main target, and the power the foil captures. The least clearance falls from −1.130 mm to −1.901 mm (beams B35 and B36 on the main target), the line of sight stays clear, and the least fraction of a beam's power on the foil drops from 95.62% at no shift to 63.50% at +2 mm; the step at +1 mm is selected.](assets/gui/sweep.png)
-- **TaLIS:** the NIF target-configuration checks ([`talis_check`](@ref)): 3ω capture,
-  incidence and clearance, 1ω clearance and unconverted-light management, and the TAS
-  stay-in zone, on the chosen capture components, checked components and diagnostics
-  (checked for 3ω clearance and kept 10–25 mm from 1ω light), with the rule
-  tolerance and how it becomes a distance (measured from the target chamber center,
-  from the beam's aim point, the larger of the two, or from a given point); the error
-  stack and sampling are the clearance check's. The report shows the notes and a
-  per-rule summary beside every check, colored by status with its margin, with a
-  draggable split between the two. Each note takes one line, the whole note on hover:
-  what the tolerance stands for at the top, then the per-rule summary, then the error set, the checks not evaluated and the requirements out of scope
-  ([`TALIS_OUT_OF_SCOPE`](@ref)). A report is marked out of date when the target, the
-  beams or any setting it used changes. CSV export with [`write_talis_csv`](@ref),
-  whose header carries the settings, the checks not evaluated and the requirements out
-  of scope.
+  - the clearance (with the components, envelope and errors of the clearance check);
+  - the line of sight from the foil through an object, by default from the center of the
+    foil through the center of the object ([`line_of_sight`](@ref));
+  - the least fraction of the power of a beam that the foil captures;
+  - optionally, the pointing re-optimized with the optimization settings, warm-started
+    from the previous step when the aims are free in their frames.
+
+  The quick sampling, the default, makes each of the many steps of a sweep short. The table
+  lists the least clearance of each step and where it occurs, the failing and review
+  pairs, the line of sight and the captured power. The chart plots the least clearance
+  and the blocked fraction of the line of sight against the shift. Instead of a shift,
+  the sweep can step a number in one of the placement steps of the part, such as a
+  distance, an angle or a coordinate, set with *Sweep…* on the heading of the step.
+  Every part whose frame changes, including the parts facing it, then moves rigidly with
+  it at each value. A click on the chart or a row selects a step, drawn as an orange
+  ghost of the moved parts beside the design. *Apply step* (or a double click) moves the
+  part there as one edit, with the re-optimized pointing when the sweep re-optimized. A
+  sweep is marked out of date when the design or a setting it used changes.
+
+  ![A placement sweep of the backlighter foil along its front normal, in 1 mm steps from 2 mm farther from the target chamber center to 2 mm nearer it, which puts the foil 8 mm to 4 mm from it. The sweep runs the clearance check, the line of sight from the foil through the main target, and the power the foil captures. The least clearance falls from −1.130 mm to −1.901 mm (beams B35 and B36 on the main target), the line of sight stays clear, and the least fraction of the power of a beam on the foil drops from 95.62% at no shift to 63.50% at +2 mm. The step at +1 mm is selected.](assets/gui/sweep.png)
+
+- **TaLIS:** the NIF target-configuration checks ([`talis_check`](@ref)). They cover 3ω
+  capture, incidence and clearance, 1ω clearance and unconverted-light management, and
+  the TAS stay-in zone. The checks run on the chosen capture components, checked
+  components and diagnostics; diagnostics are checked for 3ω clearance and kept 10–25 mm
+  from 1ω light. The settings include the rule tolerance and how it becomes a distance:
+  measured from the target chamber center, from the aim point of the beam, the larger of
+  the two, or from a given point. The error stack and sampling are those of the
+  clearance check. The report shows the notes and a per-rule summary beside every check,
+  colored by status with its margin, with a draggable split between the two. Each note
+  takes one line, and the whole note shows on hover. The notes give what the tolerance
+  stands for at the top, then the per-rule summary, the error set, the checks not
+  evaluated and the requirements out of scope ([`TALIS_OUT_OF_SCOPE`](@ref)). A report
+  is marked out of date when the target, the beams or any setting it used changes. The
+  report exports as CSV with [`write_talis_csv`](@ref), and the header of the file lists
+  the settings, the checks not evaluated and the requirements out of scope.
 
 ### Files in and out
 
-- **Beams:** beam tables ([`read_beam_table`](@ref), [`write_beam_table`](@ref)); a NIF
-  VisRad SST pointing CSV ([`read_visrad_sst`](@ref): aim points and defocus) and a
-  Laser Beam Summary CSV ([`read_visrad_summary`](@ref): pointing, defocus, power and
-  spot). Beams off or absent in a file are switched off at their power, and the readers'
-  warnings are listed.
-- **VisRad workspaces:** File ▸ Import VisRad workspace reads a workspace's components
-  as VisRad object parts and its beams, on worker threads with progress; File ▸ Export
-  VisRad workspace writes the beams back into a copy of the imported workspace
+- **Beams:** beam tables ([`read_beam_table`](@ref), [`write_beam_table`](@ref)), a NIF
+  VisRad SST pointing CSV with aim points and defocus ([`read_visrad_sst`](@ref)), and a
+  Laser Beam Summary CSV with pointing, defocus, power and spot
+  ([`read_visrad_summary`](@ref)). Beams off or absent in a file are switched off at
+  their power, and the warnings of the readers are listed.
+- **VisRad workspaces:** File ▸ Import VisRad workspace reads the components of a
+  workspace as VisRad object parts, and its beams, on worker threads with progress. File
+  ▸ Export VisRad workspace writes the beams back into a copy of the imported workspace
   ([`write_visrad_workspace`](@ref)).
-- **Results:** File ▸ Export target as STL ([`write_stl`](@ref), mm); File ▸ Export
-  results ([`write_results`](@ref): the drive's per-element laser, radiosity and flux,
-  the power per component and beam, and the capsule modes as CSV, with the session that
-  produced them).
-- **Retune to a reference drive** (Compute ▸): from the pulse table of a reference
-  shot that fired every beam of the table, the enabled beams' powers are retuned at
-  each step of the drive history (the table's times, the prepulse window and the
-  zero-power steps between; zero where the reference fires no 3ω light) to restore the
-  reference's drive ([`retune_drive`](@ref)),
-  within a limit relative to the reference powers and optionally staying near them; the
-  disabled beams are the ones the shot loses. What is restored follows the target: an
-  observed sphere's level and modes through l = 4 ([`CapsuleModes`](@ref)); an observed
-  flat face's incident x-ray flux over its elements, so its mean, RMS nonuniformity and
-  peak-to-mean ([`FaceFlux`](@ref)); without a radiation model, the active backlighter
-  foil's absorbed 3ω irradiance within the drive's spot radius ([`FoilIrradiance`](@ref),
-  laser only). The new pulses are written as a pulse table. The dialog reports, for a
-  capsule, the worst-time mode 1 and Tᵣ change before and after; for a face or a foil,
-  the worst RMS and the worst departure of the mean from the reference's, before and
-  after. The Time tab plots each group's power on the reference and retuned pulses, with
-  ε₁ before and after, or the face's or spot's RMS (before, after, reference) and its
-  mean's departure from the reference's (before, after).
+- **Results:** File ▸ Export target as STL ([`write_stl`](@ref), mm) and File ▸ Export
+  results ([`write_results`](@ref)). The results are the per-element laser, radiosity
+  and flux of the drive, the power per component and beam, and the capsule modes, as
+  CSV, with the session that produced them.
+- **Retune to a reference drive** (Compute ▸): the pulse table of a reference shot that
+  fired every beam of the table sets the target. The powers of the enabled beams are
+  retuned at each step of the drive history to restore the drive of the reference
+  ([`retune_drive`](@ref)), within a limit relative to the reference powers and
+  optionally staying near them. The steps are the times of the table, the prepulse
+  window and the zero-power steps between; the power is zero where the reference does
+  not fire 3ω light. The disabled beams are the ones the shot loses. What is restored
+  depends on the target:
+
+  - for an observed sphere, its level and modes through l = 4 ([`CapsuleModes`](@ref));
+  - for an observed flat face, the incident x-ray flux over its elements, and so its
+    mean, RMS nonuniformity and peak-to-mean ([`FaceFlux`](@ref));
+  - without a radiation model, the absorbed 3ω irradiance of the active backlighter foil
+    within the spot radius of the drive ([`FoilIrradiance`](@ref), laser only).
+
+  The new pulses are written as a pulse table. For a capsule, the dialog reports the
+  worst-time change of mode 1 and Tᵣ before and after. For a face or a foil, it reports
+  the worst RMS and the worst departure of the mean from the reference mean, before and
+  after. The Time tab plots the power of each group on the reference and retuned pulses,
+  with ε₁ before and after for a capsule. For a face or a spot it plots the RMS (before,
+  after and reference) and the departure of the mean from the reference mean (before and
+  after).
 
 ### CAD workspaces and large targets
 
 A CAD workspace can bring hundreds of thousands of facets, most of them mounting
 hardware far from the target. On import, a CAD part that reaches farther than twice the
-farthest aim point of the beams the workspace fires is drawn only (from its file's
-facets, not remeshed) and left out of the calculations; the status line names these
-parts, and *Include in calculations* puts one back. Beams the workspace leaves off are
-not drawn when most are (View ▸ Beams ▸ Show beams that are off).
+farthest aim point of the beams the workspace fires is only drawn, from the facets of
+its file without remeshing, and is left out of the calculations. The status line names
+these parts, and *Include in calculations* puts one back. Beams that the workspace has
+switched off are not drawn when most of the beams are off (View ▸ Beams ▸ Show beams
+that are off).
 
-The drive of a target with CAD parts runs on its cavity around the target chamber
-center (Drive ▸ Cavity; [`Briareus.enclosure`](@ref)): the elements bounding the free
-space around the point, without the assembly's outer faces. A thin film modeled as a
-solid that seals the point into a pocket (a capsule tent) is found and left out, and the
-drive's properties list what the cavity kept of each part. The cavity's view factors are
-balanced once aperture parts facing into the cavity close its entrance holes, with
-under 1% of its rays leaking (`CAVITY_MAX_LEAK`). A target whose x-ray view
-factors would not fit in half the memory (`radiation_size`: about 160,000
-elements on 32 GB) gets the laser deposition alone, with the reason in the status line.
+The drive of a target with CAD parts runs on its cavity around the target chamber center
+(Drive ▸ Cavity; [`Briareus.enclosure`](@ref)). The cavity is made of the elements that
+bound the free space around the point, without the outer faces of the assembly. A thin
+film modeled as a solid that seals the point into a pocket, such as a capsule tent, is
+found and left out, and the drive properties list what the cavity kept of each part. The
+view factors of the cavity are balanced once aperture parts facing into the cavity close
+its entrance holes, with under 1% of its rays leaking (`CAVITY_MAX_LEAK`). A target
+whose x-ray view factors would not fit in half the memory (`radiation_size`, about
+160,000 elements on 32 GB) gets only the laser deposition, with the reason in the status
+line.
 
-Remeshing a CAD part and building a large target's ray-tracing hierarchy run on worker
-threads: an edit takes effect at once, with the part drawn from its file's facets or the
-previous target shown until the new one is ready, and a drive requested meanwhile starts
-when the target is ready; so does a CAD capsule's sphere fit. A CAD part that is one
-cylinder or sphere as a whole (a tube, a shell; [`fit_surfaces`](@ref)) is integrated on
-that surface in the view factors; parts of several faces stay flat, and the drive's
-status names flat parts carrying more than 50 facets per element (a curved face
-tessellated in slivers, which slows the view factors).
+Remeshing a CAD part and building the ray-tracing hierarchy of a large target run on
+worker threads. An edit takes effect at once: the part is drawn from the facets of its
+file, or the previous target is shown, until the new one is ready, and a drive requested
+meanwhile starts when the target is ready. The sphere fit of a CAD capsule runs the same
+way. A CAD part that is one cylinder or sphere as a whole, such as a tube or a shell
+([`fit_surfaces`](@ref)), is integrated on that surface in the view factors. Parts of
+several faces stay flat, and the drive status names flat parts with more than 50 facets
+per element, a sign of a curved face tessellated in slivers, which slows the view
+factors.
 
-## Scripting the window's steps
+## Scripting the window
 
 `briareus` returns its session (a `DesignSession`) when the window closes, and the
-controllers in `BriareusGUI.Controllers` run the window's steps from a script without a
-window. Text-field setters (`edit_*`) take the field's text and return `false`, with the
-reason in the controller's `error`, when the geometry or a check rejects the value.
+controllers in `BriareusGUI.Controllers` run the steps of the window from a script
+without a window. Text-field setters (`edit_*`) take the text of the field and return
+`false`, with the reason in the `error` of the controller, when the geometry or a check
+rejects the value.
 
 ```julia
 using BriareusGUI, BriareusGUI.Controllers

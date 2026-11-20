@@ -34,11 +34,12 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
   quadrature, Monte Carlo, ray traces converged at nspot ≥ 121), never against the method
   under test. Published shot data used as a check (e.g. PRE 109 Fig. 10, Dante) is never
   also a fit target; say which data a calibration was fitted to.
-- New paths must leave existing results bitwise identical unless the change is the point:
-  say so in the commit and measure the difference. Screens that skip work (zero weights,
-  culled rays) must be exact on Float64. The package is 0.x: a better design is reason enough to
-  break an API or change results (no compatibility shims, no parallel old option); "existing
-  results don't change" is never the argument for keeping a worse one.
+- New paths must leave existing results unchanged to the last bit unless the change is
+  the point: say so in the commit and measure the difference. Screens that skip work
+  (zero weights, culled rays) must be exact on Float64. The package is 0.x: a better
+  design is reason enough to break an API or change results (no compatibility shims, no
+  parallel old option); "existing results don't change" is never the argument for
+  keeping a worse one.
 - Tests: tolerances no tighter than ~1e-12 relative on summed quantities (CI CPUs round
   differently); no `@test` inside loops over elements or points — check the collection
   with one `@test all(...)` (a per-element loop once tripled the suite's test count).
@@ -53,15 +54,26 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
   data headers included. `dev/prose/lint.jl` checks each edit (a hook in
   `.claude/settings.json`) and, with `git config core.hooksPath dev/githooks`, each commit.
 - Banned everywhere (the lint fails a commit): "its own" and "'s own"; doubled nouns
-  ("bit for bit", "vertex for vertex": write "bitwise identical", "at every vertex"); a
-  space before a percent sign ("0.5%", in output strings too).
+  ("bit for bit", "vertex for vertex": write "matches", "is unchanged", "at every
+  vertex"); a space before a percent sign ("0.5%", in output strings too).
 - Discouraged (the lint warns where it can): "provenance" (say references or sources);
-  "reads", "prints", "printed" and "to round-off" outside literal I/O; "<verb> no" ("solves
-  no hydrodynamics": say what it does); "a, not b" (state what the thing is);
-  possessives on things ("the beam's axis": "the beam axis", "the axis of the beam");
-  preambles before the content; pronouns and "the source" with more than one candidate
-  referent; sentences of stacked clauses (split them); timings that depend on the machine
-  ("loads in 1.6 s": say "the study takes about 15 seconds on a desktop", where it matters).
+  "bitwise" (say "matches", "is identical to", "the same"; keep it only where exact
+  floating-point identity is the point); "reads", "prints", "printed" and "to round-off"
+  outside literal I/O; "<verb> no" ("solves no hydrodynamics": say what it does); "a, not
+  b" (state what the thing is); possessives on things where a compound or "of" reads as
+  well ("the beam's axis": "the beam axis"); "the can: its wall and its lid" (write "the
+  wall and lid of the can"); preambles and noun-plus-colon openings; fragments with no
+  main verb and trailing absolute phrases ("…, its properties beside the tree's dots");
+  inanimate subjects given actions ("one quad draws its light": "light is drawn for one
+  quad"); example lists with an article on each item ("(a shield, a stalk, a closed
+  window)": "such as shields, stalks and closed windows"); lines that open with "thing:
+  description" (write "The thing is ..."); colons or nested parentheses inside
+  parentheses; "the former/the latter" and vague "here"/"there"; "rather than"; clipped
+  "the 3ω light alone" ("only the 3ω light"); arrows in sentences ("from oi to oj"; arrows
+  stay in math, code, tables and displayed output); pronouns and "the source" with more
+  than one candidate referent; sentences of stacked clauses (split them); vague
+  qualifiers ("seen so far"); timings that depend on the machine ("loads in 1.6 s": say
+  "the study takes about 15 seconds on a desktop", where it matters).
 - Sources: docstrings say when a value is derived or an engineering default rather than
   a facility criterion; numbers go in the research notes with source and confidence.
   Papers are cite-only (numbers with citations, never copied text or figures).

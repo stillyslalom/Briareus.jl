@@ -22,8 +22,8 @@ port = "P143-274"
 source = "NIF User Guide (2024-09), Table 5-1"
 
 [view]
-# the whole target in the collimated field (the 2004 design, which this configuration
-# shares): ±30 mm at TCC (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120)
+# The collimated field takes in the whole target. It is the ±30 mm at TCC of the 2004
+# design, which this configuration shares (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120).
 field_of_view_mm = 60.0
 through = "leh_bottom"
 

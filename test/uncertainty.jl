@@ -33,10 +33,11 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         col = sens.J[:, 3(bi-1)+k]
         @test maximum(abs, fd .- col) <= 1e-6 * max(maximum(abs, col), 1e-6)
     end
-    # a power error moves no mode when all beams' powers scale together
+    # A power error does not move any mode when the powers of all beams scale together.
     @test maximum(abs, sum(sens.J[:, 3:3:end]; dims = 2)) < 1e-12
 
-    # linear propagation against Monte Carlo (small errors: linear regime)
+    # Linear propagation is checked against Monte Carlo, with small errors in the linear
+    # regime.
     u = mode_uncertainty(s, quads; pointing = 0.02, power = 0.02, lmax)
     @test u.sigma ≈ sqrt.(diag(u.covariance)) && length(u.rms_mode) == lmax
     @test u.sigma[1] == 0
@@ -78,15 +79,16 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
     @test ug.rms_by.beam == zeros(lmax) && ug.rms_by.group ≈ ug.rms_mode
     # one shared power scale for every beam moves nothing
     @test maximum(mode_uncertainty(s, quads; pointing = 0.0, group_power = 0.05, groups = b -> 1, lmax).sigma) < 1e-12
-    # target positioning along x alone: σ = |∂c/∂x| against central differences of
-    # every aim moved together
+    # With target positioning only along x, σ = |∂c/∂x| is checked against central
+    # differences of every aim moved together.
     ux = mode_uncertainty(s, quads; pointing = 0.0, positioning = (1.0, 0.0, 0.0), lmax)
     h = 1e-4
     fdx = (shape([remake(b; aim = Vec3(b.aim) + Vec3(h, 0, 0)) for b in quads]) .-
            shape([remake(b; aim = Vec3(b.aim) - Vec3(h, 0, 0)) for b in quads])) ./ 2h
     @test maximum(abs, ux.sigma .- abs.(fdx)) <= 1e-6 * maximum(abs, fdx)
     @test ux.rms_by.positioning ≈ ux.rms_mode
-    # a cone over both hemispheres has no common direction for a shared displacement
+    # A cone over both hemispheres does not have a common direction for a shared
+    # displacement.
     @test_throws ArgumentError mode_uncertainty(s, quads; group_pointing = 0.02, groups = :group, lmax)
     @test mode_uncertainty(s, quads; group_power = 0.01, groups = :group, lmax).rms_by.group[1] > 0
     # all sources together against Monte Carlo (per cone and hemisphere)
@@ -115,8 +117,8 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         @test gc[i] ≈ (fc(xg .+ e) - fc(xg .- e)) / 2h rtol = 1e-5
     end
 
-    # inverse: the errors behind a measured shape departure
-    # (1) synthetic recovery of a target offset from a full evaluation's l = 1 and 3
+    # The inverse finds the errors behind a measured shape departure.
+    # (1) synthetic recovery of a target offset from the l = 1 and 3 of a full evaluation
     D = Vec3(0.04, 0.0, -0.03)
     cm = shape([remake(b; aim = Vec3(b.aim) + D) for b in quads])
     meas = (1 => cm[2:4] .- sens.c[2:4], 3 => cm[10:16] .- sens.c[10:16])

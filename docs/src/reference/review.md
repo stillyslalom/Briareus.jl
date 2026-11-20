@@ -15,7 +15,7 @@ per beamlet and color, with shadowing; the unconverted fraction is an input).
 a prepulse that may vary in time, and [`irradiance_history`](@ref) the 3ω light;
 [`specular_check`](@ref) and [`preplasma_check`](@ref) compare them with the NIF User
 Guide's 10⁸ W/cm² plasma-onset guideline for metals.
-[`ApertureKeepOut`](@ref) puts each beam's worst-case clearance from its entrance hole
+[`ApertureKeepOut`](@ref) puts the worst-case clearance of each beam from its entrance hole
 into an optimization objective, [`SphereKeepOut`](@ref) its clearance from the capsule
 and [`HardwareKeepOut`](@ref) its clearance from named hardware; each clearance is also a
 separate quantity ([`keepout_clearance`](@ref)) for a hand-written objective or

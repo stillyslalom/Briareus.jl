@@ -7,7 +7,7 @@
 # ~3.4 ns (black), close to the first shock's breakout from the ablator into the fuel
 # (N221204-design keyhole N230110: 3.86-3.91 ns; N210808 design 3.65-3.71 ns, Ruof et al.
 # PoP 33, 052706 (2026) Table II). The ice-gas surface cannot move until that shock has
-# crossed the 65 um of ice (~5.5 ns at the keyhole's shock speeds, our estimate), so the curve follows the
+# crossed the 65 um of ice (~5.5 ns at the keyhole's shock speeds, estimated for this file), so the curve follows the
 # ablator-fuel interface (1.050 mm initially) or the fuel's center of mass, not the ice-gas
 # surface, and not the ablation front. (Before 2026-10-26 it was read as the ice-gas
 # surface, from its 0.906 at 6 ns against the ice-gas interface drawn at 0.92 mm in the

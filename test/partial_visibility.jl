@@ -34,7 +34,7 @@ end
 @testset "partial visibility" begin
     @test_throws ArgumentError view_factors(hohlraum(h = 2.0, capsule_h = 0.8); visibility = :rays)
 
-    # nothing in the way: bitwise identical to the centroid rule
+    # With nothing in the way, the result is identical to the centroid rule.
     s = Target(Component(:s, sphere_mesh(2.0; ntheta = 8, nphi = 12, outward = false), gold();
                          surface = SphereSurface(2.0)))
     @test view_factors(s; visibility = :sampled) == view_factors(s)
@@ -53,9 +53,10 @@ end
     rows(F, names) = (es = reduce(vcat, [elements(t, n) for n in names]); maximum(abs, closure_error(F)[es]))
     walls = (:wall_top, :wall_bottom)
     lehs = (:leh_top, :leh_bottom)
-    # largest |row sum − 1|, measured: walls 9.7e-3 → 1.9e-3, LEH apertures 5.9e-2 →
-    # 6.7e-3, capsule 1.6e-3 → 5.0e-4 (the gap's faces, 50 µm wide behind a 20 µm slot,
-    # stay at 5%: the slot is narrower than a sample cell of the walls)
+    # The largest measured |row sum − 1| falls from 9.7e-3 to 1.9e-3 on the walls, from
+    # 5.9e-2 to 6.7e-3 on the LEH apertures, and from 1.6e-3 to 5.0e-4 on the capsule. The
+    # faces of the gap, 50 µm wide behind a 20 µm slot, stay at 5% because the slot is
+    # narrower than a sample cell of the walls.
     @test rows(F1, walls) < 0.25rows(F0, walls)
     @test rows(F1, lehs) < 0.2rows(F0, lehs)
     @test rows(F1, (:capsule,)) < 0.5rows(F0, (:capsule,))
@@ -66,13 +67,14 @@ end
     @test 0 < o.fraction < 2e-3 && maximum(o.element[elements(t, :bore_top, :bore_bottom)]) > 0.02
     @test open_fraction(Target(filter(c -> !startswith(String(c.name), "leh"), t.components))).fraction > 0.03
 
-    # A pair half shadowed by a thin plate: two unit squares facing each other 2 apart,
-    # and an opaque plate in the mid-plane covering x < 0. A segment from p to q crosses
-    # the mid-plane at (p + q)/2, so (p, q) → (−p, −q) swaps shadowed and seen pairs of
-    # equal kernel: half the unshadowed exchange (both squares are symmetric about their
-    # centers; the upper one is turned 45° so that no two samples mirror each other and
-    # tie on the edge). The edge is moved 1e-3 past the centroid ray, which is blocked.
-    # Measured: 0.493 (g = 4), 0.500 (g = 8).
+    # A thin plate half shadows a pair of unit squares that face each other 2 apart; the
+    # opaque plate lies in the mid-plane and covers x < 0. A segment from p to q crosses the
+    # mid-plane at (p + q)/2, so the map from (p, q) to (−p, −q) swaps shadowed and seen
+    # pairs of equal kernel. The exchange is therefore half the unshadowed exchange. Both
+    # squares are symmetric about their centers, and the upper one is turned 45° so that no
+    # two samples mirror each other and tie on the edge. The edge is moved 1e-3 past the
+    # centroid ray, which is blocked. The measured fractions are 0.493 (g = 4) and 0.500 (g
+    # = 8).
     RotZ45 = [cosd(45) -sind(45) 0; sind(45) cosd(45) 0; 0 0 1]
     lo = Component(:lo, rectangle_mesh(1.0, 1.0; nu = 1, nv = 1), gold())
     hi = Component(:hi, transform(rectangle_mesh(1.0, 1.0; nu = 1, nv = 1), rotation_to((0, 0, -1)) * RotZ45, Vec3(0, 0, 2)), gold())
@@ -114,9 +116,9 @@ end
     # centroid rule 0.9986
     @test minimum(rs[cap]) > 0.995
     @test abs(capmean(rs) - capmean(rsc)) < 1e-3
-    # a two-ring source on the walls: the capsule's mean flux against the Monte Carlo
-    # radiosity on the same facets (the element model with exact factors), measured
-    # −0.33% sampled, −0.45% centroid (σ 0.06%)
+    # With a two-ring source on the walls, the mean flux on the capsule is checked against
+    # the Monte Carlo radiosity on the same facets, which is the element model with exact
+    # factors. The measured differences are −0.33% sampled and −0.45% centroid (σ 0.06%).
     P = zeros(nelements(t))
     for e in elements(t, :top, :bottom)
         p, n = t.elem_centroid[e], t.elem_normal[e]

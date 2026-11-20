@@ -22,7 +22,8 @@ RowLayout {
         Layout.alignment: Qt.AlignTop
         rightPadding: 0
         spacing: 0
-        // as wide as its box: without a text, a style may center the box in a wider control
+        // as wide as its box, since without a text a style may center the box in a wider
+        // control
         Layout.preferredWidth: leftPadding + (indicator ? indicator.width : 20) + 8
         onToggled: line.toggled()
     }

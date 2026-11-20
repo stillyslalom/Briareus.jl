@@ -42,7 +42,8 @@ using Briareus, Test
     @test_throws ArgumentError remake(s; parameterization = GroupPointing(omega_beams()))
     @test_throws ArgumentError remake(s; parameterization = GroupPointing(nif_quads(fnumber = 10.0)))
 
-    # deposition options: the operator rebuilt for the parameterization's beams
+    # With deposition options, the operator is rebuilt for the beams of the
+    # parameterization.
     kw = (; ncone = 7, resolution = 0.4)
     sd = remake(s; deposition_kw = kw)
     @test sd.deposition !== s.deposition && sd.moment_response === s.moment_response

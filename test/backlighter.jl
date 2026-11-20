@@ -4,7 +4,8 @@
 using Briareus, LinearAlgebra, Test
 
 @testset "backlighter line of sight" begin
-    # placement: on the far side of TCC, normal along the line of sight, width along θ̂
+    # The foil is placed on the far side of TCC, normal to the line of sight, with the
+    # width along θ̂.
     for (θ, φ) in ((90.0, 78.0), (90.0, 348.0), (37.0, 211.0), (0.0, 0.0))
         d = port_vector(θ, φ)
         eθ, eφ = Briareus.port_basis(d)
@@ -82,10 +83,10 @@ using Briareus, LinearAlgebra, Test
     @test line_of_sight(t, (90.0, 0.0)).radius ≈ a rtol = 1e-12
     @test_throws ArgumentError line_of_sight(t, (90.0, 0.0); object = nothing)
 
-    # a point detector: the imaging rays converge on it, so a plate beside the line of
-    # sight between the object and the detector at distance L blocks them iff it reaches
-    # within the rays' envelope there, a (1 − s/L) at distance s. The rays spread to
-    # a (1 + D/L) = 1.26 mm at the foil, so a 2 mm foil leaves the disk's rim uncovered
+    # The imaging rays converge on a point detector. A plate beside the line of sight, at
+    # distance s from the object and with the detector at distance L, therefore blocks them
+    # iff it reaches within the envelope of the rays at s, a (1 − s/L). The rays spread to a
+    # (1 + D/L) = 1.26 mm at the foil, so a 2 mm foil leaves the rim of the disk uncovered.
     L, s = 20.0, 10.0
     r = line_of_sight(Target([fl]), (90.0, 0.0); object = nothing, radius = a, detector = L)
     @test !r.clear && r.blocked == 0

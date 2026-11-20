@@ -1,18 +1,20 @@
-# Unconverted (1ω, 2ω) light: footprint exposure of target hardware.
+# This file models unconverted (1ω, 2ω) light and the exposure of target hardware to its
+# footprints.
 
 """
     UnconvertedColor(name; footprint, edge, focal_shift, absorption = 1.0, conversion = 1.0)
 
-Unconverted-light footprint of one color at the 3ω best-focus plane: a square of side
-`footprint` (mm) whose nearest edge lies `edge` mm from the 3ω aim point, displaced in
-a port-dependent direction; its focus lies `focal_shift` mm beyond the 3ω focus.
+Unconverted-light footprint of one color at the 3ω best-focus plane. The footprint is a
+square of side `footprint` (mm) whose nearest edge lies `edge` mm from the 3ω aim point,
+displaced in a port-dependent direction. Its focus lies `focal_shift` mm beyond the 3ω
+focus.
 
-`absorption` is the fraction of this color's incident light a surface absorbs, relative
-to the 3ω light (which the deposition takes as fully absorbed), and `conversion` the
-x-ray conversion efficiency of the absorbed light relative to a material's 3ω
-conversion. [`unconverted_deposition`](@ref) deposits `absorption` times the incident
-power; [`solve`](@ref) with `unconverted` multiplies a material's conversion, at the
-absorbed flux of this color, by `conversion`.
+`absorption` is the fraction of the incident light of this color that a surface absorbs,
+relative to the 3ω light, which the deposition takes as fully absorbed. `conversion` is
+the x-ray conversion efficiency of the absorbed light relative to the 3ω conversion of a
+material. [`unconverted_deposition`](@ref) deposits `absorption` times the incident
+power, and [`solve`](@ref) with `unconverted` multiplies the conversion of a material, at
+the absorbed flux of this color, by `conversion`.
 """
 struct UnconvertedColor
     name::Symbol
@@ -31,19 +33,21 @@ end
 """
     nif_unconverted()
 
-NIF 1ω and 2ω footprints (NIF User Guide §4.5, §5.6.1): 1ω ≈ 22 mm square with nearest
-edge ≈ 4.8 mm from the 3ω aim point, 2ω ≈ 12 mm square with nearest edge ≈ 2.9 mm. Focal
-shifts: 1ω +460 mm (MacFarlane 2003); 2ω ≈ +270 mm (derived from fused-silica
-dispersion — see reference/research-notes.md).
+NIF 1ω and 2ω footprints (NIF User Guide §4.5, §5.6.1). The 1ω footprint is a square of
+about 22 mm with its nearest edge about 4.8 mm from the 3ω aim point, and the 2ω
+footprint a square of about 12 mm with its nearest edge about 2.9 mm away. The focal
+shift is +460 mm for 1ω (MacFarlane 2003) and about +270 mm for 2ω, derived from
+fused-silica dispersion (see reference/research-notes.md).
 
-Absorption and x-ray conversion relative to 3ω (an *engineering default*, confidence
-low): the ratios on gold disks at the lowest intensity measured, ~3 × 10¹³ W/cm² with
-~1 ns pulses, held below it.
+The absorption and x-ray conversion relative to 3ω are an *engineering default* with
+low confidence. They are the ratios on gold disks at the lowest intensity measured,
+about 3 × 10¹³ W/cm² with pulses of about 1 ns, held constant below that intensity.
 - 1ω: absorption 0.82 against 0.93 at 3ω (Ze et al., UCRL-86414 (1981), Fig. 4) gives
   0.88; conversion of the absorbed energy 0.50 against 0.57 (Mead et al., LA-UR-86-300
   (1985), Fig. 16; same laboratory) gives 0.88.
-- 2ω: absorption equal to 3ω's (Ze, Fig. 4) gives 1.0; conversion 0.72 (small spots)
-  to 1.16 (large spots) of 3ω's (Mead, Fig. 16) gives their geometric mean, 0.9.
+- 2ω: absorption equal to that at 3ω (Ze, Fig. 4) gives 1.0. The conversion is 0.72
+  (small spots) to 1.16 (large spots) of that at 3ω (Mead, Fig. 16), and the geometric
+  mean, 0.9, is used.
 
 Unconverted light reaches hardware at ~10¹⁰–10¹² W/cm², 1.5–3.5 decades below these
 data. The ratios rise toward 1 as the intensity falls, and inverse-bremsstrahlung
@@ -59,10 +63,12 @@ nif_unconverted() = [UnconvertedColor(:omega1; footprint = 22.0, edge = 4.8, foc
 """
     UnconvertedRow
 
-`beam`, `color`, `component`, `exposure` (`:exposed` — hardware inside the footprint
-for a known offset direction; `:possible` — inside the footprint for some offset
-direction when the direction is unknown; `:clear`), and `distance`: the smallest
-transverse distance (mm) from the footprint region to the component (negative inside).
+One row of an unconverted-light check, with fields `beam`, `color`, `component`,
+`exposure` and `distance`. `exposure` is `:exposed` for hardware inside the footprint
+for a known offset direction, `:possible` for hardware inside the footprint for some
+offset direction when the direction is unknown, and `:clear` otherwise. `distance` is
+the smallest transverse distance (mm) from the footprint region to the component,
+negative inside.
 """
 struct UnconvertedRow
     beam::String
@@ -75,10 +81,11 @@ end
 """
     UnconvertedReport
 
-Result of `unconverted_light_check`: per-beam/color/component `rows`, plus per-component
-`zone` flags (nearest distance to TCC within `zone_radius`) and `flat` flags (planar
-components, which violate the NIF curvature rule inside a 1ω footprint unless dimpled:
-1D curvature radius ≤ 2 mm or 2D ≤ 5 mm).
+Result of `unconverted_light_check`. It contains `rows` per beam, color and component,
+and per-component `zone` and `flat` flags. `zone` marks a component whose nearest
+distance to TCC is within `zone_radius`. `flat` marks a planar component, which violates
+the NIF curvature rule inside a 1ω footprint unless dimpled; the rule requires a 1D
+curvature radius ≤ 2 mm or a 2D radius ≤ 5 mm.
 """
 struct UnconvertedReport
     rows::Vector{UnconvertedRow}
@@ -91,15 +98,15 @@ end
     unconverted_light_check(target, beams; colors = nif_unconverted(), offsets = nothing,
                             hardware = all surfaces, zone_radius = 32.0, level = 1)
 
-Check target hardware against unconverted-light footprints. Footprints are prisms
-along each beam through its square footprint at the 3ω focal plane (near TCC the
-converging 1ω/2ω beams change size by ≲ 2% per cm, so the prism is a close
-approximation; shadowing is ignored, so exposure is conservative).
+Check target hardware against unconverted-light footprints. Footprints are prisms along
+each beam through its square footprint at the 3ω focal plane. Near TCC the converging
+1ω and 2ω beams change size by ≲ 2% per cm, so the prism is a close approximation.
+Shadowing is ignored, so the exposure is conservative.
 
-`offsets` maps beam names to the footprint offset direction: an angle (degrees, from
-the port's θ̂ toward φ̂, in the focal plane) or a 3-vector. The per-port directions are
-not public; without them every azimuth is considered and hardware is reported as
-`:possible` when any offset direction would expose it.
+`offsets` maps beam names to the footprint offset direction, given as an angle (degrees,
+from θ̂ of the port toward φ̂, in the focal plane) or as a 3-vector. The per-port
+directions are not public. Without them every azimuth is considered, and hardware is
+reported as `:possible` when any offset direction would expose it.
 
 Also reports components within `zone_radius` mm of TCC (where unconverted light
 reaches) and planar components (flagged against the NIF curvature rule).
@@ -107,7 +114,7 @@ reaches) and planar components (flagged against the NIF curvature rule).
 function unconverted_light_check(t::Target, beams::AbstractVector{<:Beam};
                                  colors = nif_unconverted(), offsets = nothing,
                                  hardware = nothing, zone_radius = 32.0, level::Integer = 1)
-    # hardware: parts (all their surface pieces) or components
+    # hardware as parts (all their surface pieces) or components
     hw = hardware === nothing ? unique!([c.part for c in t.components if c.kind === :surface]) :
          Symbol[hardware...]
     hw_idx = [hardware === nothing ? [ci for ci in part_pieces(t, n) if t.components[ci].kind === :surface] :
@@ -134,8 +141,8 @@ function unconverted_light_check(t::Target, beams::AbstractVector{<:Beam};
             d = x - aim
             u, v = dot(d, e1), dot(d, e2)
             if dir === nothing
-                # union over all offset directions: an annulus from the nearest edge to
-                # the far corner of the square
+                # The union over all offset directions is an annulus from the nearest edge
+                # to the far corner of the square.
                 ρ = hypot(u, v)
                 rin, rout = col.edge, hypot(col.edge + col.footprint, h)
                 dist = ρ < rin ? rin - ρ : ρ > rout ? ρ - rout : -min(ρ - rin, rout - ρ)
@@ -189,47 +196,48 @@ end
                            lens_distance = 7700.0, coarse = 0.5, resolution = 0.02)
         -> NamedTuple
 
-Laser power of the unconverted (1ω, 2ω) light absorbed by the target: one
-[`Deposition`](@ref) per color of `colors`, keyed by its name (`:omega1`, `:omega2`);
-`skipped`, the beams whose footprints cannot be placed (no NIF quad name and no
-`offsets` entry); and `colors`, the [`UnconvertedColor`](@ref)s themselves, so that
-[`solve`](@ref) and [`flux_response`](@ref) take the result's x-ray conversions with
-its light.
+Laser power of the unconverted (1ω, 2ω) light absorbed by the target. The result
+contains one [`Deposition`](@ref) per color of `colors`, keyed by its name (`:omega1`,
+`:omega2`). It also contains `skipped`, the beams whose footprints cannot be placed (no
+NIF quad name and no `offsets` entry), and `colors`, the [`UnconvertedColor`](@ref)s
+themselves. [`solve`](@ref) and [`flux_response`](@ref) then use the x-ray conversions
+of the result with its light.
 
-Each beamlet's light of one color is a uniform square beam converging to its focus.
-At the 3ω best-focus plane it is a square of side `footprint` whose nearest edge lies
-`edge` mm from the 3ω axis ([`UnconvertedColor`](@ref); [`nif_unconverted`](@ref) gives
-the NIF User Guide's 22 mm and 4.8 mm for 1ω, 12 mm and 2.9 mm for 2ω, §4.5 and
-Fig. 4-12). It converges to a point `focal_shift` beyond the 3ω focus on the chief ray
-from the lens center, `lens_distance` upstream. This is the geometry of
-[`talis_check`](@ref)'s 1ω footprint, at the footprint's nominal size where TaLIS uses
-its 10% contour. The square is displaced along φ̂ to the side of the quad axis that
-the beamlet's port lies on (Fig. 4-12), a NIF quad-level beam is expanded into its four
-beamlets, and `offsets` sets the displacement direction of other beams, as in
-[`talis_check`](@ref). The light at a target is the image of the near-field aperture,
-so its intensity is taken to be uniform across the square (a flat top; the phase
-plate's blur of the edge, ~0.1 mm, is not modeled). The geometry is *derived*
-(confidence medium; research notes, "Unconverted light (NIF)").
+The light of one color from each beamlet is a uniform square beam converging to its
+focus. At the 3ω best-focus plane it is a square of side `footprint` whose nearest edge
+lies `edge` mm from the 3ω axis ([`UnconvertedColor`](@ref)). [`nif_unconverted`](@ref)
+gives the values of the NIF User Guide, 22 mm and 4.8 mm for 1ω and 12 mm and 2.9 mm
+for 2ω (§4.5 and Fig. 4-12). The beam converges to a point `focal_shift` beyond the 3ω
+focus on the chief ray from the lens center, `lens_distance` upstream. This is the
+geometry of the 1ω footprint of [`talis_check`](@ref), at the nominal size of the
+footprint where TaLIS uses its 10% contour. The square is displaced along φ̂ to the side
+of the quad axis on which the port of the beamlet lies (Fig. 4-12). A NIF quad-level
+beam is expanded into its four beamlets, and `offsets` sets the displacement direction
+of other beams, as in [`talis_check`](@ref). The light at a target is the image of the
+near-field aperture, so its intensity is taken to be uniform across the square, as a
+flat top. The blur of the edge by the phase plate, about 0.1 mm, is not modeled. The
+geometry is *derived* (confidence medium; research notes, "Unconverted light (NIF)").
 
-`ratio` gives, per color, the unconverted power as a fraction of each beam's 3ω
-`power`, e.g. `(omega1 = 0.05, omega2 = 0.01)`: a number, or a vector with one entry
-per beam. It has no default: by the NIF User Guide (§4.5), most of the unconverted
-light is 1ω and shaped pulses leave more of it, with no fraction given. VisRad also
-takes it as an input (its "Fraction of Total Beam Power" and "Relative to Blue Cone
-Power" models).
+`ratio` gives, per color, the unconverted power as a fraction of the 3ω `power` of each
+beam, e.g. `(omega1 = 0.05, omega2 = 0.01)`, as a number or as a vector with one entry
+per beam. It has no default. According to the NIF User Guide (§4.5), most of the
+unconverted light is 1ω and shaped pulses leave more of it, but the guide does not give
+a fraction. VisRad also takes the fraction as an input, in its "Fraction of Total Beam
+Power" and "Relative to Blue Cone Power" models.
 
-Without shadowing, the power a beam puts on a flat triangle is exact: every ray of the
-beam passes through its focus, so the triangle's share of the power is the area of its
-projection from the focus onto the 3ω focal plane, clipped to the footprint square,
-over the square's area, at any tilt and distance from focus. Shadowing is resolved by
-rays from the triangle toward the lens. The clipped projection is divided into pieces
-no larger than `coarse` mm in the focal plane and, where a shadow edge crosses a piece,
-down to `resolution` mm. The side of a surface facing the lens absorbs the color's
-`absorption` times the power reaching it: its element or, for an unmodeled back side,
-its component's `backside`. The rest is dropped, not reflected (`delivered -
-sum(per_beam)` includes it). Light beyond its focus (hundreds of mm past the target)
-is not followed. Values are Float64: this is a fixed source, not part of the
-differentiable deposition path ([`deposit`](@ref)).
+Without shadowing, the power that a beam puts on a flat triangle is exact. Every ray of
+the beam passes through its focus, so the share of the power on the triangle is the area
+of its projection from the focus onto the 3ω focal plane, clipped to the footprint
+square, over the area of the square. This holds at any tilt and distance from focus.
+Shadowing is resolved by rays from the triangle toward the lens. The clipped projection
+is divided into pieces of at most `coarse` mm in the focal plane and, where a shadow
+edge crosses a piece, down to `resolution` mm. The side of a surface facing the lens
+absorbs `absorption` times the power of the color reaching it. The power goes to its
+element or, for an unmodeled back side, to the `backside` of its component. The rest is
+dropped without reflection, and `delivered - sum(per_beam)` includes it. Light beyond
+its focus (hundreds of mm past the target) is not followed. Values are Float64, since
+this is a fixed source and lies outside the differentiable deposition path
+([`deposit`](@ref)).
 """
 function unconverted_deposition(t::Target, beams::AbstractVector{<:Beam}; ratio,
                                 colors = nif_unconverted(), offsets = nothing,
@@ -275,9 +283,10 @@ function unconverted_deposition(t::Target, beams::AbstractVector{<:Beam}; ratio,
     return (; out..., skipped, colors = collect(UnconvertedColor, colors))
 end
 
-# One beamlet's share (a fraction of its power) per destination: an element (> 0) or a
-# component's back side (< 0). The beam is the pyramid from the footprint square (center
-# c0 along ô, half-side h0, in the 3ω focal plane through `fb`) to its apex, the focus.
+# Returns the share of one beamlet (a fraction of its power) per destination, which is an
+# element (> 0) or the back side of a component (< 0). The beam is the pyramid from the
+# footprint square to its apex, the focus. The square has center c0 along ô and half-side
+# h0, in the 3ω focal plane through `fb`.
 function _uc_beamlet(t::Target, tris, k, fb, ô, c0, h0, f, L, coarse, res, ε)
     ŵ = cross(k, ô)
     A = fb + f * k + c0 * (1 + f / L) * ô
@@ -337,8 +346,9 @@ end
 
 _uc_area(a, b, c) = abs((b[1] - a[1]) * (c[2] - a[2]) - (c[1] - a[1]) * (b[2] - a[2])) / 2
 
-# Lit focal-plane area of a triangle (u, v) of a clipped projection: its corners and
-# centroid are mapped back to the target triangle and tested for shadow toward the lens.
+# Returns the lit focal-plane area of a triangle (u, v) of a clipped projection. Its
+# corners and centroid are mapped back to the target triangle and tested for shadow
+# toward the lens.
 function _uc_lit(t, tri, A, fb, ô, ŵ, n, v0, side_n, ε, coarse, res)
     a, b, c = tri
     area = _uc_area(a, b, c)
@@ -361,7 +371,8 @@ function _uc_split(t, (a, b, c), args...)
            _uc_lit(t, (ca, bc, c), args...) + _uc_lit(t, (ab, bc, ca), args...)
 end
 
-# Whether the target point on the ray through focal-plane point p sees the lens.
+# Whether the target point on the ray through focal-plane point p has a clear line of
+# sight to the lens.
 function _uc_visible(t, p, A, fb, ô, ŵ, n, v0, side_n, ε)
     q = fb + p[1] * ô + p[2] * ŵ
     x = A + dot(n, v0 - A) / dot(n, q - A) * (q - A)
@@ -373,23 +384,24 @@ end
 """
     IrradianceHistory
 
-Incident laser irradiance on a target over time, per color: the result of
-[`unconverted_history`](@ref) (colors `:omega1`, `:omega2`) and
+Incident laser irradiance on a target over time, per color. It is the result of
+[`unconverted_history`](@ref) (colors `:omega1`, `:omega2`) and of
 [`irradiance_history`](@ref) (3ω, `:omega3`).
 
 - `target`, `time` (ns), `colors` (the color names, in order)
-- `element` — per color, a `nelements × length(time)` matrix: the irradiance incident on
-  each element (W/cm²; the power reaching it over its area, at its incidence)
-- `backside` — per color, a `ncomponents × length(time)` matrix: the irradiance on each
-  one-sided component's unmodeled back side, its power over the component's area (W/cm²;
-  a mean over the component, below the back side's local peak where it is lit unevenly)
-- `absorption` — per color, the fraction of the incident light a surface absorbs
-  (`UnconvertedColor`'s `absorption`; 1 for 3ω): the absorbed irradiance is
-  `absorption[c] .* element[c]`
+- `element` — per color, a `nelements × length(time)` matrix of the irradiance incident
+  on each element (W/cm²), which is the power reaching it over its area, at its incidence
+- `backside` — per color, a `ncomponents × length(time)` matrix of the irradiance on the
+  unmodeled back side of each one-sided component (W/cm²). It is the power over the area
+  of the component, a mean that lies below the local peak of the back side where it is
+  lit unevenly.
+- `absorption` — per color, the fraction of the incident light that a surface absorbs
+  (the `absorption` of the `UnconvertedColor`, 1 for 3ω). The absorbed irradiance is
+  `absorption[c] .* element[c]`.
 - `skipped` — the beams whose unconverted light cannot be placed (see
   [`unconverted_deposition`](@ref))
 
-Between its times the history is taken to be linear: crossings of a threshold
+Between its times the history is taken to be linear, and crossings of a threshold
 ([`threshold_crossing`](@ref)) are interpolated within a step.
 """
 struct IrradianceHistory
@@ -413,14 +425,15 @@ function Base.show(io::IO, ::MIME"text/plain", h::IrradianceHistory)
     isempty(h.skipped) || print(io, "\n  skipped (cannot be placed): ", join(h.skipped, ", "))
 end
 
-# Each one-sided component's area (its back side's); 0 for a two-sided one.
+# Returns the area of each one-sided component, which is also the area of its back side,
+# and 0 for a two-sided component.
 _backside_area(t::Target) =
     [c.two_sided ? 0.0 :
      sum(t.elem_area[e] for e in t.comp_elems[ci] if t.elem_side[e] == 1; init = 0.0)
      for (ci, c) in enumerate(t.components)]
 
-# Beams grouped by their schedule `sig(b)` (compared by identity): the distinct schedules
-# and the beam indices of each, in order of first appearance.
+# Groups beams by their schedule `sig(b)`, compared by identity. Returns the distinct
+# schedules and the beam indices of each, in order of first appearance.
 function _schedule_groups(beams, sig)
     sigs = Any[]
     groups = Vector{Int}[]
@@ -437,7 +450,7 @@ _unit_irradiance(t::Target, d::Deposition, Aback) =
     (1e14 .* d.element ./ t.elem_area,
      [A > 0 ? 1e14 * L / A : 0.0 for (L, A) in zip(d.backside, Aback)])
 
-# Add `I` (per unit power) times the power history `s` to the matrix `M`.
+# Adds `I` (per unit power) times the power history `s` to the matrix `M`.
 function _add_outer!(M, I, s)
     for k in eachindex(s)
         s[k] == 0 && continue
@@ -446,10 +459,10 @@ function _add_outer!(M, I, s)
     return M
 end
 
-# A per-color input (`ratio`, `prepulse`, a Dict or NamedTuple) is keyed by the colors'
-# names, Symbols, as `pulses` is keyed by the beams' keys exactly: any other key (a
-# String, a misspelled or unknown name) is an error, so no entry goes unused. With
-# `complete`, every color needs an entry.
+# A per-color input (`ratio` or `prepulse`, as a Dict or NamedTuple) is keyed exactly by
+# the color names as Symbols, as `pulses` is keyed by the beam keys. Any other key, such
+# as a String or a misspelled or unknown name, is an error, so that every entry is used.
+# With `complete`, every color needs an entry.
 function _check_color_keys(d, names, what; complete::Bool = true)
     for n in keys(d)
         n isa Symbol && n in names ||
@@ -467,11 +480,12 @@ end
 _fraction_at(r::Real, τ) = Float64(r)
 _fraction_at(r, τ) = Float64(r(τ))
 
-# The fraction schedule of beam `b`, at position `i` of `n` beams, in one color's entry
-# `r` of a per-color fraction input: `r` itself (a number or a function of time, for every
-# beam), `r[i]` of a vector with one entry per beam, or `r[key(b)]` of a keyed collection
-# (a `KeyError` for a beam without an entry, as `pulses`). Numbers are made Float64, so
-# that beams on equal fractions share a schedule (compared by identity).
+# Returns the fraction schedule of beam `b`, at position `i` of `n` beams, from the entry
+# `r` of one color in a per-color fraction input. The schedule is `r` itself (a number or
+# a function of time, for every beam), `r[i]` of a vector with one entry per beam, or
+# `r[key(b)]` of a keyed collection. A beam without an entry is a `KeyError`, as for
+# `pulses`. Numbers are converted to Float64, so that beams on equal fractions share a
+# schedule, compared by identity.
 function _fraction_of(r, key, b, i, n)
     f = if r isa AbstractVector
         length(r) == n || throw(DimensionMismatch("a fraction per beam needs one entry for each of the $n beams, " *
@@ -483,16 +497,16 @@ function _fraction_of(r, key, b, i, n)
     return f isa Real ? Float64(f) : f
 end
 
-# Each beam's fraction schedules, a tuple over the colors `names` of `ratio`.
+# Returns the fraction schedules of each beam, a tuple over the colors `names` of `ratio`.
 _fractions_of(ratio, names, key, beams) =
     [Tuple(_fraction_of(ratio[nm], key, b, i, length(beams)) for nm in names) for (i, b) in enumerate(beams)]
 
-# The schedule of beam `b`: `p[key(b)]` of a keyed collection, else `p` itself (one
-# function of time for all beams).
+# Returns the schedule of beam `b`, `p[key(b)]` of a keyed collection, or else `p` itself
+# as one function of time for all beams.
 _schedule_of(p, key, b) = p isa Union{AbstractDict,NamedTuple} ? _beam_pulse(p, key, b) : p
 
-# A color's power per beam (TW) at the times `ts`: `r` (a number or a function of time)
-# times the 3ω pulse, plus a separate pulse `pre` for the color (or nothing).
+# Returns the power of a color per beam (TW) at the times `ts`. It is `r` (a number or a
+# function of time) times the 3ω pulse, plus a separate pulse `pre` for the color, if any.
 function _color_power(r, pulse, pre, ts, name)
     s = [_fraction_at(r, τ) * pulse(τ) + (pre === nothing ? 0.0 : Float64(pre(τ))) for τ in ts]
     all(>=(0), s) || throw(ArgumentError("the $name power must not be negative (ratio and prepulse)"))
@@ -504,50 +518,53 @@ end
                         colors = nif_unconverted(), offsets = nothing, lens_distance = 7700.0,
                         coarse = 0.5, resolution = 0.02) -> IrradianceHistory
 
-Irradiance of the unconverted (1ω, 2ω) light on the target at each of `times` (ns),
-from each beam's 3ω pulse and an unconverted fraction that may vary in time.
+Irradiance of the unconverted (1ω, 2ω) light on the target at each of `times` (ns), from
+the 3ω pulse of each beam and an unconverted fraction that may vary in time.
 
-`pulses` gives each beam's 3ω power history (TW per beam), keyed as in
-[`with_pulses`](@ref): one function of time (a [`PulseShape`](@ref)) for all, or a
-`Dict`/NamedTuple keyed by each beam's `group` (`by = :quad`: its quad; `by = :beam`:
-its name; or `by(beam)`). For each color `c` of `colors`, the light of one beam is
+`pulses` gives the 3ω power history of each beam (TW per beam), keyed as in
+[`with_pulses`](@ref). It is one function of time (a [`PulseShape`](@ref)) for all
+beams, or a `Dict` or NamedTuple keyed by the `group` of each beam. With `by = :quad`
+the key is the quad, with `by = :beam` the name, and otherwise `by(beam)`. For each
+color `c` of `colors`, the light of one beam is
 
     P_c(t) = ratio[c](t) · P₃ω(t) + prepulse[c](t)    (TW per beam)
 
-- `ratio` — per color, the unconverted power as a fraction of the beam's 3ω power: a
-  number or a function of time (ns), e.g. a `PulseShape(times, fractions)` table (zero
-  outside its times). It has no default: the fraction and its dependence on the pulse
-  shape are not public (NIF User Guide §4.5: most of the unconverted light is 1ω, and
-  shaped pulses leave more of it). Every color needs an entry (0 for none), keyed by its
-  name, a `Symbol`: any other key (a `String`, an unknown name) is an error. A color's
-  entry holds for every beam, or gives each beam a separate fraction (a number or a
-  function of time): a vector with one entry per beam of `beams`, in order, or keyed as
-  `pulses` (by `by`; a beam without an entry is a `KeyError`, as for `pulses`), e.g.
-  `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05, :inner23 => 0.0, :inner30 => 0.0),
-  omega2 = 0.01)` for 1ω on the outer cones only.
+- `ratio` — per color, the unconverted power as a fraction of the 3ω power of the beam,
+  as a number or a function of time (ns), e.g. a `PulseShape(times, fractions)` table
+  (zero outside its times). It has no default, since the fraction and its dependence on
+  the pulse shape are not public. According to the NIF User Guide (§4.5), most of the
+  unconverted light is 1ω and shaped pulses leave more of it. Every color needs an
+  entry (0 for none), keyed by its name as a `Symbol`; any other key, such as a `String`
+  or an unknown name, is an error. The entry of a color applies to every beam, or gives
+  each beam a separate fraction (a number or a function of time). A separate fraction is
+  a vector with one entry per beam of `beams`, in order, or is keyed as `pulses` by `by`.
+  A beam without an entry is a `KeyError`, as for `pulses`. An example for 1ω on the
+  outer cones only is `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05,
+  :inner23 => 0.0, :inner30 => 0.0), omega2 = 0.01)`.
 - `prepulse` — per color (optional), light not proportional to the 3ω pulse, in TW per
-  beam: one function of time (a `PulseShape`) for all beams, or keyed as `pulses`, keyed
-  by color as `ratio` is. An
-  example is the 1ω prepulse, which the User Guide (§4.4) puts above 10⁸ W/cm² 3–5 ns before the nominal
-  start of the pulse, with no level given. As a *derived* scale, the 22 mm 1ω footprint
-  (4.84 cm² in the 3ω focal plane) is at 10⁸ W/cm² when a beamlet carries 0.48 GW
-  (4.8e-4 TW) of 1ω.
+  beam. It is one function of time (a `PulseShape`) for all beams or is keyed as
+  `pulses`, and it is keyed by color as `ratio` is. An example is the 1ω prepulse, which
+  the User Guide (§4.4) puts above 10⁸ W/cm² 3–5 ns before the nominal start of the
+  pulse, with no level given. As a *derived* scale, the 22 mm 1ω footprint (4.84 cm² in
+  the 3ω focal plane) is at 10⁸ W/cm² when a beamlet carries 0.48 GW (4.8e-4 TW) of 1ω.
 
-The geometry is fixed (the aims, spots and ports of `beams`; only the power varies), and
-the light is linear in each beam's power, so the whole history costs one
-[`unconverted_deposition`](@ref): the beams are grouped by their (pulse, prepulse,
-fraction) schedule (equal numbers or the same function), each group is deposited once
-at unit power, and the history is that pattern times the group's power at each time. A
-pointing or a target that changes in time needs
-a deposition per configuration, which this does not cover.
+The geometry is fixed, with the aims, spots and ports of `beams`, and only the power
+varies. The light is linear in the power of each beam, so the whole history costs one
+[`unconverted_deposition`](@ref). The beams are grouped by their (pulse, prepulse,
+fraction) schedule (equal numbers or the same function), and each group is deposited
+once at unit power. The history is that pattern times the power of the group at each
+time. A pointing or a target that changes in time needs a deposition per configuration,
+which this function does not cover.
 
-The irradiance is the light incident on each surface (each color's `absorption` set to
-1), as the threshold checks ([`specular_check`](@ref), [`preplasma_check`](@ref))
-compare incident intensities. Times each element's area (over 10¹⁴, W/cm² to TW/mm²),
-`absorption[c] .* element[c]` is the power [`unconverted_deposition`](@ref) absorbs at
-each time's beam powers, the same to rounding for a constant fraction. `offsets`, `lens_distance`, `coarse` and `resolution` are those of
-[`unconverted_deposition`](@ref). The history is sampled at `times` and linear between
-them: include the knots of the pulses and fractions in `times` to follow them exactly.
+The irradiance is the light incident on each surface, with the `absorption` of each
+color set to 1, since the threshold checks ([`specular_check`](@ref),
+[`preplasma_check`](@ref)) compare incident intensities. Multiplied by the area of each
+element (and divided by 10¹⁴ for W/cm² to TW/mm²), `absorption[c] .* element[c]` is the
+power that [`unconverted_deposition`](@ref) absorbs at the beam powers of each time. For
+a constant fraction the two agree within rounding. `offsets`, `lens_distance`, `coarse`
+and `resolution` are those of [`unconverted_deposition`](@ref). The history is sampled
+at `times` and is linear between them, so the knots of the pulses and fractions should be
+included in `times` to follow them exactly.
 """
 Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractVector{<:Beam},
                                                      @nospecialize(pulses), @nospecialize(times);
@@ -566,7 +583,7 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
     pre(b) = Tuple(haskey(prepulse, n) ? _schedule_of(prepulse[n], key, b) : nothing for n in names)
     fr = _fractions_of(ratio, names, key, vb)
     sigs, groups = _schedule_groups(eachindex(vb), i -> (_schedule_of(pulses, key, vb[i]), pre(vb[i]), fr[i]))
-    # the colors' geometry, incident light only
+    # geometry of the colors, for incident light only
     unit = [UnconvertedColor(c.name; footprint = c.footprint, edge = c.edge, focal_shift = c.focal_shift)
             for c in colors]
     ne, nt = nelements(t), length(ts)
@@ -591,19 +608,20 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
     return IrradianceHistory(t, ts, names, E, B, absorption, skipped)
 end
 
-# The unconverted light of a `drive_history` (its `unconverted`): per color, a fraction
-# `ratio` of each beam's 3ω power (a number or a function of time, for every beam, one
-# per beam or keyed by `key(beam)`), plus an optional `prepulse` power per beam (per
-# color, one function of time or keyed by `key(beam)`). The light is linear in each
-# beam's power, so beams whose powers have been equal at every step so far, on the same
-# fraction and prepulse schedules, share one `unconverted_deposition` at unit power (an
-# atom of a partition of the beams, split when their powers part); a color's absorbed
-# power at a step is the sum over atoms of that pattern times the atom's power in the
-# color, `ratio · P₃ω + prepulse`. For beams on shared pulses the atoms are the (pulse,
-# fraction, prepulse) schedules, as in `unconverted_history`.
+# The unconverted light of a `drive_history`, its `unconverted` argument. Per color it is
+# a fraction `ratio` of the 3ω power of each beam, plus an optional `prepulse` power per
+# beam. The fraction is a number or a function of time for every beam, one per beam, or
+# keyed by `key(beam)`. The prepulse is, per color, one function of time or keyed by
+# `key(beam)`. The light is linear in the power of each beam. Beams whose powers have been
+# equal at every step so far, on the same fraction and prepulse schedules, therefore
+# share one `unconverted_deposition` at unit power. Such a set is an atom of a partition
+# of the beams, and it is split when the powers of its beams diverge. The absorbed power
+# of a color at a step is the sum over atoms of that pattern times the power of the atom
+# in the color, `ratio · P₃ω + prepulse`. For beams on shared pulses the atoms are the
+# (pulse, fraction, prepulse) schedules, as in `unconverted_history`.
 mutable struct _UnconvertedLight
     ratio::Any
-    prepulse::Any                  # `nothing`: none
+    prepulse::Any                  # `nothing` when there is no prepulse
     key::Any
     colors::Vector{UnconvertedColor}
     kw::NamedTuple
@@ -611,8 +629,8 @@ mutable struct _UnconvertedLight
     geometry::Vector{Tuple{String,Vec3,SVector{3,Float64},Float64,String}}
     atoms::Vector{Vector{Int}}
     fracs::Vector{Any}             # per atom, its fraction schedule per color
-    pres::Vector{Any}              # per atom, its prepulse schedule per color (`nothing`: none)
-    patterns::Vector{Any}          # per atom, its unit-power deposition (`nothing`: not yet)
+    pres::Vector{Any}              # per atom, its prepulse schedule per color (`nothing` for none)
+    patterns::Vector{Any}          # per atom, its unit-power deposition (`nothing` until computed)
     skipped::Vector{String}
 end
 
@@ -629,15 +647,17 @@ function _UnconvertedLight(ratio, prepulse, by, colors, kw)
                              Any[], Any[], String[])
 end
 
-# Per-color depositions with the colors they were deposited with: `solve`'s `unconverted`.
+# Returns per-color depositions with the colors with which they were deposited, in the
+# form of the `unconverted` argument of `solve`.
 _with_colors(d::AbstractDict, colors) = (u = Dict{Symbol,Any}(d); u[:colors] = colors; u)
 
-# A beam's prepulse schedule per color (a tuple; `nothing` for a color without one).
+# Returns the prepulse schedule of a beam per color, as a tuple with `nothing` for a color
+# without a prepulse.
 _prepulse_of(u::_UnconvertedLight, b) =
     Tuple(haskey(u.prepulse, c.name) ? _schedule_of(u.prepulse[c.name], u.key, b) : nothing for c in u.colors)
 
-# Each color's absorbed unconverted light (a `Deposition`) on target `t` from `beams` (3ω
-# setup powers, before any laser–plasma model) at time τ.
+# Returns the absorbed unconverted light of each color (a `Deposition`) on target `t` from
+# `beams` at time τ. The beams have their 3ω setup powers, before any laser–plasma model.
 function _unconverted_at!(u::_UnconvertedLight, t::Target, beams, τ)
     vb = Beam{Float64}[_value_beam(b) for b in beams]
     geo = [(b.name, b.port, SVector{3,Float64}(b.aim), b.defocus, b.quad) for b in vb]
@@ -681,7 +701,7 @@ function _unconverted_at!(u::_UnconvertedLight, t::Target, beams, τ)
     delivered = Dict(c.name => 0.0 for c in u.colors)
     for (k, a) in enumerate(atoms)
         s = p[a[1]]
-        # the atom's fraction per color, and each color's power per beam of the atom (TW)
+        # the fraction of the atom per color, and the power of each color per beam of the atom (TW)
         r = Float64[_fraction_at(f, τ) for f in fracs[k]]
         all(>=(0), r) || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
         if pres[k] === nothing
@@ -718,13 +738,14 @@ end
     irradiance_history(op, beams, pulses, times; by = :group) -> IrradianceHistory
 
 Irradiance of the 3ω light (color `:omega3`) on the target of the
-[`DepositionOperator`](@ref) `op` at each of `times` (ns), the beams following `pulses`
-(one function of time for all, or keyed by `by` as in [`with_pulses`](@ref)). With the geometry fixed, deposition is linear in each
-beam's power: the history costs one [`deposit`](@ref) per distinct pulse (with that
-pulse's beams at unit power and the others at zero), scaled by the pulse at each time.
-The irradiance is the incident light (every ray deposits all its power), before any
-laser–plasma model. It gives [`preplasma_check`](@ref) the time the backlighter beams
-arrive on their foil.
+[`DepositionOperator`](@ref) `op` at each of `times` (ns), with the beams following
+`pulses`. `pulses` is one function of time for all beams, or keyed by `by` as in
+[`with_pulses`](@ref). With the geometry fixed, deposition is linear in the power of
+each beam. The history therefore costs one [`deposit`](@ref) per distinct pulse, with
+the beams of that pulse at unit power and the others at zero, scaled by the pulse at
+each time. The irradiance is the incident light (every ray deposits all its power),
+before any laser–plasma model. [`preplasma_check`](@ref) uses it for the time at which
+the backlighter beams arrive on their foil.
 """
 Base.@nospecializeinfer function irradiance_history(op::DepositionOperator, beams::AbstractVector{<:Beam},
                                                     @nospecialize(pulses), @nospecialize(times);
@@ -750,7 +771,8 @@ Base.@nospecializeinfer function irradiance_history(op::DepositionOperator, beam
                              Dict(:omega3 => 1.0), String[])
 end
 
-# First time a linearly interpolated series `I` (at times `ts`) reaches `thr`; Inf if never.
+# Returns the first time at which a linearly interpolated series `I` (at times `ts`)
+# reaches `thr`, or Inf if it never does.
 function _first_reach(ts, I, thr)
     k = findfirst(>=(thr), I)
     k === nothing && return Inf
@@ -758,8 +780,9 @@ function _first_reach(ts, I, thr)
     return ts[k-1] + (thr - I[k-1]) / (I[k] - I[k-1]) * (ts[k] - ts[k-1])
 end
 
-# The irradiance of `colors` summed on the elements and back sides of the surface
-# components of `parts`: rows, and per row (component index, element; 0 for the back side).
+# Returns the irradiance of `colors` summed on the elements and back sides of the surface
+# components of `parts`, as rows, and per row the pair (component index, element), with
+# element 0 for the back side.
 function _part_series(h::IrradianceHistory, parts, colors)
     t = h.target
     cols = colors === nothing ? h.colors : Symbol[colors...]
@@ -783,12 +806,13 @@ end
     threshold_crossing(history, threshold; parts = nothing, colors = nothing)
         -> NamedTuple (time, part, element)
 
-The first time (ns) the irradiance of `history` (an [`IrradianceHistory`](@ref)), summed
-over `colors` (default: all of the history's), reaches `threshold` (W/cm²) on any element
-or one-sided back side of the surface components of `parts` (default: all), with the
-history linear between its times. `part` is the part where it does, `element` the
-element (0 for a back side, whose irradiance is the component mean). `time = Inf`,
-`part = :none` and `element = 0` when it never does.
+The first time (ns) at which the irradiance of `history` (an
+[`IrradianceHistory`](@ref)), summed over `colors`, reaches `threshold` (W/cm²) on any
+element or one-sided back side of the surface components of `parts`. By default
+`colors` are all the colors of the history and `parts` are all parts, and the history is
+linear between its times. `part` is the part where the threshold is reached, and
+`element` the element (0 for a back side, whose irradiance is the component mean). When
+the threshold is never reached, `time = Inf`, `part = :none` and `element = 0`.
 """
 function threshold_crossing(h::IrradianceHistory, threshold::Real; parts = nothing, colors = nothing)
     threshold > 0 || throw(ArgumentError("threshold must be positive"))
@@ -808,23 +832,24 @@ end
         -> Vector{NamedTuple}
 
 Whether each surface part stays below the irradiance `threshold` (W/cm²) at which it is
-taken to stop being a specular reflector, under the light of `history` (an
-[`IrradianceHistory`](@ref), e.g. of [`unconverted_history`](@ref)) summed over
-`colors`. One row per part of `parts` (default: every surface part), in target order:
-`part`, `peak` (the highest irradiance on any of its elements or back sides, W/cm²),
-`peak_time` (ns), `crossing` (the first time it reaches `threshold`,
-[`threshold_crossing`](@ref); `Inf` if never) and `specular` (`crossing == Inf`).
+taken to stop being a specular reflector, under the light of `history` summed over
+`colors`. `history` is an [`IrradianceHistory`](@ref), e.g. of
+[`unconverted_history`](@ref). The result has one row per part of `parts` (by default
+every surface part), in target order, with the fields `part`, `peak` (the highest
+irradiance on any of its elements or back sides, W/cm²), `peak_time` (ns), `crossing`
+and `specular`. `crossing` is the first time at which the part reaches `threshold`
+([`threshold_crossing`](@ref), `Inf` if never), and `specular` is `crossing == Inf`.
 
-A surface below the threshold stays a cold mirror, and its specular 1ω reflection is what
-the NIF curvature rule disperses (User Guide §5.6.1: curvature radius ≤ 2 mm in one
-dimension, ≤ 5 mm in two, or dimpled); above it, a plasma forms and the cold-mirror
-reflection no longer holds. The default 10⁸ W/cm² is an *engineering default*
-(confidence low): the User Guide's general guideline for the onset of weakly ionized
-plasma on a metal surface (§4.4, citing Spaeth et al., Fusion Sci. Technol. 69, 25
-(2016)), taken as the end of specular reflection. It is not a facility criterion for
-specularity, it holds for metals only (silicon and plastics need their own value), and a
-fluence-driven change of the surface (melting, roughening) is not modeled. Research
-notes, "Unconverted light over time".
+A surface below the threshold stays a cold mirror, and the NIF curvature rule disperses
+its specular 1ω reflection. The rule requires a curvature radius ≤ 2 mm in one
+dimension, ≤ 5 mm in two, or dimpling (User Guide §5.6.1). Above the threshold a plasma
+forms, and the cold-mirror reflection no longer applies. The default 10⁸ W/cm² is an
+*engineering default* with low confidence. It is the general guideline of the User
+Guide for the onset of weakly ionized plasma on a metal surface (§4.4, citing Spaeth et
+al., Fusion Sci. Technol. 69, 25 (2016)), taken as the end of specular reflection. No
+facility criterion for specularity sets it. It applies only to metals, and silicon and
+plastics need separate values. A fluence-driven change of the surface (melting,
+roughening) is not modeled. See the research notes, "Unconverted light over time".
 """
 function specular_check(h::IrradianceHistory; threshold::Real = 1e8, parts = nothing, colors = nothing)
     t = h.target
@@ -843,18 +868,18 @@ end
         -> NamedTuple (onset, arrival, lead, preplasma)
 
 Whether the foil `foil` forms a pre-plasma before its backlighter beams arrive. `onset`
-is the first time (ns) the irradiance of `history` (the unconverted light of
-[`unconverted_history`](@ref), summed over `colors`) reaches `threshold` (W/cm²) on the
+is the first time (ns) at which the irradiance of `history`, the unconverted light of
+[`unconverted_history`](@ref) summed over `colors`, reaches `threshold` (W/cm²) on the
 foil ([`threshold_crossing`](@ref)). `arrival` is a time (ns), or the 3ω
 [`irradiance_history`](@ref) of the backlighter beams, whose first crossing of the same
 threshold on the foil is then the arrival. `lead = arrival - onset` (ns; `-Inf` when the
-unconverted light never reaches the threshold) and `preplasma = onset < arrival`.
+unconverted light never reaches the threshold), and `preplasma = onset < arrival`.
 
-The default 10⁸ W/cm² is the NIF User Guide's general guideline for the onset of weakly
-ionized plasma on a metal surface (§4.4, citing Spaeth et al., Fusion Sci. Technol. 69,
-25 (2016)); the guide puts the 1ω prepulse above it 3–5 ns before the nominal start of
-the pulse. It is a guideline for metals, not a facility criterion for foils; a foil of
-another material needs a separate value.
+The default 10⁸ W/cm² is the general guideline of the NIF User Guide for the onset of
+weakly ionized plasma on a metal surface (§4.4, citing Spaeth et al., Fusion Sci.
+Technol. 69, 25 (2016)). The guide puts the 1ω prepulse above it 3–5 ns before the
+nominal start of the pulse. It is a guideline for metals, and no facility criterion for
+foils sets it. A foil of another material needs a separate value.
 """
 preplasma_check(h::IrradianceHistory, arrival::IrradianceHistory; foil::Symbol = :backlighter,
                 threshold::Real = 1e8, colors = nothing) =

@@ -97,7 +97,7 @@ var pages = [
 
             **Empty** starts with no parts; build the target from the Insert menu.
 
-            The dimensions are illustrative mock-ups, not a facility's designs. Imported beams are kept.`) },
+            The dimensions are illustrative mock-ups; no facility uses these designs. Imported beams are kept.`) },
         { key: "target.insert", title: "Inserting parts",
           tip: "Insert adds a part, window, assembly or frame",
           text: md(`
@@ -353,7 +353,7 @@ var pages = [
             - Hohlraum presets aim into the entrance holes and follow the hohlraum when it moves.
             - The OMEGA backlighter set aims at the active foil.
 
-            The pointing is an illustrative default, not a shot's.`) },
+            The pointing is an illustrative default; no shot used it.`) },
         { key: "beams.display", title: "Rays and volumes",
           tip: "How beams are drawn",
           text: md(`
@@ -365,7 +365,7 @@ var pages = [
         { key: "beams.pointing", title: "Pointing",
           tip: "Aim offsets, defocus and power of the selection",
           text: md(`
-            The fields show the mean over the selected beams. An edit sets that field on all of them and leaves the others alone.
+            The fields show the mean over the selected beams. An edit sets that field on all of them and leaves the other fields as they are.
 
             A beam's direction is fixed by its port; pointing moves where it aims.`) },
         { key: "beams.aim", title: "Aim point and aim frame",
@@ -518,7 +518,7 @@ var pages = [
 
             Right-click or double-click its chip to choose another configuration.
 
-            A configuration marked * was saved with the session and differs from the one in the diagnostic directories. **Use the directories' definition** switches to the latter.`) },
+            A configuration marked * was saved with the session and differs from the one in the diagnostic directories. **Use the directories' definition** switches to the one in the directories.`) },
         { key: "diagnostics.chart", title: "X-ray power",
           tip: "Each recorded diagnostic's Tr and intensity",
           text: md(`
@@ -622,7 +622,7 @@ var pages = [
 
             It becomes a lateral allowance r·tan(tolerance) at each hardware point, with r measured from the chosen pivot. For a component assembled off-square, set the pivot to its mount.
 
-            It applies to the clearances and the capture margin, not to the 70° incidence limit.`) },
+            It applies to the clearances and the capture margin. The 70° incidence limit does not include it.`) },
         { key: "talis.report", title: "The report",
           tip: "Rules on the left, every check on the right",
           text: md(`

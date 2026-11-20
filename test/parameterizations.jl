@@ -1,7 +1,7 @@
-# Composed parameterizations: parameters held at given values (`HeldParameters`) and a
-# power scale per group of beams (`PowerScales`), checked against the beams composed by
-# hand (the inner parameterization applied, then powers remade) and against closed-form
-# gradients.
+# This file tests composed parameterizations: parameters held at given values
+# (`HeldParameters`) and a power scale per group of beams (`PowerScales`). They are checked
+# against the beams composed by hand, with the inner parameterization applied and the powers
+# then remade, and against closed-form gradients.
 
 using Briareus, ForwardDiff, LinearAlgebra, Test
 
@@ -28,12 +28,13 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         @test HeldParameters(gp, [n in held for n in eachindex(names)]; values).free == h.free
         @test HeldParameters(gp, names[held]; values).free == h.free
         @test HeldParameters(gp, Set(names[held]); values).free == h.free
-        # apply: the inner parameterization at the held values and the free parameters
+        # `apply` evaluates the inner parameterization at the held values and the free
+        # parameters.
         y = initial_parameters(h) .+ 0.05 .* cos.(1:nparams(h))
         x = copy(values)
         x[free] = y
         @test apply(h, y) == apply(gp, x)
-        # bounds: the inner box about the same point, at the free parameters
+        # The bounds are the inner box about the same point, at the free parameters.
         lo, hi = bounds(gp, x; z = 0.3, phi = 0.2)
         @test bounds(h, y; z = 0.3, phi = 0.2) == (lo[free], hi[free])
         # nothing held, everything held
@@ -60,10 +61,11 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         y = [xs; [s[k] for k in ps.keys]]
         byhand = [remake(b; power = b.power * s[cone2(b)]) for b in apply(p, xs)]
         @test apply(ps, y) == byhand
-        # the cone fraction follows the scales (closed form: 16 inner and 32 outer quads)
+        # The cone fraction follows the scales, in a closed form with 16 inner and 32 outer
+        # quads.
         P = [b.power for b in apply(ps, y)]
         @test sum(P[isinner.(quads)]) / sum(P) ≈ 16 * 0.8 / (16 * 0.8 + 32 * 1.1) rtol = 1e-14
-        # bounds: the inner box, then each scale in y0 (1 ± scale) within [min, max]
+        # The bounds are the inner box, then each scale in y0 (1 ± scale) within [min, max].
         lo, hi = bounds(ps, y; scale = 0.5, scale_max = 1.0, z = 0.4)
         plo, phi = bounds(p, xs; z = 0.4)
         sv = [s[k] for k in ps.keys]
@@ -88,19 +90,20 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         x[free] = y[1:end-2]
         byhand = [remake(b; power = b.power * s[cone2(b)]) for b in apply(gp, x)]
         @test apply(c, y) == byhand
-        # the other order of composition: the same beams
+        # The other order of composition gives the same beams.
         c2 = PowerScales(HeldParameters(gp, byinner; values); by = cone2)
         @test c2.keys == c.inner.keys && apply(c2, y) == byhand
-        # gradients (closed forms): Σ aim_z changes by 1 per free z shift (relative, not
-        # mirrored, one beam per quad) and not at all with a phi shift or a scale; the
-        # total power by the power each scale multiplies
+        # The gradients have closed forms. With relative, unmirrored shifts and one beam per
+        # quad, Σ aim_z changes by 1 per free z shift and not at all with a phi shift or a
+        # scale. The total power changes by the power each scale multiplies.
         g = ForwardDiff.gradient(v -> sum(b -> b.aim[3], apply(c, v)), y)
         nf = parameter_names(c)
         @test g == [endswith(n, ".z") ? 1.0 : 0.0 for n in nf]
         gP = ForwardDiff.gradient(v -> sum(b -> b.power, apply(c, v)), y)
         @test all(iszero, gP[1:end-2])
         @test gP[end-1:end] ≈ [8.0 * count(b -> cone2(b) === k, quads) for k in c.inner.keys] rtol = 1e-14
-        # a FramePointing inside: the frames' aims, scaled powers
+        # With a FramePointing inside, the aims come from the frames and the powers are
+        # scaled.
         fp = FramePointing(quads, CHAMBER; fields = (:u, :v, :w))
         fps = HeldParameters(PowerScales(fp; by = cone2), n -> endswith(n, ".w"))
         yf = initial_parameters(fps) .+ 0.01
@@ -110,7 +113,7 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         sf = Dict(zip(fps.inner.keys, yf[end-1:end]))
         @test apply(fps, yf) == [remake(b; power = b.power * sf[cone2(b)]) for b in apply(fp, full)]
 
-        # in a scenario and its subset: evaluations of the composed beams
+        # A scenario and its subset evaluate the composed beams.
         t = Target([foil(:foil, (0, 0, 0), (0, 0, 1); width = 8.0, n = 8)])
         sc = Scenario(t, quads)
         keep = findall(b -> nif_bundle(b) != "31", quads)
@@ -145,7 +148,8 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         t = Target([foil(:foil, (0, 0, 0), (0, 0, 1); width = 8.0, n = 2)])
         sk = subset(Scenario(t, c), keep)
         sub = sk.param
-        # by hand: the kept beams by quad, a scale per kept quad, the old values by name
+        # The reference is built by hand from the kept beams by quad, a scale per kept quad,
+        # and the old values by name.
         byname = Dict(zip(parameter_names(c.inner), values))
         ps = PowerScales(GroupPointing(beams[keep]; by = :quad, fields = (:z, :phi), mirror = false,
                                        relative = true); by = :quad)
@@ -164,7 +168,8 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
                   ("$part.z", "$part.phi", "$part.power_scale"))
         @test !any(n -> nif_bundle(first(split(n, '.'))) == "31", inner_names)
         @test length(sub.inner.keys) == 48 - count(q -> nif_bundle(q) == "31", unique(b.quad for b in beams))
-        # a power scale per cone alone: as built by hand on the kept beams
+        # A parameterization of only a power scale per cone matches the one built by hand
+        # on the kept beams.
         sp = subset(Scenario(t, PowerScales(gq; by = cone2)), keep).param
         hp = PowerScales(GroupPointing(beams[keep]; by = :quad, fields = (:z, :phi), mirror = false,
                                        relative = true); by = cone2)
@@ -181,8 +186,8 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         @test parameter_names(sg) == parameter_names(hg) && all(in(parameter_names(gq)), parameter_names(sg))
         @test apply(sg, initial_parameters(hg) .+ 0.04) == apply(hg, initial_parameters(hg) .+ 0.04)
 
-        # named values: a quad's fields and its scale by the quad's name, passed through
-        # to the inner parameterization; a held parameter is refused
+        # Named values give the fields and the scale of a quad by the quad name, and they
+        # are passed through to the inner parameterization. A held parameter is refused.
         oq = beams[findfirst(!isinner, beams)].quad
         free_names = parameter_names(c)
         yn = parameters(c, oq => (z = 0.3, power_scale = 1.2))
@@ -203,7 +208,7 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         xh[findfirst(==("inner23.power_scale"), pn)] = 0.9
         xh[findfirst(==("outer50.power_scale"), pn)] = 1.1
         @test xn == xh
-        # the other order: scales outside, the hold inside
+        # In the other order the scales are outside and the hold is inside.
         c2 = PowerScales(HeldParameters(gq, byinner; values = values[1:nq]); by = cone2)
         y2 = parameters(c2, oq => (phi = -0.2,); outer = (power_scale = 0.8,))
         n2 = parameter_names(c2)

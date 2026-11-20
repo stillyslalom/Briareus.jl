@@ -1,7 +1,7 @@
-# NIF Dante 1 as configured for ICF experiments from October 2021 (three mirrored
-# channels: the 2–4 keV multilayer on channel 2, SiO2 on channels 3 and 4). Public
-# values; research notes, "Dante channel responses and the unfold (2026-10-24)" and
-# "Dante-family hardware and geometry: what is public (2026-10-29)".
+# NIF Dante 1 as configured for ICF experiments from October 2021, with three mirrored
+# channels: the 2–4 keV multilayer on channel 2 and SiO2 on channels 3 and 4. All values
+# are public (research notes, "Dante channel responses and the unfold (2026-10-24)" and
+# "Dante-family hardware and geometry: what is public (2026-10-29)").
 #
 # Filter thicknesses in µm. "CH" is taken as polystyrene and "parylene" as parylene N
 # (assumed); channel 2's "47 µm CH" is the polyimide of the multilayer channel (Rubery
@@ -29,8 +29,8 @@ source = "NIF User Guide (2024-09), Table 5-1"
 [view]
 # Tr over the lower entrance hole's initial area, Dante's convention (Rubery et al.,
 # PRL 132, 065104, 2024)
-# the whole target in the collimated field (the 2004 design, which this configuration
-# shares): ±30 mm at TCC (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120)
+# The collimated field takes in the whole target. It is the ±30 mm at TCC of the 2004
+# design, which this configuration shares (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120).
 field_of_view_mm = 60.0
 through = "leh_bottom"
 
@@ -51,8 +51,8 @@ filters = [{ material = "polyimide", thickness_um = 47 }]
 mirror = { kind = "mlm", angle_deg = 1.9 }
 cathode = "Al"
 solid_angle_sr = 1.9e-7
-# a field of view for this channel alone, 12 mm in diameter at TCC (Rubery et al. 2022, OSTI
-# 1959490; research notes, "Dante-family hardware and geometry", H)
+# This channel has a separate field of view, 12 mm in diameter at TCC (Rubery et al. 2022,
+# OSTI 1959490; research notes, "Dante-family hardware and geometry", H).
 field_of_view_mm = 12
 
 [[channel]]

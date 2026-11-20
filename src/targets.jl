@@ -1,4 +1,4 @@
-# Ready-made target geometries.
+# This file builds ready-made target geometries.
 
 """
     WallWindow(; phi, z = 0.0, width, height, material = nothing, open = false, name = nothing,
@@ -7,33 +7,34 @@
 
 Diagnostic window cut into a hohlraum wall (see `hohlraum`), centered at azimuth `phi`
 (degrees from `+x`) and axial position `z` (mm). Its shape is drawn on the unrolled
-wall (arc length along the wall by `z`, an isometry of the cylinder, so areas are those
-of the flat shape):
+wall, with arc length along the wall against `z`. The unrolling is an isometry of the
+cylinder, so areas are those of the flat shape. The shape is:
 
 - a rectangle `width` mm of arc by `height` mm along the axis, or
 - a disk of `diameter` mm, area π d²/4. Its edge is a regular polygon of `segments`
-  sides (default: about one per wall cell, a multiple of 8, at least 32) enlarged to
-  the disk's area, so the window's area is exact while its edge stays within
-  `π² d/6 segments²` of the circle (3 µm for a 2 mm window with 32 sides).
+  sides, enlarged to the area of the disk. By default there is about one side per wall
+  cell, with a multiple of 8 and at least 32 sides. The area of the window is then
+  exact, while its edge stays within `π² d/6 segments²` of the circle (3 µm for a 2 mm
+  window with 32 sides).
 
 - A closed window (`open = false`) is an opaque patch of wall that re-emits with a
-  separate `material` (albedo and laser conversion, e.g. a thin gold foil whose albedo
-  follows `BurnthroughAlbedo`); `material = nothing` keeps the wall's.
+  separate `material` (albedo and laser conversion), e.g. a thin gold foil whose albedo
+  follows `BurnthroughAlbedo`. With `material = nothing`, the wall material is used.
 - An open window (`open = true`) is a hole: an aperture that laser light passes
-  through and whose incident x-ray flux escapes.
+  through and through which its incident x-ray flux escapes.
 
-`gap > 0` (mm) surrounds the window with an assembly gap of that width (a ring around
-a disk, a frame around a rectangle), a separate component `Symbol(name, :_gap)`: open by
-default, or a closed patch of `gap_material`. `name` defaults to `:window_<k>` for the
-`k`-th window.
+`gap > 0` (mm) surrounds the window with an assembly gap of that width, a ring around a
+disk or a frame around a rectangle. The gap is a separate component
+`Symbol(name, :_gap)`, open by default or a closed patch of `gap_material`. `name`
+defaults to `:window_<k>` for the `k`-th window.
 """
 struct WallWindow
     phi::Float64
     z::Float64
-    width::Float64                 # a disk's diameter
-    height::Float64                # a disk's diameter
+    width::Float64                 # diameter for a disk
+    height::Float64                # diameter for a disk
     circular::Bool
-    segments::Int                  # sides of a disk's polygon (0: automatic)
+    segments::Int                  # sides of the polygon of a disk (0 for automatic)
     material::Union{Nothing,Material}
     open::Bool
     name::Union{Nothing,Symbol}
@@ -64,13 +65,15 @@ function WallWindow(; phi, z = 0.0, width = nothing, height = nothing, diameter 
                       gap_material)
 end
 
-# Azimuthal (radians: start, angular width) and axial (mm) extent of the rectangle of
-# half-sizes `a` (mm of arc) by `b` (mm) centered on window `w`, on a wall of radius R.
+# Returns the azimuthal (radians, as start and angular width) and axial (mm) extent of the
+# rectangle of half-sizes `a` (mm of arc) by `b` (mm) centered on window `w`, on a wall of
+# radius R.
 _rect_extent(w::WallWindow, R, a, b) = (deg2rad(w.phi) - a / R, 2a / R, w.z - b, w.z + b)
 
-# Rectangles whose edges the wall grid must contain: a rectangular window and the outer
-# edge of its gap frame; for a disk, the square box (the disk, its gap, and half a wall
-# cell `hcell` of margin) that `_circular_window` re-meshes. The last is the footprint.
+# Returns the rectangles whose edges the wall grid must contain. For a rectangular
+# window these are the window and the outer edge of its gap frame. For a disk it is the
+# square box that `_circular_window` re-meshes, which contains the disk, its gap and half
+# a wall cell `hcell` of margin. The last rectangle is the footprint.
 function _window_extents(w::WallWindow, R, hcell)
     if w.circular
         B = w.width / 2 + w.gap + hcell / 2
@@ -105,9 +108,10 @@ function _check_windows(windows, R, h, hcell)
     return exts
 end
 
-# Band `i` of `k` of the fillet of radius `rc` joining the wall (radius R, ends ±hw) to the
-# cap at z = sgn (hw + rc): the frustum between the arc points at θ = (i-1)π/2k and iπ/2k
-# from the wall, on the wall's azimuthal grid, facing the cavity, with its exact cone.
+# Returns band `i` of `k` of the fillet of radius `rc` that joins the wall (radius R, ends
+# ±hw) to the cap at z = sgn (hw + rc). The band is the frustum between the arc points at
+# θ = (i-1)π/2k and iπ/2k from the wall, on the azimuthal grid of the wall, facing the
+# cavity, with its exact cone.
 function _corner_band(name, R, hw, rc, sgn, i, k, nphi, phibreaks, material)
     θa, θb = (i - 1) * π / 2k, i * π / 2k
     ρa, za = R - rc + rc * cos(θa), sgn * (hw + rc * sin(θa))
@@ -121,11 +125,11 @@ function _corner_band(name, R, hw, rc, sgn, i, k, nphi, phibreaks, material)
         p = [Vec3(ρa * cos(a), ρa * sin(a), za), Vec3(ρa * cos(b), ρa * sin(b), za),
              Vec3(ρb * cos(b), ρb * sin(b), zb), Vec3(ρb * cos(a), ρb * sin(a), zb)]
         φc = (a + b) / 2
-        # toward the fillet's center of curvature: into the cavity
+        # toward the center of curvature of the fillet, which is into the cavity
         add_polygon!(m, p; facing = -Vec3(cos(θc) * cos(φc), cos(θc) * sin(φc), sgn * sin(θc)))
     end
-    # the cone through both rim circles: apex on the axis beyond the cap, opening toward
-    # the waist
+    # The cone through both rim circles has its apex on the axis beyond the cap and opens
+    # toward the waist.
     zapex = za + (zb - za) * ρa / (ρa - ρb)
     half = atand((ρa - ρb) / abs(zb - za))
     return Component(name, m, material; surface = ConeSurface(half; apex = (0.0, 0.0, zapex), axis = (0.0, 0.0, -sgn)))
@@ -140,38 +144,41 @@ vertices to `r π²/6n²` inside at mid-side.
 """
 equal_area_radius(r, n) = r * sqrt(2π / (n * sin(2π / n)))
 
-# Default number of sides of a circular window's polygon: about one per wall cell of
-# size `hcell` along the outer circumference, a multiple of 8, at least 32.
+# The default number of sides of the polygon of a circular window. There is about one
+# side per wall cell of size `hcell` along the outer circumference, with a multiple of 8
+# and at least 32 sides.
 _window_segments(w::WallWindow, hcell) =
     w.segments > 0 ? w.segments : max(32, 8 * cld(ceil(Int, 2π * (w.width / 2 + w.gap) / hcell), 8))
 
 """
     _circular_window(box, R, φc, zc, rw, rg, n, hcell) -> (wall, window, gap)
 
-Re-mesh the square `box` of whole wall patches (cut from a `cylinder_mesh` of radius
-`R` whose grid contains the box edges) around a circular window centered at azimuth
-`φc` (radians) and height `zc`, of radius `rw` with a gap ring out to `rg ≥ rw`. In the
-unrolled coordinates (u, v) = (R(φ - φc), z - zc), with every vertex on the cylinder:
+Re-mesh the square `box` of whole wall patches around a circular window centered at
+azimuth `φc` (radians) and height `zc`, of radius `rw` with a gap ring out to
+`rg ≥ rw`. The box is cut from a `cylinder_mesh` of radius `R` whose grid contains the
+box edges. The mesh is built in the unrolled coordinates (u, v) = (R(φ - φc), z - zc),
+with every vertex on the cylinder:
 
-- window: polar rings of about `hcell` radial spacing, `n` sides on the edge, halving
-  the count inward while the arcs stay below 1.25 `hcell`, and a fan at the center;
-- gap: two triangles per side between the window's and the gap's polygons;
-- wall: triangles joining the outer polygon to the box boundary, whose vertices are
-  exactly those of the box grid (no T-junctions with the wall around it), by the
-  shorter-diagonal rule.
+- window: polar rings of about `hcell` radial spacing, with `n` sides on the edge and the
+  count halved inward while the arcs stay below 1.25 `hcell`, and a fan at the center;
+- gap: two triangles per side between the window polygon and the gap polygon;
+- wall: triangles that join the outer polygon to the box boundary by the
+  shorter-diagonal rule. Their vertices are exactly those of the box grid, so there are
+  no T-junctions with the surrounding wall.
 
-The window and gap polygons are `equal_area_radius` polygons, so with the exact curved
-areas of triangles on the cylinder (R times their (φ, z) area) the components have the
-areas π rw² and π(rg² - rw²) to round-off. Every patch is a triangle: a polygon with
-more than three vertices on the cylinder is not planar, and the centroid of a folded
-patch can sit behind its facets, which hides the element from the visibility rays.
+The window and gap polygons are `equal_area_radius` polygons. With the exact curved
+areas of triangles on the cylinder (R times their (φ, z) area), the components therefore
+have the areas π rw² and π(rg² - rw²) within round-off. Every patch is a triangle. A
+polygon with more than three vertices on the cylinder is not planar, and the centroid of
+a folded patch can lie behind its facets, which hides the element from the visibility
+rays.
 """
 function _circular_window(box::Mesh, R, φc, zc, rw, rg, n::Integer, hcell)
     uv(p) = (R * (mod(atan(p[2], p[1]) - φc + π, 2π) - π), p[3] - zc)
     xyz((u, v)) = (φ = φc + u / R; Vec3(R * cos(φ), R * sin(φ), zc + v))
     ang(p) = ((u, v) = uv(p); atan(v, u))
     tri!(m, a, b, c) = (g = a + b + c; add_polygon!(m, [a, b, c]; facing = -Vec3(g[1], g[2], 0)))
-    # a quad (a, b on the inner ring, d, c on the outer) split along its shorter diagonal
+    # splits a quad (a, b on the inner ring, d, c on the outer) along its shorter diagonal
     quad!(m, a, b, c, d) = norm(c - a) <= norm(d - b) ? (tri!(m, a, d, c); tri!(m, a, c, b)) :
                                                          (tri!(m, a, d, b); tri!(m, b, d, c))
     # box boundary, counterclockwise from its point nearest angle -π
@@ -199,7 +206,7 @@ function _circular_window(box::Mesh, R, φc, zc, rw, rg, n::Integer, hcell)
             a, b = inn[i], inn[mod1(i + 1, mi)]
             if mo == mi
                 quad!(window, a, b, out[mod1(i + 1, mo)], out[i])
-            else                       # two outer sides per inner one: three triangles
+            else                       # two outer sides per inner side give three triangles
                 p, q, r = out[2i-1], out[2i], out[mod1(2i + 1, mo)]
                 tri!(window, a, p, q); tri!(window, a, q, b); tri!(window, b, q, r)
             end
@@ -214,9 +221,9 @@ function _circular_window(box::Mesh, R, φc, zc, rw, rg, n::Integer, hcell)
         end
         outer = gl
     end
-    # wall between the outer polygon and the box: advance along whichever loop gives
-    # the shorter new edge (both loops are convex about the center and start at the
-    # same angle)
+    # The wall between the outer polygon and the box advances along whichever loop gives
+    # the shorter new edge. Both loops are convex about the center and start at the same
+    # angle.
     M = length(bnd)
     i = j = 1
     while i <= M || j <= n
@@ -235,13 +242,13 @@ end
 """
     HohlraumProfile(z, r)
 
-Wall profile of a hohlraum of revolution about `z` (`hohlraum(; profile)`): break points
-at heights `z` (mm, nondecreasing, from the bottom end `z[1] = −L/2` to the top end
-`z[end] = L/2`) with wall radii `r` (mm, positive). Between consecutive breaks the wall is
-a section: a cylinder where the two radii are equal, a conical frustum where they differ,
-and a flat ring (a step in radius) where two breaks share a height. A frustraum is two
-frusta meeting at the waist ([`frustraum_profile`](@ref)); a multi-section hohlraum is a
-radius per break.
+Wall profile of a hohlraum of revolution about `z` (`hohlraum(; profile)`). The profile
+has break points at heights `z` (mm, nondecreasing, from the bottom end `z[1] = −L/2` to
+the top end `z[end] = L/2`) with wall radii `r` (mm, positive). Between consecutive
+breaks the wall is a section. The section is a cylinder where the two radii are equal, a
+conical frustum where they differ, and a flat ring (a step in radius) where two breaks
+share a height. A frustraum is two frusta meeting at the waist
+([`frustraum_profile`](@ref)), and a multi-section hohlraum has a radius per break.
 """
 struct HohlraumProfile
     z::Vector{Float64}
@@ -277,19 +284,19 @@ function frustraum_profile(; length::Real, waist_radius::Real, end_radius::Real,
     return HohlraumProfile([-length / 2, 0.0, length / 2], [bottom_end_radius, waist_radius, end_radius])
 end
 
-# The sections of a profile: (r0, z0, r1, z1) per section, bottom to top.
+# Returns the sections of a profile as (r0, z0, r1, z1) per section, bottom to top.
 _sections(p::HohlraumProfile) = [(p.r[i], p.z[i], p.r[i+1], p.z[i+1]) for i in 1:length(p.z)-1]
 
-# A section's kind: :cylinder, :frustum or :ring (a step).
+# Returns the kind of a section: :cylinder, :frustum or :ring (a step).
 _section_kind(r0, z0, r1, z1) = z0 == z1 ? :ring : r0 == r1 ? :cylinder : :frustum
 
 """
     hohlraum_counts(; length, radius, leh_radius, h) -> (; nz, nphi, nr_cap, nr_leh)
 
-Mesh counts of `hohlraum` for wall and end-cap elements no larger than `h` (mm) along
-either side: `nz` axial and `nphi` azimuthal (a multiple of 8, so the NIF and OMEGA
-port symmetries map the mesh onto itself) wall cells, `nr_cap` radial cap rings and
-`nr_leh` LEH rings (their sides `≤ h`).
+Mesh counts of `hohlraum` for wall and end-cap elements of at most `h` (mm) along either
+side. The counts are `nz` axial and `nphi` azimuthal wall cells, `nr_cap` radial cap
+rings and `nr_leh` LEH rings, with sides `≤ h`. `nphi` is a multiple of 8, so that the
+NIF and OMEGA port symmetries map the mesh onto itself.
 """
 function hohlraum_counts(; length, radius, leh_radius, h)
     h > 0 || throw(ArgumentError("the element size h must be positive"))
@@ -300,9 +307,10 @@ function hohlraum_counts(; length, radius, leh_radius, h)
     return (; nz, nphi, nr_cap, nr_leh)
 end
 
-# The wall, cap, LEH and fillet counts `hohlraum` meshes with: from the element size `h`
-# when given (the straight wall and the flat caps are shorter by the fillets), and the
-# fillet bands about one wall cell of arc each unless `nr_corner` is given.
+# Returns the wall, cap, LEH and fillet counts with which `hohlraum` meshes. They come
+# from the element size `h` when given, with the straight wall and the flat caps shorter
+# by the fillets. Each fillet band is about one wall cell of arc unless `nr_corner` is
+# given.
 function _hohlraum_grid(; length, radius, leh_radius, h, rc, nz, nphi, nr_cap, nr_leh, nr_corner)
     if h !== nothing
         (; nz, nphi, nr_cap, nr_leh) = hohlraum_counts(; length, radius, leh_radius, h)
@@ -318,23 +326,23 @@ end
     Sombrero(; inner_radius = 4.0, outer_radius = 9.2, offset = 0.623, material = BLACK,
              nr = 4, nphi = 96)
 
-Entrance-hole shield ("sombrero") for `hohlraum(; sombrero)`: a flat annular sheet
-around each end of the hohlraum, from `inner_radius` to `outer_radius` (mm), its
-mid-plane `offset` mm from the entrance-hole plane (`length/2`) toward the waist
-(negative: beyond the hole). `hohlraum` meshes it as an `annulus_mesh` of `nr × nphi`
-patches (equal-area rings; the polygon edges lie within `r (1 − cos(π/nphi))` of the
-circles, 5 µm at 9.2 mm with 96 sides) carrying its exact `DiskSurface`.
+Entrance-hole shield ("sombrero") for `hohlraum(; sombrero)`. The shield is a flat
+annular sheet around each end of the hohlraum, from `inner_radius` to `outer_radius`
+(mm). Its mid-plane lies `offset` mm from the entrance-hole plane (`length/2`) toward
+the waist, or beyond the hole when negative. `hohlraum` meshes it as an `annulus_mesh` of
+`nr × nphi` patches in equal-area rings, with its exact `DiskSurface`. The polygon edges
+lie within `r (1 − cos(π/nphi))` of the circles, 5 µm at 9.2 mm with 96 sides.
 
-The defaults are representative of a NIF symcap shield, relative to the entrance-hole
-washer's inner face: bore 4.0 mm and rim 9.2 mm radius, a 39 µm sheet whose mid-plane
-lies 0.623 mm inside that face. Both shields are identical (mirror images). A real sheet
-is dimpled, within about ±0.12 mm of its mean plane, and runs past the rim where it is
-mounted; the model keeps the flat mean plane.
+The defaults are representative of a NIF symcap shield, relative to the inner face of
+the entrance-hole washer. They are a bore of 4.0 mm and a rim of 9.2 mm radius, with a
+39 µm sheet whose mid-plane lies 0.623 mm inside that face. Both shields are identical
+mirror images. A real sheet is dimpled, within about ±0.12 mm of its mean plane, and
+extends past the rim where it is mounted; the model uses the flat mean plane.
 
-`material` is an engineering default: `BLACK`, absorbing laser
-light and emitting nothing. The shield lies outside the cavity and does not see into it
-(beside the wall, the wall hides the hole from it), so its albedo and conversion do not
-change the hohlraum's radiation.
+`material` is an engineering default, `BLACK`, which absorbs laser light and emits
+nothing. The shield lies outside the cavity and has no view into it, since beside the
+wall the wall hides the hole from the shield. Its albedo and conversion therefore do not
+change the radiation of the hohlraum.
 """
 struct Sombrero
     inner_radius::Float64
@@ -354,12 +362,12 @@ Sombrero(; inner_radius::Real = 4.0, outer_radius::Real = 9.2, offset::Real = 0.
          material::Material = BLACK, nr::Integer = 4, nphi::Integer = 96) =
     Sombrero(inner_radius, outer_radius, offset, material, nr, nphi)
 
-# The two shields of `s` for a hohlraum of half-length `h`, wall radius `R` and entrance
-# holes of radius `rl`: one-sided, facing away from the waist.
+# Returns the two shields of `s` for a hohlraum of half-length `h`, wall radius `R` and
+# entrance holes of radius `rl`. They are one-sided and face away from the waist.
 function _sombreros(s::Sombrero, h, R, rl)
     z = h - s.offset
     z > 0 || throw(ArgumentError("the sombrero offset puts the shields past the waist"))
-    # beside the wall the bore must clear it; beyond the hole, the hole
+    # beside the wall the bore must clear the wall, and beyond the hole it must clear the hole
     s.inner_radius > (s.offset >= 0 ? R : rl) ||
         throw(ArgumentError("the sombrero bore (inner_radius) cuts into the hohlraum"))
     return [Component(name, annulus_mesh(s.inner_radius, s.outer_radius, sgn * z; nr = s.nr,
@@ -371,8 +379,8 @@ end
 """
     capsule_counts(capsule_radius, capsule_h) -> (; capsule_ntheta, capsule_nphi)
 
-Capsule mesh counts of `hohlraum` for elements no larger than `capsule_h` (mm) along a
-meridian or the equator (`capsule_nphi` a multiple of 4).
+Capsule mesh counts of `hohlraum` for elements of at most `capsule_h` (mm) along a
+meridian or the equator, with `capsule_nphi` a multiple of 4.
 """
 function capsule_counts(r, ch)
     ch > 0 || throw(ArgumentError("the capsule element size must be positive"))
@@ -396,108 +404,117 @@ profile), centered on TCC (dimensions in mm), with components
 - `:cap_top`, `:cap_bottom` — end-cap washers between the LEH and the wall
 - `:leh_top`, `:leh_bottom` — laser entrance holes (apertures; their incident flux is
   the x-ray loss through the LEH)
-- `:leh_top_lip`, `:leh_bottom_lip` — with `leh_closure`, each hole's closing lip (after
-  its hole)
-- `:capsule` — spherical capsule (omit with `capsule_radius = 0`)
+- `:leh_top_lip`, `:leh_bottom_lip` — with `leh_closure`, the closing lip of each hole
+  (after its hole)
+- `:capsule` — spherical capsule (omitted with `capsule_radius = 0`)
 - `:window_1`, … — diagnostic windows in the wall, one component per `WallWindow` in
-  `windows` (or the window name): closed windows are opaque wall patches with
-  their own material, open ones apertures. A window with a gap is followed by its gap
+  `windows` (or the window name). Closed windows are opaque wall patches with a separate
+  material, and open windows are apertures. A window with a gap is followed by its gap
   component `:window_1_gap`, ….
 - `:sombrero_top`, `:sombrero_bottom` — with `sombrero`, the entrance-hole shields
   (last)
 
-Laser light that strikes the outside of the wall or caps (clipping on the LEH edge)
-is reported as the `_outside` back-side loss of those components; light that leaves
+Laser light that strikes the outside of the wall or caps, by clipping on the LEH edge,
+is reported as the `_outside` back-side loss of those components. Light that leaves
 through an open window is `:missed`. The wall, caps, LEHs, windows and capsule carry
-their exact `CylinderSurface`, `DiskSurface` and `SphereSurface`, so the radiation
-model uses the true geometry.
-The target is declared `closed`, so `RadiationModel` balances its view factors
-(`enforce_closure!`) unless given `closed = false`: windows, their gaps and closing lips
-are apertures, the sombreros see nothing of the cavity, and with open windows and gaps
-the balanced loss and capsule drive agree with a continuum Monte Carlo within 0.1%
-(research notes, "Closure on bored, windowed and CAD cavities").
+their exact `CylinderSurface`, `DiskSurface` and `SphereSurface`, so the radiation model
+uses the true geometry. The target is declared `closed`, so `RadiationModel` balances
+its view factors (`enforce_closure!`) unless given `closed = false`. Windows, their gaps
+and closing lips are apertures, and the sombreros have no view of the cavity. With open
+windows and gaps, the balanced loss and capsule drive agree with a continuum Monte Carlo
+within 0.1% (research notes, "Closure on bored, windowed and CAD cavities").
 
-Each end (`top_end` at `+length/2`, `bottom_end` at `−length/2`) is, by default, an
-entrance hole of radius `leh_radius`; given a number, an entrance hole of that radius
-(its cap's and hole's ring counts from `h` when given, else `nr_cap` and `nr_leh`; with
-`leh_closure`, its open radius `leh_open_radius` scaled by the ratio of the radii);
-`:closed`, a cap with no hole (the hole's mesh, and its lip's, merged into the cap, of
-the wall's material); `:open`, neither cap nor hole: the cavity is open there, to a
-physics package placed against it or to nothing (a halfraum). A target with an open end
-is not declared `closed` (its view factors are not balanced: what leaves through the
-open end and strikes nothing is lost), and has no fillet (`corner_radius = 0`) or
-sombrero. The defaults leave the hohlraum exactly as without these keywords.
+Each end (`top_end` at `+length/2`, `bottom_end` at `−length/2`) is set as follows:
 
-With windows, the wall and end-cap meshes contain the windows' edges as grid lines
-(`conforming_grid`; the wall's axial grid gets their `z` edges, wall and caps share
-the azimuthal grid with their `φ` edges), so each rectangular window (and gap frame) is
-tiled exactly by whole patches, and the caps still meet the wall at shared vertices. A
-circular window is cut the same way as a square box around it and its gap, half a wall
-cell wider, which is re-meshed to conform to the circles (`_circular_window`) and
-stitched to the surrounding grid at the box vertices. Without windows the mesh
-is the uniform `nz × nphi` grid.
+- by default, an entrance hole of radius `leh_radius`;
+- a number gives an entrance hole of that radius. The ring counts of its cap and hole
+  come from `h` when given, and otherwise from `nr_cap` and `nr_leh`. With
+  `leh_closure`, its open radius is `leh_open_radius` scaled by the ratio of the radii;
+- `:closed` gives a cap with no hole. The mesh of the hole and of its lip are merged into
+  the cap, with the wall material;
+- `:open` gives neither cap nor hole. The cavity is open there, to a physics package
+  placed against it or to nothing (a halfraum).
 
-Mesh size: give `h` (mm) to set the wall, cap and LEH counts from an element size
-instead (`hohlraum_counts`), and `capsule_h` for the capsule (`capsule_counts`); they
-replace the corresponding counts.
+A target with an open end is not declared `closed`, so its view factors are not
+balanced, and the light that leaves through the open end and strikes nothing is lost.
+Such a target has no fillet (`corner_radius = 0`) or sombrero. The defaults leave the
+hohlraum exactly as without these keywords.
+
+With windows, the wall and end-cap meshes contain the window edges as grid lines
+(`conforming_grid`). The axial grid of the wall includes their `z` edges, and the wall
+and caps share the azimuthal grid with their `φ` edges. Each rectangular window (and gap
+frame) is therefore tiled exactly by whole patches, and the caps still meet the wall at
+shared vertices. A circular window is cut in the same way, as a square box around it and
+its gap, half a wall cell wider. The box is re-meshed to conform to the circles
+(`_circular_window`) and stitched to the surrounding grid at the box vertices. Without
+windows the mesh is the uniform `nz × nphi` grid.
+
+Mesh size: `h` (mm) sets the wall, cap and LEH counts from an element size instead
+(`hohlraum_counts`), and `capsule_h` sets the counts for the capsule
+(`capsule_counts`). These replace the corresponding counts.
 
 `corner_radius` (mm) rounds the wall–cap corners into quarter-circle fillets of that
-radius (a hohlraum machined with curved corners): the wall stops `corner_radius` short
-of each end and the caps `corner_radius` short of the wall radius. Each fillet is
-`nr_corner` bands (default: about one wall cell of arc each, at least 2), components
-`:corner_top_1`, … (from the wall to the cap) and `:corner_bottom_1`, …, of the wall
-material. Each band is the exact frustum through its two rim circles (`ConeSurface`),
-so the fillet is the chord polygon of the arc (sagitta `corner_radius (1 − cos(π/4k))`,
-20 µm for 1 mm in 4 bands) and the bands, wall and caps meet at shared vertices.
+radius, as for a hohlraum machined with curved corners. The wall stops `corner_radius`
+short of each end, and the caps stop `corner_radius` short of the wall radius. Each
+fillet is `nr_corner` bands, by default about one wall cell of arc each and at least 2.
+The bands are the components `:corner_top_1`, … (from the wall to the cap) and
+`:corner_bottom_1`, …, of the wall material. Each band is the exact frustum through its
+two rim circles (`ConeSurface`). The fillet is therefore the chord polygon of the arc,
+with sagitta `corner_radius (1 − cos(π/4k))` (20 µm for 1 mm in 4 bands), and the bands,
+wall and caps meet at shared vertices.
 
-`leh_closure`, a `GapClosure`, closes each entrance hole to x-rays from `leh_radius` down
-to `leh_open_radius` during the pulse: the annulus between them is a closing lip
-(`aperture(...; closure)`), transparent to laser light and lines of sight, which lets
-its incident flux escape until `closure.closure` (ns) and across the next
-`closure.width` ns turns into plasma that re-emits with the albedo of `closure.after`
-(the wall's, e.g. `WallLossAlbedo()`). Engineering default for low-fill NIF hohlraums:
-open through the foot, closing over ~0.5 ns at the rise to peak, to
-`leh_open_radius = 0.84 leh_radius` (Schneider et al. 2015: ~0.84 r₀ through the peak;
-Young et al. 2020 use 85% static radii; research notes, "Closing entrance holes"). Beams
-pass the lip unclipped: the laser keeps its path open (Chen et al. 2020).
+`leh_closure`, a `GapClosure`, closes each entrance hole to x-rays from `leh_radius`
+down to `leh_open_radius` during the pulse. The annulus between them is a closing lip
+(`aperture(...; closure)`), transparent to laser light and lines of sight. Its incident
+flux escapes until `closure.closure` (ns), and across the next `closure.width` ns the
+lip turns into plasma that re-emits with the albedo of `closure.after`, the wall albedo,
+e.g. `WallLossAlbedo()`. In the engineering default for low-fill NIF hohlraums, the
+hole stays open through the foot and closes over about 0.5 ns at the rise to peak, to
+`leh_open_radius = 0.84 leh_radius`. Schneider et al. 2015 find about 0.84 r₀ through
+the peak, and Young et al. 2020 use 85% static radii (research notes, "Closing entrance
+holes"). Beams pass the lip unclipped, since the path of the laser stays open (Chen et
+al. 2020).
 
-`leh_closure = :computed` (or a `LipClosure`) computes the closure instead: each lip's
-plasma edge moves in from `leh_radius` at the sound speed of the gold blown off the lip
-and stands a fixed depth inside the rim while the beams pass at high power
-(`LipClosure`, calibrated on measured LEH radii; `drive_history` integrates it per hole
-from the lip temperature and the beams entering that hole). The lip then reaches
+`leh_closure = :computed` (or a `LipClosure`) computes the closure instead. The plasma
+edge of each lip moves in from `leh_radius` at the sound speed of the gold blown off the
+lip, and stays at a fixed depth inside the rim while the beams pass at high power. The
+`LipClosure` is calibrated on measured LEH radii, and `drive_history` integrates it per
+hole from the lip temperature and the beams entering that hole. The lip then extends
 down to `leh_open_radius` (default 0.6 `leh_radius`, the floor of the closure) in
 `nr_lip` rings (default 6; 1 for a `GapClosure`).
 
 `sombrero` (`true` for the measured `Sombrero()`, or a `Sombrero`) adds an annular
-shield around each end, one-sided and facing away from the waist: opaque to beams
-(clipping, deposition: power on its waist side is booked as `sombrero_top_outside`) and
-lines of sight, hardware for `clearance`. It lies outside the cavity: its elements see
-none of the hohlraum's (their view-factor rows and columns are zero), so the enclosure
-stays closed, `closed = true` balancing leaves them alone, and the hohlraum's solution
-does not change. Off by default.
+shield around each end, one-sided and facing away from the waist. The shield is opaque
+to beams and lines of sight, and it is hardware for `clearance`. For clipping and
+deposition, the power on its waist side is booked as `sombrero_top_outside`. The shield
+lies outside the cavity, and its elements have no view of the elements of the hohlraum,
+so their view-factor rows and columns are zero. The enclosure therefore stays closed,
+`closed = true` balancing leaves the shield elements unchanged, and the solution of the
+hohlraum does not change. Off by default.
 
 `profile`, a [`HohlraumProfile`](@ref), gives the wall a radius per break instead of
-`length` and `radius` (give neither): a frustraum ([`frustraum_profile`](@ref)) or a
-multi-section hohlraum. Each section between two breaks is a separate wall component,
-`:wall_1`, `:wall_2`, … from the bottom, each with `part = :wall` (so `:wall` names the
-whole wall in `elements`, `drive_history(; wall)` and every name-taking analysis) and its
-exact surface: a `CylinderSurface`, a `ConeSurface` (a frustum, meshed as planar
-trapezoids between parallel chords) or a `DiskSurface` (a flat ring where the radius
-steps). All sections share the azimuthal grid, so they meet at shared vertices, and each
-end's cap runs from its hole to that end's radius. With `h` the azimuthal count comes
-from the widest radius and each section's axial count from its meridian length;
-otherwise `nz` is shared out among the sections by length. Windows are cut into
-cylindrical sections only (each window within one); a window on a frustum or across a
+`length` and `radius`, which must then be omitted. The profile describes a frustraum
+([`frustraum_profile`](@ref)) or a multi-section hohlraum. Each section between two
+breaks is a separate wall component, `:wall_1`, `:wall_2`, … from the bottom, each with
+`part = :wall`. `:wall` therefore names the whole wall in `elements`,
+`drive_history(; wall)` and every name-taking analysis. Each section has its exact
+surface: a `CylinderSurface`, a `ConeSurface` (a frustum, meshed as planar trapezoids
+between parallel chords) or a `DiskSurface` (a flat ring where the radius steps). All
+sections share the azimuthal grid, so they meet at shared vertices, and the cap at each
+end runs from its hole to the radius of that end. With `h`, the azimuthal count comes
+from the widest radius, and the axial count of each section from its meridian length.
+Otherwise `nz` is shared out among the sections by length. Windows are cut only into
+cylindrical sections, each window within one section. A window on a frustum or across a
 break is refused, as are corner fillets. The ends, closing lips, sombreros and the
-capsule work as for the cylinder; a sombrero's bore must clear the widest radius. A
-profile of one cylindrical section is the cylindrical hohlraum exactly (`:wall` and all).
+capsule work as for the cylinder, and the bore of a sombrero must clear the widest
+radius. A profile of one cylindrical section gives exactly the cylindrical hohlraum,
+including the `:wall` component.
 
-`capsule_mesh` picks the capsule mesh: `:compact` (the default), a geodesic
+`capsule_mesh` selects the capsule mesh. `:compact` (the default) is a geodesic
 `icosphere_mesh` of nearly equilateral triangles with sides of about `capsule_h`
-(`icosphere_frequency`; without `capsule_h`, the lat-long meridional size
-`π capsule_radius / capsule_ntheta`), or `:latlong` (`sphere_mesh`, `capsule_ntheta ×
-capsule_nphi`). The capsule mesh sets the flux's P4: lat-long cells are slivers near
+(`icosphere_frequency`). Without `capsule_h`, the side is the lat-long meridional size
+`π capsule_radius / capsule_ntheta`. `:latlong` is a `sphere_mesh` of `capsule_ntheta ×
+capsule_nphi`. The capsule mesh sets the P4 of the flux. Lat-long cells are slivers near
 the poles, and the compact mesh reaches the same P4 error with several times fewer
 elements (research notes, "Compact capsule mesh"). `:latlong` is the comparison mesh of
 that convergence study (`examples/capsule_mesh.jl`, `test/capsule_mesh.jl`).
@@ -521,7 +538,7 @@ function hohlraum(; length::Union{Nothing,Real} = nothing, radius::Union{Nothing
             throw(ArgumentError("a profile sets the length and the radii: give no length or radius with it"))
         secs = _sections(profile)
         if Base.length(secs) == 1 && _section_kind(secs[1]...) === :cylinder
-            # one cylindrical section: the cylindrical hohlraum itself
+            # one cylindrical section gives the cylindrical hohlraum itself
             length, radius = profile.z[end] - profile.z[1], profile.r[1]
             profile = nothing
         end
@@ -582,7 +599,8 @@ function hohlraum(; length::Union{Nothing,Real} = nothing, radius::Union{Nothing
     return Target(comps; closed = !opened)
 end
 
-# Whether either end is open, refusing what an open end cannot have (a fillet, a sombrero).
+# Whether either end is open. Fillets and sombreros, which an open end cannot have, are
+# refused.
 function _check_open_ends(ends, rc, sombrero)
     opened = any(e -> e.kind === :open, ends)
     opened && rc > 0 &&
@@ -592,16 +610,16 @@ function _check_open_ends(ends, rc, sombrero)
     return opened
 end
 
-# Cut `windows` (with extents `exts`, numbered `ks`) out of the cylindrical wall mesh of
-# radius `R` whose grid contains their edges: the rest of the wall and the windows'
+# Cuts `windows` (with extents `exts`, numbered `ks`) out of the cylindrical wall mesh of
+# radius `R` whose grid contains their edges. Returns the rest of the wall and the window
 # components (each followed by its gap), on the cylinder `cyl`.
 function _cut_windows(wall_mesh, windows, exts, ks, R, hcell, cyl, wall)
     part(name, mesh, open, mat) = open ? aperture(name, mesh; surface = cyl) :
                                   Component(name, mesh, mat === nothing ? wall : mat; surface = cyl)
     window_comps = Component[]
     for (k, w, e) in zip(ks, windows, exts)
-        # the mesh conforms to the extents' edges, so patch centroids are well inside or
-        # well outside (by half a patch)
+        # The mesh conforms to the edges of the extents, so patch centroids are well inside
+        # or well outside, by half a patch.
         if w.circular
             box, wall_mesh = split_mesh(wall_mesh, c -> _in_window(e[1], c))
             rest, sel, gsel = _circular_window(box, R, deg2rad(w.phi), w.z, w.width / 2,
@@ -622,9 +640,10 @@ function _cut_windows(wall_mesh, windows, exts, ks, R, hcell, cyl, wall)
     return wall_mesh, window_comps
 end
 
-# The end caps (washers from each end's hole to `rcaps`, top then bottom), the entrance
-# holes and their closing lips, appended to `comps`; a closed end's hole (and lip) merged
-# into its cap, of the wall's material; an open end with neither cap nor hole.
+# Appends to `comps` the end caps (washers from the hole of each end to `rcaps`, top then
+# bottom), the entrance holes and their closing lips. The hole and lip of a closed end
+# are merged into its cap, with the wall material, and an open end has neither cap nor
+# hole.
 function _end_components!(comps, ends, h, rcaps, nphi, phibreaks, wall; leh_closure, leh_radius,
                           leh_open_radius, nr_lip)
     push!(comps,
@@ -638,13 +657,14 @@ function _end_components!(comps, ends, h, rcaps, nphi, phibreaks, wall; leh_clos
         e.kind === :open && continue
         disk = DiskSurface(center = (0, 0, sgn * h))
         rl = e.radius
-        # the hole takes the cap's azimuths, so its rim meets the cap's inner edge at
-        # shared vertices (half the count left a crack at the rim that rays leak through)
+        # The hole uses the azimuths of the cap, so its rim meets the inner edge of the cap
+        # at shared vertices. Half the count left a crack at the rim through which rays
+        # leaked.
         if leh_closure === nothing
             push!(comps, aperture(name, annulus_mesh(0.0, rl, sgn * h; nr = e.nr_leh, nphi,
                                                      up = sgn < 0, phibreaks); surface = disk))
         else
-            # the hole open at the peak, and the lip that closes around it
+            # the hole that is open at the peak, and the lip that closes around it
             ro = rl == leh_radius ? leh_open_radius : leh_open_radius * rl / leh_radius
             push!(comps, aperture(name, annulus_mesh(0.0, ro, sgn * h; nr = max(1, round(Int, e.nr_leh * ro / rl)),
                                                      nphi, up = sgn < 0, phibreaks); surface = disk))
@@ -669,7 +689,7 @@ function _end_components!(comps, ends, h, rcaps, nphi, phibreaks, wall; leh_clos
     return comps
 end
 
-# The capsule (none for `capsule_radius = 0`), appended to `comps`.
+# Appends the capsule to `comps`, or nothing for `capsule_radius = 0`.
 function _capsule_component!(comps, capsule_radius, capsule_mesh, capsule_ntheta, capsule_nphi, capsule_h,
                              capsule, capsule_center)
     capsule_radius > 0 || return comps
@@ -687,8 +707,8 @@ function _capsule_component!(comps, capsule_radius, capsule_mesh, capsule_ntheta
                                   surface = SphereSurface(capsule_radius; center = capsule_center)))
 end
 
-# The entrance-hole shields (last), for a hohlraum of half-length `h` whose wall's widest
-# radius near the ends is `R`.
+# Appends the entrance-hole shields (last), for a hohlraum of half-length `h` whose widest
+# wall radius near the ends is `R`.
 function _sombrero_components!(comps, sombrero, h, R, ends)
     sombrero === true && (sombrero = Sombrero())
     sombrero isa Sombrero && append!(comps, _sombreros(sombrero, h, R, max(ends[1].radius, ends[2].radius)))
@@ -708,15 +728,16 @@ function _profile_hohlraum(prof::HohlraumProfile; leh_radius, capsule_radius, nz
     rends = (prof.r[end], prof.r[1])                # top, bottom
     rmax = maximum(prof.r)
     0 < leh_radius || throw(ArgumentError("need 0 < leh_radius"))
-    # the capsule inside every section: its distance in its meridian half-plane from each
-    # section's line, and from the ends
+    # The capsule must lie inside every section, checked by its distance in its meridian
+    # half-plane from the line of each section and from the ends.
     if capsule_radius > 0
         c = Vec3(capsule_center...)
         q = (hypot(c[1], c[2]), c[3])
         abs(q[2]) + capsule_radius < hz && all(s -> _segment_distance(q, s) > capsule_radius, secs) &&
             _profile_radius(prof, q[2]) > q[1] || throw(ArgumentError("capsule does not fit"))
     end
-    # counts: azimuthal from the widest radius, axial per section from its meridian length
+    # The azimuthal count comes from the widest radius, and the axial count of each
+    # section from its meridian length.
     lens = [hypot(r1 - r0, z1 - z0) for (r0, z0, r1, z1) in secs]
     if h !== nothing
         h > 0 || throw(ArgumentError("the element size h must be positive"))
@@ -736,7 +757,7 @@ function _profile_hohlraum(prof::HohlraumProfile; leh_radius, capsule_radius, nz
             throw(ArgumentError("need $key's entrance hole (radius $(e.radius)) narrower than the end ($re)"))
     end
     opened = _check_open_ends(ends, 0.0, sombrero)
-    # windows: each within one cylindrical section, cut as in a cylindrical wall
+    # Each window lies within one cylindrical section and is cut as in a cylindrical wall.
     home = zeros(Int, Base.length(windows))
     exts = Vector{Any}(undef, Base.length(windows))
     for (k, w) in enumerate(windows)
@@ -753,7 +774,7 @@ function _profile_hohlraum(prof::HohlraumProfile; leh_radius, capsule_radius, nz
     for i in unique(home)
         ks = findall(==(i), home)
         r0, z0, _, z1 = secs[i]
-        # `_check_windows` takes a wall centered on z = 0: shift the windows to it
+        # `_check_windows` takes a wall centered on z = 0, so the windows are shifted to it
         zc = (z0 + z1) / 2
         shifted = [WallWindow(w.phi, w.z - zc, w.width, w.height, w.circular, w.segments, w.material, w.open,
                               w.name, w.gap, w.gap_material) for w in windows[ks]]
@@ -797,10 +818,10 @@ function _profile_hohlraum(prof::HohlraumProfile; leh_radius, capsule_radius, nz
     return Target(comps; closed = !opened)
 end
 
-# A section of revolution from radius r0 at z0 to r1 at z1 (a frustum, a cylinder or a
-# flat ring) in `n` bands on the azimuthal grid `φs`, facing the axis side of the profile
-# (the cavity). Each patch is the trapezoid between two parallel chords at the same
-# azimuths, so it is planar; the last ring is (r1, z1) exactly, so sections meet at
+# Meshes a section of revolution from radius r0 at z0 to r1 at z1 (a frustum, a cylinder
+# or a flat ring) in `n` bands on the azimuthal grid `φs`, facing the axis side of the
+# profile (the cavity). Each patch is the trapezoid between two parallel chords at the
+# same azimuths, so it is planar. The last ring is exactly (r1, z1), so sections meet at
 # shared vertices.
 function _section_mesh(r0, z0, r1, z1, n, φs)
     m = Mesh()
@@ -811,20 +832,21 @@ function _section_mesh(r0, z0, r1, z1, n, φs)
         p = [Vec3(ra * cos(a), ra * sin(a), za), Vec3(ra * cos(b), ra * sin(b), za),
              Vec3(rb * cos(b), rb * sin(b), zb), Vec3(rb * cos(a), rb * sin(a), zb)]
         φc = (a + b) / 2
-        # the profile's normal toward the cavity: (−dz, dr) in the meridian half-plane
+        # the normal of the profile toward the cavity, (−dz, dr) in the meridian half-plane
         add_polygon!(m, p; facing = Vec3(-(z1 - z0) * cos(φc), -(z1 - z0) * sin(φc), r1 - r0))
     end
     return m
 end
 
-# Distance in the meridian half-plane from the point q = (ρ, z) to the section's line.
+# Returns the distance in the meridian half-plane from the point q = (ρ, z) to the line
+# of the section.
 function _segment_distance(q, (r0, z0, r1, z1))
     d = (r1 - r0, z1 - z0)
     t = clamp(((q[1] - r0) * d[1] + (q[2] - z0) * d[2]) / (d[1]^2 + d[2]^2), 0.0, 1.0)
     return hypot(q[1] - r0 - t * d[1], q[2] - z0 - t * d[2])
 end
 
-# The profile's wall radius at height z (the smallest where a ring steps).
+# Returns the wall radius of the profile at height z (the smallest where a ring steps).
 function _profile_radius(p::HohlraumProfile, z)
     best = Inf
     for (r0, z0, r1, z1) in _sections(p)
@@ -834,11 +856,11 @@ function _profile_radius(p::HohlraumProfile, z)
     return best
 end
 
-# One end of `hohlraum` (keyword `key`): `(; kind, radius, nr_cap, nr_leh)`, `kind` one
-# of `:leh` (an entrance hole of `radius`), `:closed` (the cap covers the hole of
-# `radius`) and `:open` (neither cap nor hole; `radius` and the counts unused). An end
-# of the default radius keeps the hohlraum's counts; another radius takes counts from
-# the element size `h` when given.
+# Returns one end of `hohlraum` (keyword `key`) as `(; kind, radius, nr_cap, nr_leh)`.
+# `kind` is `:leh` for an entrance hole of `radius`, `:closed` for a cap that covers the
+# hole of `radius`, and `:open` for neither cap nor hole, with `radius` and the counts
+# unused. An end of the default radius uses the counts of the hohlraum, and another
+# radius takes counts from the element size `h` when given.
 function _hohlraum_end(e, key::Symbol; leh_radius, radius, rc, h, nr_cap, nr_leh)
     e === nothing && return (; kind = :leh, radius = Float64(leh_radius), nr_cap, nr_leh)
     if e isa Symbol

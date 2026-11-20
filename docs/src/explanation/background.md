@@ -9,24 +9,25 @@ reference texts at the end treat each subject in full.
 
 ## Indirect drive and the hohlraum
 
-In indirect drive, a fuel capsule is imploded by x rays rather than by laser light
-directly. The capsule sits at the center of a hohlraum, a high-Z cylinder (gold, or
-depleted uranium lined with gold) a few millimeters across. Laser beams enter through a
-laser entrance hole (LEH) at each end and strike the inner wall. The wall's laser-heated
-plasma converts the absorbed light into soft x rays, with a conversion efficiency of
-roughly 0.7–0.95 depending on intensity and time (research notes, "Literature review against Kritcher et al. 2024"). The
-x rays fill the cavity, are partly absorbed by the wall and partly re-emitted, and
-bathe the capsule. The capsule's ablator absorbs them, ablates outward, and the reaction
-drives the shell and fuel inward. NIF's ignition-era hohlraums reach radiation
-temperatures near 300 eV: Dante measured about 307–313 eV on the HYBRID-E shots
-(Abu-Shawareb et al., Phys. Rev. Lett. 132, 065102 (2024), Table I).
+In indirect drive, a fuel capsule is imploded by x rays, and the laser light does
+not reach it directly. The capsule sits at the center of a hohlraum, a high-Z cylinder
+(gold, or depleted uranium lined with gold) a few millimeters across. Laser beams enter
+through a laser entrance hole (LEH) at each end and strike the inner wall. The
+laser-heated plasma of the wall converts the absorbed light into soft x rays, with a
+conversion efficiency of roughly 0.7–0.95 depending on intensity and time (research
+notes, "Literature review against Kritcher et al. 2024"). The x rays fill the cavity,
+are partly absorbed by the wall and partly re-emitted, and bathe the capsule. The
+ablator of the capsule absorbs them, ablates outward, and the reaction drives the shell
+and fuel inward. NIF's ignition-era hohlraums reach radiation temperatures near 300 eV:
+Dante measured about 307–313 eV on the HYBRID-E shots (Abu-Shawareb et al., Phys. Rev.
+Lett. 132, 065102 (2024), Table I).
 
-The cavity is what makes the drive uniform. The capsule sees the wall from a distance
+The cavity is what makes the drive uniform. The wall is seen from the capsule at a distance
 comparable to the hohlraum radius, so each point of the capsule receives flux from a
 wide patch of wall, and the fine structure of the laser spots averages out. What
 remains are the low-order variations set by where on the wall the laser power lands,
 which the beam layout controls. The price is efficiency: most of the x-ray energy is
-absorbed by the wall or escapes through the LEHs rather than reaching the capsule
+absorbed by the wall or escapes through the LEHs, and the rest reaches the capsule
 (Lindl 1995; Lindl et al. 2004, Sec. IV).
 
 NIF's 192 beams are grouped into 48 quads of four. The indirect-drive ports lie on four
@@ -83,12 +84,12 @@ grazing incidence, and their footprints are long and faint.
 defocus, a power, an f-number and a [`SuperGaussianSpot`](@ref). A
 [`DepositionOperator`](@ref) carries out the f-cone convolution by summing the focal
 profile over a quadrature of cone directions at points fixed on the target; it conserves
-each beam's power and is differentiable in aim, defocus and power. By default each lit surface
-absorbs all the light that reaches it; no reflection is followed, and backscatter is a
-laser–plasma correction (below). [`raytrace_deposition`](@ref) is the reference. The
-tutorial [Laser spot on a foil](@ref) checks the spot's power, its growth through focus
-and its footprint at oblique incidence against exact results; the reference page is
-[Laser deposition](@ref).
+the power of each beam and is differentiable in aim, defocus and power. By default each
+lit surface absorbs all the light that reaches it; no reflection is followed, and
+backscatter is a laser–plasma correction (below). [`raytrace_deposition`](@ref) is the
+reference. The tutorial [Laser spot on a foil](@ref) checks the power of the spot, its
+growth through focus and its footprint at oblique incidence against exact results; the
+reference page is [Laser deposition](@ref).
 
 ## View factors and radiosity
 
@@ -107,7 +108,7 @@ where ``\theta_i`` and ``\theta_j`` are the angles between the line joining the 
 points and the surface normals, ``r`` its length, and ``V`` is 1 where the two points see
 each other and 0 where another surface blocks the line. Two identities follow from the
 definition. **Reciprocity**, ``A_i F_{ij} = A_j F_{ji}``, holds because the integrand
-is symmetric. **Closure**, ``\sum_j F_{ij} = 1``, holds in a closed enclosure, where all
+is symmetric. **Closure**, ``\sum_j F_{ij} = 1``, is true in a closed enclosure, where all
 radiation leaving an element lands somewhere; a hohlraum is closed once its LEHs are
 counted as elements. A discretized view-factor matrix satisfies closure only to its
 quadrature error, and that error is a useful measure of its accuracy.
@@ -135,18 +136,18 @@ power-law fit, ``1 - \alpha = 0.32\,(T_r/100\ \mathrm{eV})^{-0.7}(t/1\ \mathrm{n
 (Lindl et al. 2004, Sec. IV.A; Hammer and Rosen, Phys. Plasmas 10, 1829 (2003), for the
 self-similar wave).
 
-A sphere is the one cavity with a closed-form answer. Every point of a sphere's
-interior sees every other with the same kernel, so the incident flux is uniform
+A sphere is the one cavity with a closed-form answer. Every point inside a
+sphere is seen from every other with the same kernel, so the incident flux is uniform
 wherever the source lies, and with a port taking a fraction ``f`` of its area,
 
 ```math
 H = \frac{\eta P}{A}\,\frac{1}{1 - \alpha(1 - f)} .
 ```
 
-The factor ``1/[1 - \alpha(1 - f)]`` is the cavity's multiplier: about 9 at
+The factor ``1/[1 - \alpha(1 - f)]`` is the cavity multiplier: about 9 at
 ``\alpha = 0.95`` and ``f = 6\,\%``. It also multiplies any radiation a discretization
 loses or creates, so a closure error of 10⁻³ per row matters at high albedo. At
-``\alpha = 0.925``, a 5 × 10⁻⁴ shift of the wall's mean row sum moves the capsule drive
+``\alpha = 0.925``, a 5 × 10⁻⁴ shift of the mean row sum of the wall moves the capsule drive
 of a NIF hohlraum by 0.3% and its P2 by about 0.05% ([`RadiationModel`](@ref)).
 
 The flux on the capsule is linear in the laser deposition, as long as the albedos are
@@ -164,8 +165,8 @@ round-off. `closed = true` removes the closure error while keeping reciprocity
 ([`enforce_closure!`](@ref); [`closure_error`](@ref) reports it). [`solve`](@ref) solves
 the radiosity system, [`WallLossAlbedo`](@ref) is the Marshak wall loss, and
 [`flux_response`](@ref) is the matrix ``R``. The tutorials [Integrating sphere](@ref) and
-[Entrance-hole size and the power balance](@ref) check these against the sphere's
-closed form, the uniform-flux power balance and a Monte Carlo photon walk; the
+[Entrance-hole size and the power balance](@ref) check these against the closed form
+for the sphere, the uniform-flux power balance and a Monte Carlo photon walk; the
 reference page is [Radiation](@ref).
 
 ## Drive symmetry
@@ -189,30 +190,30 @@ is hotter (waist-hot, a prolate implosion). Real spherical harmonics ``Y_{lm}`` 
 the expansion to flux that varies in azimuth as well, such as the mode 1 left by a
 missing bundle or a power imbalance between hemispheres.
 
-The geometry filters the modes. Each capsule point integrates the wall's emission over a
-wide solid angle, which suppresses high orders; what reaches the capsule is dominated
-by ``l = 2`` and ``l = 4``, with P6 smaller still. A drive that is symmetric between
-the two hemispheres has no odd Legendre modes. The low modes have different
+The geometry filters the modes. Each capsule point integrates the emission of the wall
+over a wide solid angle, which suppresses high orders; what reaches the capsule is
+dominated by ``l = 2`` and ``l = 4``, with P6 smaller still. A drive that is symmetric
+between the two hemispheres has no odd Legendre modes. The low modes have different
 consequences. Mode 1 pushes the hot spot sideways: about 100 km/s of hot-spot velocity
 per percent of mode-1 flux over the rise and peak (Casey et al., Phys. Rev. Lett. 126,
 025002 (2021); MacGowan et al., High Energy Density Phys. 40, 100944 (2021); Young et
 al., Phys. Plasmas 27, 082702 (2020)), a velocity that carries kinetic energy the hot
-spot no longer converts to heat. P2 and P4 distort the hot spot and shell, with the
-same loss of stagnation pressure and yield.
+spot no longer converts to heat. P2 and P4 distort the hot spot and shell, with the same
+loss of stagnation pressure and yield.
 
-Pointing moves P2 because each cone's power lands at a latitude of the wall as seen
-from the capsule. Raising the cone fraction puts more power near the waist and drives
-P2 negative; moving a ring's aim along the axis moves its spots in latitude. With two
-rings per hemisphere, the cone fraction and the two rings' axial aims are enough to
-null P2 and P4 together, as the first calculation on the home page does.
-On NIF, about 2.7 µm of hot-spot P2 follows from each percent of cone fraction
-(Callahan et al., Phys. Plasmas 25, 056305 (2018)).
+Pointing moves P2 because the power of each cone lands at a latitude of the wall as seen
+from the capsule. Raising the cone fraction puts more power near the waist and drives P2
+negative; moving the aim of a ring along the axis moves its spots in latitude. With two
+rings per hemisphere, the cone fraction and the axial aims of the two rings are enough
+to null P2 and P4 together, as the first calculation on the home page does. On NIF,
+about 2.7 µm of hot-spot P2 follows from each percent of cone fraction (Callahan et al.,
+Phys. Plasmas 25, 056305 (2018)).
 
 **In Briareus.** [`legendre_moments`](@ref) and [`ylm_moments`](@ref) integrate the
-harmonics over each facet's exact solid angle as seen from the capsule center (a
+harmonics over the exact solid angle of each facet as seen from the capsule center (a
 centroid rule leaks P0 into P2 at the 0.5% level); [`mode_amplitude`](@ref) gives the
-rotation-invariant size of each degree, and [`flux_moments`](@ref) the moments of a
-scenario's capsule flux. [`symmetry_objective`](@ref) and [`optimize_pointing`](@ref)
+rotation-invariant size of each degree, and [`flux_moments`](@ref) the moments of the
+capsule flux of a scenario. [`symmetry_objective`](@ref) and [`optimize_pointing`](@ref)
 null chosen modes at a held drive, and [`hotspot_velocity`](@ref) converts mode 1 to a
 velocity. The tutorials are [Freeing a bundle for radiography](@ref) (the port symmetry,
 mode 1, rebalancing), [Pointing and power errors](@ref) and [From drive asymmetry to
@@ -223,11 +224,11 @@ implosion metrics](@ref); the reference pages are [Mode analysis](@ref),
 
 The laser pulse of a NIF hohlraum shot lasts several nanoseconds (5.5–14.1 ns over the
 39 shots of Callahan et al. 2018). A low-power picket launches the
-first shock, a trough holds the drive, and a rise to peak power sets the final
-implosion velocity. Each cone has a separate pulse, so the cone fraction varies through
-the shot. Light crosses a hohlraum in tens of picoseconds, so the radiation field
-follows the drive at each instant; the slow parts of the problem are the wall's stored
-energy and the hohlraum's plasma.
+first shock, the drive is held steady through a trough, and a rise to peak power sets
+the final implosion velocity. Each cone has a separate pulse, so the cone fraction
+varies through the shot. Light crosses a hohlraum in tens of picoseconds, so the
+radiation field follows the drive at each instant; the slow parts of the problem are the
+energy stored in the wall and the plasma in the hohlraum.
 
 The hohlraum changes during the pulse in ways that move the drive symmetry:
 
@@ -236,12 +237,12 @@ The hohlraum changes during the pulse in ways that move the drive symmetry:
   2024").
 - **LEH closure.** Gold blown off the LEH rims shrinks the holes, lowering the loss
   through them and moving the outer-cone footprints.
-- **The gold bubble.** The outer cones' picket blows off a bubble of high-Z plasma under
-  their footprint. Its tip moves inward at 300–460 µm/ns, and it absorbs inner-cone
-  light before that light reaches the waist, so the inner-cone deposition moves toward
-  the LEHs and the drive turns pole-hot (Callahan et al. 2018). On N221204 the capsule
-  flux's P2/P0 swings from waist-hot to pole-hot during peak power (Kritcher et al.,
-  Phys. Rev. E 109, 025204 (2024)).
+- **The gold bubble.** The picket of the outer cones blows off a bubble of high-Z plasma
+  under their footprint. Its tip moves inward at 300–460 µm/ns, and it absorbs
+  inner-cone light before that light reaches the waist, so the inner-cone deposition
+  moves toward the LEHs and the drive turns pole-hot (Callahan et al. 2018). On N221204
+  the P2/P0 of the capsule flux swings from waist-hot to pole-hot during peak power
+  (Kritcher et al., Phys. Rev. E 109, 025204 (2024)).
 - **Cross-beam energy transfer (CBET).** Where beams cross in the LEH plasma, the beat
   of two beams drives an ion-acoustic wave that scatters power from one into the
   other: from the higher frequency to the lower, in the frame of the flowing plasma. A
@@ -250,27 +251,27 @@ The hohlraum changes during the pulse in ways that move the drive symmetry:
   on NIF it is quoted at 1ω, three times its 3ω value. N221204 ran 2.75 Å at 1ω (research
   notes, "Wavelength detuning (NIF)"; Michel et al., Phys. Rev. Lett. 102, 025004
   (2009)).
-- **Backscatter.** Stimulated Brillouin and Raman scattering return part of a beam's
-  power out of the LEH before it reaches the wall (Kruer 1988).
+- **Backscatter.** Stimulated Brillouin and Raman scattering return part of the
+  power of a beam out of the LEH before it reaches the wall (Kruer 1988).
 
 **What Briareus models, and what it does not.** The drive is quasi-static: at each time
-the radiosity is solved for that time's deposition, wall albedos and geometry. The loss
-of each wall element follows its temperature history. Wall motion, LEH closure, the bubble,
-CBET and backscatter are reduced models, calibrated to published simulations and
-measurements that the research notes record. Briareus solves no hydrodynamics, traces
-no refraction, and stores no energy in the hohlraum plasma; after the laser turns off
-the synthetic Dante therefore reads low, by 37–54 eV at 9 ns on three shots
+the radiosity is solved for the deposition, wall albedos and geometry at that time. The
+loss of each wall element follows its temperature history. Wall motion, LEH closure, the
+bubble, CBET and backscatter are reduced models, calibrated to published simulations and
+measurements that the research notes record. Briareus does not solve hydrodynamics,
+trace refraction or store energy in the hohlraum plasma. After the laser turns off, the
+synthetic Dante therefore comes out low, by 37–54 eV at 9 ns on three shots
 ([Verification and validation](@ref)). The CBET model assumes a uniform LEH plasma and
 must be calibrated before its magnitudes are trusted. The implosion itself is outside
-the code: [`capsule_drive`](@ref) hands the capsule's flux history to a hydrodynamics
-code.
+the code: [`capsule_drive`](@ref) hands the flux history of the capsule to a
+hydrodynamics code.
 
 **In Briareus.** [`PulseShape`](@ref) and [`with_pulses`](@ref) set powers in time,
 and [`drive_history`](@ref) runs the quasi-static history. [`WallMotion`](@ref),
 [`LipClosure`](@ref) and [`GapClosure`](@ref), [`BubbleAbsorption`](@ref),
 [`CBET`](@ref) and [`TwoZoneCBET`](@ref), and [`Backscatter`](@ref) are the reduced
 models; `Beam.dlambda` is the detuning at the (3ω) wavelength of the beam.
-[`dante1`](@ref) reads the drive as the Dante instrument does. The tutorial
+[`dante1`](@ref) records the drive as the Dante instrument does. The tutorial
 [Retuning a drive to a reference shot](@ref) runs a history; the reference pages are
 [Radiation](@ref) and [Laser–plasma models](@ref), and `examples/n221204.jl` is the
 benchmark against N221204.

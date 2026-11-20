@@ -3,18 +3,18 @@
 # Target designers draw hohlraums in CAD, and the assembly that reaches a view-factor
 # code is a set of tessellated solids: two hohlraum halves with thick walls, entrance
 # hole washers, the capsule, the tent films that hold it, and the structure that mounts
-# the target. As a radiation model it has three problems. Every part is a closed solid,
-# so most of its surface (outer walls, back faces, the mount) never exchanges radiation
-# with the cavity, while view factors cost the square of the element count. The
-# tessellation is made for drawing, not for radiosity: a cylindrical wall comes as
-# strips running its full length, flat rings as radial slivers, with the facets' windings
-# (which side is the front) mixed. And the curved walls are polygons: flat facets
+# the target. As a radiation model it has three problems. Every part is a closed solid, so
+# most of its surface (outer walls, back faces, the mount) never exchanges radiation with
+# the cavity, while view factors cost the square of the element count. The tessellation is
+# made for drawing, which does not suit radiosity: a cylindrical wall comes as strips
+# running its full length and flat rings as radial slivers, and the windings of the facets
+# (which side is the front) are mixed. And the curved walls are polygons: flat facets
 # standing in for a cylinder or a sphere misstate the exchange between nearby elements
 # (see the [Integrating sphere](@ref) tutorial).
 #
 # This tutorial builds such an assembly, with the flaws of real exports, writes it as a
 # multi-solid STL file and takes it to a radiation calculation: [`orient_mesh`](@ref)
-# repairs the windings, [`enclosure`](@ref) keeps the surfaces that bound the cavity
+# repairs the windings, [`enclosure`](@ref) selects the surfaces that bound the cavity
 # around the capsule, [`remesh_mesh`](@ref) divides them into compact elements,
 # [`fit_surfaces`](@ref) and [`curved_components`](@ref) find the cylinders and spheres
 # and attach their exact surfaces; [`cad_target`](@ref) then takes these steps in one
@@ -35,7 +35,7 @@ include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figu
 # The hohlraum has a cavity of radius 2.875 mm and length 9.4 mm with 1.55 mm entrance
 # holes (LEHs), as the primitive [`hohlraum`](@ref) has by default. In CAD it is two
 # halves with 50 µm walls that meet at the waist across a 20 µm gap; each end wall is
-# 50 µm thick, and a 50 µm washer on it carries the LEH, so the holes are 0.1 mm deep
+# 50 µm thick, and a 50 µm washer on it bears the LEH, so the holes are 0.1 mm deep
 # bores. The capsule has a radius of 0.9 mm, and the tent is a 15 µm film wrapped around
 # it, 30 µm off its surface, made of two cups that meet at the equator. A mounting block
 # sits beside the waist. All lengths are in millimeters.
@@ -48,7 +48,7 @@ zL = h + te + tw                             # the outer end of the LEH bores
 nothing #hide
 
 # Every part is a solid of revolution, tessellated the way CAD exports cylinders: one
-# facet pair per azimuthal step and profile segment, whatever the segment's length. A
+# facet pair per azimuthal step and profile segment, whatever the length of the segment. A
 # wall segment becomes strips running its full length, a flat ring radial slivers, and a
 # sphere latitude bands with fans of slivers at the poles. `revolve` turns a closed
 # profile of ``(r, z)`` points into such facets; the bottom half is the top half
@@ -108,10 +108,10 @@ path = joinpath(mktempdir(), "assembly.stl")
 write_stl(path, [name => cad_mesh(f) for (name, f) in assembly]; binary = false)
 solids = read_stl_solids(path)
 
-# The facets' shapes, as the longest edge over the height across it (1.15 for an
-# equilateral triangle), and the solids' signed volumes, ``\sum a\cdot(b\times c)/6``
-# over the facets, which is the material's volume for a closed solid wound to face out
-# of it, before and after [`orient_mesh`](@ref):
+# The shapes of the facets, as the longest edge over the height across it (1.15 for an
+# equilateral triangle), and the signed volumes of the solids are listed below before and
+# after [`orient_mesh`](@ref). The signed volume, ``\sum a\cdot(b\times c)/6`` over the
+# facets, is the volume of the material for a closed solid wound to face out of it:
 
 function aspect(m, k)
     a, b, c = (m.vertices[i] for i in m.triangles[k])
@@ -136,7 +136,7 @@ end
 # consistent across every shared edge, and turns each closed surface to face out of the
 # volume it encloses. Every part here is closed, and its oriented volume is the exact
 # volume of the solid less the faceting (a 120-gon has ``1 - (2\pi/120)^2/6``, 0.05%
-# less area than its circle). A hohlraum half's inner wall is the same surface as its
+# less area than its circle). The inner wall of a hohlraum half is the same surface as its
 # outer wall, so it now faces the axis: the cavity side.
 #
 # Each closed surface is oriented as a whole, so a hollow part whose inner surface is
@@ -149,26 +149,26 @@ end
 # The radiation problem is the free space around the capsule. [`enclosure`](@ref)
 # finds the element sides that bound it: each element casts 64 diffuse rays and gathers
 # the flux that an isotropic source at the point would put on it, directly and after
-# re-emission, and the elements that receive at least 5% of the cavity's typical flux
+# re-emission, and the elements that receive at least 5% of the typical flux in the cavity
 # are kept. The point is the capsule center; lines of sight from it pass through
 # surfaces seen from behind, such as the capsule surface itself.
 
 part_target(ps) = Target([Component(Symbol(n), m, n == "capsule" ? ablator() : gold()) for (n, m) in ps])
 with_tent = enclosure(part_target(oriented))
 
-# The tent's two cups are closed solids, and their inner faces enclose the capsule
-# completely: from the center, the free space is the 30 µm pocket between the capsule
-# and the film, and nothing escapes it. CAD gives the film a thickness to make it a
-# solid; the real tent is a polymer film thin enough that the drive's x rays cross it,
-# and it is left out of the radiation model, as an entrance-hole window would be. That
-# opens the cavity:
+# The two cups of the tent are closed solids, and their inner faces enclose the capsule
+# completely: from the center, the free space is the 30 µm pocket between the capsule and
+# the film, and nothing escapes it. CAD gives the film a thickness to make it a solid. The
+# real tent is a polymer film thin enough that the x rays of the drive cross it, so it is
+# left out of the radiation model, as an entrance-hole window would be. That opens the
+# cavity:
 
 no_tent = filter(p -> !startswith(p[1], "tent"), oriented)
 cavity = enclosure(part_target(no_tent))
 
 # The kept surfaces are the inner wall of each half, its end cap, the bores of the end
 # wall and of the washer, and the two faces of the waist gap; the outer walls, the
-# washers' faces and the mount are dropped. By reciprocity, the rays that escape
+# faces of the washers and the mount are dropped. By reciprocity, the rays that escape
 # estimate the open area of the cavity: the two LEHs (120-gons of radius 1.55 mm) and
 # the outer end of the waist gap, ``2\pi r g``, less what the mount intercepts beyond
 # the gap (`leak_area`). The estimate is a Monte Carlo sum, with a spread of about 2%
@@ -185,9 +185,10 @@ for rays in (64, 512)
             count(e.kept .!= cavity.kept))
 end
 
-# The cutaways show the far half of the assembly from the front and a little above: in
-# color what each selection keeps, in gray what it drops. The pocket is drawn close up,
-# with the capsule's upper half left out to show the tent's inner face behind it.
+# The cutaways show the far half of the assembly from the front and a little above. What
+# each selection keeps is drawn in color, and what it drops in gray. The pocket is drawn
+# close up, with the upper half of the capsule left out to show the inner face of the tent
+# behind it.
 
 colors = Dict{String,Any}(zip(first.(assembly), Makie.wong_colors()[[1, 1, 3, 3, 6, 4, 4, 2]]))
 function cutaway_panel(pos, enc, title; limits, show = (name, poly) -> true)
@@ -245,16 +246,16 @@ for c in kept
 end
 
 # On the walls and the capsule the remeshed elements are as compact as squares, about
-# one per size² (the 104.5 mm² of a half's cavity side in about 470 elements of
+# one per size² (the 104.5 mm² cavity side of a half in about 470 elements of
 # 0.5 mm). Faces narrower than the size, the 50 µm bores and gap faces, give elements
 # as narrow: the geometry sets that scale. Coarsening leaves the strips whole, and
 # five times as many elements on the capsule. The capsule is remeshed finer (0.15 mm)
-# than the walls (0.5 mm), as a primitive hohlraum's capsule is.
+# than the walls (0.5 mm), as the capsule of a primitive hohlraum is.
 #
 # The selection is then repeated on the elements, since an element straddling the edge
 # of the lit region averages its flux over its whole area. Selecting on the facets first
 # and remeshing only the kept ones saves remeshing the mount and the outsides. The
-# remeshed surface has the area of the facets to round-off.
+# remeshed surface has the area of the facets within round-off.
 
 remesh_cavity(wall, capsule) =
     enclosure([Component(c.name, remesh_mesh(c.mesh; size = c.name === :capsule ? capsule : wall), c.material)
@@ -267,22 +268,22 @@ remeshed = remesh_cavity(0.5, 0.15)
 #
 # [`fit_surfaces`](@ref) finds the planes, cylinders and spheres in a mesh by region
 # growing with least-squares fits. Remeshing puts new points inside the CAD facets,
-# which lie inside a curved wall by up to the facets' sagitta, so the fits are made on
+# which lie inside a curved wall by up to the sagitta of the facets, so the fits are made on
 # the CAD facets (`reference`) and carried over to the elements. For the top half:
 
 regions = Dict(c.name => fit_surfaces(c.mesh; reference = facets[c.name]) for c in remeshed.target.components)
 foreach(println, regions[:hohlraum_top])
 
-# The inner wall (2.875 mm, facing in), the end wall's LEH bore (1.55 mm) and two
+# The inner wall (2.875 mm, facing in), the LEH bore of the end wall (1.55 mm) and two
 # planes (the end cap and the gap face) are found. The CAD vertices lie on the true
 # surfaces, so the radii come out exact; the residuals measure the facets, whose middles
 # lie inside the wall by up to their sagitta, ``2.875 (2\pi/120)^2/8`` = 0.98 µm.
 # [`curved_components`](@ref) splits each part into its curved regions, each carrying
 # the fitted `CylinderSurface` or `SphereSurface`, and the rest; planar faces stay flat
-# elements, which are exact. So do curved regions of under 10⁻³ of the part's area
+# elements, which are exact. So do curved regions of under 10⁻³ of the part area
 # (`minfraction`): in real CAD those are fillet pieces, small holes and edge faces, each
 # of which would otherwise become a separate component (the bore here is about
-# 5×10⁻³ of its half's kept area).
+# 5×10⁻³ of the kept area of its half).
 
 fitted = reduce(vcat, [curved_components(c; regions = regions[c.name]) for c in remeshed.target.components])
 nothing #hide
@@ -295,9 +296,9 @@ for c in fitted
             c.surface isa SphereSurface ? @sprintf("sphere r = %.9f mm at %s", c.surface.radius, round.(c.surface.center; digits = 9)) : "flat")
 end
 
-# The three stages of one half, cut away as before: the CAD facets as read (dark where
-# a facet's front faces away from the viewer: the mixed windings), the remeshed
-# elements, and the fitted components.
+# The three stages of one half are cut away as before: the CAD facets as read (dark where
+# the front of a facet faces away from the viewer, which shows the mixed windings), the
+# remeshed elements, and the fitted components.
 
 function stage_panel(pos, meshes, colorof, title; strokewidth = 0.25)
     ax = Axis(pos; title, aspect = DataAspect(), limits = ((-3.1, 3.1), (-0.4, 5.6)))
@@ -334,7 +335,7 @@ fig
 #
 # [`cad_target`](@ref) takes the parts as read and runs the same steps: it orients each
 # part, selects the cavity around the point `inside` on the facets, remeshes the kept
-# facets (sizes and materials can be given per part, as functions of the part's name),
+# facets (sizes and materials can be given per part, as functions of the part name),
 # selects again on the elements, and, since it remeshes, fits the curved surfaces on
 # the kept facets (`fit = false` keeps flat elements). `visrad_target` makes this call
 # for the CAD that a VisRad workspace bundles; components built otherwise, such as
@@ -353,7 +354,7 @@ by_hand = Target(fitted)
 # `elements(target, :hohlraum_top)`, the keep-outs, the clearance checks and the reports
 # (`energy_balance`, `component_power`, `write_results`) take and show the parts as
 # read; each piece stays reachable by name. A part that is one surface, as the
-# capsule is, keeps its name:
+# capsule is, retains its name:
 
 println(parts(one_call))
 one_call
@@ -362,7 +363,7 @@ one_call
 #
 # The cavity is closed with apertures where the radiation leaves: the two LEHs at the
 # outer ends of the bores and the outer end of the waist gap. Apertures are transparent
-# and record the flux through them. With them, every element's view factors should sum
+# and record the flux through them. With them, the view factors of every element should sum
 # to one, so the view factors can be balanced by Sinkhorn scaling.
 
 openings = [aperture(:leh_top, disk_mesh(Rleh, zL; nr = 3, nphi = 24, up = false); surface = DiskSurface(center = (0, 0, zL))),
@@ -414,14 +415,14 @@ nothing #hide
 # ## Radiation from a prescribed wall source
 #
 # A diffusely emitting sphere sends its radiation to every surface that sees all of it
-# as a point source at its center would, so the capsule's view factors to the LEHs, the
+# as a point source at its center would, so the view factors of the capsule to the LEHs, the
 # bores, the caps and the wall are the solid angles they subtend from the center over
 # 4π: per end, ``(1 - \cos\theta_L)/2`` for the LEH, with
 # ``\cos\theta_L = z_L/\sqrt{z_L^2 + r_L^2}``, and differences of such cosines for the
 # bore, the cap and the wall. (The faces and the exit of the waist gap see the capsule
 # through a 20 µm slot, partly hidden, so the identity does not hold for them.) Elements
-# are grouped by where they are, so that the CAD's components and the primitives' are
-# compared alike.
+# are grouped by where they are, so that the components of the CAD model and those of the
+# primitives are compared alike.
 
 function group(t, e)
     c = t.components[t.elem_comp[e]]
@@ -436,12 +437,12 @@ solid_angle_fraction = Dict(:leh => 1 - cosine(zL, Rleh), :bore => cosine(zL, Rl
                             :cap => cosine(h, Rleh) - cosine(h, R), :wall => cosine(h, R) - cosine(g2, R))
 nothing #hide
 
-# In place of the laser, the inner wall carries a prescribed source: two Gaussian rings
+# In place of the laser, a prescribed source is put on the inner wall: two Gaussian rings
 # per half, at ``|z| = 3.9`` mm and 2.2 mm, standing in for the outer and inner cones'
 # spots. Each element gets the source integrated over it by quadrature, so every model
 # receives the same power wherever its elements are, and the gold converts 90% of it
-# into x rays. (A laser drive goes the same way: [`DepositionOperator`](@ref) traces the
-# beams onto the CAD elements, washers and bores included.)
+# into x rays. A laser drive is handled the same way, with [`DepositionOperator`](@ref)
+# tracing the beams onto the CAD elements, washers and bores included.
 
 source(z) = exp(-((abs(z) - 3.9) / 0.8)^2) + 0.6 * exp(-((abs(z) - 2.2) / 0.8)^2)   # TW/mm²
 function drive(t)
@@ -455,12 +456,13 @@ function drive(t)
 end
 nothing #hide
 
-# For each model: the view factors and the time they take, the largest error of a row
-# sum before balancing, the capsule's view factors to the LEHs, bores, caps and wall
-# against the solid angles (the largest relative error), and, after Sinkhorn balancing,
-# the radiosity solution: the capsule's mean incident flux, its Legendre moments
-# ``a_2/a_0`` and ``a_4/a_0`` ([`legendre_moments`](@ref)), and the fractions of the
-# x-ray source lost through the LEHs and the gap ([`energy_balance`](@ref)).
+# The table below lists, for each model, the view factors and the time they take, the
+# largest error of a row sum before balancing, and the view factors of the capsule to the
+# LEHs, bores, caps and wall against the solid angles (the largest relative error). After
+# Sinkhorn balancing it gives the radiosity solution: the mean incident flux on the
+# capsule, its Legendre moments ``a_2/a_0`` and ``a_4/a_0`` ([`legendre_moments`](@ref)),
+# and the fractions of the x-ray source lost through the LEHs and the gap
+# ([`energy_balance`](@ref)).
 
 function analyze(t)
     seconds = @elapsed F = view_factors(t)
@@ -508,7 +510,7 @@ end
 # primitives at 0.25 mm (0.1 and 0.05 mm on the capsule), and the thin-walled
 # [`hohlraum`](@ref) at 0.25 mm.
 #
-# - The capsule's view factors match the solid angles within 1.2e-3 in every model. The
+# - The view factors of the capsule match the solid angles within 1.2e-3 in every model. The
 #   row sums of the wall, caps and capsule miss one by up to 1%, in the primitives as
 #   in the CAD, against 0.14% in `hohlraum()`; the narrow faces and the LEHs miss by up
 #   to 7%. These are the elements that see others partly, past the rim of a bore or
@@ -523,22 +525,22 @@ end
 #   elements, gives −0.78% to −0.81% at every size tried (0.15 and 0.1 mm); the
 #   latitude-longitude capsule of the primitives gives −1.01% at 0.15 mm and −0.82% at
 #   0.05 mm.
-# - Flat and fitted CAD agree on these integrated quantities within the same margins
-#   (the flat capsule is 0.13% short of its area): flat facets misstate the exchange
-#   between neighbors, which sums out over a cavity, as the
-#   [Integrating sphere](@ref) tutorial shows. The two models' view factors cost about
-#   the same: neighboring flat elements, folded across the wall's strips, exchange by the
-#   exact double contour over their outlines (14 edges on average), and curved ones point
-#   to point on their surface.
+# - Flat and fitted CAD agree on these integrated quantities within the same margins (the
+#   flat capsule is 0.13% short of its area). Flat facets misstate the exchange between
+#   neighbors, which sums out over a cavity, as the [Integrating sphere](@ref) tutorial
+#   shows. The view factors of the two models cost about the same: neighboring flat
+#   elements, folded across the wall strips, exchange by the exact double contour over
+#   their outlines (14 edges on average), and curved ones exchange point to point on their
+#   surface.
 # - The thin-walled `hohlraum()` loses 3.3% more through its flush LEHs, and its
 #   ``a_2/a_0`` is 0.77 points lower: the 0.1 mm bores and the gap matter at this level,
 #   and the CAD model keeps them.
 #
-# The capsule's incident flux against the cosine of its polar angle, element by
-# element for the CAD models. The primitives' capsule is divided into latitude bands, on
-# which the flux is the same at every azimuth: their band means, joined by straight
-# lines, are the reference curves, and the right panel shows each model's difference
-# from the curve of the primitives at 0.25 mm.
+# The incident flux on the capsule is plotted below against the cosine of its polar angle,
+# per element for the CAD models. The capsule of the primitives is divided into latitude
+# bands, on which the flux is the same at every azimuth: their band means, joined by
+# straight lines, are the reference curves, and the right panel shows the difference of
+# each model from the curve of the primitives at 0.25 mm.
 
 function band_curve(r)
     μ = [round(normalize(r.t.elem_centroid[e])[3]; digits = 6) for e in r.cap]
@@ -573,35 +575,35 @@ end
 axislegend(ax; position = :ct)
 fig
 
-# Element by element, the CAD model at 0.25 mm follows the primitives at 0.25 mm within
-# a few hundredths of a percent of the mean flux. At 0.5 mm the CAD models and the
-# primitives depart from that curve alike, by up to 0.3% toward the poles: the walls'
-# resolution, which the CAD model shares with the primitives. Flat and fitted elements
-# differ by less than that.
+# Per element, the CAD model at 0.25 mm follows the primitives at 0.25 mm within a few
+# hundredths of a percent of the mean flux. At 0.5 mm the CAD models and the primitives
+# depart from that curve alike, by up to 0.3% toward the poles. That departure comes from
+# the resolution of the walls, which the CAD model shares with the primitives. Flat and
+# fitted elements differ by less than that.
 
 # ## What this checks
 #
-# - Windings: [`orient_mesh`](@ref) turns every part, read with 30% of its facets
-#   reversed, into a closed solid whose signed volume is its exact volume less the
-#   faceting (to 5e-4, a 120-gon's area deficit).
-# - Cavity selection: from the capsule center, the tent's cups seal a pocket with no
-#   open area; without them, [`enclosure`](@ref) keeps exactly the cavity's surfaces
-#   (inner walls, caps, bores, gap faces, capsule), and its open-area estimate matches
-#   the LEHs' area plus the gap's exit, less what the mount intercepts, within its
-#   sampling noise (0.6% at 512 rays per element).
-# - Remeshing: [`remesh_mesh`](@ref) turns 4.7 mm strips into elements as compact as
-#   squares where [`coarsen_mesh`](@ref) cannot, and keeps the area to round-off.
-# - Fitting: [`fit_surfaces`](@ref) recovers the radii of the wall (2.875 mm), the bores
-#   (1.55 mm) and the capsule (0.9 mm) to nine digits from the CAD facets, and the
-#   fitted capsule has the area 4πr² to round-off.
-# - One call: [`cad_target`](@ref) on the parts as read builds the target built by hand,
-#   with the same components, element areas and normals, exactly; its [`parts`](@ref)
-#   are the parts as read, in order.
-# - Radiation: the capsule's view factors to the LEHs, bores, caps and wall match the
-#   solid angles they subtend from its center to 1e-3. The capsule flux, its
-#   ``a_2/a_0`` and ``a_4/a_0``, and the LEH and gap losses of the CAD models, flat or
-#   fitted, match the same cavity built from Briareus's primitives at the same element
-#   size, within less than the change that halving the element size makes; the flat
-#   and fitted models' view factors cost about the same. The thin-walled
-#   [`hohlraum`](@ref) differs from both by more: its LEH loss by 3.3%, its
-#   ``a_2/a_0`` by 0.8 points.
+# - [`orient_mesh`](@ref) repairs the windings: every part, read with 30% of its facets
+#   reversed, becomes a closed solid whose signed volume is its exact volume less the
+#   faceting (to 5e-4, the area deficit of a 120-gon).
+# - The cavity selection is checked twice. From the capsule center, the cups of the tent
+#   seal a pocket with no open area. Without them, [`enclosure`](@ref) keeps exactly the
+#   surfaces of the cavity (inner walls, caps, bores, gap faces and capsule), and its
+#   open-area estimate matches the area of the LEHs plus the exit of the gap, less what
+#   the mount intercepts, within its sampling noise (0.6% at 512 rays per element).
+# - [`remesh_mesh`](@ref) turns 4.7 mm strips into elements as compact as squares where
+#   [`coarsen_mesh`](@ref) cannot, and conserves the area within round-off.
+# - [`fit_surfaces`](@ref) recovers the radii of the wall (2.875 mm), the bores (1.55 mm)
+#   and the capsule (0.9 mm) to nine digits from the CAD facets, and the fitted capsule
+#   has the area 4πr² within round-off.
+# - [`cad_target`](@ref) on the parts as read builds the target built by hand in one call,
+#   with the same components, element areas and normals, exactly; its [`parts`](@ref) are
+#   the parts as read, in order.
+# - In the radiation solution, the view factors of the capsule to the LEHs, bores, caps
+#   and wall match the solid angles they subtend from its center to 1e-3. The capsule
+#   flux, its ``a_2/a_0`` and ``a_4/a_0``, and the LEH and gap losses of the CAD models,
+#   flat or fitted, match the same cavity built from Briareus's primitives at the same
+#   element size, within less than the change that halving the element size makes. The
+#   view factors of the flat and fitted models cost about the same. The thin-walled
+#   [`hohlraum`](@ref) differs from both by more: its LEH loss by 3.3% and its ``a_2/a_0``
+#   by 0.8 points.

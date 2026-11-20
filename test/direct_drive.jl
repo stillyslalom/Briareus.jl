@@ -6,20 +6,20 @@
 # References (all independent of the operator and of the mode weights):
 # - Skupsky & Lee, J. Appl. Phys. 54, 3662 (1983): for identical axisymmetric beams aimed
 #   at the center, σₗ = |aₗ/a₀| Gₗ / √(2l+1) with aₗ the single beam's Legendre
-#   coefficients (a 1-D quadrature here) and Gₗ² = Σᵢⱼ Pₗ(Uᵢ·Uⱼ)/N² from the ports alone.
+#   coefficients (a 1-D quadrature in this file) and Gₗ² = Σᵢⱼ Pₗ(Uᵢ·Uⱼ)/N² from the ports.
 # - Temporal et al., arXiv:1406.7762 (2014): one ring at 49°/131° on R₀ = 0.5 mm, m = 4
 #   super-Gaussians; σ = 11.9% (circular, a = b = R₀) and 5.2% (elliptical, a = 2b,
 #   b = R₀ meridional) centered, minima 1.1% at Δ/R₀ = 13.7% and 1.3% at 7.4% for a
 #   shift Δ perpendicular to the beam toward the equator.
 # - Temporal et al., HPLSE 2, e8 (2014), §4: LMJ option A (20 quads at 49°/131°, the
 #   hemispheres rotated 18°), elliptical m = 4 quads Δa = 2Δb = 640 µm; minimum over r0
-#   of the intrinsic σ0 = 4.6% (a 2-D quadrature of all 20 beams here).
+#   of the intrinsic σ0 = 4.6% (a 2-D quadrature of all 20 beams in this file).
 # - Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eqs. 28–37: ring-averaged
 #   absorbed intensity of parallel-ray super-Gaussian beams whose axes cross the polar
-#   axis at z R₀, re-solved here by direct quadrature.
+#   axis at z R₀, re-solved in this file by direct quadrature.
 # The ring references below integrate the absorbed intensity η_a(ψ) I_L cos ψ over the
 # lit azimuths of each latitude (Gauss–Legendre, split where the lit range changes), so
-# they converge spectrally; they share no code with Briareus.
+# they converge spectrally. They do not share code with Briareus.
 
 # Gauss–Legendre nodes and weights on [-1, 1] (Newton on the three-term recurrence).
 function _dd_gauss(n)
@@ -51,11 +51,12 @@ function _dd_P(l, μ)
     return p1
 end
 
-# One ring (continuous in azimuth) of beams from polar angle j: toward-source direction
-# U = (sin j, 0, cos j) at φ = 0, axis through the point p (units of R₀), super-Gaussian
-# exp(-[(u/a)² + (v/b)²]^(m/2)) with u azimuthal and v meridional (units of R₀), normal
-# absorption η (MN17 Eq. 29; η = 1: everything incident is absorbed). Returns the
-# ring-averaged absorbed intensity at latitude μ = cos θ (MN17 Eqs. 28–34).
+# One ring of beams, continuous in azimuth, from polar angle j. The toward-source direction
+# is U = (sin j, 0, cos j) at φ = 0, and the axis passes through the point p in units of R₀.
+# The profile is the super-Gaussian exp(-[(u/a)² + (v/b)²]^(m/2)), with u azimuthal and v
+# meridional in units of R₀. The normal absorption is η (MN17 Eq. 29), and η = 1 absorbs
+# everything incident. Returns the ring-averaged absorbed intensity at latitude μ = cos θ
+# (MN17 Eqs. 28–34).
 function _dd_ring(μ, j, p, a, b, m, η, xg, wg)
     st, ct = sqrt(max(0.0, 1 - μ^2)), μ
     A, B = st * sin(j), ct * cos(j)
@@ -171,9 +172,9 @@ _dd_sphere(R, n) = Target(Component(:capsule, icosphere_mesh(R; n), Material(:CH
 _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
 
 @testset "hard-sphere direct drive" begin
-    # Two meshes: the element (facet-constant) representation smooths the illumination at
-    # O(h²), so references are matched on the finer one and the error is shown to fall
-    # as h², with the Richardson extrapolation of the pair closer still.
+    # The test uses two meshes. The element (facet-constant) representation smooths the
+    # illumination at O(h²), so references are matched on the finer mesh and the error is
+    # shown to fall as h². The Richardson extrapolation of the pair is closer still.
     R0, L = 0.5, 30
     meshes = map((20, 30)) do n                # 8000 / 18000 elements, edges 28 / 18 µm
         tn = _dd_sphere(R0, n)
@@ -211,7 +212,8 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         dep, c, σ = runs[2]
         err20, err30 = (maximum(abs.(r.σ .- σref)) for r in runs)
         rmsx = richardson(mode_rms(runs[1].c, L), mode_rms(c, L))
-        # absorbed power: the beam inside the sphere's disk (enclosed fraction)
+        # The absorbed power is the power of the beam inside the disk of the sphere (the
+        # enclosed fraction).
         @test isapprox(sum(dep.element) / dep.delivered, enclosed_fraction(sp, R0 / sp.a); rtol = 1e-4)
         @test err30 < 2e-5                     # σₗ, absolute in units of the mean
         @test 1.8 < err20 / err30 < 2.8        # O(h²): (30/20)² = 2.25
@@ -230,8 +232,9 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         @test all(abs.(mode_power(C; m = :zero) .- zl) .< 2e-5)
 
         @testset "absorption weight η_a (MN17 Eq. 29)" begin
-            # off is bitwise the default (and unchanged from before the option: see the
-            # research notes); η⊥ = 1 (η_a ≡ 1) is the same model, to rounding
+            # With the weight off, the result is identical to the default, which is
+            # unchanged from before the option (research notes). η⊥ = 1, that is η_a ≡ 1, is
+            # the same model within rounding.
             op = runs[2].op
             dn = deposit(op, beams; absorption = nothing)
             @test dn.element == dep.element && dn.per_beam == dep.per_beam
@@ -260,15 +263,16 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
                 d = deposit(r.op, beams; absorption = η)
                 (; dep = d, σ = mode_power(ylm_matrix(_dd_coeffs(m.W, m.t, d), L)))
             end
-            # σₗ: O(h²) as without the weight (the facets' flat normals now also enter
-            # η_a(ψ), so the error at n = 30 is ~3× the unweighted one)
+            # The error of σₗ is O(h²), as without the weight. The flat normals of the
+            # facets now also enter η_a(ψ), so the error at n = 30 is ~3× the unweighted
+            # error.
             e20, e30 = (maximum(abs.(r.σ .- σηref)) for r in rη)
             ex = maximum(abs.(richardson(rη[1].σ, rη[2].σ) .- σηref))
             @test e30 < 1e-4 && ex < 1e-5
             @test 1.8 < e20 / e30 < 2.8
             # the weight changes the pattern by far more than the error
             @test maximum(abs.(σηref .- σref)) > 50 * e30
-            # absorbed power: the enclosed fraction times the η_a-weighted share
+            # The absorbed power is the enclosed fraction times the η_a-weighted share.
             fη = enclosed_fraction(sp, R0 / sp.a) * num / den
             f20, f30 = (sum(r.dep.element) / r.dep.delivered for r in rη)
             @test isapprox(f30, fη; rtol = 5e-4) && isapprox(richardson(f20, f30), fη; rtol = 2e-5)
@@ -282,8 +286,9 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         circ = (1.0, 1.0)                     # (azimuthal a, meridional b) / R₀
         ell = (2.0, 1.0)
         σref(Δ, (a, b)) = _dd_mirrored_sigma(j, perp(Δ), a, b, 4.0)
-        # the reference reproduces the published values (conventions pinned: incident
-        # I cos ψ fully absorbed, shift normal to the beam axis, a azimuthal)
+        # The reference reproduces the published values with the conventions pinned. The
+        # incident I cos ψ is fully absorbed, the shift is normal to the beam axis, and a is
+        # azimuthal.
         @test round(100σref(0.0, circ); digits = 1) == 11.9
         @test round(100σref(0.0, ell); digits = 1) == 5.2
         Δc, σc = _dd_golden(Δ -> σref(Δ, circ), 0.10, 0.17)
@@ -357,7 +362,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         # the quadrature is converged far below the published digit
         @test abs(_dd_lmj_sigma(ρmin, 2.0, 1.0, 4.0; nμ = 300, nφ = 540) - σmin) < 1e-6
 
-        # Briareus: the same 20 collimated quads on the n = 30 sphere (σ to l = 30)
+        # Briareus computes the same 20 collimated quads on the n = 30 sphere (σ to l = 30).
         quadsL = [Beam("L$k"; theta = θ, phi = φ) for (k, (θ, φ)) in enumerate(_dd_lmj_ports())]
         opL = DepositionOperator(t, quadsL; ncone = 1)
         σL(ρ) = mode_rms(_dd_coeffs(W, t, deposit(opL, [remake(q; spot = SuperGaussianSpot(R0 / ρ, 2R0 / ρ; order = 4))
@@ -367,9 +372,10 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
     end
 
     @testset "Murakami & Nishi 2017 two-cone PDD" begin
-        # MN17 §4: two cones per hemisphere (j, z, E), a = 0.6, b = 6, η⊥ = 0.9; printed
-        # solution j = 46°, 53°, z = -0.65, 0.80, E₂ = 0.40 for B₂ = … = B₁₀ = 0 (Eq. 37,
-        # B = Σ Eᵢ bₗ(jᵢ, zᵢ) with bₗ of each ring normalized to its mean).
+        # MN17 §4 uses two cones per hemisphere (j, z, E) with a = 0.6, b = 6 and η⊥ = 0.9.
+        # The published solution is j = 46°, 53°, z = -0.65, 0.80, E₂ = 0.40 for B₂ = … =
+        # B₁₀ = 0. Eq. 37 defines B = Σ Eᵢ bₗ(jᵢ, zᵢ), with bₗ of each ring normalized to
+        # its mean.
         a, b, η = 0.6, 6.0, 0.9
         function resid(x; n = 100)
             j1, j2, z1, z2, E2 = x
@@ -379,7 +385,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         end
         printed = [46.0, 53.0, -0.65, 0.80, 0.40]
         r0 = resid(printed)
-        # Newton from the printed values (central-difference Jacobian)
+        # Newton iteration starts from the published values (central-difference Jacobian).
         x = copy(printed)
         for _ in 1:8
             r = resid(x)
@@ -390,8 +396,8 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
             x = x .- J \ r
         end
         @test norm(resid(x)) < 1e-10
-        # the printed digits do not zero the modes (|B₄| ≈ 0.19); the nearby root found
-        # here is j = 48.93°, 51.69°, z = -0.576, 0.769, E₂ = 0.421
+        # The published digits do not zero the modes (|B₄| ≈ 0.19). The nearby root found by
+        # this test is j = 48.93°, 51.69°, z = -0.576, 0.769, E₂ = 0.421.
         @test abs(r0[2]) > 0.1
         @test isapprox(x, [48.926, 51.685, -0.5756, 0.7687, 0.4208]; atol = 2e-3)
 
@@ -447,7 +453,7 @@ end
     @test all(b -> b.defocus == 5.0, bs) && all(b -> b.power == 4.0, bs)
     # every aim faces its port, so the axis first meets the sphere there
     @test all(b -> dot(b.aim, b.port) > 0, bs)
-    # round trip: the angles read back from the new beams' axes
+    # The angles are recovered from the axes of the new beams.
     @test isapprox(initial_parameters(GroupPointing(bs; fields = p.fields, radius = R)), x; atol = 1e-11)
     # relative shifts from that pointing move every aim by the same angles
     pr = GroupPointing(bs; fields = (:theta_s, :dphi_s), radius = R, relative = true)
@@ -463,8 +469,9 @@ end
     xc = reduce(vcat, [[θs[k], Δφs[k]] for k in pc.keys])
     @test all(norm.([b.aim for b in apply(pc, xc)] .- (hand .+ Ref(Vec3(c...)))) .< 1e-14)
 
-    # split quads on the 192 beams: each beam moves by ±split in θ and Δφ, the signs of
-    # its port's offset from its quad's mean port (here from the beam table directly)
+    # With split quads on the 192 beams, each beam moves by ±split in θ and Δφ. The signs
+    # are those of the offset of its port from the mean port of its quad, taken directly
+    # from the beam table in this test.
     beams = nif_beams()
     ps = GroupPointing(beams; fields = (:theta_s, :dphi_s, :split_theta, :split_phi), radius = R)
     xs = reduce(vcat, [[θs[k], Δφs[k], 1.5, 4.0] for k in ps.keys])

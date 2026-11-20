@@ -1,8 +1,9 @@
-# Unconverted light over time: irradiance histories against closed forms, against
-# `unconverted_deposition` at each time, and threshold crossings against hand computations.
+# This file tests unconverted light over time. Irradiance histories are checked against
+# closed forms and against `unconverted_deposition` at each time, and threshold crossings
+# against hand computations.
 
 @testset "unconverted-light histories" begin
-    bl = first(nif_beams())                       # one beamlet: its whole power in one square
+    bl = first(nif_beams())                       # one beamlet, with its whole power in one square
     k = direction(bl)
     ô = Briareus._own_side(bl.port, Briareus._nif_quad_port(bl.quad))
     ŵ = cross(k, ô)
@@ -27,20 +28,22 @@
     h = unconverted_history(t, [bl], pulse, times; ratio = (omega1 = f1, omega2 = 0.01))
     @test isempty(h.skipped) && h.colors == [:omega1, :omega2]
 
-    # closed form: inside each square the incident irradiance is the color's power over
-    # the square's area, 1e14 P/footprint² W/cm² (mm² → cm²), times the pulse at each time
+    # In the closed form, the incident irradiance inside each square is the power of the
+    # color over the area of the square, 1e14 P/footprint² W/cm² (mm² → cm²), times the
+    # pulse at each time.
     I1 = [1e14 * f1(τ) * pulse(τ) / 22.0^2 for τ in times]
     I2 = [1e14 * 0.01 * pulse(τ) / 12.0^2 for τ in times]
     @test !isempty(full1) && !isempty(full2)
     @test isapprox(h.element[:omega1][full1, :], repeat(I1', length(full1)); rtol = 1e-12)
     @test isapprox(h.element[:omega2][full2, :], repeat(I2', length(full2)); rtol = 1e-12)
-    # the incident power in total: the whole color, at every time
+    # The total incident power is the whole color at every time.
     P1 = vec(sum(h.element[:omega1] .* t.elem_area; dims = 1)) ./ 1e14
     @test isapprox(P1, [f1(τ) * pulse(τ) for τ in times]; rtol = 1e-12)
     @test all(iszero, h.element[:omega1][:, times .< 0]) && all(iszero, h.backside[:omega1])
 
-    # a constant fraction: absorption × irradiance × area is `unconverted_deposition` of
-    # the beams at each time's power, for both colors, from a quad (four beamlets) too
+    # For a constant fraction, absorption × irradiance × area equals the
+    # `unconverted_deposition` of the beams at the power of each time, for both colors and
+    # also from a quad (four beamlets).
     q = only(b for b in nif_quads() if b.quad == bl.quad)
     ratio = (omega1 = 0.05, omega2 = 0.02)
     hq = unconverted_history(t, [q], pulse, times; ratio)
@@ -51,8 +54,8 @@
         @test isapprox(A, R; rtol = 1e-12) && sum(R) > 0
     end
 
-    # Beams on their own pulses: one deposition per schedule, the sum of the separate
-    # histories, and the same as `unconverted_deposition` at each time
+    # Beams on separate pulses give one deposition per schedule. The result is the sum of
+    # the separate histories and the same as `unconverted_deposition` at each time.
     b2 = nif_beams()[2]
     late = PulseShape([1.0, 1.5, 3.0], [0.0, 1.0, 1.0])
     pulses = Dict(Symbol(bl.name) => pulse, Symbol(b2.name) => late)

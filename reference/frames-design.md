@@ -42,7 +42,7 @@ was built.
      - `Frame(origin; z, x = θ̂ of z)`.
      - `port_frame(θ, φ; roll)`: z toward the port, x = θ̂. That x̂ is assumed, at
        confidence L, until a sample workspace shows it.
-     - `foil_frame(los; …)`, onto which `backlighter_foil` is refactored, with bitwise
+     - `foil_frame(los; …)`, onto which `backlighter_foil` is refactored, with
        identical results.
      - `component_frame(t, part)` for script targets: the centroid, then the axis of the
        analytic surface, else the area-weighted normal, else the principal axes, with
@@ -67,7 +67,7 @@ was built.
    - `Roll(angle; from)`;
    - the relative moves `Offset` and `Rotate`.
 
-   The steps run in sequence rather than through a general solver. Every requested
+   The steps run in sequence, without a general solver. Every requested
    relation has a closed form, the result is deterministic with explicit branches, and
    each error names one step. `PlacementReport` records:
    - the degrees of freedom each step fixes;
@@ -86,7 +86,7 @@ was built.
      - `apply` computes `aim = R*SVector{3,T}(u,v,w) + origin`;
      - a shared local aim in `:leh_top` and `:leh_bottom` gives mirrored pointing
        without a flag;
-     - `GroupPointing`'s non-aim tail moves into a shared helper, bitwise unchanged;
+     - `GroupPointing`'s non-aim tail moves into a shared helper, with results unchanged;
      - `bounds`, `initial_parameters` and `parameter_names` as in `GroupPointing`;
      - inference and JET cases in `test/inference.jl`.
    - The GUI optimize fields gain `:u, :v, :w` (exclusive with the chamber aim fields).
@@ -131,15 +131,17 @@ was built.
    ("Frames and placement").
 2. **Placement steps:** landed in 700e0a7 (core: `src/placement.jl`) and the GUI commit
    after it (`PartSpec.steps`, the step list in the part inspector, a sweep of a step's
-   number, the ghost of the selected sweep step). Departures: `FrameDef.steps` apply
-   after the offset and rotation, so the fields keep the free degrees of freedom; a
-   conflict is a raised residual of an earlier relation, not a subspace test; a sweep
-   re-resolves the frames per value and moves each changed part by the rigid map of that part
-   (also a translation sweep when other parts' steps refer to the moving part).
+   number, the ghost of the selected sweep step). It departs from the design in three
+   ways. `FrameDef.steps` apply after the offset and rotation, so the fields keep the free
+   degrees of freedom. A conflict is a raised residual of an earlier relation, not a
+   subspace test. A sweep re-resolves the frames per value and moves each changed part by
+   its rigid map (also a translation sweep when the steps of other parts refer to the
+   moving part).
 3. **User frames:** landed in c1f64de (core: `port_frame(facility, port)`,
    `port_angles(facility, port)`, `transform_point`) and the GUI commit after it (the
    Frames folder, port frames, Tools ▸ Coordinate transform, triads, session version 9).
-   Departures: a user frame is a `PartSpec` of kind `:frame` (no components), so it
+   As a departure from the design, a user frame is a `PartSpec` of kind `:frame` (no
+   components), so it
    shares the parts' resolution, renames, steps, sweeps and session rows instead of a
    separate `FrameDef` list; a port frame is such a part tied to a port (`object`), its
    origin TCC and axis the port's, only its roll editable; its ports are the beam
@@ -147,7 +149,7 @@ was built.
    places the new frame in the To frame (at the point with the From frame's axes, or at
    the origin with z along a direction).
 4. **VisRad frames,** import and export. (`_vrw_rotation` was unified in phase 1,
-   bitwise unchanged.)
+   with results unchanged.)
 5. **(Optional)** The foil template becomes a rectangle part with the foil role. That
    changes mesh counts: measure it and say so.
 

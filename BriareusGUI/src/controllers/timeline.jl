@@ -1,11 +1,11 @@
-# Time in the window: the pulses the beams fire (a pulse table, or a pulse shape scaled
-# to the table's powers), the drive history they give on the drive's scenario (capsule
-# Tᵣ and its Legendre modes, or a flat observed face's Tᵣ and nonuniformity, the
-# synthetic diagnostics ticked in the list of diagnostic
-# definitions and the energy split, `drive_history` and `energy_budget`), the latest
-# retune's power histories, and the time cursor that colors the 3D view by a step of the
-# history. Each step's element fields are kept with the history, so moving the cursor
-# recomputes nothing.
+# Time in the window. This file covers the pulses the beams fire, from a pulse table or a
+# pulse shape scaled to the table's powers, and the drive history they give on the scenario
+# of the drive. The history holds the capsule Tᵣ and its Legendre modes, or the Tᵣ and
+# nonuniformity of a flat observed face, with the synthetic diagnostics ticked in the list
+# of diagnostic definitions and the energy split (`drive_history` and `energy_budget`). The
+# file also covers the power histories of the latest retune and the time cursor that colors
+# the 3D view by a step of the history. The element fields of each step are kept with the
+# history, so moving the cursor does not recompute anything.
 
 # ---------------------------------------------------------------- pulses
 
@@ -13,7 +13,7 @@
 What the power of a pulse table's cone or quad column is given per: `:quad` (the
 default: the power of each quad, shared equally among the beams the table holds of it,
 so the pulses fire the same whether a quad is held as one beam or as its four) or
-`:beam` (every beam of the column fires the column's power, as `with_pulses` reads a
+`:beam` (every beam of the column fires the column's power, as `with_pulses` treats a
 table). A column per beam name is that beam's power either way, as is any column on
 beams without quad names.
 """
@@ -54,7 +54,7 @@ _pulse_unit(sess::DesignSession) =
     (src = sess.time.pulses[]; src !== nothing && src.kind === :table && src.by !== :beam ? src.unit : :quad)
 
 # The pulses of a pulse table (`Dict{Symbol,PulseShape}`, keyed by `by`), named `label`,
-# its cone or quad columns powers per `unit` (a table keyed by beam: per beam).
+# with its cone or quad columns as powers per `unit`; a table keyed by beam is per beam.
 function _table_pulses(table::AbstractDict, by::Symbol, label::AbstractString; unit::Symbol = :quad)
     unit in PULSE_UNITS || throw(ArgumentError("a pulse table's unit is one of $PULSE_UNITS"))
     nodes = sort(unique(reduce(vcat, [p.t for p in values(table)])))
@@ -69,7 +69,8 @@ _pulse_shares(beams, by::Symbol, unit::Symbol) =
     by === :beam || unit === :beam ? ones(length(beams)) : _quad_shares(beams)
 
 # `beams` at time τ of the pulse table `table` keyed by `by`, each firing its `shares` of
-# its column (`_pulse_shares`; all ones: bitwise `with_pulses`).
+# its column (`_pulse_shares`); with all shares one, the result is identical to
+# `with_pulses`.
 function _table_beams(beams, table, τ; by, shares)
     bs = with_pulses(beams, table, τ; by)
     all(==(1.0), shares) && return bs
@@ -126,7 +127,7 @@ _state_pulses(d) =
     d["kind"] == "shape" ? _shape_pulses(Float64(d["step"]), Symbol(get(d, "shape", "n221204"))) :
     _table_pulses(Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(Float64.(v["t"]), Float64.(v["power"]))
                                           for (k, v) in d["table"]),
-                  # (a session from before the unit: every beam fired its column's power)
+                  # In a session from before the unit, every beam fired the power of its column.
                   Symbol(d["by"]), d["label"]; unit = Symbol(get(d, "unit", "beam")))
 
 """
@@ -161,8 +162,9 @@ end
 
 struct _HistoryCanceled <: Exception end
 
-# What a history is computed for: the scenario, the beams (pointing and table power),
-# which are on, the pulses, the walls and the unconverted light (fractions and prepulse).
+# What a history is computed for: the scenario, the beams (pointing and table power), the
+# beams that are on, the pulses, the walls and the unconverted light (fractions and
+# prepulse).
 _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], sess.beams.enabled[],
                                      sess.time.pulses[], wall_names(sess.target), _history_unconverted(sess),
                                      _history_prepulse(sess))
@@ -172,7 +174,7 @@ _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], 
 # of the 3ω power (`unconverted_ratios`), `(; omega1, omega2)`, one number when it is
 # the same on every beam of `idx`, else a vector with one per beam of the table (zero on
 # the beams whose light does not take part); `nothing` when no unconverted light of the
-# beams `idx` takes part (the history is then bitwise the 3ω one).
+# beams `idx` takes part (the history is then identical to the 3ω one).
 function _history_unconverted(sess::DesignSession, idx = findall(sess.beams.enabled[]))
     u = unconverted_ratios(sess)
     u === nothing && return nothing
@@ -255,8 +257,8 @@ end
 
 # `drive_history`'s keywords for the unconverted light: the fractions `u`
 # (`_history_unconverted`, zero for both colors when only a prepulse is set) and the
-# prepulse `pp` (`_history_prepulse`) of `beams`, keyed by `by`. None without either,
-# so that the history is bitwise the 3ω one.
+# prepulse `pp` (`_history_prepulse`) of `beams`, keyed by `by`. Without either there are
+# no keywords, so that the history is identical to the 3ω one.
 _light_kw(::Nothing, ::Nothing, beams; by = :beam) = (;)
 function _light_kw(u, pp, beams; by = :beam)
     kw = (; unconverted = something(u, (omega1 = 0.0, omega2 = 0.0)), colors = nif_unconverted())
@@ -422,11 +424,13 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         laser[aperture] .= NaN32
         diag = [_record_diagnostic!(v, sol) for v in views]
         progress(steps[] += 1)
-        # (per component: the history sums a part's pieces, a hohlraum's holes into its walls)
+        # The record is per component, since the history sums the pieces of a part and
+        # the holes of a hohlraum into its walls.
         escaped = energy_balance(sol; by = :component).escaped
         rec = (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag,
                escaped)
-        # a flat observed face: its statistics over the face, as the drive's (`_face_stats`)
+        # For a flat observed face, the record holds its statistics over the face, as the
+        # drive does (`_face_stats`).
         return flat ? merge(rec, (; face = _face_stats(s, sol))) : rec
     end
     cavs = _drive_cavities(s, cavities)
@@ -495,7 +499,8 @@ function _energy_series(h, t::Target, observed)
     # the unconverted light delivered, per color (part of the laser's)
     uc = h.unconverted
     uc === nothing || append!(series, [(; name = c, values = upto(uc.delivered[c])) for c in (:omega1, :omega2)])
-    # (a hohlraum without windows, or a target without an observed surface, has no such series)
+    # A hohlraum without windows, or a target without an observed surface, does not have
+    # such a series.
     return filter(s -> s.name === :laser || any(>(1e-9), s.values), series)
 end
 
@@ -798,8 +803,8 @@ end
 
 const _INK = "#333333"
 const _GRAY = "#8C8C8C"
-# the irradiance chart: the parts drawn, at most, and the floor of its log axis (a
-# fraction of the threshold; display choices)
+# The irradiance chart draws at most this many parts, and the floor of its log axis is
+# a fraction of the threshold; both are display choices.
 const _IRRADIANCE_PARTS = 12
 const _IRRADIANCE_FLOOR = 1e-4
 
@@ -879,8 +884,8 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                      _series("a₄/a₀", h.time, 100 .* h.legendre[4, :], "#009E73")]
             title, rlabel = "Capsule drive history", "aₗ/a₀ (%)"
         else
-            # a flat observed face: its RMS nonuniformity, and its peak and lowest flux
-            # relative to its mean
+            # For a flat observed face the chart shows its RMS nonuniformity and its peak and
+            # lowest flux relative to its mean.
             right = [_series("RMS", h.time, 100 .* f.rms, "#0072B2"),
                      _series("peak", h.time, 100 .* (f.peak ./ f.mean .- 1), "#D55E00"; style = :dash),
                      _series("lowest", h.time, 100 .* (f.low ./ f.mean .- 1), "#009E73"; style = :dash)]
@@ -962,8 +967,8 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                      _series("ε₁ retuned", r.after.time, ε1(r.after), _INK)]
             rlabel = "ε₁ (%)"
         else
-            # a face or a foil spot: its RMS nonuniformity, and its mean's departure from
-            # the reference's (or from the set level), before and after
+            # For a face or a foil spot the chart shows its RMS nonuniformity and the departure
+            # of its mean from that of the reference, or from the set level, before and after.
             Δ(f) = 100 .* _mean_departure(f, r.level, r.solved, r.reference)
             right = [_series("RMS before", r.before.time, 100 .* r.before.rms, _GRAY; style = :dot),
                      _series("RMS retuned", r.after.time, 100 .* r.after.rms, _INK),
@@ -1038,7 +1043,7 @@ function refresh_diagnostics!(sess::DesignSession)
     found = Briareus._checked(raws, DiagnosticIssue[])
     problem(d) = join([i.message * (isempty(i.key) ? "" : " [" * i.key * "]") for i in issues
                        if i.file == d.file && i.level !== :warning], "; ")
-    # listed too: those that lack values (not public) but have no error
+    # Definitions that lack values (not public) but have no error are listed too.
     for id in setdiff(keys(raws), keys(found))
         any(i -> i.file == raws[id].file && i.level === :error, issues) && continue
         d = Briareus._resolve(id, raws, DiagnosticIssue[])
@@ -1152,9 +1157,9 @@ end
 """
     set_configuration!(sess::DesignSession, id, new) -> sess
 
-Record definition `new` in place of the recorded definition `id` (another configuration
-of its instrument: a chip's menu in the window), where `id` was in the list; when `new`
-is recorded already, `id` is dropped.
+Record definition `new`, another configuration of the same instrument chosen from the
+menu of a chip in the window, in place of the recorded definition `id`, where `id` was in
+the list. When `new` is recorded already, `id` is dropped.
 """
 function set_configuration!(sess::DesignSession, id::AbstractString, new::AbstractString)
     id, new = String(id), String(new)
@@ -1248,8 +1253,8 @@ function _missing_view_parts(sess::DesignSession)
     return out
 end
 
-# A status warning for the ticked diagnostics whose view names a part the design lacks
-# (empty: none).
+# A status warning for the ticked diagnostics whose view names a part the design lacks,
+# or an empty string when there are none.
 function _view_part_warning(sess::DesignSession)
     miss = _missing_view_parts(sess)
     isempty(miss) && return ""
@@ -1522,7 +1527,7 @@ end
 # y1)` (mm) bounding the pixels above `frac` of the peak, widened by `margin` of its
 # extent on each side (at least 4 pixels) and clamped to the field; `nothing` when that
 # region covers most of the field or the image is empty. `values[i, j]` is at `(x[i],
-# y[j])`. The threshold and margin are display defaults, not instrument criteria.
+# y[j])`. The threshold and margin are display defaults; no instrument criterion sets them.
 function _signal_window(x, y, values; frac = 1e-3, margin = 0.15)
     fin = filter(isfinite, values)
     peak = isempty(fin) ? 0.0 : maximum(fin)
@@ -1564,8 +1569,8 @@ end
     diagnostic_folders() -> Vector{NamedTuple}
 
 The folders on the diagnostic search path besides the built-ins, `(; path, saved)`:
-`saved` for those kept in the configuration file (Diagnostics ▸ Folders), not for those
-of `BRIAREUS_DIAGNOSTICS` or added for this Julia session only.
+`saved` is true for those kept in the configuration file (Diagnostics ▸ Folders) and
+false for those of `BRIAREUS_DIAGNOSTICS` or added for this Julia session only.
 """
 function diagnostic_folders()
     saved = Set(normpath.(Briareus._saved_paths()))

@@ -1,4 +1,5 @@
-// The clearance check: component roles, envelope and error set, sampling, run.
+// The clearance check page sets component roles, the envelope and error set, and the
+// sampling, and runs the check.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

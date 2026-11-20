@@ -52,8 +52,8 @@ Hurricane et al., *Phys. Plasmas* **27**, 062704 (2020), doi:10.1063/5.0001335 (
   - Applied to NIF data, the typical yield is 0.66 ± 0.14 of the symmetric yield.
 
 ### 1b. Flux P1 → v_HS (linear transfer and its time weighting)
-Young et al., *Phys. Plasmas* **27**, 082702 (2020), doi:10.1063/5.0009746 (OSTI
-1650438). **H** This is the closest published analog of a Briareus `drive_history` → v_HS layer.
+Young et al., *Phys. Plasmas* **27**, 082702 (2020), doi:10.1063/5.0009746 (OSTI 1650438).
+**H** This is the closest published analog of a Briareus layer from `drive_history` to v_HS.
 - **Method.** VisRad view factors are run at 100 time points with as-delivered powers
   for all 192 beams. Windows are patches with albedo 0.3 against 0.8 for the wall, and
   the gaps are ignored. **V_x = Σᵢ G(t_f,tᵢ) c₁₁(tᵢ)Δtᵢ, V_y = −Σ G c₁,₋₁ Δt,
@@ -88,7 +88,7 @@ Young et al., *Phys. Plasmas* **27**, 082702 (2020), doi:10.1063/5.0009746 (OSTI
 Spears et al., *Phys. Plasmas* **21**, 042702 (2014), OSTI 1229835. **H**
 - 2% P1/P0, applied in the 4th pulse (peak), gives a neutron-weighted v_HS of 120 km/s
   and a jet of up to 500 km/s.
-- Yield falls almost 2× (4.5e15 → 2.4e15 in the text; Table I lists 4.1e15 → 1.5e15).
+- Yield falls almost 2× (from 4.5e15 to 2.4e15 in the text; Table I lists 4.1e15 to 1.5e15).
 - Recommended **x-ray P1/P0 < 0.5%**.
 
 MacGowan et al., *HEDP* **40**, 100944 (2021), doi:10.1016/j.hedp.2021.100944
@@ -130,8 +130,8 @@ Casey et al., *Phys. Rev. E* **108**, L053203 (2023), OSTI 2283276. **H**
   (1−f²)ᵃ e^{−1.2(a−1)χ^{1.2}f²} (Eq. 5), with a = 6 − 1.5 ln T[keV].
 - v_HS sensitivity is up to 2× higher at yields above 1e17.
   - For Y₁D = 4 MJ, a 0.5% seed costs about **50%** of the yield; for 0.1 MJ it costs about 14%.
-  - Fig. 4a reads about 120 km/s at 0.5% for 4 MJ and about 55 km/s for 0.1 MJ
-    (read off the figure: **M**).
+  - Fig. 4a shows about 120 km/s at 0.5% for 4 MJ and about 55 km/s for 0.1 MJ
+    (read off the figure; **M**).
 - Seeds, combined as vectors with these sensitivities, explain 4 of 6 N210808-family
   shots (χ²≈1), against 2 of 6 with static sensitivities. N210808 itself was degraded
   about 30%.
@@ -146,7 +146,7 @@ Nora et al., *Phys. Plasmas* **30**, 092705 (2023), doi:10.1063/5.0153421 (OSTI
   2026-10-24; research notes, "Young 2020 validation").
 - Burn term (Eq. 4): **0.324 ln(Y_amp + 2.239) + 0.653** for Y_amp < 40, and
   **13.105 ln(Y_amp + 1585.225) − 95.539** for 80 < Y_amp < 500 (Fig. 6's coefficients;
-  Eq. 4 prints them rounded to 13, 1585, −95, which shifts the value by −0.24). Table IV
+  Eq. 4 gives them rounded to 13, 1585, −95, which shifts the value by −0.24). Table IV
   lists the inverses per shot.
 - Prolate or oblate stagnation deflects the flow (their Fig. 4, Tables I and II).
 - In the N210808 family, measured v_HS was inflated up to 184%. Read naively it implies
@@ -209,7 +209,7 @@ Scott et al., *PRL* **110**, 075001 (2013), arXiv:1212.3123. **H**
 - P4 flux applied 100 µm from the ablation front.
 - **The sign of the stagnated P4 reverses with timing.** High flux during shock
   compression protrudes outward; during peak drive it protrudes inward.
-- **10% flux P4 → hot-spot a₄ ≈ 20 µm and up to 15× yield loss.** The loss comes
+- **10% flux P4 gives a hot-spot a₄ ≈ 20 µm and up to 15× yield loss.** The loss comes
   through RKE and lateral mass flow.
 - Positive P4 aliases as a false oblate P2 in GXD images, and "correcting" it worsens
   the implosion.
@@ -230,7 +230,7 @@ Kritcher 2024 (paper.txt). **H**
 - The P2 swing "is currently unknown". It is calibrated with in-flight radiography at
   about 200 µm and was missing for N221204.
 - −10.5 µm (oblate) to +6 µm (prolate) mattered.
-- **Reducing hot-spot P2 by 5 µm → ~90% more yield (N230729).**
+- **Reducing hot-spot P2 by 5 µm gives ~90% more yield (N230729).**
 - Yield vs hot-spot P2 spreads with the assumed swing (Fig. 4 bottom).
 
 Ralph et al. 2024 (above). **H**
@@ -302,7 +302,7 @@ full text read through a summarizing fetch).
    - Mode-1 vector: `p1 = √3·(c₁ₘ/c₀₀)` mapped to Cartesian. Its norm is
      `mode_amplitude(c,1)`. The pushing direction is opposite the high-flux pole.
    - `v_HS = k_v · p1` (km/s), with `k_v` a documented engineering default of 100 km/s
-     per % (Young/MacGowan; Kritcher's 0.7% → 75 km/s burn-off is the check). Say that
+     per % (Young/MacGowan; Kritcher's 75 km/s burn-off at 0.7% is the check). Say that
      it is platform-specific and linear below about 0.75%.
    - `f = v_HS/vimp`. No-α yield factor `(1−f²)^a` (a = 3.3, or 6 − 1.5 ln T).
    - Optional α factor `exp(−(a−1)χ^{1.2}f²)`, with a keyword for Casey's 1.2.
@@ -313,18 +313,18 @@ full text read through a summarizing fetch).
      - Young's N170601 test (0.44% → 37.6/44.7 km/s);
      - Kritcher N230729 (0.7% → 75 km/s burn-off);
      - Hurricane Table I (f ↔ ΔY), as an exact closed-form unit test;
-     - Spears (2% → 120 km/s, saturated: an expected over-prediction).
+     - Spears (2% → 120 km/s, saturated, so an over-prediction is expected).
 2. **A time-weighted mode-1 metric over `drive_history`.**
    - `v_HS = Σᵢ G₁(tᵢ)·p1(tᵢ)Δtᵢ` with a user-supplied `G₁` (km/s/%/ns) table.
    - Ship a placeholder: zero in the foot, flat over rise and peak, normalized so a
      constant 1% gives `k_v`. Label it as derived.
-   - The real G is platform-specific; Young Fig. 5 holds three tables, read off the
+   - The real G is platform-specific; Young Fig. 5 contains three tables, read off the
      figure only.
    - Validate on Young's static and dynamic agreement (<5%) and on the quad/beam-drop
      ratio (inner about 2× outer).
 3. **P2/P4 swing metrics.** These are generic Green's-function convolutions, the same code
    as item 2.
-   - Report the time-integrated P2 over a user window (default: rise and peak).
+   - Report the time-integrated P2 over a user window (by default the rise and peak).
    - Report the swing: max − min, and the integral of |P2(t) − its mean|.
    - Report the picket-only P2 against Milovich's 7.5%.
    - Accept response kernels for hot spot and ρR. The hot-spot kernel changes sign before
@@ -347,7 +347,7 @@ full text read through a summarizing fetch).
    - Validate on Casey PRE Fig. 3 (N210808 family). Shots and seeds are listed but the
      per-shot seed values are not; this needs LLNL data.
 6. **Objectives.** Add an optional `VelocityPenalty` (k_v·p1, or the G₁-weighted p1) so
-   mode 1 is weighted by its time history, not equally at all times. It needs no new
+   mode 1 is weighted by its time history, not equally at all times. It does not need a new
    physics.
 
 ## 7. Open questions
@@ -361,8 +361,8 @@ full text read through a summarizing fetch).
   ratios in Kritcher Table II. They may differ in what is held fixed (P2, Y_amp
   definition). Y_amp for the 2022–23 shots was not checked.
 - No published per-cone or per-quad imbalance (kJ or %) for N230729.
-- No closed-form RKE → yield for the N221204 design (only Kritcher Fig. 4). The P2-swing
-  magnitude is "unknown" (Kritcher 2024).
+- No closed-form relation from RKE to yield exists for the N221204 design (only Kritcher
+  Fig. 4). The P2-swing magnitude is "unknown" (Kritcher 2024).
 - No transfer for hot-spot P2 in µm per % flux P2 for HYBRID-E beyond 2.7 µm per % cone
   fraction and 40–50 µm/Å (research notes).
 - The Kritcher 2014 metrics paper (time-integrated P2 requirement, swing tolerance) was

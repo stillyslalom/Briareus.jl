@@ -1,19 +1,20 @@
-# Placement steps: relations to other frames (coincident, on an axis, concentric, at a
-# distance, facing, parallel, rolled) and relative moves, applied in order to a frame
-# after its offset and rotation, with the degrees of freedom each step fixes and
-# conflicts between steps.
+# This file defines placement steps, which are relations to other frames (coincident, on
+# an axis, concentric, at a distance, facing, parallel, rolled) and relative moves. The
+# steps are applied in order to a frame after its offset and rotation. The file also
+# reports the degrees of freedom that each step fixes and conflicts between steps.
 
 """
     PlacementStep
 
-A step of a frame's placement ([`FrameDef`](@ref)'s `steps`), applied in order after the
-frame's offset and rotation in its parent. Relations fix degrees of freedom:
-[`Coincident`](@ref), [`OnAxis`](@ref), [`Concentric`](@ref), [`Distance`](@ref),
-[`Facing`](@ref), [`Parallel`](@ref) and [`Roll`](@ref) with a reference direction.
-Relative moves fix none: [`Offset`](@ref), [`Rotate`](@ref) and [`Roll`](@ref) without
-one. Each step has a closed form; a rotation turns the frame about its origin.
-Frames named by steps (`ref`) are resolved first, so a frame follows them as it follows
-its parent. [`placement_report`](@ref) gives what each step fixes.
+A step of the placement of a frame (the `steps` of a [`FrameDef`](@ref)), applied in
+order after the offset and rotation of the frame in its parent. Relations fix degrees
+of freedom: [`Coincident`](@ref), [`OnAxis`](@ref), [`Concentric`](@ref),
+[`Distance`](@ref), [`Facing`](@ref), [`Parallel`](@ref) and [`Roll`](@ref) with a
+reference direction. Relative moves do not fix any: [`Offset`](@ref), [`Rotate`](@ref)
+and [`Roll`](@ref) without a reference direction. Each step has a closed form, and a
+rotation turns the frame about its origin. Frames named by steps (`ref`) are resolved
+first, so a frame follows them as it follows its parent. [`placement_report`](@ref)
+gives the degrees of freedom that each step fixes.
 """
 PlacementStep
 
@@ -32,8 +33,8 @@ end
 """
     Coincident(ref; point = (0, 0, 0))
 
-Move the frame's origin onto the local `point` of the frame `ref` (mm). Fixes the three
-translations.
+Move the origin of the frame onto the local `point` of the frame `ref` (mm). Fixes the
+three translations.
 """
 struct Coincident <: PlacementStep
     ref::Symbol
@@ -44,10 +45,11 @@ Coincident(ref::Symbol; point = (0.0, 0.0, 0.0)) = Coincident(ref, Vec3(point...
 """
     OnAxis(ref; axis = :z, distance = nothing)
 
-Move the frame's origin onto the line through `ref`'s origin along its `axis` (`:x`,
-`:y`, `:z` or a vector in `ref`'s coordinates): with `distance` (mm), to that signed
-distance from `ref`'s origin along the axis, fixing the three translations; without,
-to the nearest point of the line, fixing the two translations across it.
+Move the origin of the frame onto the line through the origin of `ref` along its `axis`
+(`:x`, `:y`, `:z` or a vector in the coordinates of `ref`). With `distance` (mm), the
+origin moves to that signed distance from the origin of `ref` along the axis, which
+fixes the three translations. Without it, the origin moves to the nearest point of the
+line, which fixes the two translations across it.
 """
 struct OnAxis <: PlacementStep
     ref::Symbol
@@ -60,10 +62,10 @@ OnAxis(ref::Symbol; axis = :z, distance = nothing) =
 """
     Concentric(ref; axis = :z, flip = false)
 
-Turn the frame so its `z` axis lies along `ref`'s `axis` (against it with `flip`), by the
-smallest rotation, and move its origin onto that axis line at the nearest point. Fixes
-the two translations and the two rotations across the axis; the position along it and
-the roll about it stay free.
+Turn the frame by the smallest rotation so that its `z` axis lies along the `axis` of
+`ref` (against it with `flip`), and move its origin onto that axis line at the nearest
+point. Fixes the two translations and the two rotations across the axis. The position
+along the axis and the roll about it stay free.
 """
 struct Concentric <: PlacementStep
     ref::Symbol
@@ -75,9 +77,9 @@ Concentric(ref::Symbol; axis = :z, flip::Bool = false) = Concentric(ref, _step_a
 """
     Distance(ref, distance; point = (0, 0, 0))
 
-Move the frame's origin along the line from `ref`'s local `point` through it, to
-`distance` (mm, ≥ 0) from the point. Fixes the translation along that line. An origin
-at the point is an `ArgumentError` (no line).
+Move the origin of the frame along the line from the local `point` of `ref` through the
+origin, to `distance` (mm, ≥ 0) from the point. Fixes the translation along that line.
+An origin at the point is an `ArgumentError`, since the line is then undefined.
 """
 struct Distance <: PlacementStep
     ref::Symbol
@@ -92,10 +94,10 @@ end
 """
     Facing(ref; point = (0, 0, 0), side = :front)
 
-Turn the frame by the smallest rotation so its `z` axis points at `ref`'s local `point`
-(`side = :front`) or away from it (`side = :back`). Fixes the two rotations across that
-direction; the roll about it stays free. A point at the frame's origin is an
-`ArgumentError`.
+Turn the frame by the smallest rotation so that its `z` axis points at the local `point`
+of `ref` (`side = :front`) or away from it (`side = :back`). Fixes the two rotations
+across that direction, and the roll about it stays free. A point at the origin of the
+frame is an `ArgumentError`.
 """
 struct Facing <: PlacementStep
     ref::Symbol
@@ -110,8 +112,8 @@ end
 """
     Parallel(ref; axis = :z, flip = false)
 
-Turn the frame by the smallest rotation so its `z` axis is parallel to `ref`'s `axis`
-(antiparallel with `flip`). Fixes the two rotations across the axis.
+Turn the frame by the smallest rotation so that its `z` axis is parallel to the `axis` of
+`ref` (antiparallel with `flip`). Fixes the two rotations across the axis.
 """
 struct Parallel <: PlacementStep
     ref::Symbol
@@ -123,11 +125,11 @@ Parallel(ref::Symbol; axis = :z, flip::Bool = false) = Parallel(ref, _step_axis(
 """
     Roll(angle; from = nothing)
 
-Turn the frame about its `z` axis. With `from` (a frame name, its `x` axis, or
-`(name, axis)`), set the frame's `x` axis to `angle` degrees from that direction's
-projection across `z`, turning toward `y`; this fixes the roll. A direction along `z`
-has no projection and is an `ArgumentError`. Without `from`, turn by `angle` from the
-current roll, a relative move.
+Turn the frame about its `z` axis. With `from` (a frame name for its `x` axis, or
+`(name, axis)`), the `x` axis of the frame is set to `angle` degrees from the projection
+of that direction across `z`, turning toward `y`, which fixes the roll. A direction
+along `z` has no projection and is an `ArgumentError`. Without `from`, the frame turns
+by `angle` from the current roll, a relative move.
 """
 struct Roll <: PlacementStep
     angle::Float64
@@ -144,7 +146,7 @@ end
     Offset(dx, dy, dz; frame = nothing)
 
 Move the frame by `(dx, dy, dz)` (mm) along its axes, or along the axes of the frame
-named `frame`. A relative move: it fixes nothing.
+named `frame`. This is a relative move and does not fix a degree of freedom.
 """
 struct Offset <: PlacementStep
     delta::Vec3
@@ -157,7 +159,8 @@ Offset(dx::Real, dy::Real, dz::Real; frame::Union{Nothing,Symbol} = nothing) =
     Rotate(axis, angle)
 
 Turn the frame by `angle` degrees (right-handed) about its `axis` (`:x`, `:y`, `:z`
-or a vector in its coordinates) through its origin. A relative move: it fixes nothing.
+or a vector in its coordinates) through its origin. This is a relative move and does not
+fix a degree of freedom.
 """
 struct Rotate <: PlacementStep
     axis::Vec3
@@ -185,8 +188,9 @@ function _axis_rotation(k::Vec3, angle)
     return cos(angle) * SMatrix{3,3,Float64}(I) + sin(angle) * K + (1 - cos(angle)) * (k * k')
 end
 
-# The frame turned about its origin by the smallest rotation taking its z axis to the
-# unit vector `t`; z opposite to `t` turns by 180° about the frame's x axis.
+# Returns the frame turned about its origin by the smallest rotation that takes its z
+# axis to the unit vector `t`. A z axis opposite to `t` turns by 180° about the x axis of
+# the frame.
 function _turn_z(f::Frame, t::Vec3)
     z = f.R[:, 3]
     c = cross(z, t)
@@ -202,8 +206,8 @@ _ref_point(fr, ref::Symbol, p::Vec3) = Vec3(to_chamber(fr[ref], p))
 const _AXES3 = (Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1))
 _across(a::Vec3) = port_basis(a)
 
-# Each step: the new frame, the chamber directions of the translations it fixes and the
-# axes of the rotations it fixes.
+# Each step returns the new frame, the chamber directions of the translations that it
+# fixes and the axes of the rotations that it fixes.
 function _place(s::Coincident, f::Frame, fr)
     return Frame(f.R, _ref_point(fr, s.ref, s.point)), _AXES3, ()
 end
@@ -269,7 +273,8 @@ end
 _place(s::Rotate, f::Frame, fr) =
     Frame(_axis_rotation(f.R * s.axis, deg2rad(s.angle)) * f.R, f.origin), (), ()
 
-# How far the frame is from satisfying a step: (mm, degrees). Relative moves: zero.
+# Returns how far the frame is from satisfying a step, as (mm, degrees). It is zero for
+# relative moves.
 _residual(::PlacementStep, f::Frame, fr) = (0.0, 0.0)
 _residual(s::Coincident, f::Frame, fr) = (norm(f.origin - _ref_point(fr, s.ref, s.point)), 0.0)
 function _residual(s::OnAxis, f::Frame, fr)
@@ -298,10 +303,11 @@ function _residual(s::Roll, f::Frame, fr)
     return (0.0, _angle_between(f.R[:, 1], cosd(s.angle) * e + sind(s.angle) * cross(z, e)))
 end
 
-# Tolerances on a step's residual (mm, degrees): satisfied, and disturbed by a later step.
+# Tolerances on the residual of a step (mm, degrees), for a satisfied step and for one
+# disturbed by a later step.
 const _PLACE_TOL = (1e-9, 1e-7)
 
-# Add the directions `vs` to the orthonormal basis `B`; the number added.
+# Adds the directions `vs` to the orthonormal basis `B` and returns the number added.
 function _extend!(B::Vector{Vec3}, vs)
     n = 0
     for v in vs
@@ -313,7 +319,7 @@ function _extend!(B::Vector{Vec3}, vs)
     return n
 end
 
-# An orthonormal basis of the directions not in the orthonormal basis `B`.
+# Returns an orthonormal basis of the directions not in the orthonormal basis `B`.
 function _complement(B::Vector{Vec3})
     C = copy(B)
     _extend!(C, _AXES3)
@@ -323,18 +329,23 @@ end
 """
     PlacementReport
 
-What a frame's placement steps fix ([`placement_report`](@ref)). Fields: `frame` (its
-name), `steps`, `fixed` (per step, the translations and rotations it fixes that no
-earlier step fixed, as `(translations, rotations)`), `redundant` (indices of relations
-that fix nothing new), `free_translation` and `free_rotation` (orthonormal chamber
-directions and rotation axes no step fixes; they keep the values of the frame's offset
-and rotation) and `residuals` (per step, how far the final frame is from it,
-`(mm, degrees)`: zero for a relation no later relative move disturbs, and for every
-relative move).
+The degrees of freedom that the placement steps of a frame fix
+([`placement_report`](@ref)). Fields:
 
-The rotations a step fixes are counted at the frame's orientation after the step (the
-axes across a `z` axis set by [`Facing`](@ref), [`Parallel`](@ref) or
-[`Concentric`](@ref), and that `z` axis for [`Roll`](@ref)).
+- `frame`: the name of the frame;
+- `steps`;
+- `fixed`: per step, the translations and rotations that it fixes and no earlier step
+  fixed, as `(translations, rotations)`;
+- `redundant`: indices of relations that fix nothing new;
+- `free_translation` and `free_rotation`: orthonormal chamber directions and rotation
+  axes that no step fixes. They keep the values of the offset and rotation of the frame;
+- `residuals`: per step, how far the final frame is from it, as `(mm, degrees)`. The
+  residual is zero for a relation that no later relative move disturbs, and for every
+  relative move.
+
+The rotations that a step fixes are counted at the orientation of the frame after the
+step. They are the axes across a `z` axis set by [`Facing`](@ref), [`Parallel`](@ref) or
+[`Concentric`](@ref), and that `z` axis for [`Roll`](@ref).
 """
 struct PlacementReport
     frame::Symbol
@@ -354,9 +365,10 @@ function Base.show(io::IO, r::PlacementReport)
     print(io, ")")
 end
 
-# Apply `steps` in order to the frame `f` of the frame `name`; the placed frame and its
-# report. A relation that disturbs an earlier one (raises its residual past the
-# tolerance) is an `ArgumentError` naming both steps and the size of the change.
+# Applies `steps` in order to the frame `f` of the frame `name` and returns the placed
+# frame and its report. A relation that disturbs an earlier one, raising its residual
+# past the tolerance, is an `ArgumentError` that names both steps and the size of the
+# change.
 function _apply_steps(name::Symbol, f::Frame, steps::AbstractVector{<:PlacementStep}, fr)
     T, Rb = Vec3[], Vec3[]
     fixed, redundant = NTuple{2,Int}[], Int[]
@@ -394,8 +406,9 @@ end
 """
     placement_report(defs, base = Dict(:tcc => CHAMBER)) -> Dict{Symbol,PlacementReport}
 
-A [`PlacementReport`](@ref) for every definition in `defs` (as in
-[`resolve_frames`](@ref), which raises the same errors): the degrees of freedom each
-placement step fixes, redundant steps, what stays free, and the residuals.
+A [`PlacementReport`](@ref) for every definition in `defs`, as in
+[`resolve_frames`](@ref), which raises the same errors. The report gives the degrees of
+freedom that each placement step fixes, the redundant steps, the free degrees of
+freedom and the residuals.
 """
 placement_report(defs, base::AbstractDict = Dict(:tcc => CHAMBER)) = last(_resolve_frames(defs, base))

@@ -122,7 +122,7 @@ ColumnLayout {
         onEdited: (text) => Julia.br_rename_cluster(text)
     }
 
-    // NIF quads: held as one beam each (a split gives the deposition per beam), or as four
+    // NIF quads are held as one beam each or as four; a split gives the deposition per beam
     SectionLabel { text: "Quads"; info: "beams.quad"; visible: app.bnSplit > 0 || app.bnMerge > 0 }
     Flow {
         Layout.fillWidth: true

@@ -1,19 +1,21 @@
 # Inference and compilation guards for the hot paths (CLAUDE.md, "Optimization path").
 #
-# 1. Functions that take user callables are compiled once for every callable: a second call
-#    with new closure types adds no method instance to the body (`Base.@nospecializeinfer`
-#    with `@nospecialize`; `@nospecialize` alone still infers, and so instantiates, the
-#    body per closure type). Counting instances is deterministic, unlike compile times;
-#    JET checks dispatch and inference, not recompilation per closure.
-# 2. The optimization path infers concrete types on Float64 and on the optimizer's duals
-#    (`@inferred`), and JET finds no runtime dispatch in it (`report_opt`) and no possible
-#    error (`report_call`) in it, the solves or the drive history.
-# 3. The threaded deposition kernel allocates per task, not per point (function barrier).
+# 1. Functions that take user callables are compiled once for every callable. A second call
+#    with new closure types does not add a method instance to the body
+#    (`Base.@nospecializeinfer` with `@nospecialize`). `@nospecialize` by itself still
+#    infers, and so instantiates, the body per closure type. Counting instances is
+#    deterministic, unlike compile times. JET checks dispatch and inference but not
+#    recompilation per closure.
+# 2. The optimization path infers concrete types on Float64 and on the duals of the
+#    optimizer (`@inferred`). JET finds no runtime dispatch in it (`report_opt`) and no
+#    possible error (`report_call`) in it, the solves or the drive history.
+# 3. The threaded deposition kernel allocates per task; behind the function barrier it
+#    does not allocate per point.
 # Add a case to 1 for each new function that takes closures, objectives or callbacks,
 # and to 2 for each new function on the optimization path.
-# The fixture's calls have the precompile workload's argument types (fast with it).
-# JET is a test-only dependency (Project.toml [extras]); run standalone without it, its
-# checks are skipped with a warning.
+# The calls of the fixture have the argument types of the precompile workload, so they
+# are fast with it. JET is a test-only dependency (Project.toml [extras]). In a standalone
+# run without JET, its checks are skipped with a warning.
 
 const _INF_JET = Base.find_package("JET") !== nothing
 _INF_JET && @eval using JET
@@ -27,9 +29,9 @@ function _inf_body_instances(f)
     return sum(m -> count(_ -> true, Base.specializations(m)), methods(body))
 end
 
-# Whether JET's analysis `report` (`JET.report_opt` or `JET.report_call`) of `f(args...)`
+# Whether the JET analysis `report` (`JET.report_opt` or `JET.report_call`) of `f(args...)`
 # reports nothing in Briareus frames; prints the reports otherwise. Base, Optim and
-# ForwardDiff internals are not ours to fix.
+# ForwardDiff internals are outside this package.
 function _inf_jet_clean(report, f, args...)
     r = report(f, Base.typesof(args...); target_modules = (Briareus,))
     ok = isempty(JET.get_reports(r))
@@ -51,8 +53,8 @@ function _inf_kernel_allocs(op, beams, split = nothing)
     return minimum(@allocated(run()) for _ in 1:3)
 end
 
-# The same for the pass over beam sets that differ in power alone (`_deposit_sets`: the
-# phases of a phased scenario on one operator), every beam live in every set.
+# The same for the pass over beam sets that differ only in power (`_deposit_sets`), such as
+# the phases of a phased scenario on one operator, with every beam live in every set.
 function _inf_sets_allocs(op, sets, splits)
     b1 = first(sets)
     T = typeof(first(b1).power)
@@ -94,8 +96,9 @@ end
     objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout),
                   face_flux_objective(; flux = 1.0, rms_scale = 0.1, keepout))   # the capsule's elements as a "face"
     hardware = HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule))   # named parts
-    # TaLIS rules: 3ω clearance with the rule tolerance (about the aim: in the beams' type)
-    # and 3ω capture, landed (on the wall) and continued past the outline (the caps)
+    # The TaLIS rules are 3ω clearance with the rule tolerance, which is about the aim and
+    # so in the number type of the beams, and 3ω capture. Capture is checked landed on the
+    # wall and continued past the outline onto the caps.
     talis_rules = (HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule), tolerance = 0.5,
                                    pivot = :aim, miss = :all),
                    CaptureKeepIn(t, (:wall, :cap_top, :cap_bottom)), CaptureKeepIn(t, (:cap_top, :cap_bottom); pivot = :aim),
@@ -113,13 +116,15 @@ end
     psp = [GroupPointing(nif_beams(power = 2.0)[1:16]; by = :quad, fields = (:z, :r, :phi, :split), relative)
            for relative in (false, true)]
     xsp0 = initial_parameters(psp[1]) .+ 0.1
-    # a corona about the capsule (the quads' spots reach it: live rays on both paths)
-    # pointing in the entrance holes' frames (the bottom one mirrored), one local aim per cone
+    # A corona surrounds the capsule; the quad spots reach it, so rays are live on both
+    # paths. Pointing is in the frames of the entrance holes, with the bottom one mirrored
+    # and one local aim per cone.
     L = geometry.length
     lehs = (Frame(Matrix(1.0I, 3, 3), (0.0, 0.0, L / 2)), Frame(Diagonal([1.0, -1.0, -1.0]), (0.0, 0.0, -L / 2)))
     pf = FramePointing(quads, b -> b.port[3] > 0 ? lehs[1] : lehs[2]; fields = (:u, :v, :w, :power))
     xf0 = initial_parameters(pf)
-    # composed: the radial aims held, a power scale per cone pair
+    # The composed parameterization holds the radial aims and has a power scale per cone
+    # pair.
     pc = HeldParameters(PowerScales(p; by = b -> b.group in (:inner23, :inner30) ? :inner : :outer),
                         n -> endswith(n, ".r"))
     xc0 = initial_parameters(pc)
@@ -135,8 +140,8 @@ end
     # the drive proxies of a deposition, made positive everywhere (types unchanged)
     _inf_positive(d) = (; ylm = d.ylm .+ 10 .* (eachindex(d.ylm) .== 1),
                         shell_ylm = d.shell_ylm .+ 10 .* (axes(d.shell_ylm, 1) .== 1))
-    # constraints: the wall-irradiance ceiling and the mode gate of the start, and the
-    # augmented Lagrangian of an objective with both
+    # The constraints are the wall-irradiance ceiling and the mode gate of the start,
+    # with the augmented Lagrangian of an objective with both.
     ev_ref = evaluate(s, x0)
     c_ref = flux_ylm(ev_ref)
     ceilc, gatec = irradiance_ceiling(ev_ref, :wall), mode_gate(c_ref, fill(0.05, 4))
@@ -195,8 +200,8 @@ end
         # new `beams_at`, `record` and `times` types
         history(τ -> with_pulses(quads, pulse, 0.9τ), 0.5:0.5:1.0; record = sol -> sol.H[1])
         @test _inf_body_instances(Briareus._drive_history) == n
-        # unconverted light: new fraction functions reuse the body, for every beam, keyed
-        # or one per beam
+        # For unconverted light, new fraction functions reuse the body, whether given for
+        # every beam, keyed, or one per beam.
         uq(r) = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; unconverted = (omega1 = r, omega2 = 0.0))
         uq(τ -> 0.05)
         n = _inf_body_instances(Briareus._drive_history)
@@ -214,7 +219,7 @@ end
         up(Dict(g => (τ -> 2e-3) for g in unique(b.group for b in quads)))
         @test _inf_body_instances(Briareus._drive_history) == n
 
-        # retuning: new limit, nominal, fraction and prepulse functions reuse the body
+        # For retuning, new limit, nominal, fraction and prepulse functions reuse the body.
         rref = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; ylm = true, keep_albedo = true, mband = nothing)
         rt(lim, nom, r) = retune_drive(CapsuleModes(mw), s.deposition, quads, rref; limits = lim, nominal = nom,
                                        stay = 0.1, unconverted = (omega1 = r, omega2 = 0.0),
@@ -236,7 +241,8 @@ end
         optimize_pointing(s, asymmetry_objective(; drive = 1.0); x0, iterations = 1,
                           evaluations = 2, callback = st -> false)
         @test _inf_body_instances(optimize_pointing) == n
-        # constrained runs: new objective, constraint and callback types reuse the bodies
+        # For constrained runs, new objective, constraint and callback types reuse the
+        # bodies.
         optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 3, constraints = (ceilc, gatec))
         n = _inf_body_instances(optimize_pointing)
         nc = _inf_body_instances(Briareus._constrained_pointing)
@@ -255,9 +261,9 @@ end
         @test _inf_body_instances(Briareus._lbfgsb) == nl
         @test _inf_body_instances(Briareus._pointing_result) == npr
         @test _inf_instances(Briareus._active_set_multipliers) == nam
-        # phase 1 and the relaxations (a power cap below the box: a verdict, then each
-        # violated constraint relaxed until the budget ends): new objective, constraint and
-        # callback types reuse the bodies
+        # For phase 1 and the relaxations, new objective, constraint and callback types
+        # reuse the bodies. A power cap below the box gives a verdict, and then each
+        # violated constraint is relaxed until the budget ends.
         optimize_pointing(s, objectives[1]; x0, evaluations = 60, relaxation = true,
                           constraints = (Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 1.0), gatec))
         n1, nr = _inf_body_instances(Briareus._phase1), _inf_body_instances(Briareus._relaxations)
@@ -276,7 +282,8 @@ end
         nj, npj = _inf_instances(Briareus._scenario_jacobian), _inf_instances(Briareus._pointing_jacobian)
         Briareus._scenario_jacobian(s, Briareus._KKTValues(dobj, (clf, lightc)), x0)
         @test _inf_instances(Briareus._scenario_jacobian) == nj && _inf_instances(Briareus._pointing_jacobian) == npj
-        # a phased scenario: new objective, constraint and callback types reuse the bodies
+        # For a phased scenario, new objective, constraint and callback types reuse the
+        # bodies.
         optimize_pointing(pph, in_phase(:a, objectives[1]); x0 = xph, iterations = 1, evaluations = 2)
         n = _inf_body_instances(optimize_pointing)
         optimize_pointing(pph, in_phase(:b, dobj); x0 = xph, iterations = 1, evaluations = 2, callback = st -> false)
@@ -297,7 +304,7 @@ end
                           constraints = (ceilc, gatec))
         @test _inf_body_instances(optimize_pointing) == n && _inf_instances(Briareus._hard_cut_result) == nh
 
-        # a placement sweep: new design and callback types reuse the compiled sweep
+        # For a placement sweep, new design and callback types reuse the compiled sweep.
         foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])
         sweep(d, cb) = placement_sweep(d, [0.0]; callback = cb)
         sweep(v -> (; target = foilt, beams = quads[1:1]), st -> false)
@@ -305,7 +312,8 @@ end
         sweep(v -> (; target = foilt, beams = quads[1:2]), st -> st.done > 5)
         @test _inf_instances(Briareus._sweep) == n
 
-        # unconverted-light histories: new fraction and prepulse functions reuse the body
+        # For unconverted-light histories, new fraction and prepulse functions reuse the
+        # body.
         uh(r, pre) = unconverted_history(foilt, quads[1:1], pulse, [0.5, 1.0];
                                          ratio = (omega1 = r, omega2 = 0.0), prepulse = (omega1 = pre,))
         uh(τ -> 0.05, τ -> 0.0)
@@ -322,7 +330,7 @@ end
         bp((bs, m) -> history(τ -> with_pulses(bs, pulse, 0.9τ), [0.5, 1.0]; lpi = (m,)))
         @test _inf_body_instances(bubble_prediction) == n && _inf_instances(Briareus._swing_history) == ns
 
-        # pulse-shape groups: new class functions reuse the compiled grouping
+        # For pulse-shape groups, new class functions reuse the compiled grouping.
         mg = [1.0 + 0.1i + 0.01j for i in 1:6, j in 1:2]
         pulse_shape_groups(mg, 1:6; shapes = 2, class = i -> i <= 3)
         n = _inf_instances(Briareus._pulse_shape_groups)
@@ -377,8 +385,8 @@ end
             @test (@inferred dfl.f(ev)) isa T
             @test (@inferred shobj(ev)) isa T
         end
-        # the phased path: the beams per phase, a phase's constraint and objective, the
-        # augmented Lagrangian over the phases
+        # The phased path covers the beams per phase, the constraint and objective of a
+        # phase, and the augmented Lagrangian over the phases.
         for x in (xph, _inf_duals(xph))
             T = eltype(x)
             @test (@inferred apply(pph.param, x)) isa PerPhase{Vector{Beam{T}}}
@@ -425,7 +433,8 @@ end
             @test (@inferred pavg.f(evs)) isa T && (@inferred pown.f(evs)) isa T
             @test (@inferred Briareus._deposit(s.deposition, bs, getfield(evs, :_split))).element isa Vector{T}
             @test (@inferred linked_bubble(linked, bs)) isa BubbleAbsorption{T}
-            # the bubble and the linked bubble on the beams (6 ns: clipping and the ridge stop)
+            # The bubble and the linked bubble act on the beams at 6 ns, with clipping and
+            # the ridge stop.
             @test all(m -> (@inferred apply_lpi(m, bs, 6.0)) isa Vector{Beam{T}}, (bubble, linked))
             @test all(m -> (@inferred lpi_deposit(m, s.deposition, bs, 6.0)).element isa Vector{T}, (bubble, linked))
         end
@@ -509,8 +518,9 @@ end
                 @test _inf_jet_clean(JET.report_call, objectives[2], ev)
                 @test _inf_jet_clean(JET.report_call, objectives[3], ev)
                 @test _inf_jet_clean(JET.report_call, mode_rms, flux_ylm(ev), 6)
-                # constraints: no dispatch in the per-element and per-degree kernels, no
-                # possible errors in the constraint values and the augmented Lagrangian
+                # For constraints, the per-element and per-degree kernels have no dispatch,
+                # and the constraint values and the augmented Lagrangian have no possible
+                # errors.
                 P = evaluate(s, x).deposition.element
                 @test _inf_jet_clean(JET.report_opt, Briareus._irradiance_norm, P, t, elements(t, :wall), 32.0)
                 @test _inf_jet_clean(JET.report_opt, mode_departure, flux_ylm(ev), c_ref)
@@ -524,8 +534,9 @@ end
                 @test _inf_jet_clean(JET.report_opt, lightc.f, ev)
                 @test _inf_jet_clean(JET.report_call, aug2, ev)
                 @test _inf_jet_clean(JET.report_call, kktv, ev)
-                # phase 1 and the relaxations: no dispatch in their kernels, no possible
-                # errors in their objectives; the gate and the floor from an evaluation
+                # For phase 1 and the relaxations, the kernels have no dispatch and the
+                # objectives have no possible errors. The gate and the floor come from an
+                # evaluation.
                 @test _inf_jet_clean(JET.report_opt, Briareus._hinge2, flux_ylm(ev)[1:4])
                 @test _inf_jet_clean(JET.report_opt, Briareus._positive_norm, flux_ylm(ev)[1:4], 64.0)
                 @test _inf_jet_clean(JET.report_call, infeas, ev)
@@ -535,7 +546,8 @@ end
                 @test _inf_jet_clean(JET.report_opt, Briareus._mean_shift2, shobj, ev.beams)
                 @test _inf_jet_clean(JET.report_call, shobj, ev)
             end
-            # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
+            # The outer picket fluence has no dispatch (from 1.11, as for the deposition)
+            # and no errors.
             for x in (xo, _inf_duals(xo))
                 VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, picket_fluence, s.deposition, apply(p, x))
                 @test _inf_jet_clean(JET.report_call, picket_fluence, s.deposition, apply(p, x))
@@ -553,7 +565,7 @@ end
                     @test all(m -> _inf_jet_clean(JET.report_opt, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
                               (bubble, linked))
                 end
-                # the clipping of the bubble: no dispatch on either version
+                # The clipping of the bubble has no dispatch on either version.
                 @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), bubble, bs)
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
                 @test _inf_jet_clean(JET.report_call, pavg.f, ev) && _inf_jet_clean(JET.report_call, pcor.f, ev)
@@ -565,8 +577,8 @@ end
                                _inf_jet_clean(JET.report_call, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
                           (bubble, linked))
             end
-            # spherical pointing fields: no dispatch (from 1.11, as the deposition checks
-            # above), no possible errors
+            # Spherical pointing fields have no dispatch (from 1.11, as for the deposition
+            # checks above) and no possible errors.
             for x in (xs0, _inf_duals(xs0))
                 if VERSION >= v"1.11"
                     @test _inf_jet_clean(JET.report_opt, apply, ps, x)
@@ -581,7 +593,7 @@ end
                 @test _inf_jet_clean(JET.report_opt, apply, q, x)
                 @test _inf_jet_clean(JET.report_call, apply, q, x)
             end
-            # pointing in frames: no dispatch, no possible errors
+            # Pointing in frames has no dispatch and no possible errors.
             for x in (xf0, _inf_duals(xf0))
                 @test _inf_jet_clean(JET.report_call, apply, pf, x)
                 if VERSION >= v"1.11"
@@ -589,7 +601,7 @@ end
                     @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, apply(pf, x))
                 end
             end
-            # composed parameterizations: no dispatch, no possible errors
+            # Composed parameterizations have no dispatch and no possible errors.
             for (q, x) in ((pc, xc0), (pc, _inf_duals(xc0)), (pcs, xcs0), (pcs, _inf_duals(xcs0)))
                 @test _inf_jet_clean(JET.report_opt, apply, q, x)
                 @test _inf_jet_clean(JET.report_call, apply, q, x)
@@ -623,8 +635,9 @@ end
             @test _inf_jet_clean(JET.report_call,
                                  (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c, relaxation = true),
                                  s, objectives[1], x0, (ceilc, gatec))
-            # the phased path: no dispatch in the beams per phase, no possible errors in
-            # them, the evaluations, the augmented Lagrangian and a constrained run
+            # On the phased path, the beams per phase have no dispatch, and they, the
+            # evaluations, the augmented Lagrangian and a constrained run have no possible
+            # errors.
             for x in (xph, _inf_duals(xph))
                 @test _inf_jet_clean(JET.report_opt, apply, pph.param, x)
                 @test _inf_jet_clean(JET.report_call, apply, pph.param, x)

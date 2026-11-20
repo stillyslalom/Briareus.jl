@@ -1,4 +1,5 @@
-// The pointing optimization: free fields and bounds, objective, keep-outs, limits, run.
+// The pointing optimization page sets the free fields and bounds, the objective, the
+// keep-outs and the limits, and runs the optimization.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

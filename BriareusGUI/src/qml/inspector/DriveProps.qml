@@ -1,5 +1,6 @@
-// The drive analysis: compute the view factors, the beam model of the laser deposition,
-// what the target is colored by, the capsule or foil map, and the foil spot radius.
+// The drive analysis page computes the view factors and sets the beam model of the laser
+// deposition, what the target is colored by, the capsule or foil map, and the foil spot
+// radius.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

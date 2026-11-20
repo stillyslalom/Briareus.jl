@@ -34,9 +34,9 @@ using Briareus, LinearAlgebra, Test
     @test all(abs.(Hmc .- H) .< 5stderr_(batch))
     @test maximum(abs, Hmc ./ H .- 1) < 0.01
 
-    # The continuum (re-emission from the hit point) is the limit of finer elements: with
-    # one element per face its face averages differ from the element model's by up to 26%,
-    # with 8 × 8 by under 1% (measured: 0.6%).
+    # The continuum, with re-emission from the hit point, is the limit of finer elements.
+    # With one element per face, its face averages differ from those of the element model by
+    # up to 26%. With 8 × 8 they differ by under 1%, measured at 0.6%.
     t = cube(true, 8)
     P = [t.components[t.elem_comp[e]].name === :bottom ? t.elem_area[e] : 0.0 for e in 1:nelements(t)]
     sol = solve(RadiationModel(t), P)
@@ -44,12 +44,13 @@ using Briareus, LinearAlgebra, Test
     face_mean(H, n) = (es = elements(t, n); sum(H[es] .* t.elem_area[es]) / sum(t.elem_area[es]))
     @test all(abs(face_mean(Hmc, n) / face_mean(sol.H, n) - 1) < 0.015 for n in (:bottom, :top, :xm, :yp))
 
-    # Closing entrance holes: a closed lip re-emits its albedo, as in `solve`. A small flat
-    # hohlraum (the meshes without their curved surfaces) driven on the wall, lips closed
-    # at 3 ns, against the same hohlraum with open entrance holes: the capsule's mean
-    # incident flux from the element model (sampled visibility) and from the Monte Carlo.
-    # Each agrees to its view-factor error (measured 0.3–0.4%); the closure's gain (8.5%)
-    # to the Monte Carlo's sampling error (5σ ≈ 0.4%).
+    # A closed lip re-emits its albedo, as in `solve`. A small flat hohlraum, with the
+    # meshes stripped of their curved surfaces, is driven on the wall with the lips closed
+    # at 3 ns and compared with the same hohlraum with open entrance holes. The mean
+    # incident flux on the capsule comes from the element model (sampled visibility) and
+    # from the Monte Carlo. Each agrees within its view-factor error, measured at 0.3–0.4%.
+    # The gain from the closure (8.5%) agrees within the sampling error of the Monte Carlo
+    # (5σ ≈ 0.4%).
     flat(t) = Target([Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided)
                       for c in t.components]; closed = t.closed)
     au = Material(:Au; albedo = 0.8, conversion = 0.8)

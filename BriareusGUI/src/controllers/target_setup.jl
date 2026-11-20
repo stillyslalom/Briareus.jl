@@ -1,8 +1,8 @@
-# The target: parts placed anywhere (hohlraums, spheres, disks, washers, rectangles,
-# cylinders, cones, as VisRad's target components; CAD meshes and VisRad objects), the
-# starters that insert assemblies of them, and the mesh element sizes. Every edit
-# rebuilds the `Target` (meshing takes milliseconds; the view factors are computed on
-# request).
+# The target consists of parts placed anywhere, the starters that insert assemblies of them,
+# and the mesh element sizes. The parts are hohlraums, spheres, disks, washers, rectangles,
+# cylinders and cones, as in the VisRad target components, and CAD meshes and VisRad
+# objects. Every edit rebuilds the `Target`; meshing takes milliseconds, and the view
+# factors are computed on request.
 
 """
     MeshSpec(h, capsule_h)
@@ -75,7 +75,7 @@ azimuth `phi` (degrees from the part's +x) and axial position `z` (mm, in the pa
 frame); `round` (the default, as diagnostic windows usually are) a disk of diameter
 `width` mm on the unrolled wall, otherwise a rectangle `width` mm of arc by `height` mm
 along the axis. A closed window (`open = false`) is an opaque wall patch with a separate
-x-ray `albedo` and laser → x-ray `conversion` (by default the hohlraum wall's, core
+x-ray `albedo` and laser-to-x-ray `conversion` (by default the hohlraum wall's, core
 `gold()`); an open one is a hole (an aperture: laser light and x-rays leave through it).
 Window `k` of part `name` is the component `<name>_window_k`.
 """
@@ -165,7 +165,7 @@ const PART_SIZE_FIELDS = Dict(
 
 """
 Values of a `:hohlraum` part besides its sizes (`key => default`): its wall's albedo and
-laser → x-ray conversion (the placement fields `albedo` and `conversion`, which default
+laser-to-x-ray conversion (the placement fields `albedo` and `conversion`, which default
 to 0.8 and 0.9 for a hohlraum: core `gold()`, the static NIF wall of Young et al., PoP 27,
 082702 (2020); sessions keep the values they saved), each end's opening (`top_end`,
 `bottom_end`: 1 an entrance hole, 0 closed: the cap covers the end, 2 open: neither cap
@@ -354,7 +354,7 @@ radiates from its inside; a flat part from its back; a mesh from the other side)
 escapes through it). The role flags mark the part for the analyses
 ([`set_part_role!`](@ref)): `foil` a backlighter foil ([`active_foil`](@ref)),
 `observed` the surface whose x-ray drive is analyzed ([`observed_name`](@ref)), `wall`
-a re-emitting cavity wall ([`wall_names`](@ref)); the name carries no role. A `:mesh`
+a re-emitting cavity wall ([`wall_names`](@ref)); the name does not carry a role. A `:mesh`
 part reads its triangles from the STL `file`. The
 placement fields are in the frame named `frame` (`:tcc`, another part's name or a piece
 frame of a hohlraum part: see [`part_frames`](@ref)); `coords` ([`PART_COORDINATES`](@ref)) is
@@ -457,7 +457,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     kind === :hohlraum || isempty(windows) || throw(ArgumentError("only a hohlraum has windows"))
     kind === :hohlraum || isempty(sections) || throw(ArgumentError("only a hohlraum has sections"))
     kind === :hohlraum || isempty(piece_roles) ||
-        throw(ArgumentError("only a hohlraum part's pieces hold roles of their own"))
+        throw(ArgumentError("piece roles are allowed only on a hohlraum part"))
     all(r -> Symbol(r) in PIECE_ROLES, Base.values(piece_roles)) ||
         throw(ArgumentError("a piece's role must be one of $PIECE_ROLES"))
     for (k, x) in values
@@ -566,9 +566,9 @@ center `(0, 0, L/2)`, the part's axes, so `z` points out of the hohlraum) and
 `name.leh_bottom` (at `(0, 0, −L/2)`, turned 180° about the part's `x`: `z` out of the
 hohlraum, `y` reversed, so one placement or aim mirrors between the two ends, as the
 former template's entrance-hole frames did), and each window's `name.window_k` (origin at the
-window's center on the wall, the part's axes). The ends' frames serve their caps too (a
-cap's centroid is its end's center), and the wall aims in the part frame (its
-centroid is the part's center). Other kinds have none.
+window's center on the wall, the part's axes). The frames of the ends are also used for
+their caps, since the centroid of a cap is the center of its end, and the wall aims in
+the part frame, since its centroid is the center of the part. Other kinds have none.
 """
 function piece_frame_defs(p::PartSpec)
     out = Pair{Symbol,FrameDef}[]
@@ -643,10 +643,10 @@ for drawing a part left out of the calculations, at no meshing cost).
 A sphere with `capsule_mesh` set (value 1, see [`SPHERE_VALUES`](@ref)) is meshed as a
 capsule: the geodesic mesh of `Briareus.hohlraum`'s capsule (`icosphere_mesh`,
 `capsule_mesh = :compact`) with elements of `capsule_h` (the target's capsule size,
-[`MeshSpec`](@ref)) unless the part sets a separate size. A `:hohlraum` part is core `hohlraum(...)` without a capsule, meshed with
-elements of `h`, its components named and grouped as in [`hohlraum_pieces`](@ref); at
-the chamber frame it is not moved at all, so it equals the former template's hohlraum
-bitwise.
+[`MeshSpec`](@ref)) unless the part sets a separate size. A `:hohlraum` part is core
+`hohlraum(...)` without a capsule, meshed with elements of `h`, its components named and
+grouped as in [`hohlraum_pieces`](@ref). At the chamber frame it is not moved at all, so
+it is identical to the hohlraum of the former template.
 """
 function part_components(p::PartSpec, h::Real; frame::Frame = _own_frame(p), raw::Bool = false,
                          capsule_h::Real = h)
@@ -794,7 +794,7 @@ function _cached(f, cache::AbstractDict, key)
     if !mine
         wait(ev)
         v = lock(() -> get(cache, key, nothing), _STL_LOCK)
-        return v === nothing ? _cached(f, cache, key) : v      # it failed there: try here
+        return v === nothing ? _cached(f, cache, key) : v      # the other task failed, so build it in this one
     end
     try
         v = f()
@@ -841,9 +841,10 @@ function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
             ref = visrad_component(o; material = mat, two_sided = p.two_sided)
             cs = [length(ref) == 1 ? _with_surface(c, _whole_surface(c.mesh, only(ref).mesh)) : c for c in cs]
         end
-        # components carry the part's name (renamed, or given a role), not the object's, and
-        # the part as their `part` (a primitive's pieces, `<part>_wall`, …, as a hohlraum
-        # part's: they follow the part through a rename and a left-out part)
+        # Components carry the name of the part, renamed or given a role, instead of the
+        # name of the object, and the part as their `part`. The pieces of a primitive,
+        # `<part>_wall`, …, are named as those of a hohlraum part are, so they follow the
+        # part through a rename and a left-out part.
         Component[String(p.name) == o.name && c.part === p.name ? c :
                   Component(String(p.name) * String(c.name)[ncodeunits(o.name)+1:end], c.mesh, c.material;
                             kind = c.kind, two_sided = c.two_sided, surface = c.surface, part = p.name)
@@ -925,14 +926,14 @@ end
     _whole_surface(mesh, reference) -> Union{Nothing,CylinderSurface,SphereSurface}
 
 The cylinder or sphere a remeshed CAD part lies on when the whole part is one
-(`fit_surfaces` on its file's facets, `reference`, whose vertices lie on the true
-surface; every element of `mesh` in that one region), else `nothing`. The part then
-keeps its name and its elements and is integrated on the true surface: a tube or shell
-tessellated in slivers otherwise carries hundreds of facets per element, and its view
-factors cost ~20× more on the flat path (research notes, "Finely faceted curved CAD on
-the flat path"). A part of several faces (a hohlraum half: its bore, walls, ends) stays
-one flat component in the window, which shows and keys parts; the drive splits it into
-its fitted pieces in a separate target (`_fitted_target`).
+(`fit_surfaces` on its file's facets, `reference`, whose vertices lie on the true surface;
+every element of `mesh` in that one region), else `nothing`. The part then keeps its name
+and elements and is integrated on the true surface: a tube or shell tessellated in slivers
+otherwise carries hundreds of facets per element, and its view factors cost ~20× more on the
+flat path (research notes, "Finely faceted curved CAD on the flat path"). A part of several
+faces, such as a hohlraum half with its bore, walls and ends, stays one flat component in
+the window, which shows and keys parts; the drive splits it into its fitted pieces in a
+separate target (`_fitted_target`).
 """
 function _whole_surface(m::Mesh, ref::Mesh)
     npatches(m) >= 6 && length(ref.triangles) >= 6 || return nothing
@@ -970,7 +971,7 @@ function _on_one_surface(m::Mesh)
     c = Vec3(x[1], x[2], x[3])
     r = sqrt(max(x[4] + dot(c, c), 0.0))
     r > 0 && maximum(p -> abs(norm(p - c) - r), P) <= tol(r) && return true
-    # cylinder: the facet normals span the plane across the axis
+    # For a cylinder, the facet normals span the plane across the axis.
     M = zeros(3, 3)
     for (a, b, d) in m.triangles
         n = cross(m.vertices[b] - m.vertices[a], m.vertices[d] - m.vertices[a])   # area-weighted
@@ -1194,7 +1195,7 @@ function TargetSetup(; starter::Symbol = :hohlraum, resolution::Symbol = :standa
                        Observable{Union{Nothing,Symbol}}(nothing))
 end
 
-# The parts of a new target: a starter's, or (`:none`) none.
+# The parts of a new target, those of a starter, or none for `:none`.
 function _starter_or_none(starter::Symbol, mesh::MeshSpec)
     starter === :none && return PartSpec[]
     starter in STARTERS || throw(ArgumentError("a starter is one of $STARTERS, or :none"))
@@ -1238,11 +1239,11 @@ end
 """
     await_target!(ts::TargetSetup) -> Bool
 
-Make `target` the committed design's now if a worker is still building it (the build
-in flight is waited for, not repeated), as the checks that read it need. CAD parts
-still remeshing stay `pending` (their facets are drawn) unless the session no longer
-spawns jobs (a closed window), when they are meshed here. Returns whether the target
-is current.
+Make `target` the committed design's now if a worker is still building it, as the checks
+that use it need. The build in flight is waited for instead of being repeated. CAD parts
+still remeshing stay `pending`, with their facets drawn, unless the session no longer
+spawns jobs (a closed window), in which case they are meshed in this call. Returns
+whether the target is current.
 """
 function await_target!(ts::TargetSetup)
     (ts.building[] || (!ts.spawn[] && !isempty(ts.pending[]))) || return true
@@ -1291,8 +1292,9 @@ end
 
 # The `Target` of `comps`, built once for the same components (identical objects): the
 # few latest are kept, so an edit to a part left out of the calculations, or an undo,
-# finds its targets again (a NIF CAD workspace's take a second to build: BVHs of
-# 2 × 10⁵ facets). A target being built on a worker is waited for, not built twice.
+# finds its targets again. The targets of a NIF CAD workspace take about a second to
+# build, with BVHs of 2 × 10⁵ facets. A target being built on a worker is waited for
+# instead of being built twice.
 # Keyed by the components' object ids: the entry holds the components, so no other
 # object takes their ids while it is kept.
 const _TARGETS = Dict{Vector{UInt},Pair{Vector{Component},Target}}()
@@ -1367,8 +1369,8 @@ function _try_build!(ts::TargetSetup; mesh = ts.mesh[], parts = ts.parts[], excl
         end
         _assign!(ts.excluded, Set{Symbol}(excluded))
         built === nothing || (ts.ghost[] === built[2] || (ts.ghost[] = built[2]))
-        # (first: what follows a frame sees the design's frames;
-        # beams aimed in a renamed part's frame follow its new name)
+        # This comes first, so that what follows a frame sees the frames of the design,
+        # and beams aimed in the frame of a renamed part follow its new name.
         ts.renames[] = Dict{Symbol,Symbol}(renames)
         try
             _assign!(ts.frames, frames)
@@ -1409,7 +1411,7 @@ end
 # A worker built the target of job `g`: commit it unless a later edit superseded it.
 function _built!(ts::TargetSetup, g::Integer, out)
     g == ts.mesh_job[] || return false
-    if out.err !== nothing                       # (a bug: the inputs were checked)
+    if out.err !== nothing                       # a bug, since the inputs were checked
         ts.error[] = "building the target failed: " * _errmsg(out.err)
         empty!(ts.after_build)
         _assign!(ts.building, false)
@@ -1460,8 +1462,8 @@ An excluded component is not part of `target` (no laser, view factors, clearance
 checks see it) but stays listed and drawn as a ghost (`ghost`), so it can be put
 back; a hohlraum with an excluded component is no longer treated as closed. `name` may
 be a part (every component of it) or an assembly (every part of its subtree,
-[`assembly_parts`](@ref)); a part put back comes back whole, its pieces left out on
-their own included.
+[`assembly_parts`](@ref)); a part put back comes back whole, including pieces that were
+left out separately.
 """
 function set_excluded!(ts::TargetSetup, name::Symbol, excluded::Bool)
     ex = first(_with_excluded(ts, ts.excluded[], (name,), excluded))
@@ -1522,7 +1524,7 @@ end
 """
     new_target!(ts::TargetSetup, starter = :hohlraum) -> Bool
 
-Start a new target (File ▸ New target): the parts of `starter` alone (one of
+Start a new target (File ▸ New target): only the parts of `starter` (one of
 [`STARTERS`](@ref), placed at TCC, [`starter_parts`](@ref)), or with `starter = :none`
 no parts at all (an empty design, to build from Insert); nothing is left out of the
 calculations, and the element sizes are kept.
@@ -1602,7 +1604,8 @@ function hohlraum_windows(ts::TargetSetup; part = nothing)
 end
 
 # Commit a new window list of part `i` if the hohlraum accepts it; otherwise keep the
-# target and report why (without the part's name: the edit names the window).
+# target and report why. The report leaves out the part name, since the edit names the
+# window.
 function _set_windows!(ts::TargetSetup, i::Integer, ws::Vector{WindowSpec})
     ps = copy(ts.parts[])
     name = String(ps[i].name)
@@ -1651,7 +1654,7 @@ function add_window!(ts::TargetSetup; part = nothing, kwargs...)
         for φ in (90.0, 270.0, 0.0, 180.0, 45.0, 135.0, 225.0, 315.0)
             ws = [p.windows; WindowSpec(; base..., phi = φ, kwargs...)]
             try
-                # the windows are checked as the wall is meshed (the hohlraum alone)
+                # The windows are checked as the wall is meshed, on the hohlraum by itself.
                 part_components(_with(p; windows = ws), ts.mesh[].h)
             catch err
                 err isa ArgumentError || rethrow()
@@ -1770,7 +1773,8 @@ target's; `remesh_mesh`). A part the geometry rejects sets `error` and returns `
 function add_part!(ts::TargetSetup, kind::Symbol; name = nothing, two_sided::Bool = false,
                    inward::Bool = false, aperture::Bool = false, file::AbstractString = "",
                    frame::Symbol = :tcc, values...)
-    # (the parts too: the target may still be the previous design's, being built)
+    # The parts count too, since the target may still be that of the previous design,
+    # being built.
     taken = union(Set(component_names(ts.target[])), (p.name for p in ts.parts[]))
     if name === nothing
         k = 1
@@ -2140,7 +2144,7 @@ function set_part_coords!(ts::TargetSetup, i::Integer, coords::Symbol)
     p.coords === coords && return true
     ps = copy(ts.parts[])
     ps[i] = _with(p; coords)
-    ts.parts[] = ps                     # the geometry is unchanged: no rebuild
+    ts.parts[] = ps                     # the geometry is unchanged, so no rebuild
     return true
 end
 
@@ -2340,7 +2344,7 @@ end
     move_part_step!(ts::TargetSetup, i, k, by) -> Bool
 
 Remove placement step `k` of part `i`, or move it `by` places (−1 earlier, +1 later;
-the order matters: steps apply in sequence).
+the order matters, since steps apply in sequence).
 """
 function remove_part_step!(ts::TargetSetup, i::Integer, k::Integer)
     _check_part_index(ts, i)
@@ -2545,7 +2549,7 @@ normalized) of the frame named `frame` ([`part_frames`](@ref); by default the fr
 part is placed in), through the part origin, as one edit: the angles of its
 rotation (`theta`, `phi`, `rotation`) are re-expressed in the frame it is placed in, its
 origin and that frame stay. A part without placement steps ends where a `Rotate` step
-about the same chamber axis would put it (to round-off in the angles). Parts placed in
+about the same chamber axis would put it (within round-off in the angles). Parts placed in
 its frame, and beams aimed in it, turn with it. The rotational counterpart of
 [`nudge_part!`](@ref) (the placement triad's rings make it). A port frame (its axis is
 its port's) and a turn its placement steps undo are refused with `error` set, returning
@@ -2575,7 +2579,7 @@ function turned_parts(parts::AbstractVector{PartSpec}, i::Integer, θ::Real;
     Q = Briareus._axis_rotation(Vec3(e), deg2rad(θ))
     P = fr[p.frame]
     F0 = _own_frame(p, P)                          # before the steps
-    O = fr[p.name].origin                          # the pivot: the part's origin
+    O = fr[p.name].origin                          # the pivot is the part origin
     vals = copy(p.values)
     # (without steps the pivot is its center, kept as typed)
     isempty(p.steps) || ((vals[:x], vals[:y], vals[:z]) = to_frame(P, O + Q * (F0.origin - O)))
@@ -2602,7 +2606,8 @@ function _axis_vector3(axis)
 end
 
 """
-Roles a part can take in the analyses, held by the part's flags (its name carries none):
+Roles a part can take in the analyses, held by the part's flags (its name does not carry
+a role):
 `:none`; `:observed`, the surface whose x-ray drive is analyzed (flag `observed`; one
 part at a time, see [`observed_name`](@ref)): a sphere (a capsule: its drive's modes,
 the θ–φ map and the capsule keep-out) or a flat face (a rectangle or disk: a package's
@@ -2612,7 +2617,7 @@ of parts can be foils, and the active one ([`active_foil`](@ref)) is the foil wh
 statistics, map, objective, line of sight and captured power the analyses take); and
 `:wall` (a re-emitting cavity surface: the drive history's wall temperature, and a
 surface the clearance and TaLIS checks land the beams on; any number of parts, see
-[`wall_names`](@ref)). A hohlraum part's pieces hold roles of their own
+[`wall_names`](@ref)). The pieces of a hohlraum part hold separate roles
 ([`PIECE_ROLES`](@ref), [`set_piece_role!`](@ref)).
 """
 const PART_ROLES = (:none, :observed, :foil, :wall)
@@ -2751,7 +2756,7 @@ end
     observed_flat(ts::TargetSetup) -> Bool
 
 Whether the observed surface ([`observed_name`](@ref)) is a flat face (a rectangle or a
-disk, a VisRad rectangle, a hohlraum part's cap) rather than a sphere: the drive then
+disk, a VisRad rectangle, a hohlraum part's cap) instead of a sphere: the drive then
 maps its face and gives its flux's statistics over the face, and the capsule-only views
 (modes, keep-out, the θ–φ map) have no capsule. Decided on the built target's elements of
 the observed surface, by the rule the drive applies to the elements its scenario
@@ -2844,8 +2849,8 @@ hohlraum part in the calculations, in the parts' order, `part => its wall pieces
 pieces holding the wall role, [`piece_role`](@ref): by default its wall, each section of
 it, and the caps it has, so a cap made the observed surface is not among them;
 [`wall_names`](@ref) lists them all together). Parts that hold the wall role without being a hohlraum part (a shield, a
-VisRad hohlraum) count in the drive history's wall temperature, not as a cavity of
-their own. A cavity's walls are named piece by piece: every piece of a hohlraum part,
+VisRad hohlraum) count in the drive history's wall temperature but do not form a
+separate cavity. A cavity's walls are named piece by piece: every piece of a hohlraum part,
 its entrance holes included, carries the part's name as `Component.part`.
 """
 cavity_walls(ts::TargetSetup) =
@@ -2969,15 +2974,16 @@ end
 # components join them; the foils by component).
 function _landing(ts::TargetSetup, t::Target = ts.target[])
     obs = _with_parts(t, observed_components(ts, t))
-    # (a hohlraum part's caps hold the wall role for the drive, but the checks keep them
-    # as hardware: they are the entrance holes' edges, as the former template's were)
+    # The caps of a hohlraum part hold the wall role for the drive, but the checks keep
+    # them as hardware, since they are the edges of the entrance holes, as the caps of
+    # the former template were.
     walls = filter(n -> !occursin(r"_cap_(top|bottom)$", String(n)) || !_piece_of_hohlraum(ts, n),
                    wall_components(ts, t))
     capture = unique!([_with_parts(t, walls); foil_components(ts, t)])
     return (; lands_on = unique!([capture; obs]), capture, observed = obs)
 end
 
-# Components `ns` of `t` and their parts (a piece of a part in pieces stands alone).
+# Components `ns` of `t` and their parts; a piece of a part in pieces is listed by itself.
 _with_parts(t::Target, ns) = unique!([ns; [c.part for c in t.components if c.name in ns && !_is_piece(c)]])
 
 # Whether component `name` is a piece of one of the design's hohlraum parts.
@@ -2999,25 +3005,24 @@ end
 """
     set_part_role!(ts::TargetSetup, i, role::Symbol; done = () -> nothing) -> Bool
 
-Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)); the part keeps its
-name, and its components (and so the target) are unchanged. `:foil` (a disk, rectangle
-or mesh, or a VisRad rectangle or CAD part: a backlighter whose spot the foil objective
-makes uniform) marks the part as a foil; the part becomes the active foil
-([`active_foil`](@ref)) when the design had none. `:observed` makes the part the observed
-surface ([`observed_name`](@ref)); another part or piece that held it gives it up. A
-hohlraum part takes no role: its pieces hold theirs (the wall and caps the wall role by
-default, see [`set_piece_role!`](@ref)). The observed surface is a
-sphere (a capsule: the mode analysis and the keep-out take its center and radius) or a
-flat face (a one-sided rectangle or disk, or a VisRad rectangle: [`observed_flat`](@ref)): such a
-part takes the role itself; a CAD part (a capsule with its fill tube, say) is replaced in the calculations by
-a sphere part fitted to it ([`fit_sphere`](@ref): named `capsule`, or `capsule_2`, … when
-that is taken; its element size the target's capsule size, its albedo and conversion the
-part's), which takes the role, and left out of the calculations itself. `:wall` (any
-surface but an aperture) marks a re-emitting cavity wall ([`wall_names`](@ref)). `:none`
-clears the part's role. A role the part cannot take sets `error` and returns `false`. In
-a window (`spawn[]`) a large CAD capsule is fitted on a worker (see
-[`TargetSetup`](@ref)): `true` then means the fit is under way, and `done()` runs once the
-role is given (at once otherwise).
+Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)); the part keeps its name,
+and its components (and so the target) are unchanged. `:foil` (a disk, rectangle or mesh, or
+a VisRad rectangle or CAD part: a backlighter whose spot the foil objective makes uniform)
+marks the part as a foil; the part becomes the active foil ([`active_foil`](@ref)) when the
+design had none. `:observed` makes the part the observed surface ([`observed_name`](@ref));
+another part or piece that held it gives it up. A hohlraum part does not take a role; its
+pieces hold theirs (the wall and caps the wall role by default, see
+[`set_piece_role!`](@ref)). The observed surface is a sphere (a capsule: the mode analysis
+and the keep-out take its center and radius) or a flat face (a one-sided rectangle or disk,
+or a VisRad rectangle: [`observed_flat`](@ref)): such a part takes the role itself; a CAD
+part (a capsule with its fill tube, say) is replaced in the calculations by a sphere part
+fitted to it ([`fit_sphere`](@ref): named `capsule`, or `capsule_2`, … when that is taken;
+its element size the target's capsule size, its albedo and conversion the part's), which
+takes the role, and left out of the calculations itself. `:wall` (any surface but an
+aperture) marks a re-emitting cavity wall ([`wall_names`](@ref)). `:none` clears the part's
+role. A role the part cannot take sets `error` and returns `false`. In a window (`spawn[]`)
+a large CAD capsule is fitted on a worker (see [`TargetSetup`](@ref)): `true` then means the
+fit is under way, and `done()` runs once the role is given (at once otherwise).
 """
 function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> nothing)
     _check_part_index(ts, i)
@@ -3052,7 +3057,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     role === :observed && _drop_observed!(ps)            # one observed surface at a time
     ps[i] = _with(ps[i]; foil = role === :foil, observed = role === :observed, wall = role === :wall)
     first_foil = role === :foil && active_foil(ts) === nothing
-    # the geometry is unchanged: the parts are committed without building the target
+    # The geometry is unchanged, so the parts are committed without building the target.
     ts.error[] = ""
     ts.parts[] = ps
     first_foil && (ts.active_foil[] = ps[i].name)
@@ -3169,7 +3174,7 @@ function _capsule_fitted!(ts::TargetSetup, p::PartSpec, job::Integer, out, done 
             false
         elseif i !== nothing
             _apply_capsule!(ts, i, out.value...) && (done(); true)
-        elseif j !== nothing                                  # edited meanwhile: fit it again
+        elseif j !== nothing                                  # edited meanwhile, so fit it again
             set_part_role!(ts, j, :observed; done)
         else
             ts.error[] = "$(p.name) went away before its capsule sphere was fitted"
@@ -3186,7 +3191,7 @@ function _capsule_fitted!(ts::TargetSetup, p::PartSpec, job::Integer, out, done 
     return ok
 end
 
-# Drop the capsule fits in flight (an undo, a session loaded, a window closed).
+# Drop the capsule fits in flight, as after an undo, a loaded session or a closed window.
 function _cancel_fits!(ts::TargetSetup)
     empty!(ts.fit_jobs)
     _assign!(ts.fitting, Set{Symbol}())
@@ -3228,7 +3233,7 @@ each other across a cylinder package whose end face has the observed role) and
 end) and `:frustraum` (*Frustraum with capsule*: a hohlraum part with a frustraum
 profile and a capsule). Their dimensions are illustrative (the NIF-scale defaults of the
 former templates; mock-ups for the halfraums; the frustraum at a published platform's
-stated size), not a facility's design.
+stated size); none is a facility design.
 """
 const STARTERS = (:hohlraum, :foil, :shock_tube, :opacity, :frustraum)
 
@@ -3271,9 +3276,10 @@ The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame nam
   starter's capsule otherwise) with the observed role. The length, waist and holes are
   the stated dimensions of the NIF frustraum of Baker et al., Phys. Plasmas 30, 092708
   (2023); the end radius is derived from its 23° wall angle taken from the axis, and the
-  capsule is its 1.2 mm inner radius plus the ~81 µm shell. An illustrative mock-up: its
-  wall area is not the paper's quoted one. The NIF presets aim in its holes with a
-  pointing derived for it ([`preset_pointing`](@ref)), not the platform's.
+  capsule is its 1.2 mm inner radius plus the ~81 µm shell. The starter is an
+  illustrative mock-up, and its wall area differs from the one the paper quotes. The NIF
+  presets aim in its holes with a pointing derived for it ([`preset_pointing`](@ref));
+  the pointing of the platform is not used.
 
 The two halfraum starters are mock-ups at an illustrative scale; reference/research-notes.md,
 "Halfraum ends and starters" and "Hohlraum profiles", has the sources.
@@ -3387,7 +3393,7 @@ end
 """
 Names of a target's components, in order: its parts (the drive's fitted pieces of a CAD
 part are the part), then the pieces of the parts made in pieces (a hohlraum part's
-`<part>_wall`, …), which are addressed on their own too.
+`<part>_wall`, …), which are also addressed separately.
 """
 component_names(t::Target) = unique!([Briareus.parts(t); [c.name for c in t.components if _is_piece(c)]])
 

@@ -1,5 +1,5 @@
-// Clearance report: the closest beam per component and every beam–component row,
-// colored by status, with CSV export.
+// The clearance report shows the closest beam per component and every beam–component
+// row, colored by status, with CSV export.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -44,7 +44,7 @@ ColumnLayout {
             Layout.fillWidth: true
         }
     }
-    // (without a report nothing else takes the height: keep the note at the top)
+    // Without a report nothing else takes the height, so the note stays at the top.
     Item { visible: !app.rvHasReport; Layout.fillHeight: true }
     HScroll {
         visible: app.rvHasReport

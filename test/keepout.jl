@@ -20,7 +20,7 @@
                                         aim = (x0, 0.0, 5.05), defocus = d)
     x0 = [0.0, 0.2, -0.4, 0.7]
     ref = [1.55 - abs(x) - ρ * 0.3 - tr - 1.0 * cone for x in x0]
-    # (the rim is a polygon on the circle: within R(1 − cos(π/96)) ≈ 1e-3 mm)
+    # The rim is a polygon on the circle, so it agrees within R(1 − cos(π/96)) ≈ 1e-3 mm.
     @test aperture_clearance(ko, beam.(x0)) ≈ ref atol = 2e-3
     # defocus moves best focus off the hole's plane by d: the f-cone grows the envelope by d/2F
     @test aperture_clearance(ko, [beam(0.2, 1.5)]) ≈ [ref[2] - 1.5 * cone] atol = 2e-3
@@ -28,7 +28,7 @@
     km = ApertureKeepOut(th; margin = 0.1, pointing = 0.0, target_offset = 0.0, hardware_tolerance = 0.02,
                          focus = 2.0)
     @test aperture_clearance(km, [beam(0.2)]) ≈ [1.55 - 0.2 - ρ * 0.3 - 0.1 - 0.02 - 2cone] atol = 2e-3
-    # a beam whose port faces neither hole has no entrance aperture
+    # A beam whose port faces neither hole does not have an entrance aperture.
     @test aperture_clearance(ko, [beam(0.0; theta = 90)]) == [Inf]
 
     # a sphere of radius 0.9 at the origin, a foil behind it: a beam down −z whose axis
@@ -41,12 +41,12 @@
                              aim = (h, 0.0, 0.0), defocus = d)
     h = [1.0, 1.4, 2.0]
     @test sphere_clearance(ks, sbeam.(h)) ≈ [x - ρ * 0.3 - 0.9 - tr - cone for x in h] rtol = 1e-12
-    # best focus 1 mm past the center: the envelope there has grown by 1/2F
+    # With best focus 1 mm past the center, the envelope at the center has grown by 1/2F.
     @test sphere_clearance(ks, [sbeam(1.4, 1.0)]) ≈ [1.4 - ρ * 0.3 - cone - 0.9 - tr - cone] rtol = 1e-12
     # a foil between the beam and the sphere shadows it: no clearance to keep
     tb = Target(cap, foil(:f, (0, 0, 2), (0, 0, 1); width = 8.0, n = 4))
     @test sphere_clearance(SphereKeepOut(tb), [sbeam(1.4)]) == [Inf]
-    # the penalty: weight × Σ max(0, minimum − c)²
+    # The penalty is weight × Σ max(0, minimum − c)².
     kp = SphereKeepOut(ts; minimum = 0.5, weight = 3.0)
     c = sphere_clearance(kp, sbeam.(h))
     @test keepout_penalty(kp, sbeam.(h)) ≈ 3 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
@@ -107,9 +107,10 @@ end
           a * (1 - cos(π / n))
     @test only(aperture_clearance(ke, [tilt])) ≈ direct(tilt, polyline(vs, 2_000)) atol = 1e-9
 
-    # a circle on its `DiskSurface` is the circle itself, whatever the mesh: one disk of
-    # the full radius, and a part made of a disk inside a ring of twice its count (the
-    # seam's arcs meet, their chords leave a crack: inside the hole either way)
+    # A circle on its `DiskSurface` is the circle itself, whatever the mesh. The meshes are
+    # one disk of the full radius and a part made of a disk inside a ring of twice its
+    # count. The arcs of the seam meet and their chords leave a crack, which lies inside the
+    # hole either way.
     disk = DiskSurface(center = (0, 0, z0))
     piece(name, m) = Component(name, transform(m, Matrix(1.0I, 3, 3), Vec3(0, 0, z0)), BLACK; kind = :aperture,
                                surface = disk, part = :leh)
@@ -144,10 +145,11 @@ end
     @test abs(slope(-30λ)) < 1e-3 && abs(slope(30λ) + 1) < 1e-3 && -0.9 < slope(0.0) < -0.1
     @test slope(0.0) ≈ (c(ks, 1e-7) - c(ks, -1e-7)) / 2e-7 atol = 1e-6
 
-    # a dual beam's rim is searched on its values, and the smooth minimum's sensitivities
-    # to the focus and the envelope's semi-axes are carried to its partials by the chain
-    # rule: the value is bitwise the Float64 beam's, the partials those of evaluating
-    # the terms found in the dual type of the beam (to rounding)
+    # The rim of a dual beam is searched on its values. The sensitivities of the smooth
+    # minimum to the focus and to the semi-axes of the envelope are carried to its partials
+    # by the chain rule. The value is identical to that of the Float64 beam, and the
+    # partials equal, within rounding, those from evaluating the terms found in the dual
+    # type of the beam.
     function in_beam_type(k, b)
         j = argmax([dot(c, b.port) for c in k.centers])
         terms, imin = Briareus._rim_terms(k, k.rims[j], k.samples[j], Briareus._RimFrame(k, Briareus._value_beam(b)))
@@ -202,9 +204,9 @@ end
     tn = Target(floor(-3.0), foil(:plate, (h + 1.0, 0, 2.0), (0, 0, 1); width = 2.0, n = 3))
     kn = HardwareKeepOut(tn, :plate)
     @test only(hardware_clearance(kn, [beam()])) ≈ h - ρ * 0.3 - 2cone - tr - cone rtol = 1e-12
-    # a plate along the beam: the envelope is widest at its far upstream end (s = −2.5),
-    # and with the floor at z = −1 its part beyond the landing (s > 1) does not count:
-    # the cut at the landing plane is then its farthest point
+    # For a plate along the beam, the envelope is widest at the far upstream end of the
+    # plate (s = −2.5). With the floor at z = −1, the part of the plate beyond the landing
+    # (s > 1) does not count, and the cut at the landing plane is then its farthest point.
     along(z0, z1) = foil(:plate, (h, 0, (z0 + z1) / 2), (1, 0, 0); width = z1 - z0, height = 2.0, n = 4)
     kp = HardwareKeepOut(Target(floor(-3.0), along(-1.0, 2.5)), :plate)
     @test only(hardware_clearance(kp, [beam()])) ≈ h - ρ * 0.3 - 2.5cone - tr - cone rtol = 1e-12
@@ -221,12 +223,12 @@ end
                                                                     aim = (y[1], y[2], y[3]))])),
                              [0.0, 0.0, 0.0, 0.4, 0.25])
     @test g ≈ [0, 0, cone, 0, -ρ] atol = 1e-9
-    # beyond the landing altogether: no clearance to keep
+    # Entirely beyond the landing, there is no clearance to keep.
     @test hardware_clearance(HardwareKeepOut(Target(floor(3.0), along(-1.0, 2.5)), :plate), [beam()]) == [Inf]
 
-    # an oblique, defocused round beam beside a tilted plate: the minimum over the plate
-    # lies on its rim (a round envelope has no stationary point inside), against 40 000
-    # points per side
+    # For an oblique, defocused round beam beside a tilted plate, the minimum over the plate
+    # lies on its rim, since a round envelope does not have a stationary point inside. It is
+    # checked against 40 000 points per side.
     tilt = Beam("tilt"; theta = 35, phi = 20, spot = SuperGaussianSpot(0.2), aim = (0.2, -0.15, 0.3),
                 defocus = 0.8, fnumber = 8.0, power = 1.0)
     center, normal, θ = Vec3(2.3, -0.6, 1.5), (0.3, -0.2, 1.0), 0.4

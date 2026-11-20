@@ -69,37 +69,38 @@ developed Briareus, but Pkg writes the entry again whenever it rewrites `Project
 (`add`, `rm`, `update` in this environment); `git checkout BriareusGUI/Project.toml`
 after such a change, or `git diff` before committing it, keeps it out.
 
-The tests drive every controller without a window and render the canvases offscreen
-(they need a GL context; on a headless Linux machine wrap them in `xvfb-run`). The Qt
-window test runs in a separate process when `BRIAREUSGUI_QT_TESTS=true` is set on a
-machine with a display (`test/qt_window.jl`, also runnable alone; set
-`BRIAREUSGUI_SHOTS` to keep its window images). `BRIAREUSGUI_NO_WORKLOAD=true` skips
-the precompile workload for faster rebuilds while developing. `test/test_app.jl` checks
-the command: the shortcuts and their script (in temporary folders), and the splash.
-`julia dev/gui_screenshots.jl` regenerates the documentation's screenshots.
+The tests drive every controller without a window and render the canvases offscreen (they
+need a GL context; on a headless Linux machine wrap them in `xvfb-run`). The Qt window test
+runs in a separate process when `BRIAREUSGUI_QT_TESTS=true` is set on a machine with a
+display (`test/qt_window.jl`, which also runs by itself; set `BRIAREUSGUI_SHOTS` to keep its
+window images). `BRIAREUSGUI_NO_WORKLOAD=true` skips the precompile workload for faster
+rebuilds while developing. `test/test_app.jl` checks the command, the shortcuts and their
+script (in temporary folders), and the splash. `julia dev/gui_screenshots.jl` regenerates
+the documentation's screenshots.
 
-Time to first window: the workload builds the window's shell and item models (QML's Qt
-application exists while precompiling), but it has no GL context, so the first frame's
-rendering code on the window's screen type comes from `precompile` signatures recorded
-by `julia dev/gui_first_frame.jl` into `src/qt/first_frame.jl` and replayed by the
-workload. Rerun the recorder after updating GLMakie, QMLMakie or Makie, or after
-changing what the canvases plot. On a 16-thread Windows machine the first frame came
-at 50 s without either, 21 s with both; the rest is loading the package images (15 s,
-GLMakie and QML about equally) and QML's `__init__`. `julia -m` loads an app's whole
-package before its `@main` runs, so the splash comes from the shortcut's script
-(`src/app/app.jl`), which starts Qt's `qml` tool on `src/app/splash.qml` and then the
-app; the app closes the splash through a status file once its window shows.
+For the time to the first window, the workload builds the shell and item models of the
+window, since the Qt application of QML exists while precompiling. The workload has no GL
+context, so the rendering code of the first frame on the screen type of the window comes
+from `precompile` signatures. `julia dev/gui_first_frame.jl` records them into
+`src/qt/first_frame.jl`, and the workload replays them. Rerun the recorder after updating
+GLMakie, QMLMakie or Makie, or after changing what the canvases plot. The workload and the
+recorded signatures together cut the time to the first frame by more than half; most of the
+rest is loading the package images, GLMakie and QML about equally, and the `__init__` of
+QML. `julia -m` loads the whole package of an app before its `@main` runs, so the splash
+comes from the script of the shortcut (`src/app/app.jl`). The script starts the `qml` tool
+of Qt on `src/app/splash.qml` and then the app, and the app closes the splash through a
+status file once its window shows.
 
-The package follows HammerheadGUI's architecture: all state and logic lives in the
-framework-free `Controllers` submodule (Briareus + Observables, testable without a GL
-context), the Makie canvases (`src/canvas/`) create every plot up front and only update
-their inputs (the 3D view sets its camera matrices from a `CadCamera`, which takes
-its gestures from the scene's mouse and keyboard events and picks by ray casting into
-the target's BVH), and `src/qt/shell.jl` bridges controllers to the QML pages (`src/qml/`)
-through one property map, item models and `br_*` callbacks. Background jobs run on
-worker threads and hand their observable updates to a queue that the window's 16 ms
-tick applies on the GUI thread. Long core calls report progress and cancel through
-their own callbacks (`optimize_pointing`'s per objective evaluation, `clearance`'s per
-batch of beams), which run on the job's task. `talis_check` has no callback, so its
-Cancel drops the result instead. GLMakie windows (or offscreen renders) and the Qt
-window cannot share a process.
+The package follows the architecture of HammerheadGUI. All state and logic live in the
+framework-free `Controllers` submodule (Briareus and Observables, testable without a GL
+context). The Makie canvases (`src/canvas/`) create every plot up front and only update
+their inputs. The 3D view sets its camera matrices from a `CadCamera`, which takes its
+gestures from the mouse and keyboard events of the scene and picks by ray casting into the
+BVH of the target. `src/qt/shell.jl` bridges controllers to the QML pages (`src/qml/`)
+through one property map, item models and `br_*` callbacks. Background jobs run on worker
+threads and hand their observable updates to a queue that the 16 ms tick of the window
+applies on the GUI thread. Long core calls report progress and cancel through callbacks that
+run on the task of the job: `optimize_pointing` calls one per objective evaluation, and
+`clearance` one per batch of beams. `talis_check` does not take a callback, so its Cancel
+drops the result instead. GLMakie windows (or offscreen renders) and the Qt window cannot
+share a process.

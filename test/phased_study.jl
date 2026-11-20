@@ -76,20 +76,22 @@
         @test_throws DimensionMismatch mode_gate(e0[:picket], u; fraction = [1, 2, 2])
         @test_throws ArgumentError mode_gate(e0[:picket], u; fraction = [1, 0, 2, 2])
         @test_throws ArgumentError mode_gate(e0[:picket], phys; fraction = [1, 2, 2, 2])  # no floor to scale
-        # a shifted target: the gate's value is the departure from the shifted shape, and
-        # the reference's model is still checked
+        # For a shifted target, the value of the gate is the departure from the shifted
+        # shape, and the model of the reference is still checked.
         c0 = flux_ylm(e0[:peak]; lmax = 4)
         g0, gs = mode_gate(e0[:peak], phys), mode_gate(e0[:peak], phys; shift = 2 => 0.024)
         @test g0.f(ev[:peak]) == mode_departure(ev[:peak], c0)
         @test gs.f(ev[:peak]) == mode_departure(ev[:peak], shift_modes(c0, 2 => 0.024))
         @test mode_gate(c0, phys; shift = 2 => 0.024).f(ev[:peak]) == gs.f(ev[:peak])
         @test_throws ArgumentError gs.f(evaluate(backscatter(ps[:peak]), ev[:peak].beams))
-        # the shift in its degree alone, for m = 0 and m ≠ 0; the drive unchanged
+        # The shift acts only in its degree, for m = 0 and m ≠ 0, and the drive is
+        # unchanged.
         @test mode_departure(shift_modes(c0, 2 => 0.024), c0) ≈ [0, 0.024, 0, 0] atol = 1e-15
         @test mode_departure(shift_modes(c0, [(3, -2) => 0.01, 1 => -0.005]), c0) ≈ [0.005, 0, 0.01, 0] atol = 1e-15
         @test shift_modes(c0, 2 => 0.024)[1] == c0[1]
-        # Legendre units: aₗ/a₀ of the capsule flux's Legendre moments is √(2l+1) c_l0/c_00
-        # (both integrated on the same sub-triangles), so the shift moves P2/P0 by itself
+        # In Legendre units, aₗ/a₀ of the Legendre moments of the capsule flux is √(2l+1)
+        # c_l0/c_00, both integrated on the same sub-triangles, so the shift moves P2/P0 by
+        # itself.
         p2(c) = sqrt(5) * c[mode_index(2, 0)] / c[1]
         e = e0[:peak]
         obs, te = e.scenario.observed, e.scenario.target
@@ -106,17 +108,19 @@
         clf = clearance_floor(ko; name = :leh)
         rows = check_constraints(ev, clf)
         @test length(rows) == length(quads) && all(r -> startswith(r.name, "leh["), rows)
-        # a keep-out at a fraction of the peak: bitwise the clearance of every phase
+        # A keep-out at a fraction of the peak gives a clearance identical to that of every
+        # phase.
         @test clf.f(ev) == in_phase(:picket, clf).f(ev) == keepout_clearance(ko, ev[:peak].beams)
         # at an absolute intensity the envelope widens with the power: the brightest phase
         # sets each beam's clearance
         ki = ApertureKeepOut(tP; intensity = 0.05, minimum = -0.8)
         per = [keepout_clearance(ki, e.beams) for e in ev]
         @test clearance_floor(ki).f(ev) == min.(per...) && per[3] != per[1]
-        # under the optimizer's duals (partials in an aim and a power scale, so the phases'
-        # powers differ in value and partials): the phases the keep-out sees as the first
-        # are skipped, and the value is the least over every phase, values and partials
-        # bitwise; at an intensity the third phase is not skipped
+        # The test repeats under the duals of the optimizer, with partials in an aim and a
+        # power scale, so that the phase powers differ in value and partials. The phases
+        # that the keep-out treats as the first are skipped, and the value is exactly the
+        # least over every phase, in values and partials. At an intensity the third phase is
+        # not skipped.
         yd = [ForwardDiff.Dual{:ko}(v, Float64(i == 1), Float64(i == length(y))) for (i, v) in enumerate(y)]
         evd = evaluate(ps, yd)
         perd = [keepout_clearance(ko, e.beams) for e in evd]
@@ -133,15 +137,16 @@
         @test s == y[nq+1:end]
         @test power_scales(ps, apply(pp, y)) ≈ s rtol = 1e-14
         @test power_scales(ps, ev) ≈ s rtol = 1e-14
-        # differentiable: the gradient of a quadratic in the scales, in closed form
+        # The objective is differentiable, with the gradient of a quadratic in the scales in
+        # closed form.
         G = Briareus._scenario_gradient(ps, e -> sum(abs2, power_scales(ps, e) .- 1), y)
         @test all(iszero, G[1:nq]) && isapprox(G[nq+1:end], 2 .* (s .- 1); rtol = 1e-12)
         # the phases' powers before the scales
         @test phase_powers(ps, :picket) == [picket_power(q) for q in quads]
         @test phase_powers(ps, :step) == [b.power for b in with_pulses(quads, pulses, 2.5)]
         @test phase_powers(ps, :peak) == fill(2.0, length(quads))
-        # a key dark in its phase reads 1; a phase on the pointing powers has no
-        # powers to read the scales against
+        # A key that is dark in its phase has scale 1. A phase on the pointing powers does
+        # not have powers to measure the scales against.
         dark = PhasedScenario(gq, Phase(:dark, sP; power = b -> inner(b) ? 0.0 : 0.4); by = :quad)
         xd = vcat(zeros(nq), fill(1.3, length(quads)))
         @test power_scales(dark, apply(dark.param, xd)) ≈ [inner(q) ? 1.0 : 1.3 for q in quads] rtol = 1e-14
@@ -172,14 +177,14 @@
         @test reg(ec) ≈ J rtol = 1e-12
         @test power_scale_objective(pc; reference = r0)(ec) == reg(ec)
         @test power_scale_objective(pc)(ec) ≈ sum(nb .* (sv .- 1) .^ 2) / 96 rtol = 1e-12
-        # a weight per beam: the inner quads' scales three times dearer
+        # With a weight per beam, the scales of the inner quads cost three times as much.
         w3 = [first(k) === :inner ? 48 : 32 for k in pc.param.keys]
         r3 = power_scale_objective(pc; reference = 1.2, weight = b -> inner(b) ? 3.0 : 1.0)
         @test r3(ec) ≈ sum(w3 .* (sv ./ 1.2 .- 1) .^ 2) / 160 rtol = 1e-12
         # the gradient in closed form: 2 W_j (s_j/s0_j - 1) / s0_j / ΣW, none in the aims
         G = Briareus._scenario_gradient(pc, reg, xc)
         @test all(iszero, G[1:nq]) && isapprox(G[nq+1:end], 2 .* nb .* (sv ./ r0 .- 1) ./ r0 ./ 96; rtol = 1e-12)
-        # one scale per quad: unit weights, the plain mean
+        # With one scale per quad, the weights are one and the objective is the plain mean.
         @test power_scale_objective(ps)(ev) ≈ sum(abs2, power_scales(ps, ev) .- 1) / length(pp.keys) rtol = 1e-12
         @test_throws ArgumentError power_scale_objective(pc; reference = 0.0)
         @test_throws DimensionMismatch power_scale_objective(pc; reference = [1.0, 1.0])
@@ -249,7 +254,7 @@
         ca = picket_ceiling(ref, :wall, :window_1; reference_names = (:wall,), measure = :average)
         @test only(ca.limit) == picket_irradiance(ref, :wall; measure = :average)
         @test ca.f(eW) == picket_irradiance(eW, :wall, :window_1; measure = :average) == check_constraints(eW, ca)[1].value
-        @test_throws ArgumentError ca.f(ref)                      # the reference's target has no window
+        @test_throws ArgumentError ca.f(ref)                      # the reference target lacks a window
         # the other integral measures, the same names on both targets
         cw, cc = picket_ceiling(ref, :wall; measure = :weighted), picket_ceiling(ref, :wall; measure = :corridor)
         @test cw.f(eW) == picket_irradiance(eW, :wall; measure = :weighted)

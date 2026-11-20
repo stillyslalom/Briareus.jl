@@ -9,7 +9,7 @@
     cache = m.cache
     S = Briareus.conversions(t) .* dep.element ./ t.elem_area
     rel(x, y) = maximum(abs.(x .- y)) / maximum(abs.(y))
-    # references: the uncached formulas
+    # The references are the uncached formulas.
     α0 = albedos(t)
     α1 = albedos(t) .* 0.9
     α2 = albedos(t) .* 0.8
@@ -24,7 +24,7 @@
     @test rel(s1.B, refs[α0]) <= 1e-12
     @test rel(s1.H, m.F * refs[α0]) <= 1e-12
     @test length(cache.keys) == 1
-    # explicit albedo: new key, most recently used first
+    # An explicit albedo adds a new key, most recently used first.
     sx = solve(m, dep; albedo = α1)
     @test rel(sx.B, refs[α1]) <= 1e-12
     @test cache.keys == [α1, α0]
@@ -56,7 +56,7 @@
     @test all(rel(s.B, refs[αs[mod1(i, 3)]]) <= 1e-12 for (i, s) in enumerate(sols))
     @test length(cache.keys) == length(cache.facts) <= Briareus.FACTOR_CACHE_SIZE
 
-    # temperature-dependent albedo: same iteration as without the cache
+    # A temperature-dependent albedo follows the same iteration as without the cache.
     tw = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,
                   wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw)
@@ -94,7 +94,8 @@ end
     dep = deposit(DepositionOperator(t, q), q)
     ew = [e for e in 1:nelements(t) if Briareus.element_material(t, e).albedo === w]
     s = solve(m, dep; time = 1.0)
-    # the reference: the albedo model at the incident-flux temperature of each wall element
+    # The reference is the albedo model at the incident-flux temperature of each wall
+    # element.
     αref = albedo.(Ref(w), 1.0, radiation_temperature.(s.H[ew]))
     @test s.converged && s.residual < 1e-4 && s.iterations < 50
     @test maximum(abs.(αref .- s.albedo[ew])) < 1e-4
@@ -103,7 +104,7 @@ end
     s2 = @test_logs (:warn, r"did not converge") solve(m, dep; time = 1.0, maxiter = 2)
     @test !s2.converged && s2.iterations == 2 && s2.residual > 1e-4
     @test maximum(abs.(s2.B .- s2.source .- s2.albedo .* s2.H)) <= 1e-12 * maximum(s2.B)
-    # a constant albedo has no fixed point to report
+    # A constant albedo does not have a fixed point to report.
     s3 = solve(m, dep; albedo = s.albedo)
     @test s3.converged && s3.iterations == 1 && s3.residual == 0
 end
@@ -136,7 +137,8 @@ end
     @test Briareus._SOLVE_STATS.lu[] == 1
     @test m.cache.precond[].factors ≈ lu(I - α1 .* m.F).factors
 
-    # temperature-dependent histories: the iterative path against a fresh LU per iterate
+    # Temperature-dependent histories on the iterative path are checked against a fresh LU
+    # per iterate.
     function both(f)
         Briareus.empty_cache!(m)
         Briareus._ITERATIVE_SOLVE[] = false
@@ -166,7 +168,7 @@ end
     Briareus._ITERATIVE_SOLVE[] = true
     @test maximum(abs.(s2.albedo .- s2_old.albedo)) <= 1e-12 && rel(s2.H, s2_old.H) <= 1e-10
 
-    # dual-number sources: value and partials solved as columns
+    # For dual-number sources, the value and partials are solved as columns.
     dP = ForwardDiff.Dual{Nothing}.(dep.element, 0.5 .* dep.element, dep.element .^ 2 ./ maximum(dep.element))
     d_old, d_new = both(() -> solve(m, dP; time = 2.0, guess = g))
     @test maximum(abs.(d_old.albedo .- d_new.albedo)) <= 1e-12
@@ -183,9 +185,9 @@ end
     @test maximum(abs.(h_old.Tr .- h_new.Tr)) <= 1e-8
     @test h_new.moments ≈ h_old.moments rtol = 1e-9
 
-    # transmitting albedos: closing LEH lips (GapClosure) and a burned-through window
-    # whose transmission follows its temperature (RosselandTransmission) iterate the
-    # same albedo/transmission split on either path
+    # Transmitting albedos iterate the same albedo/transmission split on either path. The
+    # cases are closing LEH lips (GapClosure) and a burned-through window whose transmission
+    # follows its temperature (RosselandTransmission).
     win = Material(:Au; conversion = 0.8,
                    albedo = BurnthroughAlbedo(; thickness = 2.5, burnthrough = 1.0,
                                               transmission = RosselandTransmission()))
@@ -241,7 +243,7 @@ end
         @test seen[end] == (; done = 4, total = 4)
         @test all(==(current_task()), tasks)          # funneled to the calling task
     end
-    # cancel after the second beam: rows of the first two beams only
+    # Canceling after the second beam keeps only the rows of the first two beams.
     r = clearance(th, qs; kw..., batch = 1, callback = p -> p.done >= 2)
     @test r.canceled && r.rows == ref.rows[1:4]
     @test occursin("canceled", sprint(show, MIME"text/plain"(), r))

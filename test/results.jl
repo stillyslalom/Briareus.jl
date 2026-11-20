@@ -1,4 +1,4 @@
-# Exported results: the CSV files of write_results.
+# This file tests the exported results, the CSV files of write_results.
 
 @testset "write_results" begin
     t = hohlraum(; length = 6.0, radius = 2.0, leh_radius = 1.0, capsule_radius = 0.6,
@@ -24,6 +24,6 @@
     yl = readlines(joinpath(dir, "ylm.csv"))
     @test length(yl) == 1 + 25 && startswith(yl[2], "0,0,")
     @test occursin("laser_delivered_TW = ", read(joinpath(dir, "summary.txt"), String))
-    # without a radiosity solution: the laser files only
+    # Without a radiosity solution, only the laser files are written.
     @test basename.(write_results(mktempdir(), t, dep)) == ["elements.csv", "components.csv", "summary.txt"]
 end

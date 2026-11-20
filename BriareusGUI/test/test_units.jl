@@ -10,7 +10,8 @@
     @test quads_to_split(bt) == collect(1:48) && isempty(quads_to_merge(bt))
     P0 = sum(b.power for b in bt.beams[])
     aims0 = Dict(b.quad => b.aim for b in bt.beams[])
-    # every quad into its four beams: the rows' powers stay the quads'
+    # When every quad is split into its four beams, the row powers stay those of the
+    # quads.
     @test split_quads!(bt) == 48 && length(bt.beams[]) == 192
     @test sum(b.power for b in bt.beams[]) ≈ P0 && all(b -> b.power == 2, bt.beams[])
     @test all(b -> b.aim == aims0[b.quad], bt.beams[])
@@ -46,7 +47,7 @@
     @test split_quad!(bt, q) && count(b -> b.quad == q, bt.beams[]) == 4
     @test !split_quad!(bt, q) && occursin("already split", bt.error[])
     @test merge_quad!(bt, q) && !merge_quad!(bt, q) && occursin("not split", bt.error[])
-    # beams without quad names: per beam
+    # Beams without quad names are handled per beam.
     o = DesignSession(starter = :foil, resolution = :coarse)
     @test all(r -> r.power_unit === :beam, beam_rows(o.beams)) && isempty(quads_to_split(o.beams))
 end
@@ -93,7 +94,7 @@ end
     @test p.unit === :quad
     opt = Briareus.apply(p, Briareus.initial_parameters(p) .+ 0.2)
     @test all(q -> (a = [b.aim for b in opt if b.quad == q]; maximum(Briareus.norm(x - y) for x in a, y in a) < 1e-12), quads)
-    # the Beams label reads what the table holds after a merge of some quads, or of all
+    # The Beams label shows what the table holds after a merge of some quads, or of all.
     @test merge_quads!(bt, findall(b -> b.quad == quads[1], bt.beams[])) == 1 &&
           beams_label(bt) == "NIF quads (48) as 189 beams"
     @test merge_quads!(bt) == 47 && beams_label(bt) == "NIF quads (48)"
@@ -111,8 +112,9 @@ end
     total(τ) = sum(b.power for b in Controllers._pulse_beams(s.time.pulses[], bt.beams[], bt.enabled[], τ))
     P0 = [total(τ) for τ in times]
     b0 = Controllers._pulse_beams(src, bt.beams[], bt.enabled[], 2.0)
-    @test P0 ≈ [0.0, 100.0, 300.0, 0.0] && b0 == with_pulses(bt.beams[], pul, 2.0)     # quads as one beam: as read
-    # split: each beam fires a quarter of its quad's power, the totals as before
+    @test P0 ≈ [0.0, 100.0, 300.0, 0.0] && b0 == with_pulses(bt.beams[], pul, 2.0)     # quads as one beam, as read
+    # After a split each beam fires a quarter of the power of its quad, with the totals as
+    # before.
     split_quads!(bt)
     b1 = Controllers._pulse_beams(src, bt.beams[], bt.enabled[], 2.0)
     @test [total(τ) for τ in times] ≈ P0 && length(b1) == 192
@@ -121,7 +123,8 @@ end
     # the irradiance checks' per-beam pulses likewise
     bp = Controllers._beam_pulses(src, bt.beams[], bt.enabled[])
     @test sum(p -> p(2.0), values(bp)) ≈ 300.0
-    # read per beam instead: every beam fires its column's power (four times the total)
+    # Read per beam instead, every beam fires the power of its column, four times the
+    # total.
     set_pulse_unit!(s, :beam)
     @test s.time.pulses[].unit === :beam && [total(τ) for τ in times] ≈ 4 .* P0
     @test Controllers._pulse_beams(s.time.pulses[], bt.beams[], bt.enabled[], 2.0) == with_pulses(bt.beams[], pul, 2.0)
@@ -133,7 +136,8 @@ end
     st = Controllers._pulse_state(s.time.pulses[])
     @test st["unit"] == "quad" && Controllers._state_pulses(st).unit === :quad
     @test Controllers._state_pulses(delete!(copy(st), "unit")).unit === :beam
-    # a table per beam name is per beam, whatever is asked; a shape has no unit to set
+    # A table per beam name is per beam, whatever is asked, and a shape does not have a
+    # unit to set.
     perbeam = Dict(Symbol(b.name) => PulseShape(times, [0.0, 1.0, 2.0, 0.0]) for b in bt.beams[])
     @test Controllers._table_pulses(perbeam, :beam, "per beam").unit === :beam
     use_pulse_shape!(s; step = 1.0)
@@ -222,7 +226,7 @@ end
     set_instrument!(s, "NIF SXI lower")
     set_configuration!(s, "nif_dante1", "nif_dante1_2012")
     @test tm.diagnostics[] == ["nif_dante1_2012", "nif_sxi_lower"]
-    set_instrument!(s, "NIF Dante 1")                                  # recorded already: as it is
+    set_instrument!(s, "NIF Dante 1")                                  # recorded already, so unchanged
     @test tm.diagnostics[] == ["nif_dante1_2012", "nif_sxi_lower"]
     # an instrument that does not build is not recorded, and the status says why
     set_instrument!(s, "NIF Dante 2")
@@ -231,7 +235,7 @@ end
     # a script may record several definitions of one instrument side by side
     set_diagnostic!(s, "nif_dante1")
     @test diagnostic_instruments(s)[1].recorded == ["nif_dante1_2012", "nif_dante1"]
-    set_configuration!(s, "nif_dante1", "nif_dante1_2012")              # recorded already: dropped
+    set_configuration!(s, "nif_dante1", "nif_dante1_2012")              # recorded already, so dropped
     @test tm.diagnostics[] == ["nif_dante1_2012", "nif_sxi_lower"]
     set_instrument!(s, "NIF Dante 1", false)
     @test tm.diagnostics[] == ["nif_sxi_lower"]
@@ -254,7 +258,7 @@ end
         t, P = Controllers._published_pulse(key)
         @test src.key === key && maximum(src.shape.(t)) ≈ 1 && src.nodes == t
         @test occursin(uppercase(String(key)), src.label)
-        # in a session: the shape by name
+        # A session stores the shape by name.
         st = Controllers._pulse_state(src)
         @test st["shape"] == String(key) && Controllers._state_pulses(st).key === key
     end
@@ -270,7 +274,7 @@ end
     use_pulse_shape!(s; step = 3.0)
     build_scenario!(s)
     dir = mktempdir()
-    # without a history: the drive's files only
+    # Without a history, only the files of the drive are written.
     files = export_results(s, dir)
     @test !any(f -> startswith(basename(f), "history"), files) && !occursin("history", s.status[])
     @test_throws ArgumentError export_history(s, dir)
@@ -289,7 +293,7 @@ end
     col(name) = [v[findfirst(==(name), head)] for v in vals]
     @test col("time_ns") ≈ h.time && isapprox(col("Tr_eV"), h.Tr; rtol = 1e-7) &&
           isapprox(col("a2_over_a0"), h.legendre[2, :]; rtol = 1e-6, atol = 1e-12)
-    # the fields: a row per element of the drive's target, a column per step
+    # The fields have a row per element of the target of the drive and a column per step.
     t = s.drive.scenario[].target
     fl = readlines(joinpath(dir, "history_incident_Wcm2.csv"))
     @test length(fl) == nelements(t) + 1 && length(split(fl[1], ',')) == 2 + length(h.time)
@@ -336,7 +340,8 @@ end
         @test B.br_node_menu("group:inner23") == [1, 1, 8, 0, 0, 0, 0, 0, 0]
         m = B.br_node_menu("comp:hohlraum_cap_top")
         @test m[1:4] == [1, 1, 0, 0] && m[5] == 1 && m[6] == findfirst(==(:wall), PIECE_ROLES) - 1 && m[7:9] == [1, 1, 1]
-        # split from the Beams row: the selected quad beams become their quads' nodes
+        # A split from the Beams row turns the selected quad beams into the nodes of their
+        # quads.
         q = s.beams.beams[][1].quad
         g = String(s.beams.cluster[][1])
         @test s.beams.beams[][1].name == q                             # a quad held as one beam is named as its quad
@@ -360,7 +365,7 @@ end
         B.br_remove_selected()
         refresh()
         @test [p.name for p in s.target.parts[]] == [:capsule] && occursin("capsule keeps its place", s.status[])
-        B.br_remove_selected()                                         # the target is selected: nothing to remove
+        B.br_remove_selected()                                         # the target is selected, so nothing is removed
         @test occursin("nothing to remove", s.status[])
         # an empty target, a bare hohlraum part inserted, a starter with its facility's beams
         B.br_new_target("empty")
@@ -395,7 +400,7 @@ end
         u = only(r for r in sh.rows[:diagModel] if r.name == "NIF SXI upper")
         @test d.id == "nif_dante1_2021" && d.config == "from October 2021" && u.ticked && u.config == "hard channel"
         @test sh.shown["diagCounts"] == [1, 1, 0] && sh.shown["diagCategory"] == "xray_imager"
-        B.br_diag_record("NIF Dante 2", true)                          # does not build: not recorded
+        B.br_diag_record("NIF Dante 2", true)                          # does not build, so not recorded
         refresh()
         @test !only(r for r in sh.rows[:diagModel] if r.name == "NIF Dante 2").ticked
         B.br_time_diagnostic("nif_dante1", true)                       # a second configuration, as a script records it

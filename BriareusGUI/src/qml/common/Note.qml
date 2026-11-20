@@ -1,5 +1,6 @@
-// A short status line (a summary, a state, an outcome) that wraps to the panel width;
-// explanations go in help.js, shown by an ⓘ (Info.qml), or in `tip`, shown on hover.
+// A short status line, such as a summary, a state or an outcome, that wraps to the panel
+// width. Explanations go in help.js, shown by an ⓘ (Info.qml), or in `tip`, shown on
+// hover.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

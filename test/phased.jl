@@ -1,11 +1,13 @@
 # One pointing over several phases of a pulse (`PhasedScenario`).
 #
-# References: the plain `Scenario` (one phase at the pointing powers, bitwise);
-# the duplicate-beam construction it replaces at the same parameters (a copy of every
-# beam per scaled phase under one quad name, so that a per-quad pointing gives the copies
-# one aim, a `PowerScales` keyed by (quad, phase) through a counting `by`, and each
-# phase's scenario evaluated on its copies); central finite differences for the
-# gradient; the beams at the box's upper corner for the laser limit.
+# The references are:
+# - the plain `Scenario`, one phase at the pointing powers, which gives identical results;
+# - the duplicate-beam construction it replaces, at the same parameters. It copies every
+#   beam per scaled phase under one quad name, so that a per-quad pointing gives the
+#   copies one aim. A `PowerScales` is keyed by (quad, phase) through a counting `by`, and
+#   the scenario of each phase is evaluated on its copies;
+# - central finite differences for the gradient;
+# - the beams at the upper corner of the box for the laser limit.
 
 @testset "phased scenarios" begin
     geom = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 1.2, capsule_h = 0.9)
@@ -52,7 +54,7 @@
         @test [b.power for b in bs[:step]] ≈ [st[i].power * y[nq+48+i] for i in eachindex(quads)] rtol = 1e-14
         @test all(b -> b.power == 2.0, bs[:peak])
         @test phase_beams(ps, apply(gq, initial_parameters(gq))) == apply(pp, initial_parameters(pp))
-        # named values: a key's scales by phase, its aim through the pointing
+        # Named values set the scales of a key by phase and its aim through the pointing.
         q = quads[3].quad
         x = parameters(pp, q => (z = 0.2, power_scale = (step = 1.3,)))
         @test x[nq+48+3] == 1.3 && x[nq+3] == 1.0 && count(!=(0.0), x[1:nq]) == 1
@@ -67,7 +69,7 @@
     end
 
     @testset "one phase is the plain scenario" begin
-        # bitwise: the evaluation and a constrained run of the same objective
+        # The evaluation and a constrained run of the same objective are identical.
         sG = remake(sP; parameterization = gg)
         ps1 = PhasedScenario(gg, Phase(:a, sG; scaled = false))
         x = [0.25, -0.1, -0.2, 0.1, 0.15, 0.0, -0.1, 0.05]
@@ -138,14 +140,14 @@
         lo2, hi2 = bounds(pp, y; scale = 1.0, power_max = lim)
         bs2 = apply(pp, hi2)
         @test all(k -> all(b -> b.power <= lim(b) * (1 + 1e-12), bs2[k]), keys(ps))
-        @test hi2[nq+1] ≈ 2 * y[nq+1] rtol = 1e-14                          # an inner picket quad: below its cap
-        @test hi2[nq+48+9] ≈ 2.0 / with_pulses(quads, pulses, 2.5)[9].power rtol = 1e-14   # an outer step quad: capped
+        @test hi2[nq+1] ≈ 2 * y[nq+1] rtol = 1e-14                          # an inner picket quad, below its cap
+        @test hi2[nq+48+9] ≈ 2.0 / with_pulses(quads, pulses, 2.5)[9].power rtol = 1e-14   # an outer step quad, capped
         # a fixed phase above the limit, and a cap below the floor
         @test_throws ArgumentError bounds(pp; power_max = 1.5)
         @test_throws ArgumentError bounds(pp; scale = Inf, scale_min = 6.0, power_max = 2.0)
     end
 
-    # by cone: a few parameters, for the runs
+    # Pointing by cone gives a few parameters for the runs.
     psg = PhasedScenario(gg, phases(); by = :group, observe = :capsule, deposition_kw = dk)
     @testset "constrained run meets every phase's gates" begin
         e0 = evaluate(psg, initial_parameters(psg.param))
@@ -169,7 +171,8 @@
         @test keys(sm) == keys(psg) && all(s -> s isa PointingSummary, sm)
         @test all(k -> sm[k].departure ≈ mode_departure(evaluate(psg, r.x)[k], flux_ylm(e0[k])), (:picket, :step))
         @test occursin("step", sprint(show, MIME("text/plain"), sm))
-        # staging: by cone → by quad (scales per quad), the same beams; then tied scales
+        # Staging from by cone to by quad, with scales per quad, gives the same beams; tied
+        # scales follow.
         psq = remake(psg; pointing = gq, by = :quad)
         xq = parameters(psq.param, r.beams)
         bq = apply(psq.param, xq)
@@ -191,8 +194,8 @@
         @test xt[end-3:end] ≈ [sum(sc(k, c)) / length(sc(k, c)) for k in (:picket, :step) for c in (:inner, :outer)] rtol = 1e-12
         @test_throws ArgumentError remake(psg; scaled = (:late,))
         @test length(remake(psg; scaled = (:step,)).param.keys) == 4
-        # an unreachable drive floor: phase 1's verdict at the laser's limit, and the floor
-        # relaxed alone
+        # For an unreachable drive floor, phase 1 gives its verdict at the laser limit, and
+        # only the floor is relaxed.
         high = in_phase(:step, drive_floor(e0[:step]; fraction = 3.0))
         rv = optimize_pointing(psg, in_phase(:peak, drive_objective(; drive = mean_flux(e0[:peak]))); x0,
                                lower = lo, upper = hi, constraints = (high,), relaxation = true, evaluations = 300)
@@ -236,7 +239,7 @@
         @test rows[2].name == "picket.light[cap_top]" && rows[2].value ≈ light_fraction(ev[:picket], :cap_top)
         @test map(mean_flux, ev) == PerPhase(:picket => mean_flux(ev[:picket]), :step => mean_flux(ev[:step]),
                                              :peak => mean_flux(ev[:peak]))
-        # a subset: every phase's scenario restricted, the powers and the groups kept
+        # A subset restricts the scenario of every phase and keeps the powers and the groups.
         keep = findall(b -> b.group !== :outer50, quads)
         sub = subset(ps, keep)
         @test sub.param.n == 2 * length(keep) && length(sub.param.keys) == 2 * length(keep)
@@ -256,8 +259,9 @@
     end
 
     @testset "phases on one mesh deposit in one pass" begin
-        # reference: the scenario of each phase evaluated alone (`deposit` per phase). The
-        # three targets differ in albedo only: their operators have the same points.
+        # The reference evaluates the scenario of each phase separately (`deposit` per
+        # phase). The three targets differ only in albedo, so their operators have the same
+        # points.
         flat(v) = reduce(vcat, [[ForwardDiff.value(z); collect(ForwardDiff.partials(z))] for z in v])
         near(a, b) = rel(flat(a), flat(b)) < 1e-12
         @test ps._mesh == [1, 1, 1]
@@ -276,8 +280,9 @@
             @test kept.sets == [[:outer44, :outer50]] && near(only(kept.element), only(getfield(alone[2], :_split).element))
             @test getfield(ev[:picket], :_split) === nothing
         end
-        # alone: a model that deposits light itself, another operator's points; a model that
-        # changes powers only (backscatter) joins
+        # A model that deposits light itself, or the points of another operator, puts a
+        # phase in a separate pass. A model that changes only powers (backscatter) joins
+        # the shared pass.
         sO = remake(sP; deposition_kw = (; dk..., resolution = 0.5))
         mixed = [Phase(:a, sP; power = picket_power),
                  Phase(:b, remake(sP; lpi = Backscatter(:inner23 => 0.1)); power = 2.0, scaled = false),
@@ -293,6 +298,6 @@
         alone = [evaluate(pm.scenarios[k], bm[k]) for k in 1:4]
         @test all(k -> near(em[k].deposition.element, alone[k].deposition.element), 1:2)
         @test all(k -> em[k].deposition.element == alone[k].deposition.element &&
-                       em[k].deposition.per_beam == alone[k].deposition.per_beam, 3:4)   # bitwise
+                       em[k].deposition.per_beam == alone[k].deposition.per_beam, 3:4)   # identical
     end
 end

@@ -1,7 +1,7 @@
 # Qt Quick shell for the Briareus window (QML.jl + QMLMakie).
 #
-# Threading: Qt's event loop owns the main thread while the window is open. QML→Julia
-# calls only change state and return. Background jobs hand their observable updates to
+# Threading: Qt's event loop owns the main thread while the window is open. Calls from QML
+# to Julia only change state and return. Background jobs hand their observable updates to
 # `deliver`, which queues them; `br_tick` (a QML Timer, ~60 Hz) drains the queue on the
 # GUI thread and refreshes what QML shows.
 #
@@ -106,15 +106,16 @@ function _warm_glyph_atlas!()
     return
 end
 
-# Compile what the canvases first do with a drive or a CAD import before the window
-# opens, so the first drive result, the first coloring by a field and the first parts
-# left out of the calculations do not stall the window for most of a second each (JIT
-# compilation, measured on a NIF CAD workspace; the package's precompile workload does
-# not keep these). CPU side: a filled flux map and a field colorbar on throwaway
-# canvases (their own session). GL side, at the window's first frames: the transparent
-# ghost plot is drawn from a degenerate triangle (invisible), and the colorbar is shown
-# as a drive field shows it, given a second scale (as the next field coloring changes
-# it: the colormap and gradient textures' updates) and hidden again.
+# Compile what the canvases first do with a drive or a CAD import before the window opens,
+# so that the first drive result, the first coloring by a field and the first parts left out
+# of the calculations do not stall the window for most of a second each. The stall is JIT
+# compilation, measured on a NIF CAD workspace, and the precompile workload of the package
+# does not keep these methods. On the CPU side, a filled flux map and a field colorbar are
+# drawn on throwaway canvases with a separate session. On the GL side, at the first frames
+# of the window, the transparent ghost plot is drawn from an invisible degenerate triangle.
+# The colorbar is shown as a drive field shows it, given a second scale as the next field
+# coloring would change it (updates of the colormap and gradient textures), and hidden
+# again.
 function _warm_canvases!(sh)
     ws = DesignSession(resolution = :coarse)
     mc = map_canvas(ws)
@@ -174,7 +175,7 @@ function _release_qml_screens!()
     return
 end
 
-# QML FileDialog URLs → local paths.
+# Convert QML FileDialog URLs to local paths.
 function _url_to_path(url::AbstractString)
     s = String(url)
     startswith(s, "file://") || return s
@@ -334,7 +335,7 @@ mutable struct WindowRow
     round::Bool
 end
 
-# TaLIS: one rule's summary, one check, one note.
+# TaLIS rows: the summary of one rule, one check and one note.
 mutable struct RuleRow
     label::String
     requirement::String
@@ -435,11 +436,11 @@ function _common_lead(old::AbstractVector, new::AbstractVector)
     return p
 end
 
-# Replace the rows of an item model: only changed rows are re-sent, and a change in the
-# count inserts or removes rows where the old and new rows part (aligned on their first
-# field: a tree node's id), so the view keeps the delegates of the others. A full reset
-# rebuilt every delegate of the model tree: 0.2 s on a CAD workspace each time a node
-# was expanded or a part added. `new` may be an empty comprehension whose eltype
+# Replace the rows of an item model. Only changed rows are re-sent, and a change in the
+# count inserts or removes rows where the old and new rows part, aligned on their first
+# field (the id of a tree node), so the view keeps the delegates of the others. A full reset
+# rebuilt every delegate of the model tree, a noticeable delay on a CAD workspace each time
+# a node was expanded or a part added. `new` may be an empty comprehension whose eltype
 # inference gave up on (`Vector{Union{}}`).
 function _sync_rows!(rows::Vector{R}, model::JuliaItemModel, new::AbstractVector) where {R}
     new = convert(Vector{R}, new)
@@ -733,7 +734,7 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "cutLo", isfinite(lo) ? _num(lo) : "")
     _set!(sh, "cutHi", isfinite(hi) ? _num(hi) : "")
     n = v.cut_normal[]
-    # (components below the digits shown print as 0, not as -0 or 1e-17)
+    # Components below the digits shown print as 0 instead of -0 or 1e-17.
     _set!(sh, "cutNormal", join((@sprintf("%.3g", abs(x) < 5e-4 ? 0.0 : x) for x in n), ", "))
     _set!(sh, "cutOffset", cut_offset(v))
     θ, φ = cut_angles(v)
@@ -859,7 +860,7 @@ end
 
 const _BY_OF_KIND = Dict(:group => :group, :quad => :quad, :beam => :beam)
 
-# The inspector: what is selected and its editable values.
+# The inspector shows what is selected and its editable values.
 function _refresh_selection!(sh::BriareusShell)
     sess = sh.sess
     id = sess.view.selection[]
@@ -927,13 +928,13 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partName", String(p.name))
             src = cad_source(sess, p.file)
             _set!(sh, "partFile", src)
-            _set!(sh, "partCopy", src != p.file)            # reads the copy saved in the session
+            _set!(sh, "partCopy", src != p.file)            # uses the copy saved in the session
             _set!(sh, "partSourceExists", src != p.file && isfile(src))
-            # its frame: the target's, or another part's
+            # Its frame is that of the target or of another part.
             frames = _part_frame_choices(sess, p)
             _set!(sh, "frameLabels", [_frame_label(f) for f in frames])
             _set!(sh, "partFrame", something(findfirst(==(p.frame), frames), 0) - 1)
-            # the move row: along an axis of any frame (the part frame by default)
+            # The move row moves along an axis of any frame, the part frame by default.
             mf = _move_frame_choices(sess)
             _set!(sh, "moveFrames", [_frame_label(f) for f in mf])
             # (the part frame when another part is selected; kept by name as frames come and go)
@@ -968,8 +969,8 @@ function _refresh_selection!(sh::BriareusShell)
                                  _num(p.values[:bottom_leh_radius])))
             hoh && p.values[:leh_closure] != 0 &&
                 append!(fields, [FieldRow(String(k), label, unit, _num(p.values[k])) for (k, label, unit, _) in LEH_CLOSURE_FIELDS])
-            # a hohlraum's profile: a frustraum's waist and end radii; a section list's
-            # breaks are a table of their own (its radius field unused)
+            # The profile of a hohlraum gives the waist and end radii of a frustraum, and
+            # the breaks of a section list form a separate table (its radius field unused).
             prof = hoh ? Int(p.values[:profile]) : 0
             _set!(sh, "partProfile", prof)
             _set!(sh, "partSectionZ", hoh && prof == 2 ? [_num(z) for (z, _) in p.sections] : String[])
@@ -1026,7 +1027,7 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "bnAimFrame", f === nothing ? -1 : something(findfirst(==(f), choices), 1) - 1)
             _set!(sh, "bnAimFrameLabel", f === nothing ? "the chamber (the beams aim in different frames)" :
                                          f === :tcc ? "the chamber" : _frame_label(f))
-            # quads: the NIF quads held as one beam can be split, those held as four merged
+            # NIF quads held as one beam can be split, and those held as four merged.
             qs = unique(bs[i].quad for i in idx)
             _set!(sh, "bnQuad", length(qs) == 1 ? qs[1] : "")
             _set!(sh, "bnSplit", length(Controllers.quads_to_split(bt, idx)))
@@ -1167,7 +1168,8 @@ end
 function _refresh_time!(sh::BriareusShell)
     sess = sh.sess
     tm = sess.time
-    # (the diagnostics chart is the Diagnostics tab's: a session left on it shows the drive)
+    # The diagnostics chart belongs to the Diagnostics tab, so a session left on it shows
+    # the drive.
     tm.chart[] === :diagnostics && set_chart!(tm, :drive)
     ch = time_chart(sess)
     h = tm.history[]
@@ -1193,13 +1195,13 @@ function _refresh_time!(sh::BriareusShell)
     step = time_step(tm)
     _set!(sh, "timeStep", step === nothing ? 0 : step)
     _set!(sh, "timeLabel", time_label(sess))
-    # what the 3D view shows: the drive at the beams' powers, or a step of the history
+    # The 3D view shows the drive at the beam powers or a step of the history.
     _set!(sh, "timeMode", time_label(sess) == "" ? "beams" : "history")
     step === nothing || (sh.shown["_lastStep"] = step)
     src = tm.pulses[]
     _set!(sh, "pulsesLabel", src === nothing ? "" : src.label)
-    # what a pulse table's cone or quad columns are given per ("": a table per beam, a
-    # shape, or beams without quads, where there is nothing to choose)
+    # What the cone or quad columns of a pulse table are given per, or "" where there is
+    # nothing to choose: a table per beam, a shape, or beams without quads.
     _set!(sh, "pulseUnit", src !== nothing && src.kind === :table && src.by !== :beam &&
                            any(b -> !isempty(b.quad), sess.beams.beams[]) ? String(src.unit) : "")
     images = diagnostic_images(sess)
@@ -1424,7 +1426,8 @@ function _refresh_talis!(sh::BriareusShell)
     comps = [CompRow(String(n), component_label(n), String(talis_role(tl, n)))
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:talisCompModel], sh.models[:talisCompModel], comps)
-    # the rows change only with the report (hundreds of them: not on every refresh)
+    # The rows, often hundreds, change only with the report, so they are not re-sent on
+    # every refresh.
     if get(sh.shown, "_talisReport", missing) !== tl.report[]
         sh.shown["_talisReport"] = tl.report[]
         rules = [RuleRow(r.label, r.requirement, r.pass, r.review, r.fail,
@@ -1572,11 +1575,10 @@ const APP_USER_MODEL_ID = "Briareus.DesignWindow"
 
 # Windows: show the icon in the title bar and taskbar. Qt Quick windows have no icon
 # property and QML.jl does not expose QGuiApplication's, so the icon is sent to this
-# process's top-level Qt windows on the first ticks after the window opens, and set on
-# their window class, so that a native window Qt creates later carries it too. Windows
-# are found by process, not by title: the title changes while a design loads. Returns
-# true once a visible window has the icon. Elsewhere the window keeps the platform
-# default.
+# process's top-level Qt windows on the first ticks after the window opens, and set on their
+# window class, so that a native window Qt creates later carries it too. Windows are found
+# by process instead of by title, since the title changes while a design loads. Returns true
+# once a visible window has the icon. Elsewhere the window keeps the platform default.
 function _set_window_icon()
     Sys.iswindows() || return true
     empty!(_QT_HWNDS)
@@ -1602,7 +1604,8 @@ end
 
 const _QT_HWNDS = Ptr{Cvoid}[]
 
-# EnumWindows callback: collect this process's top-level Qt windows (class "Qt…QWindow…").
+# The EnumWindows callback collects the top-level Qt windows of this process (class
+# "Qt…QWindow…").
 function _collect_qt_window(hwnd::Ptr{Cvoid}, ::Int)::Cint
     pid = Ref{UInt32}(0)
     ccall((:GetWindowThreadProcessId, "user32"), UInt32, (Ptr{Cvoid}, Ref{UInt32}), hwnd, pid)
@@ -1653,7 +1656,7 @@ function br_tick()
         end
     end
     sess = sh.sess
-    # after any action: note the design for undo, then show the new state
+    # After any action, note the design for undo and then show the new state.
     if sh.dirty[]
         sh.dirty[] = false
         record!(sess)
@@ -1663,8 +1666,8 @@ function br_tick()
             sess.talis.running[] || sess.time.running[] || sess.sweep.running[] ||
             !target_ready(sess.target)) &&
            time() - _LAST_REFRESH[] > 0.25
-        # running jobs report elapsed time, four times a second (not a design edit: a
-        # snapshot for undo every tick took a third of the GUI thread during a drive)
+        # Running jobs report elapsed time four times a second. This is not a design edit,
+        # since a snapshot for undo every tick took a third of the GUI thread during a drive.
         _refresh!(sh)
         _LAST_REFRESH[] = time()
     end
@@ -1734,11 +1737,12 @@ function br_node_flags(id)
     sh = _SHELL[]
     sh === nothing && return [true, true]
     sess = sh.sess
-    # a user frame: whether its axes are drawn (in place of whether it is shown)
+    # For a user frame the switch shows whether its axes are drawn, in place of whether
+    # it is shown.
     kind, key = selection_kind(String(id))
     kind === :frame && return [Symbol(key) in sess.view.triads[], true]
-    # a part or an assembly: shown when all of its components are, included when none
-    # is left out
+    # A part or an assembly is shown when all of its components are, and included when
+    # none is left out.
     if kind in (:part, :assembly)
         cs = node_components(sess, String(id))
         g = sess.target.ghost[]
@@ -1754,7 +1758,8 @@ function br_node_flags(id)
     bs = sess.beams.beams[]
     return [all(i -> beam_drawn(sess.view, bs[i].name, 3), idx), all(i -> sess.beams.enabled[][i], idx)]
 end
-# Show or hide nodes: a component becomes opaque or invisible, a beam's 3ω light drawn or not.
+# Show or hide nodes: a component becomes opaque or invisible, and the 3ω light of a beam
+# is drawn or not.
 function br_node_show(id, on)
     _with_shell() do sh
         sess = sh.sess
@@ -1801,7 +1806,7 @@ function br_node_include(id, on)
         sess = sh.sess
         comps = Symbol[]
         for n in _acted_nodes(sh, id)
-            # (an assembly: the parts of its subtree)
+            # An assembly stands for the parts of its subtree.
             c = _node_component(sess, n)
             kind, key = selection_kind(n)
             if kind === :assembly
@@ -1838,7 +1843,7 @@ function br_tree_on(id, on)
     end
 end
 # Target
-# File ▸ New target: a starter alone, with its facility's beams ("empty": no parts).
+# File ▸ New target: only a starter, with the beams of its facility ("empty" for no parts).
 function br_new_target(starter)
     _with_shell() do sh
         s = _sym(starter)
@@ -1981,7 +1986,7 @@ function _section_edit(f)
         idx = _selected_parts(sh)
         isempty(idx) && return
         f(sh.sess.target, idx[1]) && return
-        for k in ("partSectionZ", "partSectionR")       # a rejected edit: show the table again
+        for k in ("partSectionZ", "partSectionR")       # a rejected edit shows the table again
             haskey(sh.shown, k) && (sh.app[k] = copy(sh.shown[k]))
         end
     end
@@ -2067,7 +2072,8 @@ function br_new_assembly()
         sess.status[] = "added assembly $(a.name)" * (isempty(members) ? "" : " of " * join(String.(members), ", "))
     end
 end
-# Move the selected parts and assemblies into the assembly of `assemblyChoices` (0: the top level).
+# Move the selected parts and assemblies into the assembly of `assemblyChoices`, where 0 is
+# the top level.
 function br_move_into_assembly(index)
     _with_shell() do sh
         sess = sh.sess
@@ -2083,7 +2089,7 @@ function br_move_into_assembly(index)
         sess.status[] = "moved " * join(String.(names), ", ") * (a === TOP_LEVEL ? " to the top level" : " into $a")
     end
 end
-# Ungroup the selected assembly: its members stay, in its parent.
+# Ungroup the selected assembly; its members stay in its parent.
 function br_ungroup_assembly()
     _with_shell() do sh
         sess = sh.sess
@@ -2643,8 +2649,8 @@ function br_save_session(url, refs)
         sh.session_path = path
     end
 end
-# CAD copies saved with a session: read the changed sources, or keep the copies.
-# (the prompt is answered either way: a file the target rejects stays a saved copy)
+# For CAD copies saved with a session, read the changed sources or keep the copies. The
+# prompt is answered either way, and a file the target rejects stays a saved copy.
 br_reload_cad_sources() = _with_shell(sh -> (reload_cad_sources!(sh.sess); sh.sess.cad_changed[] = String[]))
 br_keep_cad_copies() = _with_shell(sh -> (sh.sess.cad_changed[] = String[]))
 # The selected part's CAD file read from `newfile` (every part reading that file moves).
@@ -2723,7 +2729,7 @@ function br_part_film(on)
     end
 end
 br_beam_model(model) = _with_shell(sh -> set_beam_model!(sh.sess.drive, _sym(model)))
-# The 1ω (`h` = 1) or 2ω (2) power as a fraction of the 3ω power, as text (empty: off).
+# The 1ω (`h` = 1) or 2ω (2) power as a fraction of the 3ω power, as text; empty when off.
 function br_unconverted_ratio(h, text)
     _with_shell() do sh
         dr = sh.sess.drive
@@ -2734,8 +2740,8 @@ function br_unconverted_ratio(h, text)
         set_unconverted_ratio!(dr, r...)
     end
 end
-# The prepulse's 1ω (`h` = 1) or 2ω (2) power per beam (TW; empty: off), or its start (3)
-# or stop (4) time (ns), as text.
+# The 1ω (`h` = 1) or 2ω (2) power per beam of the prepulse in TW, empty when off, or its
+# start (3) or stop (4) time in ns, as text.
 function br_prepulse(h, text)
     _with_shell() do sh
         tm = sh.sess.time
@@ -2788,7 +2794,7 @@ function br_retune(table, out, by, cap, stay, on, target, level, load)
 end
 # Time panel
 br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)))
-# A beam-table header click: sort the rows' display by that column.
+# A click on a beam-table header sorts the display of the rows by that column.
 br_sort_beams(key) = _with_shell(sh -> sort_beam_rows!(sh.sess.view, _sym(key)))
 br_time_pulses(url) = _with_shell(sh -> load_pulses!(sh.sess, _url_to_path(String(url))))
 # A pulse table's cone or quad columns as powers per "quad" or per "beam".
@@ -2938,7 +2944,7 @@ br_cut_kind(k) = _with_shell(sh -> (set_cut!(sh.sess.view; kind = _sym(k));
                                     Controllers._assign!(sh.sess.view.cutaway, true)))
 br_cut_axis(a) = _with_shell(sh -> (set_cut!(sh.sess.view; axis = _sym(a), kind = :sector);
                                     Controllers._assign!(sh.sess.view.cutaway, true)))
-# The sector's bounds along its axis, as text (empty: unbounded).
+# The bounds of the sector along its axis, as text; empty when unbounded.
 function br_cut_range(lo, hi)
     _with_shell() do sh
         val(x, d, what) = isempty(strip(string(x))) ? d : _parse(x, what)
@@ -3114,7 +3120,7 @@ _launch_session(; starter, resolution, preset, beams) =
              preset = nothing, beams = nothing, build = false, shown = nothing) -> DesignSession
 
 Open the Briareus window and return its session when the window closes. The window is
-a design tool in the manner of VisRad, not a sequence of steps:
+a design tool in the manner of VisRad; it is not a sequence of steps:
 
 - **Model tree** (left): the target's components (a hohlraum's wall, caps, LEHs and
   capsule, its diagnostic windows, free parts; each with its display mode), the beams by
@@ -3187,8 +3193,8 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; starter::Symbol 
         Controllers._abandon_jobs!(sess)
         sess.deliver[] = previous_deliver
         sess.spawn[] = previous_spawn
-        # a target left building: the session returned holds the design's (parts left
-        # remeshing are meshed when the drive asks)
+        # For a target left building, the returned session holds the target of the
+        # design, and parts left remeshing are meshed when the drive requests them.
         ts = sess.target
         ts.building[] && isempty(ts.pending[]) && await_target!(ts)
         _release_qml_screens!()

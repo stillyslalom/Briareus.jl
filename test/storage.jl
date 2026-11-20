@@ -35,7 +35,7 @@
     y = randn(rng, n); y0 = copy(y)
     mul!(y, transpose(A), z, -1.0, 3.0)
     @test rel(y, 3 .* y0 .- W' * z) < 1e-14
-    # aliased operands: a square matrix times the matrix the result overwrites
+    # With aliased operands, a square matrix multiplies the matrix the result overwrites.
     S = Float32Matrix(randn(rng, Float32, 60, 60))
     Ws = Float64.(S.data)
     X = randn(rng, 60, 5); X0 = copy(X)
@@ -46,7 +46,7 @@
     @test rel(v, Ws' * v0) < 1e-14
     @test_throws DimensionMismatch mul!(zeros(m), A, zeros(n + 1))
     @test_throws DimensionMismatch mul!(zeros(m, 3), A', zeros(m, 3))
-    # duals through the transpose: values and partials as two products
+    # Duals through the transpose carry values and partials as two products.
     zd = [ForwardDiff.Dual(z[i], 1.0, z[i]^2) for i in eachindex(z)]
     yd = A' * zd
     @test rel(ForwardDiff.value.(yd), W' * z) < 1e-14 &&

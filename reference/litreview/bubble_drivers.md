@@ -3,7 +3,7 @@
 ROADMAP items 10 (the P2 swing and the gold bubble) and 36 (constrained re-pointing). A
 re-pointing study holds the peak laser irradiance over the wall's elements at or below a
 reference pointing's, on the ground that high irradiance drives the growth of the gold
-bubble that absorbs the inner beams. This review asks which irradiance measure and which
+bubble that absorbs the inner beams. This review examines which irradiance measure and which
 pulse epoch the published bubble data tie to its growth, and with what scaling. Applied
 in the research notes, "The swing and the bubble without new data (2026-11-18)".
 
@@ -45,7 +45,7 @@ inference. Cite-only papers: numbers with citations, no text or figures reproduc
 - **The fluence on the wall, not only per beam (Iz21, H; the reading, L).** Splitting the outer quads
   lowers the wall fluence by 27% at fixed beam energy and slows the tip as E^0.2 predicts
   (−120 µm): the overlap of spots on the wall, which a re-pointing changes, enters as
-  fluence does (**L** for the re-pointing case: no published re-pointing study).
+  fluence does (**L** for the re-pointing case, since no re-pointing study is published).
 - **The peak drives the bubble when the picket does not (Iz23; H).** In a low-trough
   4-shock CH design (1 TW trough, 280 TW peak) the picket-launched bubble stalls in the
   trough and is relaunched at ~6 ns, at most 300 µm/ns, slowing again near the axis on

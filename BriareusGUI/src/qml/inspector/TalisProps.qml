@@ -1,5 +1,5 @@
-// The TaLIS rule checks: capture and checked components, the rule tolerance and its
-// interpretation, run. The report is in the TaLIS tab.
+// The TaLIS rule checks page sets the capture and checked components and the rule
+// tolerance and its interpretation, and runs the checks. The report is in the TaLIS tab.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

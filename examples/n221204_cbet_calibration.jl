@@ -1,10 +1,11 @@
-# Two-zone CBET calibrated to the N221204 HYDRA transfer of Kritcher et al., PRE 109,
-# 025204 (2024) Fig. 9 (digitized: data/pre109_fig9_n221204.csv). Fits the outside
-# zone's multiplier and outflow Mach number, the inside zone's multiplier and one LEH
-# electron-temperature history shared by both zones to the post-transfer inner cone
-# fraction (Fig. 9b) over 0.8–8.4 ns, then checks what was not fitted: the per-cone
-# ratios of Fig. 9a and the response to Δλ. The result is `n221204_cbet()`; research
-# notes, "Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23)". ~6 min on 8 threads.
+# This example calibrates the two-zone CBET model to the N221204 HYDRA transfer of Kritcher
+# et al., PRE 109, 025204 (2024) Fig. 9, digitized in data/pre109_fig9_n221204.csv. It fits
+# the multiplier and outflow Mach number of the outside zone, the multiplier of the inside
+# zone and one LEH electron-temperature history shared by both zones to the post-transfer
+# inner cone fraction (Fig. 9b) over 0.8–8.4 ns. It then checks what was not fitted, the
+# per-cone ratios of Fig. 9a and the response to Δλ. The result is `n221204_cbet()`
+# (research notes, "Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23)"). The fit takes
+# a few minutes on a desktop.
 #
 #   julia --project=. -t auto examples/n221204_cbet_calibration.jl
 
@@ -20,7 +21,7 @@ isin(b) = b.group in (:inner23, :inner30)
 cf(x) = sum(b.power for b in x if isin(b)) / sum(b.power for b in x)
 post(t) = fig9.cf_post[argmin(abs.(fig9.t .- t))]
 
-# Start: the deck's clamp schedule in both zones, a guessed Te history
+# The start uses the clamp schedule of the deck in both zones and a guessed Te history.
 clamp = ([0.0, 3.9, 4.1, 20.0], [0.002, 0.002, 0.0075, 0.0075])
 Te0 = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0], [3000.0, 3000.0, 3500.0, 4200.0, 4800.0, 5200.0, 6300.0])
 m0 = TwoZoneCBET(leh_z = Briareus._HYBRIDE_LEH_Z, outside = (mach = 1.4, multiplier = 0.28, clamp, Te = Te0),

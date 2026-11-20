@@ -48,8 +48,8 @@ end
     @test sw.subject[] === :hr && sw.frame[] === Symbol("hr.leh_top") && sw.los_object[] === :hr_wall
     @test v.triads[] == Set([Symbol("hr.leh_top")]) && v.selection[] == "comp:hr_wall"
     @test v.cut_components[] == Set([:hr_wall, :hr_cap_top, :hr_cap_bottom])
-    # the rename undone: the view keyed to the old names comes back with them (the view is
-    # in the edit history), and follows the redo
+    # When the rename is undone, the view keyed to the old names comes back with them,
+    # since the view is in the edit history, and it follows the redo.
     @test record!(sess) && undo!(sess)
     @test v.display[] == Dict(:hohlraum_wall => :wireframe) && v.triads[] == Set([leh])
     @test v.cut_components[] == Set([:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom])
@@ -91,7 +91,8 @@ end
     @test record!(sess) && r.applied && task_status(sess, :optimize)[1] === :ok
     @test undo!(sess) && st.result[] === r && !r.applied && !optimize_stale(sess)
     @test redo!(sess) && r.applied && !optimize_stale(sess)
-    # a design change: the result is out of date, kept, and current again on the way back
+    # After a design change the result is out of date but kept, and it is current again
+    # on the way back.
     @test edit_part!(sess.target, 1, :length, "10.2") && record!(sess)
     @test st.result[] === r && optimize_stale(sess) && task_status(sess, :optimize)[1] === :attention
     @test undo!(sess) && st.result[] === r && !optimize_stale(sess)

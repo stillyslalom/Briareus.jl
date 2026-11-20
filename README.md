@@ -23,20 +23,20 @@ wall, closing entrance holes and a synthetic Dante.
 pkg> add Briareus
 ```
 
-Briareus needs Julia 1.10 or later. The desktop application (BriareusGUI: target, beams,
-drive, optimization and shot review in one window) is installed separately; see
-[Desktop application](https://stillyslalom.github.io/Briareus.jl/dev/gui/) and
+Briareus needs Julia 1.10 or later. The desktop application, BriareusGUI, puts target,
+beams, drive, optimization and shot review in one window and is installed separately;
+see [Desktop application](https://stillyslalom.github.io/Briareus.jl/dev/gui/) and
 [BriareusGUI/README.md](BriareusGUI/README.md).
 
 ## First calculation
 
-A NIF hohlraum driven by all 48 quads at 8 TW each, at an illustrative cone pointing
-(aim height `z` and radial offset `r` per cone, mm; an example, not a shot's pointing).
-Each ring of cones, inner (23.5° and 30°) and outer (44.5° and 50°), is then moved as a
-whole along the axis and re-balanced in power to null the capsule flux's P2 and P4 at
-the same mean flux, with the beams kept clear of the entrance-hole rims and the capsule:
-four parameters, fixed at the optimum by the three targets and the entrance-hole
-keep-out.
+A NIF hohlraum is driven by all 48 quads at 8 TW each, at an illustrative cone pointing
+(aim height `z` and radial offset `r` per cone, mm); the pointing is an example and was
+not fielded on a shot. Each ring of cones, inner (23.5° and 30°) and outer (44.5° and
+50°), is then moved as a whole along the axis and re-balanced in power to null the P2
+and P4 of the capsule flux at the same mean flux, with the beams kept clear of the
+entrance-hole rims and the capsule. The four parameters are fixed at the optimum by the
+three targets and the entrance-hole keep-out.
 
 ```julia
 using Briareus
@@ -64,24 +64,25 @@ parameter_names(pointing) .=> result.x  # inner.z -0.135 mm, inner.power 3.97 TW
                                         # outer.z +0.298 mm, outer.power 11.21 TW
 ```
 
-The starting P2/P0 of −15.7% is expected: equal power per quad puts 1/3 of it on the
+The starting P2/P0 of −15.7% is expected. Equal power per quad puts 1/3 of it on the
 inner cones, near HYBRID-E's peak cone fraction, and a static solve without cross-beam
-energy transfer or the hohlraum's dynamics is not balanced there (the repository's
-N221204 benchmark has a static P2/P0 of −26% at 5.5 ns; the shot's balance comes from
+energy transfer or the hohlraum dynamics is not balanced there. The N221204 benchmark in
+the repository has a static P2/P0 of −26% at 5.5 ns; the shot is balanced by
 wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes,
-which `drive_history` models). The optimum lowers the inner-cone fraction to 0.15 and
-stops where the 30° beams reach the entrance-hole keep-out; P6/P0 is left at +0.08%.
-After the package loads (1.6 s), building the scenario (deposition operator and view
-factors) takes 2.5 s on 16 threads and the optimization 5 s on its first call (mostly
-compilation) and 1 s after. `examples/nif_hohlraum.jl` runs the same case with a
-ray-trace check. The [documentation](https://stillyslalom.github.io/Briareus.jl/dev/)
-starts with tutorials that build up the physics and check each step against an exact
-result; its home page has a short glossary (view factor, radiosity, P2/P0, LEH, cone
-fraction, CBET).
+which `drive_history` models. The optimum lowers the inner-cone fraction to 0.15 and
+stops where the 30° beams reach the entrance-hole keep-out; P6/P0 is left at +0.08%. On
+a 16-thread desktop the package loads in a couple of seconds, building the scenario
+(deposition operator and view factors) takes a few seconds, and the optimization takes
+about 5 s on its first call (mostly compilation) and 1 s after.
+`examples/nif_hohlraum.jl` runs the same case with a ray-trace check. The
+[documentation](https://stillyslalom.github.io/Briareus.jl/dev/) starts with tutorials
+that build up the physics and check each step against an exact result; its home page has
+a short glossary (view factor, radiosity, P2/P0, LEH, cone fraction, CBET).
 
 Units are mm, ns, TW (TW·ns = kJ), TW/mm² (`to_Wcm2` multiplies by 10¹⁴) and eV; angles
-are in degrees, θ from +z and φ counterclockwise from +x. A beam's direction is fixed by
-its port, pointing moves its axis, and positive defocus moves the focus along the beam.
+are in degrees, θ from +z and φ counterclockwise from +x. The direction of a beam is
+fixed by its port, pointing moves its axis, and positive defocus moves the focus along
+the beam.
 
 ## What it does
 
@@ -90,15 +91,15 @@ its port, pointing moves its axis, and positive defocus moves the focus along th
   and spheres.
 - **Beams**: NIF (per beam or quad, measured phase-plate spots) and OMEGA port tables,
   f-number cones, pointing, defocus, VisRad's beam profile.
-- **Deposition**: a differentiable quadrature operator that conserves each beam's power,
-  with an energy-conserving ray trace as its reference.
+- **Deposition**: a differentiable quadrature operator that conserves the power of each
+  beam, with an energy-conserving ray trace as its reference.
 - **Radiation**: occluded view factors, gray or multigroup radiosity, Marshak wall loss
   and re-emission; Float32 and hierarchical matrices above 10⁴ elements.
-- **Analysis**: Legendre and real spherical-harmonic moments integrated over each
-  facet's solid angle, energy balance, rendered x-ray and laser images.
+- **Analysis**: Legendre and real spherical-harmonic moments integrated over the solid
+  angle of each facet, energy balance, rendered x-ray and laser images.
 - **Optimization**: bounded L-BFGS-B on ForwardDiff gradients of aim, defocus, power,
   spot scale and Δλ per cone, quad or beam; robust design over beam errors; retuning to
-  a reference shot's drive.
+  the drive of a reference shot.
 - **Laser–plasma corrections**: backscatter, a reduced kinetic CBET model calibrated to
   published HYDRA transfer, inner-beam absorption in the gold bubble.
 - **Time dependence**: pulses, wall motion, entrance-hole closure, wall re-emission,
@@ -118,17 +119,17 @@ its port, pointing moves its axis, and positive defocus moves the focus along th
 
 ## Verification and validation
 
-- **Exact references**: the integrating-sphere flux to round-off, the defocused spot
+- **Exact references**: the integrating-sphere flux within round-off, the defocused spot
   against the exact f-cone convolution (about 1% of the beam power), the harmonics the
-  NIF port symmetry forbids to round-off, gradients against finite differences.
-- **VisRad**: with the VisRad beam profile law, wall deposition 0.45–0.7% rms per element
-  from VisRad 21's on three NIF hohlraum workspaces and 0.1–0.3% on plates up to 15 mm
-  from focus; capsule P2 and P4 within 0.014 and 0.004 points (earlier profile).
+  NIF port symmetry forbids within round-off, gradients against finite differences.
+- **VisRad**: with the VisRad beam profile law, wall deposition 0.45–0.7% rms per
+  element from VisRad 21's on three NIF hohlraum workspaces and 0.1–0.3% on plates up to
+  15 mm from focus; capsule P2 and P4 within 0.014 and 0.004 points (earlier profile).
 - **Monte Carlo**: LEH escape and capsule fractions agree with a photon walk in the
   exact N210808 geometry within its sampling error (10⁻⁴ of the source).
 - **N221204** (Kritcher et al., PRE 109, 025204 (2024)), with nothing fitted to Fig. 10
-  or to Dante: the capsule flux's P2/P0 swing reaches −0.181 at 5.25 ns and turns
-  positive at 6.19 ns (Fig. 10: −0.170 at 5.6 ns, 6.67 ns); Dante 1 at 8 ns reads
+  or to Dante: the P2/P0 swing of the capsule flux reaches −0.181 at 5.25 ns and turns
+  positive at 6.19 ns (−0.170 at 5.6 ns and 6.67 ns in Fig. 10); Dante 1 at 8 ns gives
   291–314 eV between the initial and open LEH areas, against 310 eV measured.
 
 Each check, its kind and its location:
@@ -137,15 +138,15 @@ Each check, its kind and its location:
 ## Scope and limitations
 
 Briareus is a geometric view-factor and ray-trace code with reduced laser–plasma
-corrections. It solves no hydrodynamics: wall motion, LEH closure and the inner-beam
-bubble are reduced models calibrated to published simulations and measurements, and the
-radiosity is quasi-static, with no plasma energy store (after the laser falls, the
-synthetic Dante reads 37–54 eV below the measured one at 9 ns on three shots). It does
-not trace refraction. The CBET model assumes uniform LEH plasma and full pairwise
-overlap; its unsaturated coupling overpredicts transfer, so calibrate it
-(`calibrate_cbet`) before trusting magnitudes. Radiosity is gray unless `spectral_solve`
-is used, which works about a gray solution. The `clearance` thresholds and wing models
-are engineering defaults, not facility criteria.
+corrections. It does not solve hydrodynamics: wall motion, LEH closure and the
+inner-beam bubble are reduced models calibrated to published simulations and
+measurements. The radiosity is quasi-static and has no plasma energy store, so after the
+laser falls the synthetic Dante is 37–54 eV below the measured one at 9 ns on three
+shots. Briareus does not trace refraction. The CBET model assumes uniform LEH plasma and
+full pairwise overlap; its unsaturated coupling overpredicts transfer, so it is
+calibrated with `calibrate_cbet` before its magnitudes are trusted. Radiosity is gray
+unless `spectral_solve` is used, which works about a gray solution. The `clearance`
+thresholds and wing models are engineering defaults; no facility criterion sets them.
 
 ## Facility data and sources
 
@@ -160,7 +161,7 @@ are engineering defaults, not facility criteria.
 
 `reference/research-notes.md` records the source and confidence of every default and
 calibrated constant. The HYBRID-E pointing in the examples is an illustrative mock-up
-(`hybride_mock_pointing`), not a facility pointing.
+(`hybride_mock_pointing`); it is not a facility pointing.
 
 ## Tests, citing, license
 

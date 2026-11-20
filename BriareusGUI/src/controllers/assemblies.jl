@@ -113,10 +113,11 @@ function _ancestors(parts, a::Symbol)
     return out
 end
 
-# `parts` with the parts and assemblies `names` moved into assembly `a` (TOP_LEVEL: out
-# of every assembly). A member placed in its old assembly's frame (or in `:tcc`, at the
-# top level) is placed in the new one's, where it is in the chamber (`fr`: the chamber
-# frames, `part_frames`); one placed in any other frame keeps its placement.
+# `parts` with the parts and assemblies `names` moved into assembly `a`, where TOP_LEVEL
+# moves them out of every assembly. A member placed in the frame of its old assembly, or in
+# `:tcc` at the top level, is placed in the frame of the new assembly at its position in the
+# chamber; `fr` holds the chamber frames (`part_frames`). A member placed in any other frame
+# keeps its placement.
 function _moved_into(parts::AbstractVector{PartSpec}, names, a::Symbol, fr::AbstractDict)
     out = copy(parts)
     if a !== TOP_LEVEL

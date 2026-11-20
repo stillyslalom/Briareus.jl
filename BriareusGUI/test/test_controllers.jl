@@ -44,7 +44,7 @@
     @test !new_target!(ts, :sphere) && occursin("starter", ts.error[])
     @test new_target!(ts, :hohlraum)
     @test :capsule in component_names(ts.target[]) && ts.parts[][1].values[:length] == 10.1
-    # an empty target: no parts, a target with no elements
+    # An empty target has no parts and gives a target with no elements.
     @test new_target!(ts, :none) && isempty(ts.parts[]) && nelements(ts.target[]) == 0
     @test add_part!(ts, :sphere) && component_names(ts.target[]) == [:sphere_1]
 end
@@ -150,7 +150,7 @@ end
                                     Symbol("hohlraum.leh_bottom")), rows)
     @test all(r -> r.aim_frame === nothing, beam_rows(bt; by = :group))
     @test beam_row_order(rows) == 1:48 && beam_row_order(rows, :row, true) == 48:-1:1
-    # by a number: a permutation, sorted, ties in the table's order
+    # Sorting by a number gives a sorted permutation, with ties in the table order.
     o = beam_row_order(rows, :theta)
     θ = [r.theta for r in rows]
     @test sort(o) == 1:48 && issorted(θ[o])
@@ -166,7 +166,7 @@ end
     cones = beam_rows(bt; by = :group)
     @test beam_row_order(cones, :phi) == 1:4
     @test_throws ArgumentError beam_row_order(rows, :spot)
-    # a heading click: ascending, descending, then the table's order
+    # Heading clicks sort ascending, then descending, then back to the table order.
     @test v.beam_sort[] == (:row, false)
     sort_beam_rows!(v, :power)
     @test v.beam_sort[] == (:power, false)
@@ -239,7 +239,7 @@ end
     @test isempty(hohlraum_windows(tf)) && !occursin("window", target_summary(tf))
     @test !add_window!(tf) && occursin("hohlraum", tf.error[])
     @test !add_window!(ts; part = :capsule) && occursin("hohlraum wall", ts.error[])
-    # removing renumbers: the open window becomes window_1
+    # Removing a window renumbers the rest, so the open window becomes window_1.
     remove_window!(ts, 1)
     @test length(hohlraum_windows(ts)) == 1 && hohlraum_windows(ts)[1].open
     @test ts.target[].components[component_index(ts.target[], :hohlraum_window_1)].kind === :aperture
@@ -259,7 +259,7 @@ end
     ref, en = copy(bt.beams[]), copy(bt.enabled[])
     dir = mktempdir()
 
-    # SST pointing: one row per NIF beam of the enabled quads
+    # SST pointing has one row per NIF beam of the enabled quads.
     sst = export_visrad_sst(bt, joinpath(dir, "sst.csv"))
     @test bt.path[] == sst
     @test countlines(sst) == 1 + 4 * count(en)
@@ -279,7 +279,8 @@ end
     import_visrad_sst!(b2b, sst)
     @test any(w -> occursin("ignored", w) && occursin("B999", w), b2b.warnings[])
 
-    # Laser Beam Summary: pointing, power and spot round trip; off beams disabled
+    # The Laser Beam Summary round-trips pointing, power and spot, and off beams are
+    # disabled.
     summ = export_visrad_summary(bt, joinpath(dir, "summary.csv"))
     b3 = fresh()
     edit_beams!(b3, 1, :power, "5")                       # the file restores it
@@ -328,7 +329,7 @@ end
     t = ts.target[]
     lip = t.components[component_index(t, :hohlraum_leh_top_lip)]
     @test is_lip(lip) && lip.material.albedo.closure == 5.0 && lip.material.albedo.width == 0.5
-    @test albedo(lip.material.albedo, 6.0) ≈ hv()[:albedo]       # closed: the wall's
+    @test albedo(lip.material.albedo, 6.0) ≈ hv()[:albedo]       # closed, so the wall albedo
     hole = elements(t, :hohlraum_leh_top)
     @test sqrt(maximum(sum(abs2, t.elem_centroid[e][1:2]) for e in hole)) < 0.84 * 1.55
     # the settings are edited as the hohlraum's values, and rejected values keep the target
@@ -371,7 +372,7 @@ end
     @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :sphere_1, :disk_1, :annulus_1, :rectangle_1,
                                            :cylinder_1, :cone_1]
     @test all(n -> n in component_names(t), (:sphere_1, :cone_1))
-    # placement: a disk tilted to θ = 180° faces −z, at its center
+    # A disk tilted to θ = 180° faces −z and is placed at its center.
     es = elements(t, :disk_1)
     @test all(e -> t.elem_centroid[e][3] ≈ 7.0, es)
     @test all(e -> t.elem_normal[e][3] < -0.99, es)
@@ -381,7 +382,7 @@ end
     # the sphere carries its exact surface at its center
     c = t.components[component_index(t, :sphere_1)]
     @test c.surface isa SphereSurface && c.surface.center ≈ Briareus.Vec3(4, 0, 0)
-    # edits: accepted, rejected, renamed, flags
+    # Edits are accepted, rejected or renamed, and flags are set.
     i = part_index(ts, :disk_1)
     @test edit_part!(ts, i, :r1, "1.5") && ts.parts[][i].values[:r1] == 1.5
     @test !edit_part!(ts, i, :r1, "0") && occursin("positive", ts.error[])
@@ -439,7 +440,7 @@ end
     d0 = part_frames(ts)[:dep]
     @test replaced_parts(ts, [:ref]) == [:dep] && remove_parts!(ts, [:ref])
     @test isempty(ts.parts[][part_index(ts, :dep)].steps) && isapprox(part_frames(ts)[:dep], d0; atol = 1e-12)
-    # everything: an empty target, and nothing left to remove
+    # Removing everything leaves an empty target and nothing left to remove.
     select!(s.view, "part:hohlraum")
     foreach(n -> select_add!(s.view, "part:" * String(n)), (:capsule, :bead, :dep))
     @test remove_nodes!(s).ok && isempty(ts.parts[]) && nelements(ts.target[]) == 0
@@ -462,7 +463,7 @@ end
     rows = model_tree(sess)
     kids = [r for r in rows if r.depth == 2 && !(r.kind in ("comp", "window"))]   # (not the hohlraum's pieces)
     @test length(kids) == 8 && all(r -> r.kind == "beam", kids)      # NIF quads: one beam each
-    # selection by id: beams under it, components
+    # Selection by id selects the beams under the node, or components.
     select!(sess.view, "group:inner23")
     @test length(selected_beams(sess)) == 8 && selected_component(sess) === nothing
     @test only(r for r in model_tree(sess) if r.id == "group:inner23").selected
@@ -512,7 +513,7 @@ end
     # a beam aimed away from the target misses it
     away = remake(b; aim = Briareus.Vec3(b.aim) + 20 * BriareusGUI.normalize(BriareusGUI.cross(direction(b), Briareus.Vec3(0, 0, 1))))
     @test beam_path(t, away).component === :missed
-    # volumes: closed rings around the axis, cut at the target
+    # Beam volumes are closed rings around the axis, cut at the target.
     v, f = beam_volume(t, b; nring = 16, nseg = 4)
     @test length(f) == 2 * 16 * (length(v) ÷ 16 - 1)
     @test all(x -> 1 <= x <= length(v), Iterators.flatten(f))
@@ -524,7 +525,7 @@ end
 @testset "beam groups, sets and quads (no GL)" begin
     bt = BeamTable(preset_beams(:nif_quads); preset = :nif_quads)
     @test clusters(bt) == [:inner23, :inner30, :outer44, :outer50]
-    # a backlighter group: two outer quads aimed at a point away from TCC
+    # A backlighter group has two outer quads aimed at a point away from TCC.
     idx = [findfirst(b -> b.group === :outer44, bt.beams[]), findfirst(b -> b.group === :outer50, bt.beams[])]
     @test set_cluster!(bt, idx, "backlighter")
     @test :backlighter in clusters(bt) && bt.cluster[][idx] == [:backlighter, :backlighter]
@@ -586,7 +587,7 @@ end
     @test only(r for r in rows if r.id == "comp:hohlraum_leh_top").color == ""          # a hole
     select_add!(v, "group:inner23")                                            # toggles off
     @test selected_ids(v) == ["group:inner30"]
-    select_add!(v, "comp:hohlraum_wall")                                       # not a beam: replaces
+    select_add!(v, "comp:hohlraum_wall")                                       # not a beam, so it replaces
     @test selected_ids(v) == ["comp:hohlraum_wall"]
     # moving the selection to a new group keeps it selectable
     select!(v, "group:outer44")

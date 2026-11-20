@@ -1,6 +1,6 @@
-# The flux map: the capsule's incident x-ray flux over polar angle and azimuth (a
-# hohlraum), or the laser irradiance over a foil's face. Plots are created up front;
-# updates change their inputs only (see scene_canvas.jl).
+# The flux map shows the incident x-ray flux on the capsule over polar angle and azimuth
+# for a hohlraum, or the laser irradiance over the face of a foil. Plots are created up
+# front, and updates change only their inputs (see scene_canvas.jl).
 
 """
     MapCanvas

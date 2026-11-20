@@ -1,8 +1,9 @@
 # Analytic surfaces in CAD-like meshes (fit_surfaces, curved_components). Expects
 # `facet_soup` from meshops.jl.
 
-# CAD-like facets: curved faces as full-length strips, flat annuli as radial slivers,
-# every facet separate vertices (as STL has them), wound to face `facing`.
+# These helpers build CAD-like facets. Curved faces are full-length strips and flat annuli
+# are radial slivers. Every facet has separate vertices, as STL facets do, and is wound to
+# face `facing`.
 function cad_quad!(F, a, b, c, d, facing)
     dot(cross(b - a, c - a), facing) < 0 && ((a, b, c, d) = (d, c, b, a))
     push!(F, (a, b, c), (a, c, d))
@@ -30,7 +31,7 @@ function cad_half(; R, Rout, Rleh, h, t, nphi)
 end
 cad_mirror(F) = [(a .* Vec3(1, 1, -1), c .* Vec3(1, 1, -1), b .* Vec3(1, 1, -1)) for (a, b, c) in F]
 
-# latitude-longitude sphere: quads of two facets, fans of slivers at the poles
+# A latitude-longitude sphere has quads of two facets and fans of slivers at the poles.
 function cad_sphere(r; ntheta, nphi, outward = true)
     F = NTuple{3,Vec3}[]
     θs = range(0, π; length = ntheta + 1)
@@ -45,8 +46,9 @@ function cad_sphere(r; ntheta, nphi, outward = true)
     return F
 end
 
-# conical frustum from radius r0 at z0 to r1 at z1 as CAD tessellates it: nz bands of
-# nphi strips (one band: vertices on the two rims only), facing the axis or away
+# A conical frustum from radius r0 at z0 to r1 at z1, tessellated as CAD does it, has nz
+# bands of nphi strips and faces the axis or away from it. With one band, the vertices lie
+# on the two rims only.
 function cad_frustum(r0, z0, r1, z1; nz = 1, nphi, inward = true)
     F = NTuple{3,Vec3}[]
     φs = range(0, 2π; length = nphi + 1)
@@ -116,7 +118,7 @@ end
         @test norm(regs[1].surface.center) < 1e-6
         @test regs[1].facing == 1
     end
-    # a free-form surface (a paraboloid) holds no plane, cylinder or sphere
+    # A free-form surface (a paraboloid) contains no plane, cylinder or sphere.
     para = Mesh()
     for i in 0:19, j in 0:19
         z(x, y) = 0.3 * x^2 + 0.1 * y^2 + 0.05 * x * y
@@ -129,9 +131,10 @@ end
     @test isempty(fit_surfaces(para; kinds = (:plane, :cylinder, :cone, :sphere)))
     @test_throws ArgumentError fit_surfaces(para; kinds = (:paraboloid,))
 
-    # cones: an entrance-hole cone (39°) and a 45° one as single bands (vertices on two
-    # rims only, which a sphere fits as well: the cone is taken), a slightly tapered bore
-    # (2.9°, apex 40 mm away) and a near-flat 83° cone in several bands, facing in or out
+    # The cones are an entrance-hole cone (39°) and a 45° cone as single bands, a slightly
+    # tapered bore (2.9°, apex 40 mm away) and a near-flat 83° cone in several bands, each
+    # facing in or out. A single band has vertices on two rims only, which a sphere fits as
+    # well; the cone is the fit selected.
     for (r0, z0, r1, z1, nz, nphi, inward) in ((1.55, 4.7, 2.2, 5.5, 1, 360, true), (1.0, 0.0, 2.0, 1.0, 1, 120, false),
                                                (2.0, 0.0, 1.9, 2.0, 8, 180, true), (0.5, 0.0, 3.0, 0.3, 3, 120, true))
         k = (r1 - r0) / (z1 - z0)
@@ -226,7 +229,7 @@ end
         q0 = on(φ, ψ)
         n0 = normalize(q0 - (ctr + R * (cos(φ) * e1 + sin(φ) * e2)))
         q, n = surface_point(s, q0 + δ * n0)
-        ζ = (r + δ) * sin(ψ)                # outside: the same height
+        ζ = (r + δ) * sin(ψ)                # the outside point has the same height
         ψq = δ < 0 ? ψ : abs(ζ) >= r ? copysign(π / 2, ζ) : atan(ζ, copysign(sqrt(r^2 - ζ^2), cos(ψ)))
         @test q ≈ on(φ, ψq) atol = 1e-14
         @test n ≈ normalize(on(φ, ψq) - (ctr + R * (cos(φ) * e1 + sin(φ) * e2))) atol = 1e-14
@@ -241,7 +244,7 @@ end
             ρq, zq = axial(first(surface_point(s, P + τ * (Q - P))))
             abs(ρq - ρ0) + abs(zq - z0)
         end
-        # (at the poles the height's round-off ε moves the point by √(2rε), ~1e-8)
+        # At the poles the round-off ε of the height moves the point by √(2rε), ~1e-8.
         ψ0 == 0.7 ? (@test d < 0.5β^2) : (@test d < (abs(cos(ψ0)) < 1e-12 ? 1e-7 : 1e-14))
     end
     # the nearest point inside the tube; facet points outside it (on the cap rim's chords
@@ -264,8 +267,9 @@ end
     @test t2.major_radius == R && t2.minor_radius == r
     @test_throws ArgumentError TorusSurface(0.0, 0.5)
 
-    # areas through the elements: exact where the section's rims project onto their
-    # circles (a quarter fillet's on the cap too) or the torus is closed
+    # The areas summed over the elements are exact where the rims of the section project
+    # onto their circles, as the rims of a quarter fillet do on the cap too, or where the
+    # torus is closed.
     s0 = TorusSurface(R, r; center = (0, 0, 0.3))
     band(ψ0, ψ1) = 2π * r * (R * (ψ1 - ψ0) + r * (sin(ψ1) - sin(ψ0)))
     for (ψ0, ψ1) in ((0, π), (-π, π), (0, π / 2), (π / 2, 3π / 2), (-π / 2, π / 2))
@@ -296,10 +300,11 @@ end
     @test sum(tl.elem_area) ≈ 2π^2 * R * r rtol = 1e-13
     @test all(e -> sum(element_quadrature(tl, e, 1)[2]) ≈ tl.elem_area[e], 1:nelements(tl))
 
-    # the rounded hohlraum's corners as tori: the fillets' areas those of the quarter tori
-    # (the frusta's chord polygon misses 15% with one band), and the closed cavity's row
-    # sums as close to one as with frusta (on the fillets 6.0e-4 with one band: 4.5e-5
-    # before, when the cap rims' +1.8e-3 area overshoot canceled the quadrature's shortfall)
+    # The corners of the rounded hohlraum are tori. The fillet areas equal those of the
+    # quarter tori; the chord polygon of the frusta misses 15% with one band. The row sums
+    # of the closed cavity are as close to one as with frusta. On the fillets the row-sum
+    # error is 6.0e-4 with one band. It was 4.5e-5 before, when the +1.8e-3 area overshoot
+    # of the cap rims canceled the shortfall of the quadrature.
     kw = (; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
     rc = 1.0
     for nr_corner in (1, 4)
@@ -320,8 +325,8 @@ end
         @test tt.elem_area .* F ≈ (tt.elem_area .* F)' rtol = 1e-12
     end
 
-    # fits: a 150° section of the tube (R = 2, r = 0.5) tilted and moved, fine and
-    # coarse (19° bands, under `angle`), through STL, facing out or in, and remeshed
+    # The fits cover a 150° section of the tube (R = 2, r = 0.5), tilted and moved, fine and
+    # coarse (19° bands, under `angle`), through STL, facing out or in, and remeshed.
     Rot = rotation_to(ax)
     for (nψ, nphi) in ((28, 224), (8, 64)), inward in (false, true)
         F = [(Rot * a + ctr, Rot * b + ctr, Rot * c + ctr) for (a, b, c) in cad_torus(R, r, 0.0, deg2rad(-60), π / 2; nψ, nphi)]
@@ -356,9 +361,9 @@ end
     @test cs[2].surface.minor_radius ≈ 0.5 rtol = 1e-6
     @test sum(Target(cs[2:2]).elem_area) ≈ 2π * 0.5 * (2.0 * π / 2 + 0.5) rtol = 2e-3
 
-    # cost: one torus region, the work linear in the facets (a fine
-    # fillet without the torus kind is quadratic: research notes, "Cost of fitting faces of
-    # none of the kinds")
+    # A torus fit gives one region, with the work linear in the facets. A fine fillet
+    # without the torus kind is quadratic (research notes, "Cost of fitting faces of none of
+    # the kinds").
     opts = (; rtol = 1e-3, atol = 1e-4, cosmax = cosd(30.0))
     fillet(n) = facet_soup(cad_torus(2.0, 0.5, 0.0, deg2rad(-60), π / 2; nψ = n ÷ 2, nphi = 4n))
     st = map((28, 56)) do n
@@ -472,10 +477,10 @@ end
     @test abs(errs[2].dd) < 3e-3 && abs(errs[2].ww) < 1e-3
     @test abs(errs[2].ww) < abs(errs[1].ww) && errs[2].closure < errs[1].closure
 
-    # a CAD hohlraum (the cavity side of two thick halves, LEH apertures, a CAD
-    # capsule), fitted, against the exact capsule rows (a sphere radiates by solid
-    # angle: L/√(4R²+L²) of its power onto the wall) and against the primitive hohlraum
-    # of the same dimensions
+    # A fitted CAD hohlraum, with the cavity side of two thick halves, LEH apertures and a
+    # CAD capsule, is checked against the exact capsule rows and against the primitive
+    # hohlraum of the same dimensions. A sphere radiates by solid angle, so L/√(4R²+L²) of
+    # the capsule power reaches the wall.
     R, Rout, Rleh, h, t, rc = 2.875, 2.975, 1.55, 4.7, 0.05, 0.9
     cavity(m) = split_mesh(m, c -> norm(c[1:2]) < R + 0.01 && abs(c[3]) < h + 1e-6)[1]
     comps = Component[]
@@ -489,7 +494,7 @@ end
     push!(comps, aperture(:leh_top, disk_mesh(Rleh, h; nr = 3, nphi = 24, up = false); surface = DiskSurface(center = (0, 0, h))),
           aperture(:leh_bottom, disk_mesh(Rleh, -h; nr = 3, nphi = 24, up = true); surface = DiskSurface(center = (0, 0, -h))))
     tc = Target(comps)
-    # (the capsule is one sphere: it keeps its name)
+    # The capsule is one sphere, so its name is unchanged.
     @test [c.name for c in tc.components] == Symbol.(["top/cyl1", "top/rest", "bottom/cyl1", "bottom/rest",
                                                       "capsule", "leh_top", "leh_bottom"])
     @test parts(tc) == [:top, :bottom, :capsule, :leh_top, :leh_bottom]
@@ -517,8 +522,8 @@ end
     @test flux(sc, tc, cap) ≈ flux(sp, prim, elements(prim, :capsule)) rtol = 3e-4
     @test flux(sc, tc, leh) ≈ flux(sp, prim, elements(prim, :leh_top, :leh_bottom)) rtol = 3e-4
 
-    # the halves are split for computation only: the name-taking functions and the
-    # reports see the parts, and the pieces stay reachable by their own names
+    # The halves are split only for computation. The name-taking functions and the reports
+    # see the parts, and the pieces stay reachable by their piece names.
     top, toprest = Symbol("top/cyl1"), Symbol("top/rest")
     @test elements(tc, :top) == elements(tc, top, toprest)
     @test part_pieces(tc, :top) == [1, 2] && part_pieces(tc, toprest) == [2]
@@ -532,7 +537,8 @@ end
     @test bal.absorbed[:top] ≈ balc.absorbed[top] + balc.absorbed[toprest] rtol = 1e-12
     @test sum(values(bal.absorbed)) ≈ sum(values(balc.absorbed)) rtol = 1e-12
     beams = nif_quads()
-    # (one deposition operator, the scenario's: the CAD elements make it the costly part)
+    # The test builds one deposition operator, the one of the scenario, because the CAD
+    # elements make it the costly part.
     sn = Scenario(tc, beams; observe = :top, radiation = false)
     dep = deposit(sn.deposition, beams)
     cp, cpc = component_power(dep, tc), component_power(dep, tc; by = :component)
@@ -559,9 +565,10 @@ end
 end
 
 @testset "radiation in a fitted CAD cone" begin
-    # a CAD frustum (45°, r 1 → 2 over z 0 → 1, one band of 180 strips) closed by two
-    # fans, remeshed at 0.3 mm: the fitted cone against the exact exchanges (the disks'
-    # coaxial factor; the cone's by closure and reciprocity), and against flat elements
+    # A 45° CAD frustum, with r from 1 to 2 over z from 0 to 1 in one band of 180 strips, is
+    # closed by two fans and remeshed at 0.3 mm. The fitted cone is checked against the
+    # exact exchanges and against flat elements. The exact exchanges are the coaxial factor
+    # of the disks and, by closure and reciprocity, the factors of the cone.
     r1, r2, L = 1.0, 2.0, 1.0
     Ac, A1, A2 = π * (r1 + r2) * hypot(r2 - r1, L), π * r1^2, π * r2^2
     X = 1 + (1 + (r2 / L)^2) / (r1 / L)^2
@@ -582,7 +589,7 @@ end
          cc = flux(c, c) / (1 - cd1 - cd2) - 1, back = flux(d2, c) / (1 - A1 * f12 / A2) - 1)
     end
     flat, fitted = errs
-    @test fitted.names == [:cone, :d1, :d2]             # one cone: the part keeps its name
+    @test fitted.names == [:cone, :d1, :d2]             # one cone, so the part name is kept
     @test abs(fitted.area) < 1e-8                         # (Float32 vertices)
     @test abs(fitted.d2) < 1e-3 && abs(fitted.cc) < 1e-3 && abs(fitted.back) < 1e-3
     @test abs(fitted.d2) < abs(flat.d2) / 3 && abs(fitted.back) < abs(flat.back) / 3
@@ -636,7 +643,7 @@ end
     R1, R2 = 1.0 / 0.4, 0.8 / 0.4
     S = 1 + (1 + R2^2) / R1^2
     @test flux(t, view_factors(t), elements(t, :d1), elements(t, :d2)) ≈ (S - sqrt(S^2 - 4(R2 / R1)^2)) / 2 rtol = 4e-3
-    # a closed box of strips: rows sum to one
+    # The rows of a closed box of strips sum to one.
     faces = [(0X, X, Y), (Z, Y, X), (0X, Z, X), (Y, X, Z), (0X, Y, Z), (X, Z, Y)]
     box = Target([Component(Symbol(:f, i), remesh_mesh(strips(o, u, v, cross(u, v)); size = 0.25), gold())
                   for (i, (o, u, v)) in enumerate(faces)])
@@ -645,9 +652,9 @@ end
     @test maximum(abs, closure_error(F)) < 6e-3
     @test sum(abs, closure_error(F)) / nelements(box) < 4e-3
 
-    # The outline receiver is the sum over the facets to round-off, at points anywhere
-    # (seen whole, cut by the point's tangent plane, behind), for planar elements and
-    # elements folded across a faceted cylinder
+    # The outline receiver equals the sum over the facets within round-off, for planar
+    # elements and elements folded across a faceted cylinder. The points lie anywhere: the
+    # element is seen whole, cut by the tangent plane of the point, or behind it.
     R = 2.875
     wall = orient_mesh(stl_roundtrip(cad_half(; R, Rout = 2.975, Rleh = 1.55, h = 4.7, t = 0.05, nphi = 120)))
     t = Target(Component(:p, remesh_mesh(plates[2][1]; size = 0.25), gold()),
@@ -677,9 +684,9 @@ end
     end
     @test worst < 1e-12
     @test nfolded > 100 && npoly - nfolded > 100
-    # cost: the outlines have under 40% of the facets' edges, and the emitter's root cells
-    # are about as many as a square two-facet element has (2·4^depth, plus the cells its
-    # edges cut), however many facets an element has
+    # The outlines have under 40% of the facet edges. The emitter has about as many root
+    # cells as a square two-facet element (2·4^depth, plus the cells cut by its edges),
+    # however many facets an element has.
     @test nedges < 0.4 * nfacet_edges
     square = Target(Component(:q, rectangle_mesh(0.3, 0.3; nu = 1, nv = 1), gold()))
     ncells(t, e) = length(Briareus._cell_emitter(t, e, 3).cells)
@@ -717,9 +724,9 @@ end
     size_of = n -> n === :capsule ? 0.2 : 0.5
     tc = cad_target([solids; leh]; inside = (0, 0, 0), remesh = size_of, fit = true, material = mat)
 
-    # the cavity: inner walls, bores, caps and waist faces of the halves, the capsule and
-    # the apertures as given; the outer walls (no cylinder of radius Rout) and the mount
-    # are dropped
+    # The cavity consists of the inner walls, bores, caps and waist faces of the halves, the
+    # capsule and the apertures as given. The outer walls and the mount are dropped, so no
+    # cylinder of radius Rout remains.
     @test !any(c -> startswith(String(c.name), "mount"), tc.components)
     @test tc.components[end-1:end] == leh
     cyl = [c for c in tc.components if c.surface isa CylinderSurface]
@@ -735,9 +742,10 @@ end
     # compact elements of about the size asked
     @test 0.4 < sqrt(area(cyl[1]) / npatches(cyl[1].mesh)) < 0.6
 
-    # closure is declared, not inferred: the waist gap has no aperture here, and its rays
-    # leave the facets (open fraction measured 4.2e-3); with a gap aperture only the
-    # cracks between the 72-sided bores and the 24-sided LEH disks leak (6.0e-4)
+    # Closure is declared; it is not inferred. In this case the waist gap has no aperture,
+    # and rays through it leave the facets (measured open fraction 4.2e-3). With a gap
+    # aperture only the cracks between the 72-sided bores and the 24-sided LEH disks leak
+    # (6.0e-4).
     @test !tc.closed
     gap = aperture(:gap, cylinder_mesh(Rout, -g, g; nz = 1, nphi = 72, inward = true))
     tg = cad_target([solids; leh; gap]; inside = (0, 0, 0), remesh = size_of, fit = true, material = mat,
@@ -748,8 +756,8 @@ end
     waist = [e for e in eachindex(oc.element) if abs(tc.elem_centroid[e][3]) < 0.3]
     @test sum(oc.element[waist] .* tc.elem_area[waist]) > 0.5 * sum(oc.element .* tc.elem_area)
 
-    # the same steps by hand: orient, select on the facets, remesh the kept ones, select
-    # again on the elements, fit on the kept facets
+    # The same steps are then done by hand: orient, select on the facets, remesh the kept
+    # facets, select again on the elements, and fit on the kept facets.
     kept = enclosure([[Component(n, orient_mesh(m; toward = (0, 0, 0)), mat(Symbol(n))) for (n, m) in solids]; leh]).target.components
     el = enclosure([c.kind === :aperture ? c : Component(c.name, remesh_mesh(c.mesh; size = size_of(c.name)), c.material)
                     for c in kept]).target.components

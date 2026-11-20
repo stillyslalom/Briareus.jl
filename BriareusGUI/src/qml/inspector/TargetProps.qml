@@ -1,6 +1,6 @@
-// Properties of the target: the mesh element sizes, and inserting parts, windows,
-// assemblies and frames (the Insert menu's commands). A hohlraum's dimensions and wall
-// are its part's properties; ready-made targets are in File ▸ New target.
+// The properties of the target are the mesh element sizes and the commands of the Insert
+// menu, which insert parts, windows, assemblies and frames. The dimensions and wall of a
+// hohlraum are properties of its part, and ready-made targets are in File ▸ New target.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

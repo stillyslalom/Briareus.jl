@@ -1,19 +1,20 @@
-# Multigroup (spectral) radiosity: the gray solution split into photon-energy groups.
+# Multigroup (spectral) radiosity, in which the gray solution is split into photon-energy
+# groups.
 #
 # View factors do not depend on photon energy, so each group g obeys the gray system
 # with a per-group source and albedo,
 #
 #     B_g = S_g + α_g H_g,      H_g = F B_g,
 #
-# where S_g splits the gray source ηP/A by a Planckian at each element's emission
-# temperature, less a laser-produced non-Planckian M-band part (`MBandEmission`) placed
-# in a separate band. With `thermalize = true` an element instead re-emits everything it
-# re-emits thermally: B_g = S_g + b_g(T) Σ_g′ α_g′ H_g′, with b_g(T) the Planck fraction
-# of group g. With equal group albedos either form sums to the gray system exactly
-# (Σ_g S_g = S, Σ_g b_g = 1), so the group sum of every flux is the gray one.
+# where S_g is the gray source ηP/A split by a Planckian at the emission temperature of
+# each element, less a laser-produced non-Planckian M-band part (`MBandEmission`) that is
+# placed in a separate band. With `thermalize = true` an element instead re-emits
+# everything it re-emits thermally: B_g = S_g + b_g(T) Σ_g′ α_g′ H_g′, with b_g(T) the
+# Planck fraction of group g. With equal group albedos either form sums to the gray system
+# exactly (Σ_g S_g = S, Σ_g b_g = 1), so the group sum of every flux is the gray one.
 #
-# A diagnostic, not on the optimization path: everything here is Float64 (the values of
-# a dual-number gray solution).
+# The spectral split is a diagnostic and is not on the optimization path: everything in
+# this file is Float64 (the values of a dual-number gray solution).
 
 const _PLANCK_NORM = 15 / π^4
 # Bernoulli-series coefficients of ∫₀ˣ t³/(eᵗ - 1) dt = Σ cₙ x^(n+3): B_n / ((n + 3) n!)
@@ -23,8 +24,9 @@ const _PLANCK_SERIES = let B = Dict(0 => 1 // 1, 1 => -1 // 2, 2 => 1 // 6, 4 =>
     [(n, Float64(B[n] / ((n + 3) * factorial(big(n))))) for n in sort(collect(keys(B)))]
 end
 
-# Fraction of σT⁴ above x = hν/T: the Planck tail, 1 at x = 0 and 0 at x = ∞, computed
-# directly (not as 1 - cdf) so that the hard groups keep their relative accuracy.
+# Fraction of σT⁴ above x = hν/T, the Planck tail, which is 1 at x = 0 and 0 at x = ∞.
+# It is computed directly (not as 1 - cdf) so that the hard groups keep their relative
+# accuracy.
 function _planck_tail(x::Float64)
     x <= 0 && return 1.0
     isinf(x) && return 0.0
@@ -53,7 +55,7 @@ is 1 exactly.
 """
 function planck_fraction(T::Real, E1::Real, E2::Real)
     E1 <= E2 || throw(ArgumentError("need E1 ≤ E2"))
-    T > 0 || return E1 == 0 ? 1.0 : 0.0     # a cold element: everything in the softest group
+    T > 0 || return E1 == 0 ? 1.0 : 0.0     # a cold element emits all in the softest group
     return _planck_tail(Float64(E1 / T)) - _planck_tail(Float64(E2 / T))
 end
 
@@ -69,9 +71,9 @@ planck_fractions(T::Real, edges::AbstractVector) =
 """
     spectral_edges(; lo = 50, hi = 20_000, n = 40, include = (1800,)) -> Vector
 
-Group edges (eV) for `spectral_solve`: `0`, `n` log-spaced edges from `lo` to `hi`, the
-energies in `include` (default the M-band threshold, 1.8 keV) and `Inf`. The default
-spans the NIF Dante channels (50 eV – 20 keV; Rubery et al., RSI 2023).
+Group edges (eV) for `spectral_solve`, made of `0`, `n` log-spaced edges from `lo` to
+`hi`, the energies in `include` (default the M-band threshold, 1.8 keV) and `Inf`. The
+default spans the NIF Dante channels (50 eV – 20 keV; Rubery et al., RSI 2023).
 """
 function spectral_edges(; lo::Real = 50.0, hi::Real = 20_000.0, n::Integer = 40,
                         include = (1800.0,))
@@ -84,28 +86,29 @@ end
     MBandEmission(; intensity = [1e14, 1e15], fraction = [0.01, 0.20], groups = nothing,
                   band = (1800, 2850), materials = (:Au, :DU))
 
-Non-Planckian gold M-band emission from laser-heated spots, an **engineering model**:
-elements of a material in `materials` (gold, and the Au-lined uranium of a NIF wall:
-`:DU`, [`uranium`](@ref), [`nif_uranium`](@ref), where the laser heats the gold liner) emit
-part of their absorbed laser power `P` as M-band x-rays, flat in photon energy over `band` (eV). The fraction is
+Non-Planckian gold M-band emission from laser-heated spots, an **engineering model**.
+Elements of a material in `materials` emit part of their absorbed laser power `P` as
+M-band x-rays, flat in photon energy over `band` (eV). The default materials are gold
+and the Au-lined uranium of a NIF wall (`:DU`, [`uranium`](@ref), [`nif_uranium`](@ref)),
+where the laser heats the gold liner. The fraction is
 
-- by default `fraction(I)`, with `I` the element's absorbed laser flux `P/A` (W/cm²),
+- by default `fraction(I)`, with `I` the absorbed laser flux `P/A` of the element (W/cm²),
   interpolated in log–log between the `(intensity, fraction)` points and held constant
   beyond them; or
 - with `groups` (a `Dict` from beam group to fraction, e.g. `nif_mband()`), fixed per
   beam group: an element emits `Σ_g fraction_g P_g`, `P_g` the power it absorbs from
-  group g's beams (`mband_power` deposits the groups separately).
+  the beams of group g (`mband_power` deposits the groups separately).
 
-The M-band is part of the converted x-rays, not added to them: the element's Planckian
-source is `ηP/A` less the M-band (which is capped at `ηP/A`).
+The M-band is part of the converted x-rays (it is not added to them): the Planckian
+source of the element is `ηP/A` less the M-band (which is capped at `ηP/A`).
 
-Defaults (sources in the research notes, "Spectral radiosity, M-band and a synthetic
-Dante"): laser → M-band (> 1.8 keV) conversion of gold at normal incidence ~1% at 10¹⁴
-and ~20% at 10¹⁵ W/cm² (Dewald et al., PoP 15, 072706, 2008, as quoted in Dewald et
-al., PoP 27, 2020, **M**); the band's upper edge 2.85 keV puts 1/3 of a flat band above
-2.5 keV, Dewald 2020's share of the hohlraum M-band above the Mo edge (**L**). The
-element-averaged intensity of the default form depends on the mesh across a spot (the
-fraction goes as I^1.3); the per-group form does not.
+By default the conversion of laser light to M-band (> 1.8 keV) in gold at normal incidence
+is ~1% at 10¹⁴ and ~20% at 10¹⁵ W/cm² (Dewald et al., PoP 15, 072706, 2008, as quoted in
+Dewald et al., PoP 27, 2020, **M**; sources in the research notes, "Spectral radiosity,
+M-band and a synthetic Dante"). With the upper band edge at 2.85 keV, 1/3 of a flat band
+lies above 2.5 keV, which is Dewald 2020's share of the hohlraum M-band above the Mo edge
+(**L**). The element-averaged intensity of the default form depends on the mesh across a
+spot (the fraction goes as I^1.3); the per-group form does not.
 """
 struct MBandEmission
     intensity::Vector{Float64}
@@ -134,12 +137,13 @@ MBandEmission(; intensity = [1e14, 1e15], fraction = [0.01, 0.20], groups = noth
 """
     nif_mband(; outer = 1.5e15, inner = 3e14, kwargs...) -> MBandEmission
 
-Per-cone NIF M-band emission: each cone's laser → M-band conversion is the default
-`fraction(I)` at its mean wall irradiance, outer 1.5 × 10¹⁵ and inner 3 × 10¹⁴ W/cm²
-(Dewald et al., PoP 27, 2020, **M**): 0.20 (held beyond 10¹⁵) and 0.042. Dewald also
-notes the inner beams' 2.5× lower turning-point density, which lowers their M-band
-further (``∝ n_e^2``, ~5×); that factor is not applied (**L**: the inner M-band is an upper
-bound). `kwargs` pass to `MBandEmission`. [`drive_history`](@ref)'s default M-band model.
+Per-cone NIF M-band emission. The conversion of laser light to M-band in each cone is the
+default `fraction(I)` at its mean wall irradiance, outer 1.5 × 10¹⁵ and inner 3 × 10¹⁴ W/cm²
+(Dewald et al., PoP 27, 2020, **M**), which gives 0.20 (held beyond 10¹⁵) and 0.042.
+Dewald also notes the 2.5× lower turning-point density of the inner beams, which lowers
+their M-band further (``∝ n_e^2``, ~5×). That factor is not applied, so the inner M-band
+is an upper bound (**L**). `kwargs` are passed to `MBandEmission`. This is the default
+M-band model of [`drive_history`](@ref).
 """
 function nif_mband(; outer::Real = 1.5e15, inner::Real = 3e14, kwargs...)
     m = MBandEmission(; kwargs...)
@@ -151,7 +155,7 @@ end
 """
     mband_conversion(m::MBandEmission, I) -> Float64
 
-Laser → M-band conversion at absorbed laser flux `I` (W/cm²).
+Conversion of laser light to M-band x-rays at absorbed laser flux `I` (W/cm²).
 """
 function mband_conversion(m::MBandEmission, I::Real)
     I > 0 || return 0.0
@@ -168,18 +172,19 @@ end
     mband_power(m::MBandEmission, target, laser) -> Vector
     mband_power(m::MBandEmission, op::DepositionOperator, beams; lpi = nothing, time = 0.0) -> Vector
 
-Laser-produced M-band power per element (TW): from the absorbed laser power per element
-`laser` (TW; the default intensity form), or by depositing `beams` with `op` (either
-form; the per-group form deposits each group's beams separately). Elements of other
+Laser-produced M-band power per element (TW), computed from the absorbed laser power per
+element `laser` (TW; the default intensity form) or by depositing `beams` with `op`
+(either form; the per-group form deposits each group's beams separately). Elements of other
 materials and apertures emit none. `spectral_solve` takes the result as `mband_power`.
 
-With a laser–plasma model `lpi`, `beams` are its effective beams (`apply_lpi(lpi, b,
-time)`: after CBET, backscatter, the bubble) and each group is deposited through
-[`lpi_deposit`](@ref) at `time`, so light that the model deposits off the operator (the
-bubble's ridge stop) converts at the fraction of its group. Every step of a
-[`drive_history`](@ref) does this by default with the effective beams of that step. The groups
-are split in one deposition pass: each group's share of an element is exactly the
-deposition of that group's beams alone (the others at zero power).
+With a laser–plasma model `lpi`, `beams` are its effective beams `apply_lpi(lpi, b, time)`,
+taken after CBET, backscatter and the bubble. Each group is then deposited through
+[`lpi_deposit`](@ref) at `time`, so light that the model deposits off the operator, at
+the ridge stop of the bubble, converts at the fraction of its group. By
+default this is done at every step of a [`drive_history`](@ref) with the effective beams
+of that step. The groups are split in one deposition pass: each group's share of an
+element is exactly the deposition of only the beams of that group, with the others at
+zero power.
 """
 function mband_power(m::MBandEmission, t::Target, P::AbstractVector)
     m.groups === nothing ||
@@ -202,15 +207,16 @@ function mband_power(m::MBandEmission, op::DepositionOperator, beams::AbstractVe
     return _mband_from_split(m, t, split)
 end
 
-# The per-group split `(key, EG)` for `_deposit` (beam → its group's column, 0 for a
-# group `m` does not convert; elements × groups, in the order of `m.groups`).
+# The per-group split `(key, EG)` for `_deposit`. The key maps each beam to the column of
+# its group, or to 0 for a group that `m` does not convert. EG has one row per element
+# and one column per group, in the order of `m.groups`.
 function _mband_split(m::MBandEmission, t::Target, beams)
     gs = collect(keys(m.groups))
     key = [something(findfirst(==(b.group), gs), 0) for b in beams]
     return (key, zeros(nelements(t), length(gs)))
 end
 
-# The M-band power per element from a filled split: Σ_g f_g P_g on the emitting elements.
+# The M-band power per element from a filled split, Σ_g f_g P_g on the emitting elements.
 function _mband_from_split(m::MBandEmission, t::Target, (_, EG))
     out = zeros(nelements(t))
     for (k, f) in enumerate(values(m.groups)), e in 1:nelements(t)
@@ -222,7 +228,7 @@ end
 _emits_mband(m::MBandEmission, t::Target, e) =
     !is_aperture(t, e) && element_material(t, e).name in m.materials
 
-# α_M, calibrated (see `mband_albedo`)
+# α_M is calibrated (see `mband_albedo`).
 const _ALPHA_M = 0.55
 
 """
@@ -230,16 +236,16 @@ const _ALPHA_M = 0.55
 
 Group albedos for `spectral_solve`'s `albedo` that pair with the laser M-band `m`: on
 every surface component of `m`'s materials, `albedo` (``α_M``) in each group at or above the
-M-band's lower edge `m.band[1]` (which must be one of `edges`) and the gray albedo
+lower M-band edge `m.band[1]` (which must be one of `edges`) and the gray albedo
 (`nothing`) below it. Use with `thermalize = true`: the rest of the gray albedo is
-re-emitted thermally, so the group sums stay the gray solution's.
+re-emitted thermally, so the group sums stay equal to the gray solution.
 
 The default ``α_M`` = 0.55 is **calibrated** (research notes, "Spectral radiosity, M-band
 and a synthetic Dante" and "Laser-spot spectrum"): with `nif_mband()`, thermalized and
 the laser spots thermal at the local radiation temperature (`spot = :radiation`), it
 gives Dewald et al. 2020's recirculating-to-laser M-band ratio ``F_M`` ≈ 2 on their setup
-(`examples/mband_dewald2020.jl`; 0.5 under the `:brightness` rule). Fitted to ``F_M`` only;
-Dante's > 1.8 keV share (11.4–12.0% against the measured 12%) is the check.
+(`examples/mband_dewald2020.jl`; 0.5 under the `:brightness` rule). It is fitted to
+``F_M`` only; Dante's > 1.8 keV share (11.4–12.0% against the measured 12%) is the check.
 """
 function mband_albedo(t::Target, m::MBandEmission, edges; albedo::Real = _ALPHA_M)
     E = collect(Float64, edges)
@@ -256,16 +262,16 @@ end
                albedo = 0.55)
 
 The laser-produced M-band of a [`drive_history`](@ref) and the spectral split it is
-solved with. `emission` (an `MBandEmission`) makes each step's M-band source; the step's
-gray solution is then split by `spectral_solve` with group edges `edges` (eV; they must
-include the M-band's lower edge `emission.band[1]`), `thermalize` and the group albedos
-`albedo`: either a number ``α_M``, for `mband_albedo(target, emission, edges; albedo)`
-(``α_M`` at and above the M-band's edge on the emitting surfaces, the gray albedo below),
-or a `Dict` from component name to group albedos as `spectral_solve` takes them
-(`nothing` entries keep the gray albedo).
+solved with. `emission` (an `MBandEmission`) makes the M-band source of each step.
+`spectral_solve` then splits the gray solution of the step with group edges `edges` (eV),
+`thermalize` and the group albedos `albedo`; the edges must include the lower M-band edge
+`emission.band[1]`. `albedo` is either a number ``α_M``, passed to
+`mband_albedo(target, emission, edges; albedo)` (``α_M`` at and above the M-band edge on
+the emitting surfaces, the gray albedo below), or a `Dict` from component name to group
+albedos as `spectral_solve` takes them (the gray albedo is used for `nothing` entries).
 
-The defaults are the calibrated pairing: two groups split at the M-band's edge,
-thermalized, with ``α_M`` 0.55 (**calibrated**: [`mband_albedo`](@ref)).
+The defaults are the calibrated pairing: two groups split at the M-band edge,
+thermalized, with ``α_M`` 0.55 (**calibrated**, see [`mband_albedo`](@ref)).
 """
 struct MBandSplit
     emission::MBandEmission
@@ -301,9 +307,9 @@ _band_shares(edges, (a, b)) =
 
 Result of `spectral_solve`. Fields: `gray` (the `RadiationSolution` it splits),
 `edges` (group edges, eV); per element × group (TW/mm²): `source`, `B` (radiosity), `H`
-(incident flux), `albedo`; per element: `temperature` (eV, the wall temperature: the
-Planckian of the thermal re-emission and of any stored-energy emission; with
-`spot = :brightness` the one temperature of the whole split), `spot_temperature` (eV, the
+(incident flux), `albedo`; per element: `temperature` (eV, the wall temperature of the
+thermal re-emission and of any stored-energy emission, and with `spot = :brightness` the
+one temperature of the whole split), `spot_temperature` (eV, the
 Planckian of the converted laser x-rays less the M-band), `converted` (the converted
 laser source ηP/A, TW/mm²), `mband` (the laser-produced M-band source, TW/mm²);
 `mband_shares` (its split over the groups); `thermalize`; `spot` (the spot-spectrum
@@ -324,7 +330,8 @@ struct SpectralSolution
     thermalize::Bool
     spot::Symbol
 end
-# a single-temperature split (the `:brightness` rule): every source at `temperature`
+# In a single-temperature split (the `:brightness` rule), every source is split at
+# `temperature`.
 SpectralSolution(gray::RadiationSolution, edges, source, B, H, albedo, temperature::AbstractVector,
                  mband::AbstractVector, mband_shares, thermalize::Bool) =
     SpectralSolution(gray, edges, source, B, H, albedo, temperature, copy(temperature),
@@ -348,53 +355,55 @@ Multigroup radiosity about a gray solution `sol` (same model, laser deposition a
 time). The groups are `[edges[g], edges[g+1]]` (eV; `edges[1] = 0`, `edges[end] = Inf`,
 e.g. `spectral_edges()`).
 
-- Sources: an element's gray source is its converted laser x-rays `ηP/A` (`sol.converted`,
-  every color's with `solve`'s `unconverted`) plus, on a
+- Sources: the gray source of an element is its converted laser x-rays `ηP/A`
+  (`sol.converted`, from every color when `solve` is given `unconverted`) plus, on a
   re-emitting wall of a `drive_history`, the emission of its stored energy. The
-  laser-produced M-band (`mband`, an `MBandEmission`; its power per element
-  `mband_power`, TW, defaults to `mband_power(mband, target, sol.laser3)`, from the 3ω
-  light alone as in [`drive_history`](@ref), and must be given for a per-group model) is
-  part of the converted x-rays and goes into its band.
+  laser-produced M-band (`mband`, an `MBandEmission`) is part of the converted x-rays and
+  is placed in its band. Its power per element `mband_power` (TW) defaults to
+  `mband_power(mband, target, sol.laser3)`, from only the 3ω light as in
+  [`drive_history`](@ref), and must be given for a per-group model.
   The rest is split by Planck fractions, by `spot`:
-  - `:radiation` (default): the converted x-rays less the M-band at the element's
-    radiation temperature `(H/σ)^¼` (its incident flux; the coronal emission of a laser
-    spot is thermal at about the cavity's temperature, its hard part non-Planckian M-band:
-    research notes, "Laser-spot spectrum"); the stored-energy emission (and, with
-    `thermalize`, the thermal re-emission) at the wall temperature `((B − ηP/A)/σ)^¼`,
-    the brightness of the element's radiosity without its converted laser part;
+  - `:radiation` (default): the converted x-rays less the M-band are split at the
+    radiation temperature `(H/σ)^¼` of the element, which its incident flux sets. The
+    coronal emission of a laser spot is thermal at about the cavity temperature, and its
+    hard part is non-Planckian M-band (research notes, "Laser-spot spectrum"). The
+    stored-energy emission, and with `thermalize` the thermal re-emission, is split at
+    the wall temperature `((B − ηP/A)/σ)^¼`, the brightness of the element radiosity
+    without its converted laser part;
   - `:wall`: the converted x-rays also at the wall temperature;
   - `:brightness`: everything at the brightness temperature `(B/σ)^¼` of the total
     radiosity (the rule before 2026-10-24's spot spectrum; a laser spot then emits as a
-    Planckian well above the wall's temperature, plus a hard tail).
+    Planckian well above the wall temperature, plus a hard tail).
   The temperatures follow the group totals when those differ from the gray ones
-  (iterated to `tol`). A given `temperature` vector (eV) fixes the wall (with
-  `:brightness` the only) temperature, `spot_temperature` the converted x-rays' one.
+  (iterated to `tol`). A given `temperature` vector (eV) fixes the wall temperature
+  (with `:brightness`, the only temperature), and `spot_temperature` fixes that of the
+  converted x-rays.
   On elements without laser light the three rules agree.
-- Group albedos `α_g`: the fraction of an element's incident flux in group g that it
-  re-emits in group g. The gray converged albedo `sol.albedo` in every group, except
-  for the components in `albedo`, a `Dict` (or pairs) from component name to a vector
-  of group albedos (a `nothing` entry keeps the gray albedo in that group, e.g.
+- Group albedos `α_g`: the fraction of the flux incident on an element in group g that
+  it re-emits in group g. The gray converged albedo `sol.albedo` is used in every group,
+  except for the components in `albedo`, a `Dict` (or pairs) from component name to a vector
+  of group albedos (for a `nothing` entry the gray albedo is used in that group, e.g.
   `Dict(:wall => [nothing, 0.5])`; a `NaN` entry throws).
-- `thermalize`: what happens to the rest of the gray albedo, `α − α_g`. Lost to the
-  wall by default (`B_g = S_g + α_g H_g`, each group a gray-type solve); with
-  `thermalize = true` re-emitted thermally, spread over the groups by the element's
-  Planck fractions `b_g(T)` at its wall temperature:
-  `B_g = S_g + α_g H_g + b_g(T) Σ_g′ (α − α_g′) H_g′` (group
-  albedos above `α` are lowered to it). Thermalized, the group sums are the gray
-  solution's whatever the group albedos; with every group albedo 0, all re-emission is
+- `thermalize`: what happens to the rest of the gray albedo, `α − α_g`. By default it is
+  lost to the wall (`B_g = S_g + α_g H_g`, each group a gray-type solve). With
+  `thermalize = true` it is re-emitted thermally, spread over the groups by the Planck
+  fractions `b_g(T)` of the element at its wall temperature:
+  `B_g = S_g + α_g H_g + b_g(T) Σ_g′ (α − α_g′) H_g′` (group albedos above `α` are
+  lowered to it). When thermalized, the group sums equal the gray solution whatever the
+  group albedos; with every group albedo 0, all re-emission is
   thermal.
 
 With every group albedo equal to the gray one (either way), the group sums of `source`,
-`B` and `H` equal the gray solution's (absorbed and emitted power per element too),
+`B` and `H` equal those of the gray solution (absorbed and emitted power per element too),
 whatever the split; with one group and no M-band the solution is the gray one exactly.
-Groups at the gray albedo reuse the model's cached factorizations: solved directly when
-that albedo is factored, by GMRES preconditioned with a cached factorization otherwise
-(fresh factorizations are not cached, so the gray `solve` path is unaffected). Groups
-with their own albedos are solved by GMRES (jointly when thermalized), which converges
-fast for the low albedos of hard groups. Thermalized with a single group at the gray
-albedo (e.g. a two-group split at the M-band's edge, [`drive_history`](@ref)'s), that
-group is the gray radiosity less the others, which is what its solve would return, up to
-the solves' tolerance.
+Groups at the gray albedo reuse the cached factorizations of the model. They are solved
+directly when that albedo is factored and otherwise by GMRES preconditioned with a cached
+factorization; fresh factorizations are not cached, so the gray `solve` path is
+unaffected. Groups with separate albedos are solved by GMRES (jointly when thermalized),
+which converges fast for the low albedos of hard groups. When the split is thermalized and
+a single group is at the gray albedo (e.g. a two-group split at the M-band edge, as in
+[`drive_history`](@ref)), that group is computed as the gray radiosity less the others,
+which equals its solve up to the solver tolerance.
 """
 function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = nothing,
                         mband::Union{Nothing,MBandEmission} = nothing, mband_power = nothing,
@@ -428,7 +437,7 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
     # converted laser x-rays (the rest of the source is a re-emitting wall's stored energy)
     SC = spot === :brightness ? copy(S) :
          clamp.(Float64[v(x) for x in sol.converted], SM, S)
-    # wall temperature (the only one with :brightness) and the converted x-rays'
+    # the wall temperature (the only one with :brightness) and that of the converted x-rays
     wallT(Btot) = spot === :brightness ? radiation_temperature.(Btot) :
                   radiation_temperature.(max.(Btot .- SC, 0.0))
     spotT(Btot, Htot) = spot === :radiation ? radiation_temperature.(Htot) : wallT(Btot)
@@ -450,7 +459,7 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
             Sg = reshape(copy(S), n, 1)         # the gray system itself
             B = reshape(copy(Bgray), n, 1)
         elseif thermalize && all(iszero, A)
-            B = Sg .+ b .* (α .* Hgray)         # all re-emission thermal: R = αH exactly
+            B = Sg .+ b .* (α .* Hgray)         # all re-emission is thermal, so R = αH
         else
             B = similar(Sg)
             R = zeros(n)
@@ -461,14 +470,14 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
                 thermalize && (R = vec(sum((α .- A[:, hard]) .* (m.F * X); dims = 2)))
             end
             if thermalize && length(soft) == 1 && !isempty(hard)
-                # thermalized, the group sums are the gray radiosity: the one group at the
-                # gray albedo is the rest (its solve, a gray-type one, skipped)
+                # When thermalized, the group sums are the gray radiosity, so the one group
+                # at the gray albedo is the rest, and its gray-type solve is skipped.
                 B[:, soft[1]] .= Bgray .- vec(sum(view(B, :, hard); dims = 2))
             elseif !isempty(soft)
                 B[:, soft] .= _group_radiosity(m, A[:, soft], Sg[:, soft] .+ b[:, soft] .* R, α)
             end
         end
-        # thermalized or at the gray albedo, the totals (and so T) are the gray ones
+        # When thermalized or at the gray albedo, the totals (and so T) are the gray ones.
         fixedT = temperature !== nothing
         fixedTc = spot_temperature !== nothing || (spot !== :radiation && fixedT)
         (fixedT && fixedTc || isempty(hard) || thermalize) && break
@@ -493,7 +502,7 @@ function _planck_matrix(T::AbstractVector, E::AbstractVector)
             b[e, 1] = 1.0
             continue
         end
-        # tails at the edges: 1 at E = 0, 0 at Inf (a cold element: all in the first group)
+        # tails at the edges, 1 at E = 0 and 0 at Inf; a cold element emits all in group 1
         x = T[e] > 0 ? [_planck_tail(E[g] / T[e]) for g in 1:G+1] : [i == 1 ? 1.0 : 0.0 for i in 1:G+1]
         for g in 1:G
             b[e, g] = x[g] - x[g+1]
@@ -502,7 +511,7 @@ function _planck_matrix(T::AbstractVector, E::AbstractVector)
     return b
 end
 
-# Group albedos (elements × groups): the gray albedo, overridden per component.
+# Group albedos (elements × groups), which are the gray albedo overridden per component.
 function _group_albedos(t::Target, α::Vector{Float64}, spec, G::Integer)
     A = repeat(α, 1, G)
     spec === nothing && return A
@@ -512,15 +521,16 @@ function _group_albedos(t::Target, α::Vector{Float64}, spec, G::Integer)
             throw(ArgumentError("$name: NaN group albedo (`nothing` keeps the gray albedo)"))
         es = elements(t, name)
         for g in 1:G
-            ag = a[g]                          # bound once: 1.10 does not narrow a[g]
+            ag = a[g]                          # bound once; 1.10 does not narrow a[g]
             ag === nothing || (A[es, g] .= Float64(ag))
         end
     end
     return A
 end
 
-# A cached factorization of the model to solve or precondition with: the one for `α`
-# when cached (`exact = true`), else the iterative preconditioner or the most recent one.
+# A cached factorization of the model to solve or precondition with. It is the one for `α`
+# when cached (`exact = true`), and otherwise the iterative preconditioner or the most
+# recent one.
 function _cached_lu(m::RadiationModel, α::Vector{Float64})
     c = m.cache
     lock(c.lock) do
@@ -567,9 +577,10 @@ function _group_radiosity(m::RadiationModel, A::Matrix{Float64}, S::Matrix{Float
     return B
 end
 
-# Groups h with their own albedos, thermalized: X_h - a_h∘(F X_h) - b_h∘R = S_h with
-# R = Σ_h (α - a_h)∘(F X_h), solved jointly by (unpreconditioned) GMRES; the iteration
-# matrix has spectral radius about max(a_h) + Σ_h b_h (α - a_h), small for hard groups.
+# Thermalized groups h with separate albedos satisfy X_h - a_h∘(F X_h) - b_h∘R = S_h with
+# R = Σ_h (α - a_h)∘(F X_h). They are solved jointly by (unpreconditioned) GMRES. The
+# iteration matrix has spectral radius about max(a_h) + Σ_h b_h (α - a_h), small for hard
+# groups.
 function _thermalized_groups(F::AbstractMatrix{Float64}, Ah::Matrix{Float64}, bh::Matrix{Float64},
                              Sh::Matrix{Float64}, α::Vector{Float64})
     n, Gh = size(Sh)
@@ -609,12 +620,12 @@ end
 """
     mband_recirculation(s::SpectralSolution, elems; lo = 1800) -> Float64
 
-Dewald's ``F_M`` on the elements `elems`: the ratio of recirculating to laser-produced
+Dewald's ``F_M`` on the elements `elems`, the ratio of recirculating to laser-produced
 M-band flux (photon energies ≥ `lo`, eV), where the laser-produced part is the first
-flight of the laser-heated spots' non-Planckian M-band (`F · S_M`) and the recirculating
-part everything else incident in the band (re-emission and the walls' thermal tail),
-both area-weighted over `elems`. Dewald et al., PoP 27 (2020), infer ``F_M`` ≈ 2 on the
-wall through the peak.
+flight of the non-Planckian M-band from the laser-heated spots (`F · S_M`) and the
+recirculating part is everything else incident in the band (re-emission and the thermal
+tail of the walls). Both parts are area-weighted over `elems`. Dewald et al., PoP 27
+(2020), infer ``F_M`` ≈ 2 on the wall through the peak.
 """
 function mband_recirculation(s::SpectralSolution, elems::AbstractVector{<:Integer}; lo::Real = 1800.0)
     g = _band_groups(s.edges, lo, Inf)

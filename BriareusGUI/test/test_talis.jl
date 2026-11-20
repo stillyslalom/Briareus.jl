@@ -1,6 +1,6 @@
-# The TaLIS checks: a small foil with one beam and a plate upstream
-# (the core's analytic case), then the coarse hohlraum with the NIF quads and a
-# diagnostic window, through a DesignSession.
+# This file tests the TaLIS checks through a DesignSession, first on a small foil with one
+# beam and a plate upstream (the analytic case of the core tests), then on the coarse
+# hohlraum with the NIF quads and a diagnostic window.
 
 @testset "TaLIS checks: foil and one beam (no GL)" begin
     spot = SuperGaussianSpot(0.3; order = 4.0)
@@ -43,15 +43,15 @@
     @test [n.text for n in notes if n.kind === :scope] == [TALIS_SCOPE_NOTE]      # one short line
     @test notes[end].kind === :source && occursin(TALIS_SOURCE, notes[end].text)
 
-    # the tolerance interpretation reaches talis_check: no tolerance removes r·tan(0.5°)
-    # at the plate's edge point (distance from TCC hypot(x0, 2))
+    # The tolerance interpretation reaches talis_check. With no tolerance, r·tan(0.5°) is
+    # removed at the edge point of the plate, at distance hypot(x0, 2) from TCC.
     @test edit_talis!(tl, :tolerance, "0") && tl.tolerance[] == 0
     start_talis!(tl, rv, t, [b]; spawn = false)
     c0 = only(x for x in tl.report[].rows if x.rule === :clearance_3w && x.component === :plate)
-    # (each worst is a lower bound within max(1e-4, 0.01 |worst|), the defaults)
+    # Each worst value is a lower bound within max(1e-4, 0.01 |worst|), the defaults.
     @test c0.worst - c3.worst ≈ tand(0.5) * hypot(x0, 2.0) atol = 0.01 * (c0.worst + c3.worst) + 2e-4
     @test edit_talis!(tl, :tolerance, "0.5")
-    # a pivot at the edge point gives no allowance there
+    # A pivot at the edge point gives zero allowance at that point.
     @test edit_talis!(tl, :pivot_point, "1.6, 0, 2")
     set_talis_pivot!(tl, :point)
     @test talis_kwargs(tl, rv).pivot == (1.6, 0.0, 2.0)
@@ -105,7 +105,7 @@
     start_talis!(tl2, rv, t, Beam{Float64}[]; spawn = false)
     @test tl2.status[] == "no beams are enabled"
 
-    # on a worker: the result arrives through the queue; a cancel drops it
+    # On a worker the result arrives through the queue, and a cancel drops it.
     q = Channel{Any}(Inf)
     tl3 = TaLISState()
     default_selection!(tl3, t)
@@ -129,35 +129,38 @@ end
     @test add_window!(sess.target)                            # closed, at φ = 90°
     tl = sess.talis
     @test tl.capture[] == [:hohlraum_wall] && :hohlraum_window_1 in tl.hardware[] && :hohlraum_cap_top in tl.hardware[]
-    @test !(:capsule in tl.hardware[]) && !(:capsule in tl.capture[])   # drive physics, not hardware
+    @test !(:capsule in tl.hardware[]) && !(:capsule in tl.capture[])   # drive physics; the capsule is not hardware
     @test talis_kwargs(tl, sess.review).leh == (:hohlraum_cap_top, :hohlraum_cap_bottom)
     @test :hohlraum_window_1 in sess.review.hardware[]                 # clearance checks it too
     @test task_status(sess, :talis)[1] === :todo
     start_talis!(sess; spawn = false)
     r = tl.report[]
-    # the template's pointing grazes the LEH lips (an LEH-clearance review, not a
-    # failure); apart from the closed window (hardware, in the 1% contours of beams
-    # landing beside it), the only failures are quads' incidence on the wall: their axes
-    # meet it below 70°, their f-cones' steepest rays (axis + 3.6° at f/7.9) above
+    # The pointing of the template grazes the LEH lips, which is an LEH-clearance review and
+    # does not count as a failure. Apart from the closed window, which is hardware in the 1%
+    # contours of beams that land beside it, the only failures are the incidence of quads on
+    # the wall. Their axes meet the wall below 70°, and the steepest rays of their f-cones
+    # (axis + 3.6° at f/7.9) above it.
     lip = [x for x in r.rows if x.rule === :clearance_3w && x.component in (:hohlraum_cap_top, :hohlraum_cap_bottom)]
     @test any(x -> x.status === :review, lip) && all(x -> x.status in (:pass, :review), lip)
     @test all(x -> occursin("LEH clearance", x.note), (x for x in lip if x.status === :review))
     bad = [x for x in r.rows if x.status === :fail && x.component !== :hohlraum_window_1]
     @test !isempty(bad) && all(x -> x.rule === :incidence_3w && x.component === :hohlraum_wall &&
-                                   x.nominal - atand(1 / (2 * 7.9)) < 70, bad)   # quads: f/7.9
+                                   x.nominal - atand(1 / (2 * 7.9)) < 70, bad)   # quads are f/7.9
     @test any(x -> x.status === :fail && x.rule === :clearance_3w, (x for x in r.rows if x.component === :hohlraum_window_1))
-    @test !any(x -> x.component === :capsule && x.rule !== :tas_stay_in, r.rows)   # stay-in: every part
+    @test !any(x -> x.component === :capsule && x.rule !== :tas_stay_in, r.rows)   # stay-in covers every part
     rules = Set(x.rule for x in r.rows)
     @test :tas_stay_in in rules && :clearance_1w in rules && :clearance_3w in rules
     @test any(x -> x.component === :hohlraum_window_1, r.rows)
     @test length(unique(x.beam for x in r.rows if x.rule !== :tas_stay_in)) == 48
     @test r.settings.capture == [:hohlraum_wall]
-    # every quad lands on the wall: capture rows have no free substrate edge to measure
+    # Every quad is deposited on the wall, so capture rows have no free substrate edge to
+    # measure.
     @test all(x -> x.component === :hohlraum_wall, (x for x in r.rows if x.rule === :capture_3w))
     @test occursin("48 beams", talis_brief(tl))
     st, txt = task_status(sess, :talis)
     @test st === :attention && occursin(r"\d+ fail, \d+ review", txt)  # LEH reviews, incidence fails
-    # roles follow the target: a removed window leaves the selection, a new one is checked
+    # The roles follow the target. A removed window leaves the selection, and a new one is
+    # checked.
     set_talis_role!(tl, :capsule, :hardware)
     edit_part!(sess.target, 1, :length, "10.0")
     @test :capsule in tl.hardware[] && !(:capsule in tl.capture[])        # kept as chosen

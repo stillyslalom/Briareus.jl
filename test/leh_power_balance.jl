@@ -33,7 +33,7 @@ using Briareus, Test
         leh = (eb.escaped[:leh_top] + eb.escaped[:leh_bottom]) / eb.source
         @test leh ≈ ref.leh atol = 3e-4
         @test eb.absorbed[:capsule] / eb.source ≈ ref.capsule atol = 3e-4
-        # the uniform-flux power balance reads the LEH loss 6.5–7% low
+        # The uniform-flux power balance gives an LEH loss 6.5–7% low.
         Aw = 2π * R * L + 2π * (R^2 - d^2 / 4)
         AL = π * d^2 / 2
         @test 0.06 < 1 - AL / ((1 - αw) * Aw + (1 - αc) * 4π * rc^2 + AL) / leh < 0.08

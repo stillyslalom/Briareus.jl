@@ -1,7 +1,7 @@
-# The Review step: worst-case beam-to-hardware clearance (`clearance`) of the enabled
-# beams on chosen hardware components, on a worker. `clearance` checks the beams in
-# batches and reports progress through its callback between them; canceling returns
-# the rows of the beams already checked. The step's TaLIS checks live in talis.jl.
+# The Review step computes the worst-case beam-to-hardware clearance (`clearance`) of the
+# enabled beams on chosen hardware components, on a worker. `clearance` checks the beams in
+# batches and reports progress through its callback between them; canceling returns the
+# rows of the beams already checked. The TaLIS checks of the step are in talis.jl.
 
 """
 Clearance-check quality presets: `:quick` (hardware sampled at triangle vertices and
@@ -90,11 +90,12 @@ end
 """
     default_selection!(rv::ReviewState, t::Target; lands_on = ())
 
-Choose the landing targets and hardware for a target's components: the beams land on
-the surfaces `lands_on` (names; a session passes the holders of the wall, observed and
-foil roles: a hohlraum's wall and capsule, every backlighter foil) and everything else
-(LEH caps, closed diagnostic windows, a main-target sphere) is checked. Components the
-selection was already made for keep their roles; new components get the default role.
+Choose the landing targets and hardware for a target's components: the beams land on the
+surfaces `lands_on` (names; a session passes the holders of the wall, observed and foil
+roles, such as the wall and capsule of a hohlraum and every backlighter foil), and
+everything else (LEH caps, closed diagnostic windows, a main-target sphere) is checked.
+Components the selection was already made for keep their roles; new components get the
+default role.
 """
 function default_selection!(rv::ReviewState, t::Target; lands_on = ())
     _update_roles!(rv.targets, rv.hardware, rv.known, surface_names(t),
@@ -216,7 +217,7 @@ function _finish_clearance!(rv::ReviewState, out)
     if out.err !== nothing
         rv.status[] = "failed: " * _errmsg(out.err)
     elseif rep.canceled
-        # nothing checked yet: keep no report
+        # Nothing has been checked yet, so no report is kept.
         rv.report[] = isempty(rep.rows) ? nothing : rep
         done, total = rv.progress[]
         rv.status[] = "canceled after $done of $total beams"

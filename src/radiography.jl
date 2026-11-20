@@ -1,9 +1,10 @@
-# Backlit x-ray radiography: a backlighter foil's He-α line through an object, a pinhole
-# or point projection, filters and a detector, recorded time-integrated or in gated
-# frames. The source is `backlighter_signal`'s chain (deposition, CE, angular
-# distribution); the point-spread function and the gates are the x-ray imager's. Design:
-# reference/diagnostics-design.md (phase 5); public values: research notes, "Backlit
-# radiography: the model and its public definitions".
+# This file models backlit x-ray radiography. The He-α line of a backlighter foil passes
+# through an object, a pinhole or point projection, filters and a detector, and is
+# recorded time-integrated or in gated frames. The source is the chain of
+# `backlighter_signal` (deposition, CE, angular distribution), and the point-spread
+# function and the gates are those of the x-ray imager. The design is in
+# reference/diagnostics-design.md (phase 5), and the public values are in the research
+# notes, "Backlit radiography: the model and its public definitions".
 
 """
     Radiograph(theta, phi; line, distance, pinhole = nothing, pinhole_distance = nothing,
@@ -13,57 +14,62 @@
                pulse, start = 0.0, mode = :integrated, times = Float64[], gate = 0.0,
                gate_shape = :gaussian)
 
-A backlit radiograph on the line of sight (θ, φ) (degrees, from the object toward the
-detector): the He-α `line` (an element `Symbol` of [`kshell_line_energy`](@ref), or keV)
-of the backlighter `foil` (a part of the target, behind the object), recorded on a
-detector `distance` mm from `center` (a point, or a part's name). The object plane, a
-`width` × `width` mm field about `center` normal to the line of sight sampled on
-`pixels` × `pixels` points, is the image's coordinate system; `up` (a chamber
-direction) is the image's up.
+A backlit radiograph on the line of sight (θ, φ), in degrees, from the object toward
+the detector. It records the He-α `line` (an element `Symbol` of
+[`kshell_line_energy`](@ref), or keV) of the backlighter `foil`, a part of the target
+behind the object. The detector lies `distance` mm from `center`, which is a point or
+the name of a part. The object plane is a `width` × `width` mm field about `center`
+normal to the line of sight, sampled on `pixels` × `pixels` points, and it is the
+coordinate system of the image. `up` (a chamber direction) is the up direction of the
+image.
 
-The optic:
+The optic is one of:
 - **Pinhole imaging** (`pinhole`, diameter mm, at `pinhole_distance` p mm from
-  `center`): each image point sees the foil through the pinhole and the object point,
-  at magnification `M = (distance − p)/p`. The point-spread function is the x-ray
-  imager's ([`XrayImager`](@ref)): the penumbra `d(1 + 1/M)` and a Gaussian of the
-  diffraction at the line energy and the detector pixel, on the object plane.
+  `center`): each image point views the foil through the pinhole and the object point,
+  at magnification `M = (distance − p)/p`. The point-spread function is that of the
+  x-ray imager ([`XrayImager`](@ref)). It combines the penumbra `d(1 + 1/M)` and a
+  Gaussian of the diffraction at the line energy and the detector pixel, on the object
+  plane.
 - **Point projection** (`pinhole = nothing`): each detector point receives every foil
-  element as a point source at its centroid, along its path through the object, so
-  the source's extent blurs the image (by the source width × `L/(s + L)` on the object
-  plane, `s` the foil's distance behind the object and `L = distance`). The image point
-  of a detector point is the object-plane crossing of its line to the foil's centroid,
-  and `M = (s + L)/s`. Only the detector pixel blurs further.
+  element as a point source at its centroid, along its path through the object. The
+  extent of the source therefore blurs the image, by the source width × `L/(s + L)` on
+  the object plane, with `s` the distance of the foil behind the object and
+  `L = distance`. The image point of a detector point is where its line to the centroid
+  of the foil crosses the object plane, and `M = (s + L)/s`. Only the detector pixel
+  adds further blur.
 
-The detector is flat, normal to the line of sight, and images are per mm² of it. For a
-pinhole (taken as a thin disk normal to the line of sight, of area `A = π(d/2)²`), an
-image point at `ρ` from `center` sees the foil along a ray at the angle `α` to the line
-of sight, `tan α = ρ/p`, of radiance `R`. The étendue between the pinhole and a
-detector area `dA_d` at the ray's end is `A cos α · dA_d cos α / D²`, with `D = (L −
-p)/cos α` the pinhole–detector distance along the ray, so the fluence is
-`R A cos⁴α/(L − p)²`: the on-axis value times `cos⁴α` (the projected pinhole area,
-the inverse square of the longer distance, and the detector's incidence cosine). In
-point projection each foil element's fluence `E_e f(cos θ)/(4π r²)`, at its
-distance `r` from the detector point, is times the ray's incidence cosine on the
-detector, `r̂ · d̂`. On the axis the pinhole's factor is 1 exactly; in point projection
-the incidence cosines differ from 1 by the source's angular extent,
-`(w/2)²/(2(s + L)²)` at most for a foil of width `w`. (Fluence normal to each ray, as
-[`backlighter_signal`](@ref) gives it, has none of these factors.)
+The detector is flat and normal to the line of sight, and images are per mm² of it. A
+pinhole is taken as a thin disk normal to the line of sight, of area `A = π(d/2)²`. An
+image point at `ρ` from `center` views the foil along a ray at the angle `α` to the line
+of sight, `tan α = ρ/p`, with radiance `R`. The étendue between the pinhole and a
+detector area `dA_d` at the end of the ray is `A cos α · dA_d cos α / D²`, with
+`D = (L − p)/cos α` the pinhole–detector distance along the ray. The fluence is
+therefore `R A cos⁴α/(L − p)²`, the on-axis value times `cos⁴α`. The factor combines the
+projected pinhole area, the inverse square of the longer distance and the incidence
+cosine on the detector. In point projection, the fluence `E_e f(cos θ)/(4π r²)` of each
+foil element, at its distance `r` from the detector point, is multiplied by the
+incidence cosine of the ray on the detector, `r̂ · d̂`. On the axis the pinhole factor
+is exactly 1. In point projection the incidence cosines differ from 1 by the angular
+extent of the source, at most `(w/2)²/(2(s + L)²)` for a foil of width `w`. Fluence
+normal to each ray, as [`backlighter_signal`](@ref) gives it, has none of these factors.
 
-The spectral response at the line is the product of the filters' transmission
-(`filter_transmission` materials with thicknesses in mm, NIST's tables where they cover
-the material and energy, as [`backlighter_signal`](@ref)), measured `tables`
-([`TabulatedCurve`](@ref)s, eV) and the detector's efficiency: `detector = (:Si, 0.015)`
-absorbs `1 − e^{−μρt}` (Henke photoabsorption, no dead layer), a `TabulatedCurve` is a
-measured efficiency, `nothing` absorbs every photon (`rg.filter_transmission` and
-`rg.efficiency` hold the two at the line). Images are of detected photons.
+The spectral response at the line is the product of the transmission of the filters,
+the measured `tables` ([`TabulatedCurve`](@ref)s, eV) and the efficiency of the
+detector. The filters are `filter_transmission` materials with thicknesses in mm, with
+the NIST tables where they cover the material and energy, as for
+[`backlighter_signal`](@ref). `detector = (:Si, 0.015)` absorbs `1 − e^{−μρt}` (Henke
+photoabsorption, no dead layer), a `TabulatedCurve` is a measured efficiency, and
+`nothing` absorbs every photon. `rg.filter_transmission` and `rg.efficiency` contain the
+two values at the line. Images are of detected photons.
 
-The source is that of [`backlighter_signal`](@ref) (`prepulse`, `ce`, `irradiance`,
-`angular` as there): the He-α energy of each foil element, emitted uniformly over the
-flat-top laser pulse of `pulse` ns from `start` ns (an assumption: the emission follows
-the laser). `mode` is `:integrated` (the whole emission) or `:gated` (one frame per
-time of `times`, ns, each recording the emission against a gate of FWHM `gate` ns,
-`:gaussian` or `:square`, of peak 1, as [`imager_record`](@ref)). The object is static
-over the emission: for a moving object, one radiograph per frame of its geometry.
+The source is that of [`backlighter_signal`](@ref), with `prepulse`, `ce`, `irradiance`
+and `angular` as there. It is the He-α energy of each foil element, emitted uniformly
+over the flat-top laser pulse of `pulse` ns from `start` ns, on the assumption that the
+emission follows the laser. `mode` is `:integrated` for the whole emission, or `:gated`
+for one frame per time of `times` (ns). Each gated frame records the emission against a
+gate of FWHM `gate` ns, `:gaussian` or `:square`, of peak 1, as in
+[`imager_record`](@ref). The object is static over the emission, so a moving object
+needs one radiograph per frame of its geometry.
 """
 struct Radiograph
     theta::Float64
@@ -128,10 +134,10 @@ function Radiograph(theta::Real, phi::Real; line, distance::Real, pinhole = noth
                       collect(Float64, times), Float64(gate), gate_shape)
 end
 
-# ---- the object's attenuation -------------------------------------------------------
+# ---- attenuation by the object ------------------------------------------------------
 
-# Every crossing (s, ±1) of the segment o + s r, 0 < s < 1, with the triangles of `b`,
-# the sign that of r · (e1 × e2), into `buf`
+# Collects into `buf` every crossing (s, ±1) of the segment o + s r, 0 < s < 1, with the
+# triangles of `b`, with the sign of r · (e1 × e2).
 function _crossings!(buf::Vector{Tuple{Float64,Int}}, b::BVH, o::Vec3, r::Vec3)
     empty!(buf)
     isempty(b.nodes) && return buf
@@ -158,11 +164,11 @@ function _crossings!(buf::Vector{Tuple{Float64,Int}}, b::BVH, o::Vec3, r::Vec3)
     return buf
 end
 
-# The length (mm) of the segment from `o` to `o + r` inside the closed surface `b`: the
-# signed sum of its crossings, Σ ±s |r|, whose magnitude is the inside length for a
-# consistently oriented surface (either way) and ends outside it. A crossing on an edge
-# or vertex shared by several triangles counts once (crossings of one sign within 1e-9
-# of each other in s).
+# Returns the length (mm) of the segment from `o` to `o + r` inside the closed surface
+# `b`. It is the signed sum of the crossings, Σ ±s |r|, whose magnitude is the inside
+# length for a consistently oriented surface (either orientation) and ends outside it. A
+# crossing on an edge or vertex shared by several triangles counts once, by merging
+# crossings of one sign within 1e-9 of each other in s.
 function _inside_length(b::BVH, o::Vec3, r::Vec3, buf)
     _crossings!(buf, b, o, r)
     sort!(buf)
@@ -175,8 +181,9 @@ function _inside_length(b::BVH, o::Vec3, r::Vec3, buf)
     return abs(S) * norm(r)
 end
 
-# The object `parts => material` as closed-surface BVHs and attenuation coefficients
-# (1/mm) at `hν` keV: `part => :Al` (the material's density) or `part => (:Al, ρ)`
+# Returns the object `parts => material` as closed-surface BVHs and attenuation
+# coefficients (1/mm) at `hν` keV, from `part => :Al` (the material density) or
+# `part => (:Al, ρ)`.
 function _object(t::Target, object, hν)
     bvhs, κ, parts = BVH[], Float64[], Symbol[]
     for (part, spec) in object
@@ -192,7 +199,7 @@ function _object(t::Target, object, hν)
     return bvhs, κ, parts
 end
 
-# transmission of the segment o → o + r through the object
+# transmission of the segment from o to o + r through the object
 function _object_transmission(bvhs, κ, o::Vec3, r::Vec3, buf)
     τ = 0.0
     for (b, k) in zip(bvhs, κ)
@@ -207,28 +214,30 @@ end
     radiograph(rg::Radiograph, target, deposition; object = (),
                model = kshell_ce_model()) -> NamedTuple
 
-The radiograph `rg` records of `target`, its backlighter foil driven by `deposition`
-(the laser power on each element, TW, as [`backlighter_signal`](@ref) takes it).
+The radiograph that `rg` records of `target`, with its backlighter foil driven by
+`deposition`, the laser power on each element in TW, as [`backlighter_signal`](@ref)
+takes it.
 
-`object` lists the parts that attenuate, `part => material` (the material's density) or
-`part => (material, density)` (g/cm³), materials as [`mass_attenuation`](@ref)'s: each
-part is a closed surface filled with its material, and along each ray the transmission
-is `exp(−Σ μ/ρ · ρ · L)`, `L` the ray's length inside each part. Where parts overlap their
-attenuations add, so a hollow shell is its outer surface with the shell's material and
-its inner surface with the negative density. The object's parts do not obstruct;
-every other surface part except the foil does (as hardware in
-[`backlighter_signal`](@ref)).
+`object` lists the parts that attenuate, as `part => material` (with the density of the
+material) or `part => (material, density)` (g/cm³), with materials as in
+[`mass_attenuation`](@ref). Each part is a closed surface filled with its material, and
+along each ray the transmission is `exp(−Σ μ/ρ · ρ · L)`, with `L` the length of the ray
+inside each part. Where parts overlap their attenuations add, so a hollow shell is its
+outer surface with the material of the shell and its inner surface with the negative
+density. The parts of the object do not obstruct, and every other surface part except
+the foil does, as hardware does in [`backlighter_signal`](@ref).
 
 Returns `(; images, open, transmission, weights, times, magnification, line, ce,
 sigma, extrapolated)`:
-- `images`: one matrix per frame (one for `:integrated`), detected photons per mm² of
-  detector at each object-plane point (row 1 at the top, `up`); per detector pixel,
-  times its area.
+- `images`: one matrix per frame (one for `:integrated`) of detected photons per mm² of
+  detector at each object-plane point (row 1 at the top, `up`). Per detector pixel, the
+  values are multiplied by its area.
 - `open`: the same over the whole emission without the object (the open field).
-- `transmission`: the whole emission's image over `open` (NaN where `open` is 0): the
-  object's transmission as the radiograph measures it, blurred.
-- `weights`: the fraction of the emission each frame records (1 for `:integrated`), so
-  `images[k] = weights[k] × transmission × open`; `times`: the frames' times.
+- `transmission`: the image of the whole emission over `open` (NaN where `open` is 0),
+  which is the transmission of the object as the radiograph measures it, blurred.
+- `weights`: the fraction of the emission that each frame records (1 for
+  `:integrated`), so `images[k] = weights[k] × transmission × open`; `times`: the times
+  of the frames.
 - `magnification`, `line` (keV), and from the source `ce` (the He-α energy over the
   laser energy), `sigma` (1σ of `ln CE`, by which every image is uncertain) and
   `extrapolated`.
@@ -267,8 +276,9 @@ function radiograph(rg::Radiograph, t::Target, dep::Deposition; object = (),
             ce = src.Ex / src.EL, sigma = src.σ, extrapolated = src.ext)
 end
 
-# the fluence (J/mm² of He-α at the detector, before the filters) with and without the
-# object at each object-plane point (`angular` passed through a function barrier)
+# Returns the fluence (J/mm² of He-α at the detector, before the filters) with and
+# without the object at each object-plane point, with `angular` passed through a
+# function barrier.
 function _radiograph_pixels(rg::Radiograph, t::Target, src, bvhs, κ, skip, c::Vec3, d::Vec3, fc::Vec3,
                             angular::A) where {A}
     k = rg.camera
@@ -286,7 +296,7 @@ function _radiograph_pixels(rg::Radiograph, t::Target, src, bvhs, κ, skip, c::V
             y = k.height / 2 - (i - 0.5) / k.ny * k.height
             q = c + x * k.right + y * k.up
             if rg.pinhole === nothing
-                # the detector point on the line from the foil's centroid through q
+                # the detector point on the line from the centroid of the foil through q
                 Pd = fc + (q - fc) * (dot(c + rg.distance * d - fc, d) / dot(q - fc, d))
                 tr = (o, r) -> _object_transmission(bvhs, κ, o, r, buf)
                 opn[i, j] = _point_fluence(t, fe, Ee, angular, Pd, skip, ε, nothing, d)
@@ -296,8 +306,8 @@ function _radiograph_pixels(rg::Radiograph, t::Target, src, bvhs, κ, skip, c::V
                 Pp = c + p * d
                 R, X = _foil_radiance(t, ftris, idx, Ee, angular, Pp, q - Pp, skip, ε)
                 R > 0 || continue
-                # cos⁴α of the ray's angle α to the line of sight, tan α = |q − c|/p (1
-                # exactly on the axis)
+                # cos⁴α of the angle α of the ray to the line of sight, tan α = |q − c|/p
+                # (exactly 1 on the axis)
                 c4 = 1 / (1 + (x^2 + y^2) / p^2)^2
                 f = R * π * (rg.pinhole / 2)^2 * c4 / (rg.distance - p)^2
                 opn[i, j] = f
@@ -308,8 +318,9 @@ function _radiograph_pixels(rg::Radiograph, t::Target, src, bvhs, κ, skip, c::V
     return raw, opn
 end
 
-# the fraction of the emission (uniform over the pulse) each gate records: the gates of
-# `imager_record` integrated over the pulse on 400 intervals of 64 points
+# Returns the fraction of the emission (uniform over the pulse) that each gate records.
+# The gates of `imager_record` are integrated over the pulse on 400 intervals of 64
+# points.
 function _emission_weights(rg::Radiograph)
     tg = collect(range(rg.start, rg.start + rg.pulse; length = 401))
     return [sum(_gate_weights(tg, _gate(rg.gate_shape, t0, rg.gate))) / rg.pulse for t0 in rg.times]

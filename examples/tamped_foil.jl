@@ -7,37 +7,44 @@
 #   julia --project=. examples/tamped_foil.jl nova            # ~2 min
 #   julia --project=. examples/tamped_foil.jl table [scale]   # ~3 min; scale of the drive (1.0)
 #
-# Gold: the power laws of Hammer & Rosen, Phys. Plasmas 10, 1829 (2003) (e = 3.4 T^1.6
-# ρ^-0.14 MJ/g, κ_R = 7200 T^-1.5 ρ^0.2 cm²/g, T in heV), P = 0.25 e/V, flux-limited
-# diffusion, a Marshak boundary at the incident temperature T_D on the front, as in
-# `examples/late_time_wall.jl` (which validates this wall against Hammer & Rosen's
-# self-similar solution). Here the wall is a foil of finite areal mass. Its rear radiates
-# into a cold, black absorber (vacuum, or a backing before the backing burns through) and
-# is either free (bare) or pushes on a backing of given areal mass, an ideal gas (γ = 5/3)
-# that takes no radiation: the backing's hydrodynamic hold on the gold alone.
+# The gold follows the power laws of Hammer & Rosen, Phys. Plasmas 10, 1829 (2003), with e =
+# 3.4 T^1.6 ρ^-0.14 MJ/g, κ_R = 7200 T^-1.5 ρ^0.2 cm²/g and T in heV, and P = 0.25 e/V. The
+# model uses flux-limited diffusion and a Marshak boundary at the incident temperature T_D
+# on the front, as in `examples/late_time_wall.jl`, which validates this wall against the
+# self-similar solution of Hammer & Rosen. In this example the wall is a foil of finite
+# areal mass. Its rear radiates into a cold, black absorber, which is vacuum or a backing
+# before the backing burns through. The rear is either free (bare) or pushes on a backing of
+# given areal mass. The backing is an ideal gas (γ = 5/3) that does not absorb radiation, so
+# it acts on the gold only through its hydrodynamic hold.
 #
-# Backing burnthrough: the flux F that leaves the gold's rear burns through the backing at
-# the measured x-ray ablation rate of the backing material, ṁ = A (F/σ(200 eV)⁴)^(3/4)
-# (the approximate T³ scaling of the rate with the drive temperature, here the temperature
-# whose blackbody flux is F). A (mg/cm²/ns at 200 eV) is fitted here to the burnthrough
-# ablation rates of Olson et al. (SAND2007-7414C, OSTI 1147322; Phys. Plasmas 18, 032706
-# (2011)), read from their figure: polyimide (C₂₂H₁₀N₂O₅, the measured material closest to
-# an epoxy) 4.8, beryllium 5.9; ×0.7–1.3 brackets the scatter and the material difference.
-# The flux emerges when the backing's areal mass has burned through.
+# The flux F that leaves the rear of the gold burns through the backing at the measured
+# x-ray ablation rate of the backing material, ṁ = A (F/σ(200 eV)⁴)^(3/4). This is the
+# approximate T³ scaling of the rate with the drive temperature, taken as the temperature
+# whose blackbody flux is F. A, in mg/cm²/ns at 200 eV, is fitted in this example to the
+# burnthrough ablation rates of Olson et al. (SAND2007-7414C, OSTI 1147322; Phys. Plasmas
+# 18, 032706 (2011)), read from their figure. It is 4.8 for polyimide (C₂₂H₁₀N₂O₅, the
+# measured material closest to an epoxy) and 5.9 for beryllium, and ×0.7–1.3 brackets the
+# scatter and the material difference. The flux emerges when the areal mass of the backing
+# has burned through.
 #
-# `nova`: bare and backed foils of 0.77–3 µm on Nova's 260 eV (t/1 ns)^0.15 drive against
-# the measured half-signal times (Lindl et al., Phys. Plasmas 11, 339 (2004), Fig. 4-6) and
-# `HeatFront`'s arrival. `table`: 1.5–3 µm with 35 µm of epoxy (1.185 g/cm³; Lester et al.,
-# Phys. Rev. E 114, L023201 (2026)) or 50 µm of Be on a public ignition-scale drive: N221204's
-# Dante 1 temperature from 3.3 ns (Pak et al., Phys. Rev. E 109, 025203 (2024) Fig. 1),
-# before that N210601's (Zylstra et al., Phys. Rev. E 106, 025202 (2022) Fig. 2) scaled by
-# 0.958 to join it, and a linear rise over 0.2–0.8 ns to the foot's first value; `scale`
-# multiplies it (the window's incident temperature is a few percent below Dante's). Columns:
-# `HeatFront`'s arrival; two calibrations of it to the 7.5 ns leading edge Lester et al.
-# measured through 2.5 µm of gold and 35 µm of epoxy (a heat-front coefficient and a
-# constant offset, each fitted on this drive); the 1-D gold's transmission onset (1%);
-# the emergence with `HeatFront`'s arrival, `BurnthroughAlbedo`'s transition and
-# transmission (`RosselandTransmission`) driving the backing; and the 1-D emergence.
+# `nova` runs bare and backed foils of 0.77–3 µm on the Nova drive of 260 eV (t/1 ns)^0.15
+# against the measured half-signal times (Lindl et al., Phys. Plasmas 11, 339 (2004), Fig.
+# 4-6) and the arrival of `HeatFront`. `table` runs 1.5–3 µm with 35 µm of epoxy (1.185
+# g/cm³; Lester et al., Phys. Rev. E 114, L023201 (2026)) or 50 µm of Be on a public
+# ignition-scale drive. The drive is the Dante 1 temperature of N221204 from 3.3 ns (Pak et
+# al., Phys. Rev. E 109, 025203 (2024) Fig. 1). Before that it is the temperature of N210601
+# (Zylstra et al., Phys. Rev. E 106, 025202 (2022) Fig. 2) scaled by 0.958 to join it, after
+# a linear rise over 0.2–0.8 ns to the first value of the foot. `scale` multiplies the
+# drive, since the incident temperature at the window is a few percent below that of Dante.
+# The columns are:
+# - the arrival of `HeatFront`;
+# - two calibrations of it to the 7.5 ns leading edge that Lester et al. measured through
+#   2.5 µm of gold and 35 µm of epoxy, a heat-front coefficient and a constant offset,
+#   each fitted on this drive;
+# - the transmission onset (1%) of the 1-D gold;
+# - the emergence with the arrival of `HeatFront` and the transition and transmission of
+#   `BurnthroughAlbedo` (`RosselandTransmission`) driving the backing;
+# - the 1-D emergence.
 
 using Briareus, Printf, LinearAlgebra
 
@@ -211,12 +218,12 @@ else
     t = collect(0.0:0.002:9.0)
     T = [interp(td, Td, x) for x in t]
     hf = HeatFront()
-    # calibration 1: the coefficient that puts 2.5 µm through at 7.5 ns on this drive
+    # Calibration 1 is the coefficient that puts 2.5 µm through at 7.5 ns on this drive.
     k75 = findlast(<=(7.5 + 1e-9), t)
     rate(x) = (max(x, 0.0) / 100)^(hf.temperature_exponent / hf.time_exponent)
     J = sum((t[k] - t[k-1]) * (rate(T[k]) + rate(T[k-1])) / 2 for k in 2:k75)
     kc = areal_mass(BurnthroughAlbedo(thickness = 2.5)) / (hf.coefficient * J^hf.time_exponent)
-    # calibration 2: the offset
+    # Calibration 2 is the offset.
     off = 7.5 - burnthrough_time(BurnthroughAlbedo(thickness = 2.5), t, T)
     @printf("drive ×%.2f: %s eV at 2.5, 4.5, 5.5, 6.5, 7.5, 8.5 ns; calibrated coefficient ×%.3f, offset %+.2f ns\n",
             scale, join((@sprintf("%.0f", interp(td, Td, x)) for x in (2.5, 4.5, 5.5, 6.5, 7.5, 8.5)), ", "), kc, off)

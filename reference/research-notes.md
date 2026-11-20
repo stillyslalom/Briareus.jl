@@ -17,7 +17,7 @@ heading or a bold bullet title).
 ## Contents
 
 Status: *current* unless marked; "in part" means some values were replaced later (the
-callout in the section says which).
+callout in the section states which).
 
 **Laser–plasma, facility data and file formats**
 - Cross-beam energy transfer (CBET); Wavelength detuning (NIF); Backscatter; Unconverted
@@ -219,7 +219,7 @@ Published Δλ values and sensitivities:
 | HYBRID-E (0.3 mg/cc) | 1–2 Å (1ω) | 40–50 µm P2/Å |
 | N210808 / N220919 / N221204 | 1.8 / 2.5 / 2.75 Å (1ω) | Peak cone fraction 33% |
 
-Rule of thumb: about 2.7 µm of hot-spot P2 per 1% of cone fraction (Pickworth 2020).
+A rule of thumb is about 2.7 µm of hot-spot P2 per 1% of cone fraction (Pickworth 2020).
 **H**
 
 **Split Δλ.** One Be shot ran the 30° cone 0.7 Å shorter than 23.5° to correct
@@ -228,7 +228,7 @@ the four-fold geometry of the inner cone (Michel DPP 2024). **M**
 
 ## Backscatter
 
-Practice: designers subtract the measured, time-dependent FABS/NBI backscatter from
+In practice, designers subtract the measured, time-dependent FABS/NBI backscatter from
 each cone's input power after CBET (Michel 2011). Recent designs fold it into the
 power multipliers instead (Kritcher 2024).
 
@@ -287,7 +287,7 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
   - Cost: 48 quads, both colors, on the 4116-element NIF hohlraum: 0.06 s on 4
     threads. No light reaches it except 1.8 mW of 2ω on the wall's outer side.
   - **Power fraction:** an input with no default (`ratio`, per color, relative to the
-    beam's 3ω power). Not found: a measured unconverted fraction vs. pulse shape (see
+    beam's 3ω power). No measured unconverted fraction vs. pulse shape was found (see
     "Still not found"). VisRad workspaces seen so far carry 5% / 5% of the total.
 
 ### Unconverted light over time (2026-11-01)
@@ -300,9 +300,9 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
   begin to form weakly ionized plasma on a metal surface (the guide cites Spaeth et
   al., "Description of the NIF laser", Fusion Sci. Technol. 69, 25 (2016)). The NIF
   prepulse exceeds 10⁸ W/cm² of 1ω about 3–5 ns before the nominal start of the pulse.
-  **H** for what the guide says; a guideline, not a criterion. Not given: the prepulse
-  level or shape, and where the 10⁸ W/cm² is reached (the 1ω footprint is the reading
-  taken here).
+  **H** for what the guide states. The value is a guideline, not a criterion. The guide
+  does not give the prepulse level or shape, or where the 10⁸ W/cm² is reached (the 1ω
+  footprint is the interpretation used here).
 - **Derived scale.** The 22 mm 1ω footprint is 4.84 cm² in the 3ω focal plane, so it is
   at 10⁸ W/cm² when a beamlet carries 0.48 GW (4.8e-4 TW) of 1ω. *Derived*, **M** (flat
   top at the nominal size).
@@ -409,7 +409,7 @@ fluxes lie below 10¹⁴ W/cm², as unconverted light does.
 Checks (`test/unconverted_source.jl`): a two-plate history solved by hand over two steps
 with a time-varying 1ω fraction (1e-12); NIF hohlraum histories against `solve` with
 `unconverted_deposition` at every step, for a constant fraction and for a falling 1ω
-fraction on per-cone pulses (1e-12); zero fractions reproduce the 3ω history bitwise;
+fraction on per-cone pulses (1e-12); zero fractions reproduce the 3ω history exactly;
 the secant's error on the two-plate system against the hand source change (1e-9).
 Cost and effect, measured on the 4116-element NIF hohlraum (`nif_gold`, 48 quads at
 8 TW on two per-cone pulses, 16 steps to 4 ns, 1ω fraction 0.08 falling to 0.02, 2ω
@@ -430,16 +430,16 @@ per-color response at its 1 TW-per-beam light (times the step's fraction) to the
 response, and the prepulse's flux as a fixed offset of the least squares (it is not
 retuned). As for the 3ω response, the conversions must not depend on intensity, so the
 per-color secant does not enter. Checks: `test/unconverted_source.jl`, a 1ω prepulse
-alone on the two-plate system by hand at a step before and one during the 3ω pulse
+checked by itself on the two-plate system by hand at a step before and one during the 3ω pulse
 (1e-12), and per-cone prepulses on per-cone pulses against `solve` with each color's
 `unconverted_deposition` at r_c P₃ω + prepulse_c (1e-12; mock squares near the axis,
 since NIF's miss the hohlraum's inside); a zero prepulse reproduces the history without one
-bitwise. `test/retune.jl` (constant albedo and conversion, mock squares that raise
+exactly. `test/retune.jl` (constant albedo and conversion, mock squares that raise
 the drive 5%): the reference retuned with its powers pinned gives its drive and
 shape (9e-16, 2e-16); the free retune returns those powers to 1e-9 (the bounded solver's
 tolerance; 1e-8 for the 3ω-only reference); a dropped bundle's retuned powers, run
 through `drive_history`, give the retune's predicted drive and shape (1e-15, 2e-16);
-zero fractions reproduce the retune without unconverted light bitwise.
+zero fractions reproduce the retune without unconverted light exactly.
 
 **The prepulse in the drive history (2026-11-02):** a drive history steps only at its
 `times`, so a prepulse before the 3ω pulse reached the GUI's irradiance checks only. The
@@ -459,21 +459,21 @@ in the wall's memory, each exact where it did not apply before:
   iteration at half its running maximum (it took `reference_temperature`, 250 eV, which
   put the dark wall on the heating branch at 250 eV and gave negative fluxes);
 - a cooled wall heated again (the step term of the release, `Fc < 0`, the surface layer
-  reabsorbed) could take more than its incident flux, a negative radiosity (the capsule's
-  Tr went to 0 at the first main-pulse step after a 1.25 ns gap); the radiosity is kept
-  ≥ 0 (albedo 0, no emission, the re-emitted flux booked as `L(T_h) − H`).
-Checks (`test/unconverted_source.jl`, "the prepulse in the drive history"): a
-prepulse-only history at -3, -2, -1 ns (constant albedo 0.8, an intensity-dependent
-conversion, 1ω and 2ω prepulses on mock squares) against `solve` with each color's
-`unconverted_deposition` at that step's prepulse power: Tr equal to the last bit, H to
-3e-16. On the Lindl wall, a 1ω prepulse of 0.1 TW per beam from -3 to 0 ns (prepulse Tr
-17.0 → 20.3 eV) raises the main pulse's capsule Tr by 9.5 eV at 0.25 ns (8.9 → 18.3),
-falling every step to 0.96 eV at 3 ns (28.9 eV); the same steps with a zero prepulse
-reproduce the history without one bitwise. With the prepulse stopping at -1 ns, the
-zero-power steps at -0.5 and 0 ns read 18.9 and 17.6 eV (the wall's re-emission alone, from
-19.1), and no radiosity is negative after the gap. GUI (`test_time_unconverted.jl`): without
-a prepulse the history's times are the pulses' firing times, unchanged; with one, the
-window's steps are added and match the core's history at the same times to 1e-12.
+  reabsorbed) could take more than its incident flux, a negative radiosity (the capsule's Tr
+  went to 0 at the first main-pulse step after a 1.25 ns gap); the radiosity is kept ≥ 0
+  (albedo 0, no emission, the re-emitted flux booked as `L(T_h) − H`). Checks
+  (`test/unconverted_source.jl`, "the prepulse in the drive history"): a prepulse-only
+  history at -3, -2, -1 ns (constant albedo 0.8, an intensity-dependent conversion, 1ω and
+  2ω prepulses on mock squares) against `solve` with each color's `unconverted_deposition`
+  at that step's prepulse power: Tr equal to the last bit, H to 3e-16. On the Lindl wall, a
+  1ω prepulse of 0.1 TW per beam from -3 to 0 ns (prepulse Tr 17.0 → 20.3 eV) raises the
+  main pulse's capsule Tr by 9.5 eV at 0.25 ns (8.9 → 18.3), falling every step to 0.96 eV
+  at 3 ns (28.9 eV); the same steps with a zero prepulse reproduce the history without one
+  exactly. With the prepulse stopping at -1 ns, the zero-power steps at -0.5 and 0 ns give
+  18.9 and 17.6 eV (only the re-emission of the wall, from 19.1), and no radiosity is
+  negative after the gap. GUI (`test_time_unconverted.jl`): without a prepulse the history's
+  times are the pulses' firing times, unchanged; with one, the window's steps are added and
+  match the core's history at the same times to 1e-12.
 
 **Not found:**
 - Garban-Labaune et al., PRL 48, 1018 (1982): CH absorption at 1.06/0.53/0.26 µm down
@@ -541,7 +541,7 @@ Confirmed features:
 - Multi-column ASCII time tables.
 - Per-element flux exports for rad-hydro input (MacFarlane 2003).
 
-Not documented in the manual: the `.vrw` layout. Two sample workspaces (2026-10-17)
+The manual does not document the `.vrw` layout. Two sample workspaces (2026-10-17)
 settled the text format; see "VisRad workspace files".
 
 ## State of the art (pointing design and tools)
@@ -701,7 +701,7 @@ distances are measured orthogonal to the beam.
   - Target to TAS: 5 mm above/below, 10 mm radially.
   - Diagnostics to 1ω light: a cone of 10 mm at TCC extruded to 25 mm at 1 m.
   - Diagnostics to the shroud swept volume: 10 mm.
-- **How the 0.5° enters.** The document gives no formula. Meaning (user, from facility
+- **How the 0.5° enters.** The document does not give a formula. Meaning (user, from facility
   practice, 2026-10-27): an insertion or assembly error of the target component. The
   beams must still clear with the component rotated up to 0.5° off nominal in the least
   favorable direction, whether the target is inserted rotated or the component is
@@ -749,7 +749,7 @@ figures. **H** Details beyond the summary above:
 - **Not on the summary slides.**
   - The 4.45 mm 1ω 10% offset sits 0.35 mm inside the User Guide's 4.8 mm nominal edge.
   - The User Guide (§5.6.2, 2024 rev.) words the curvature rule as "not larger than"
-    2 mm / 5 mm. TaLIS says "< 2 mm / < 5 mm"; Briareus uses the strict form.
+    2 mm / 5 mm. TaLIS states "< 2 mm / < 5 mm"; Briareus uses the strict form.
   - The User Guide adds: dimple half-side to radius "cannot be smaller than 0.25"
     (printed "0.25 mm"); horizontal planar targets have conjugate beams in the same
     hemisphere. **H**
@@ -780,7 +780,7 @@ Implementation (`src/talis.jl`, `talis_check`):
   such as the component's mount. It is added linearly to the `clearance` error set:
   pointing 50 µm + target 25 µm + hardware tolerance, and focus/(2F).
   - That double counts the positioning part, conservatively.
-  - Incidence takes no rule tolerance (2026-10-27; it took +0.5° and the widened
+  - Incidence does not take a rule tolerance (2026-10-27; it took +0.5° and the widened
     footprint before); the capture margin keeps the lateral allowance. Specular-reflection angles get −1° (a tilt by α turns a
     reflection by 2α).
 - **1ω footprint model.** *Derived*, **M**.
@@ -803,7 +803,7 @@ Implementation (`src/talis.jl`, `talis_check`):
   - The "sombrero" dimpled LEH shield is modeled as a flat annulus flagged
     `(:dimpled, r, half_side)`. The User Guide (§5.6.2) also needs dimple
     half-side/radius ≥ 0.25, so a dimpled surface without `half_side` is a `:review`
-    (2026-10-28; it passed on the radius alone before).
+    (2026-10-28; before, it passed on the radius only).
 - **Distances over whole triangles (2026-10-28).** An independent review found a 100 mm
   plate at z = 2 mm, crossed by a vertical beam but meshed as one quad, reported as
   passing 3ω clearance by 10.6 mm: the rules were evaluated only at triangle vertices
@@ -842,14 +842,14 @@ The GUI's default NIF hohlraum (10.1 × 5.75 mm, 3.1 mm LEHs, 0.9 mm capsule, th
   nominal 10% footprint; worst case 70.57° against 70°. That is 70.07° over the
   footprint grown by the errors and the lateral rule allowance, plus the 0.5° that
   Briareus adds to the incidence. With `tolerance = 0` these rows pass.
-- A ray trace at nominal puts no power on the caps.
+- A ray trace at nominal pointing deposits no power on the caps.
 
-Closed-form bound: the inner (23.5°) quad's best-focus 1% contour has a semi-axis of
+As a closed-form bound, the inner (23.5°) quad's best-focus 1% contour has a semi-axis of
 1.145 mm along φ̂. With the axis through the LEH center, that leaves
 1.55 − 1.145 = 0.405 mm to the lip along φ̂, before the f-cone, errors or tolerance.
 No 3.1 mm-LEH NIF design meets "1% contour > 0.5 mm from the LEH lip".
 
-The rule text does not separate the LEH of the target itself from hardware. It says
+The rule text does not separate the LEH of the target itself from hardware. It states
 "clearance to target features", and every 3ω violation leads to the same consequence: the
 configuration "must be assessed for blow-by by the backscatter working group". That is
 an assessment, not a prohibition. Interpretation adopted (**assumption**, not stated by
@@ -877,7 +877,7 @@ allowance.
 
 All from the manual. **H**
 
-- **Workspaces:** `.vrw`; the manual says JSON since v21.0.0, real 20.0.0/21.0.0 files
+- **Workspaces:** `.vrw`; the manual states JSON since v21.0.0, real 20.0.0/21.0.0 files
   are keyed text ("VisRad workspace files" below).
 - **Laser Beam Summary CSV columns:** Cluster, Beam ID, On/Off, Polar Ang, Azm Ang,
   Pt Ref-CS, Pt Geom, Pt Param-1/2/3, Focus offset, TC Pt Pos-x/y/z (cm), Power, DPR,
@@ -939,7 +939,7 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
   off by whether the file has pointing data for it
   (VR/power_sources/import_laser_beam_data_csv.html). **H**
 - NIF beam names are `B###`, e.g. B334, B421 in the same screenshot. **H**
-- Not documented: delimiter quoting, preamble lines, and whether the SST adds columns.
+- Delimiter quoting, preamble lines, and whether the SST adds columns are not documented.
   The reader finds the header by "Beam Aim Point" and ignores the rest.
 - No example data rows are published. The tests use synthetic rows.
 
@@ -1063,7 +1063,7 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
 
 ### Workspace `.vrw` and `.bti`
 
-- The manual says `.vrw` is JSON since v21.0.0 and "can be readily modified using
+- The manual states that `.vrw` is JSON since v21.0.0 and "can be readily modified using
   scripting tools" (VR/files/workspace_files.html). Real 20.0.0 and 21.0.0 workspaces
   are keyed text instead; `read_visrad_workspace` reads that format (next section). A
   JSON workspace (perhaps 21.1+) is rejected with an error. **H** for the text format
@@ -1078,7 +1078,7 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
 
 ### VisRad workspace files (2026-10-17)
 
-Read off two real workspaces: a NIF hohlraum with bundled STEP CAD
+The layout was read off two real workspaces: a NIF hohlraum with bundled STEP CAD
 (VisRad 20.0.0, 17 objects, 192 beams, ~20 MB) and a primitive hohlraum + foil
 (VisRad 21.0.0). Implemented in `src/visrad_workspace.jl`, `read_visrad_workspace`. The
 test fixture rebuilds the layout from rows copied from these files.
@@ -1102,14 +1102,14 @@ test fixture rebuilds the layout from rows copied from these files.
   calc.` flags. Then ten `Time-Dependent … for <name>:  # table times = N` lines
   (N = 0 in both files; the row layout of N > 0 is not seen), `Number of Bounding
   Volumes`. **H**
-- **Generalized meshes (type 13, CAD).** `Gen. mesh object origin: x/y/z` (= −Position
-  in every object), `Number of vertices`, `Number of surfaces`, `Node positions:`
+- **Generalized meshes (type 13, CAD).** `Gen. mesh object origin: x/y/z` (= −Position in
+  every object), `Number of vertices`, `Number of surfaces`, `Node positions:`
   (`index x y z`, cm, centered on the object's bounding-box centroid, 0-based) and
-  `Surface element connectivity:` (`index v1 v2 v3 -1`, all triangles). The manual: a
-  GM object's position defaults to its bounding-box centroid
-  (VR/grid/import_export_cad_files.html). Placement x = R·node + Position is consistent
-  with every object (all angles are zero in the file, so R is untested on meshes). **H**
-  for zero angles
+  `Surface element connectivity:` (`index v1 v2 v3 -1`, all triangles). The manual states
+  that a GM object's position defaults to its bounding-box centroid
+  (VR/grid/import_export_cad_files.html). Placement x = R·node + Position is consistent with
+  every object (all angles are zero in the file, so R is untested on meshes). **H** for zero
+  angles
 - **CAD normals are not reliable.** In the NIF workspace the inner hohlraum wall
   (r = 3.21 mm) faces away from the cavity on every triangle, and the next sheet
   (r = 3.24 mm) is mixed (556 out, 259 in). Edges are not shared between CAD faces
@@ -1236,7 +1236,7 @@ test fixture rebuilds the layout from rows copied from these files.
   - Briareus instead convolves the best-focus profile over the f-cone. That moves these
     wings by ~1% (`ncone = 1` against 13).
   - A blend with box half-widths c·a and c·b, a constant M, and I₀(z) renormalized
-    (fit: Γ ≈ 10, c ≈ 0.94, M ≈ 7.7) takes the minor-axis edge from −21% to −2% and
+    (fitted Γ ≈ 10, c ≈ 0.94, M ≈ 7.7) takes the minor-axis edge from −21% to −2% and
     keeps the core within 1.4%. It leaves the diagonals at +8% and +14%. Three
     parameters fitted to ~20 informative elements: suggestive, not identified. **L**
 - **Ruled out:**
@@ -1244,7 +1244,7 @@ test fixture rebuilds the layout from rows copied from these files.
     p × p grids).
   - Averaging the profile at the ray hit points.
   - Fixed 600-cell beamlets.
-  - An elliptical envelope cut alone (1.5–2.0).
+  - An elliptical envelope cut by itself (1.5–2.0).
   - Global or per-beam spot rotations, including quad-parallel square beams (±1.6–1.9°).
   - Axis or exponent changes. These fit the wings only by moving the core by 3–6%.
 - **Power on the tilted foil.** VisRad's foil total is 3.5999999 TW for 3.6 TW
@@ -1254,10 +1254,11 @@ test fixture rebuilds the layout from rows copied from these files.
   renormalizes each beam's deposited total, perhaps by its ray-grid capture fraction
   (1.00000 for all four beams here). **M**
 - **What would settle it.** The VisRad runs of the probe kits ("VisRad probe kits
-  (2026-10-27): results"). The intersection-point export (VR/files/laser_target_intpts_file.html:
-  a(z), b(z), n(z), f_SQ(z), ΔL_W(z), ΔL_H(z), M(z) at each hit) gives the defocus law
-  directly. Rerunning with the foil normal to the beams, where the distance from focus
-  barely varies, separates the focal profile from that law.
+  (2026-10-27): results"). The intersection-point export
+  (VR/files/laser_target_intpts_file.html) lists a(z), b(z), n(z), f_SQ(z), ΔL_W(z), ΔL_H(z)
+  and M(z) at each hit, which gives the defocus law directly. Rerunning with the foil normal
+  to the beams, where the distance from focus barely varies, separates the focal profile
+  from that law.
 
 #### VisRad JSON workspaces (2026-11-16)
 
@@ -1348,7 +1349,7 @@ fits below used the Briareus operator points with a free-form evaluator.
   radius in 1/e units), i.e. VisRad's spots are wider on the wall (3–8 mm past focus).
 - **Free-form profile fit.** With intensity P/(a(z)b(z)) g(q) and g a hat-basis
   function per cone (17 nodes, q ≤ 2.4), least squares over wall and window elements
-  reproduces VisRad to 1.09% rms: VisRad's profile is a function of q alone per cone,
+  reproduces VisRad to 1.09% rms: VisRad's profile is a function of q only, per cone,
   cut sharply at the envelope. Against the manual's a(z), the fitted g follows
   exp(−(q/s)^m) with s ≈ 1.09, m ≈ 5.3 (n₀ = 4.5) and s ≈ 1.03, m ≈ 8.6 (n₀ = 8):
   mostly a larger spot. With the semi-axes grown as below, the fitted g matches the n₀
@@ -1376,7 +1377,7 @@ fits below used the Briareus operator points with a free-form evaluator.
   γ = 0.67 (`VisRadProfile(; growth)`). Every beam has the default ρ = (ln 1000)^(1/n),
   so a dependence on ρ cannot be told from one on n. What a(FL) ≈ ρ R_lens/γ ≈ 1.5 ρ
   R_lens means in VisRad's terms (d(z), the lens ratio 0.4) is unknown.
-  **M** (inferred from VisRad output: one constant, fitted on one workspace)
+  **M** (inferred from VisRad output; one constant, fitted on one workspace)
 - **Validation** (`visrad_profile(ws)`: per-beam envelopes, γ = 0.67, through
   `DepositionOperator`; before → after):
 
@@ -1400,7 +1401,7 @@ fits below used the Briareus operator points with a free-form evaluator.
     peak ring at |z| = 2.7 mm is 3–4% low), inner-dominated ones 1.2%. Per-cone γ
     would give 1.1–2.0% per cone. δ4 stays 0.009 pp below VisRad's.
   - Totals on tilted surfaces: per-plane normalization puts 0.15% too much on the 20°
-    foil (VisRad: 20.80008 TW for 8 × 2.6, exact) and 0.06% on the 40° foil of the
+    foil (VisRad gives 20.80008 TW for 8 × 2.6, exact) and 0.06% on the 40° foil of the
     foil workspace
     (0.01% with the manual z_A). VisRad renormalizes each beam's total; not modeled.
   - Window patches in repointed get 1.0% more than in VisRad (n210808: 0.02%).
@@ -1483,7 +1484,7 @@ fits below used the Briareus operator points with a free-form evaluator.
   edges in the largest), with 1–25% of the shared edges joining patches of opposite
   winding (signed volumes up to 50× the bounding box before repair). After
   `orient_mesh` (consistent, closed solids facing out of their material) the volumes
-  are plausible (an LEH washer 6.2 mm across and 50 µm thick: 84 → 1.1 mm³), and the
+  are plausible (for an LEH washer 6.2 mm across and 50 µm thick, 84 → 1.1 mm³), and the
   hohlraum halves' inner wall (r = 3.20–3.21 mm) faces the axis and the outer
   (3.24 mm and beyond) away from it; as read, both faced out. `coarsen_mesh` at
   0.3 mm reduces the hohlraum halves only from 7,300 to 6,300 elements each: their
@@ -1501,13 +1502,13 @@ fits below used the Briareus operator points with a free-form evaluator.
   part, curved faster than 10° per element across its width, gives 14 elements per
   size² (pass a larger `angle` there). The design default `spacing = 0.85 size`
   (Poisson-disk seeds) was set on synthetic plates, tubes and cans, where it gives
-  0.9–1.1 elements per size²; `rmax = size` (rather than 0.75 size) avoids splitting
+  0.9–1.1 elements per size²; `rmax = size` (in place of 0.75 size) avoids splitting
   Lloyd cells into fragments (0.75 doubled the count). **H** (measured locally; the
   constants are engineering choices, **M**)
 - **Cavity selection (`enclosure`, 2026-10-17).** On the same workspace (oriented,
   `coarsen = 0.3`: 155k elements, 212k facets), 64 diffuse rays per element and the
-  gathered flux take 3.0–3.5 s on 8 threads (7.8 s on 3; kept set and fluxes bitwise
-  equal). From the capsule center the kept set is only the capsule and the inside of
+  gathered flux take 3.0–3.5 s on 8 threads (7.8 s on 3; the kept set and fluxes are
+  identical). From the capsule center the kept set is only the capsule and the inside of
   its tent (4.4k elements, open area 5e-4 mm²): the two tent films are closed solids in
   the CAD and seal the capsule into a pocket. With the tent left out, 15.3k elements
   (486 mm²) are kept: the inner walls and LEH-side end faces of the hohlraum halves
@@ -1543,39 +1544,37 @@ fits below used the Briareus operator points with a free-form evaluator.
   Float64 matrices (view factors and two cached factorizations) fill half the memory
   (`radiation_size`: 26.8k elements on 32 GB, *derived*); the drive is then laser
   only.
-- **The window's cavity and stalls (BriareusGUI, 2026-10-18, measured locally, H).**
-  Cavity selection on the window's remeshed elements against the library's faceted
-  two-pass (`visrad_target(...; remesh = 0.28, inside)`: select on the oriented CAD
-  facets, remesh the kept facets, select again), same objects, tent left out: one
-  selection 0.8 s (2.2 s with the pocket search) and 7,155 elements, 360 mm², against
-  5.3 s and 6,908 elements, 339 mm². The window keeps each part remeshed whole (it
-  draws it, deposits laser on it and checks clearance against it), so the faceted path
-  would add the remeshing of the kept facets to every cavity build; the 6% extra area
-  is whole elements straddling the cavity's edge (mostly a cap washer, 413 vs 295).
-  Element-size edits: building the `Target` of the 12 parts and of the 200k-facet
-  ghost took 1.2–1.5 s per edit (BVHs), now reused for identical components; a CAD
-  remesh runs on workers with the part drawn from its facets meanwhile. The ~1 s stalls
-  at the first drive result, the first coloring by a field and the first ghost were
-  JIT compilation (Makie's heatmap colormapping, the colorbar's first drawing, the
-  transparent mesh's first upload), not GC (≤ 0.26 s pauses at 3.3 GB live); the
-  window now compiles them before it opens.
-- **The window's target builds, capsule fit and drive end (BriareusGUI, 2026-10-18,
-  measured locally in the scripted Qt window on a NIF CAD workspace, 8 threads, H).**
-  `Target` of the 12 calculation parts (275k facets, 20k elements) 0.39–0.40 s, of the
-  4 drawn-only parts (141k facets) 0.18–0.19 s; the components themselves 1–5 ms (cached
-  parts). The CAD capsule's sphere fit 0.13 s (0.79 s at the first call: compilation).
+- **The window's cavity and stalls (BriareusGUI, 2026-10-18, measured locally, H).** Cavity
+  selection on the window's remeshed elements against the library's faceted two-pass
+  (`visrad_target(...; remesh = 0.28, inside)`: select on the oriented CAD facets, remesh
+  the kept facets, select again), same objects, tent left out: one selection 0.8 s (2.2 s
+  with the pocket search) and 7,155 elements, 360 mm², against 5.3 s and 6,908 elements, 339
+  mm². The window keeps each part remeshed whole (it draws it, deposits laser on it and
+  checks clearance against it), so the faceted path would add the remeshing of the kept
+  facets to every cavity build; the 6% extra area is whole elements straddling the cavity's
+  edge (mostly a cap washer, 413 vs 295). For element-size edits, building the `Target` of
+  the 12 parts and of the 200k-facet ghost took 1.2–1.5 s per edit (BVHs); the BVHs are now
+  reused for identical components; a CAD remesh runs on workers with the part drawn from its
+  facets meanwhile. The ~1 s stalls at the first drive result, the first coloring by a field
+  and the first ghost were JIT compilation (Makie's heatmap colormapping, the colorbar's
+  first drawing, the transparent mesh's first upload), not GC (≤ 0.26 s pauses at 3.3 GB
+  live); the window now compiles them before it opens.
+- **The window's target builds, capsule fit and drive end (BriareusGUI, 2026-10-18, measured
+  locally in the scripted Qt window on a NIF CAD workspace, 8 threads, H).** `Target` of the
+  12 calculation parts (275k facets, 20k elements) 0.39–0.40 s, of the 4 drawn-only parts
+  (141k facets) 0.18–0.19 s; the components themselves 1–5 ms (cached parts). The CAD
+  capsule's sphere fit 0.13 s (0.79 s at the first call, including compilation).
   `fit_surfaces` on that capsule (38k facets, sphere and fill tube) took 133 s
-  single-threaded, so the window's whole-part curved fit first checks that every
-  vertex lies on one algebraic sphere or cylinder (ms): none of the workspace's 14 CAD
-  parts is one surface as a whole (hohlraum halves: bore, walls, ends), so the fit is
-  neutral there; a sliver tube (the synthetic workspace) gets its cylinder. The ~1 s
-  GUI-thread gap at a drive's end was inside the window's refresh, not Qt: compilation
-  of the drive's result path (selection, drive and tree refreshes: 1.0 s and 0.9 s with
-  1.3–1.5 s compiled, the evaluation compiling on a worker meanwhile) and a full reset
-  of the model tree's rows (0.2–0.26 s, every delegate rebuilt) at every row-count
-  change. A precompiled drive (the package's workload) and row inserts/removals where
-  the tree changes bring the largest gap at the drive's end from 1.2 s to 0.31 s, of
-  which 0.23 s is a GC pause.
+  single-threaded, so the window's whole-part curved fit first checks that every vertex lies
+  on one algebraic sphere or cylinder (ms): none of the workspace's 14 CAD parts is one
+  surface as a whole (a hohlraum half has a bore, walls and ends), so the fit is neutral
+  there; a sliver tube (the synthetic workspace) gets its cylinder. The ~1 s GUI-thread gap
+  at a drive's end was inside the window's refresh, not Qt: compilation of the drive's
+  result path (selection, drive and tree refreshes: 1.0 s and 0.9 s with 1.3–1.5 s compiled,
+  the evaluation compiling on a worker meanwhile) and a full reset of the model tree's rows
+  (0.2–0.26 s, every delegate rebuilt) at every row-count change. A precompiled drive (the
+  package's workload) and row inserts/removals where the tree changes bring the largest gap
+  at the drive's end from 1.2 s to 0.31 s, of which 0.23 s is a GC pause.
 - **CAD surface fitting (2026-10-18).** `fit_surfaces` (region growing over patches
   sharing a vertex, least-squares plane/cylinder/sphere fits refined by Gauss–Newton,
   tolerance `max(1e-4 mm, 1e-3 min(R, extent))`, regions kept when their rms is under a
@@ -1596,16 +1595,16 @@ fits below used the Briareus operator points with a free-form evaluator.
     plus the facet deviation of the region of), 1.3 s: 74% of the area, the inner wall
     881 elements and 84.6 of its 86.7 mm² (elements straddling the wall's edges stay
     flat). **H** (measured locally)
-- **Curved quadrature on remeshed elements (2026-10-18).** The cylinder/sphere
-  quadrature (sub-triangle points projected radially, exact curved areas via
-  `_curved_area`) is exact in area for any element whose facets are a radial graph
-  over the surface, not only chord rectangles. Its cost was not: per-facet points made
-  a 12-facet element 6× (36× per pair) dearer than a primitive one. Elements of more than
-  two facets now lump the facets' pieces into cells of size/(2^level √2), as many as a
-  two-facet element has. Remeshed elements also need their centroid on their facets:
-  on a convex surface (a CAD capsule) the area centroid of an element folded across
-  facets lies inside the solid, and its visibility rays were blocked by the element
-  itself (every capsule element saw nothing). **H** (synthetic, see below)
+- **Curved quadrature on remeshed elements (2026-10-18).** The cylinder/sphere quadrature
+  (sub-triangle points projected radially, exact curved areas via `_curved_area`) is exact
+  in area for any element whose facets are a radial graph over the surface, not only chord
+  rectangles. Its cost was too high: per-facet points made a 12-facet element 6× (36×
+  per pair) dearer than a primitive one. Elements of more than two facets now lump the
+  facets' pieces into cells of size/(2^level √2), as many as a two-facet element has.
+  Remeshed elements also need their centroid on their facets: on a convex surface (a CAD
+  capsule) the area centroid of an element folded across facets lies inside the solid, and
+  its visibility rays were blocked by the element itself (every capsule element saw
+  nothing). **H** (synthetic, see below)
 - **Fitted vs flat CAD (2026-10-18), synthetic, Float32 STL round trip.** Interior of a
   latitude-longitude sphere (R = 2 mm, 60 × 120 bands, remeshed at 0.5 mm, 257
   elements): fitted, F_ij = A_j/4πR² to 5e-17 and an integrating sphere's incident flux
@@ -1649,7 +1648,7 @@ fits below used the Briareus operator points with a free-form evaluator.
 - **Flat CAD elements (2026-10-18).** A remeshed CAD element carries 6–46 facets (mean
   15 on the tutorial's walls, 23 on its capsule), and the flat path summed the
   point-to-polygon factor over each receiving facet and integrated each emitting facet
-  separately (16 sub-triangles each, then adaptive). Now: (1) the receiver is the
+  separately (16 sub-triangles each, then adaptive). Now, (1) the receiver is the
   element's outline when the point sees all of it from in front with every facet facing
   the same way (the contour integrand is divergence-free, so the facets' contours sum to
   the boundary's; exact for folded elements too), otherwise piece by piece (facets in one
@@ -1669,12 +1668,12 @@ fits below used the Briareus operator points with a free-form evaluator.
   a closed box of strips max |row − 1| 4.60e-3 (4.64e-3). Curved (fitted) elements of
   many facets use the same cells, rooted at level + 1 (the resolution of their point
   rule). Times (8 threads, main → now): tutorial flat model 12.4 → 2.7 s, fitted
-  1.2 → 1.1 s (primitives at 0.5 mm, 2,244 elements: 1.0 s); the synthetic
+  1.2 → 1.1 s (1.0 s for primitives at 0.5 mm, 2,244 elements); the synthetic
   thick-walled hohlraum of test/cadfit.jl at 0.5 mm (1,217 elements) flat 47.1 → 4.1 s,
   fitted 2.3 → 1.3 s; integrated results unchanged (capsule flux, a₂, a₄, LEH loss to
   ≤ 2e-6 relative or 1e-4 points; capsule rows identical to 4 digits). A flat CAD pair still costs ~5× a primitive pair: folded
   outlines have ~3× a quad's edges, and the cells' bookkeeping. Primitive targets
-  (1–2 facets per element) are bitwise unchanged. **H** (synthetic)
+  (1–2 facets per element) are unchanged. **H** (synthetic)
 - **Finely faceted curved CAD on the flat path (2026-10-18).** A slow drive reported on
   the GUI's synthetic sliver workspace (`sliver_workspace(4000)` in
   BriareusGUI/test/test_workspace.jl: a tube of 4,000 full-length strips, r = 3 mm,
@@ -1769,15 +1768,15 @@ fits below used the Briareus operator points with a free-form evaluator.
   strips, fan disks, remeshed at 0.3): fitted cone→d2 −5.9e-4, cone→cone +3.5e-4,
   d2→cone −3.8e-4 against flat −2.7e-3, −1.5e-3, −2.7e-3; view factors 0.6 s vs 1.3 s
   (8 threads). Cylinder, sphere and plane fits, and every result on targets without a
-  cone, are bitwise unchanged (seven primitive targets; the tutorial's half, washer,
+  cone, are unchanged (seven primitive targets; the tutorial's half, washer,
   capsule and tent cup fitted raw and remeshed). **H** (synthetic)
 - **Cones in the NIF CAD workspace (2026-10-18, local).** Raw facets, one thread; time
-  with cones vs without: hohlraum halves 1.1/0.8 s vs 0.7/0.6 s. Each half: the inner
+  with cones vs without: hohlraum halves 1.1/0.8 s vs 0.7/0.6 s. In each half, the inner
   end wall beside the LEH is a 84.47° cone facing the cavity (apex 5.789 mm from the
   waist plane, radius 2.153–2.363 mm, 3.04 mm², rms 0.25 µm; it meets the r = 2.15 mm
   LEH bore), and a 61.1° chamfer at the waist edge of the inner wall (r 3.21–3.25 mm,
-  0.19 mm², axis within 1.7e-3 rad of z). The LEH washers: a 77.14° chamfer on the outer
-  rim (r 3.065–3.082 mm, 0.35 mm², facing out). A waist sleeve: a 10.0° bore chamfer
+  0.19 mm², axis within 1.7e-3 rad of z). The LEH washers have a 77.14° chamfer on the outer
+  rim (r 3.065–3.082 mm, 0.35 mm², facing out). A waist sleeve has a 10.0° bore chamfer
   facing in (2.35 mm²) and two 45.0° chamfers facing out (1.72 mm² each), rms 2e-10 mm.
   Cones also absorb pieces of free-form faces (fillets) within tolerance: on the halves
   8–10 more cones of 0.001–0.12 mm², most with axes tilted 0.03–1.5 rad, rms 0.5–1 µm
@@ -1786,16 +1785,16 @@ fits below used the Briareus operator points with a free-form evaluator.
   cones; curved area 353.6 → 360.8 of 490 mm²; view factors no slower (10.8 s before,
   7.9 s with cones, 8 threads) and identical on the inner wall (self-view, wall-to-wall,
   6 digits). **H** (measured locally)
-- **Near-flat and small fitted regions (2026-10-18, local).** `curved_components` now
-  takes `maxradius` (relative to the part's bounding-box diagonal, 11 mm for a half)
-  and `minfraction` (relative to the part's area, 245 mm²); both off by default. Two
-  halves, remeshed at 0.3 mm, with cones: maxradius 1, 2, 5 alone → 127, 128, 131
-  components (the R = 23–670 mm spheres and cylinders are only ~10 of them; most of the
-  138 are small holes and edge faces); minfraction 1e-3, 3e-3, 1e-2 → 25, 16, 10
-  components with 356.6, 353.2, 344.1 mm² curved (of 360.8); minfraction 1e-2 keeps the
-  inner walls, outer sheets, steps and the two 84.5° cones. **H** (measured locally)
+- **Near-flat and small fitted regions (2026-10-18, local).** `curved_components` now takes
+  `maxradius` (relative to the part's bounding-box diagonal, 11 mm for a half) and
+  `minfraction` (relative to the part's area, 245 mm²); both off by default. Two halves,
+  remeshed at 0.3 mm, with cones and only `maxradius` set, maxradius 1, 2, 5 give 127, 128,
+  131 components (the R = 23–670 mm spheres and cylinders are only ~10 of them; most of the
+  138 are small holes and edge faces); minfraction 1e-3, 3e-3, 1e-2 → 25, 16, 10 components
+  with 356.6, 353.2, 344.1 mm² curved (of 360.8); minfraction 1e-2 keeps the inner walls,
+  outer sheets, steps and the two 84.5° cones. **H** (measured locally)
 - **Tori (2026-10-24).** `fit_surfaces` fits tori (`:torus`, in the default kinds) and
-  `TorusSurface` carries them into the radiation model. Fit: candidate axes from the
+  `TorusSurface` carries them into the radiation model. The fit takes candidate axes from the
   patch normals (the line their normal lines all meet, a linear complex: the two least
   eigenvectors of the form left after minimizing over the axis moment; the cone's two
   axes), each with a circle fit in the meridian half-plane, and starts from the patch's
@@ -1812,88 +1811,84 @@ fits below used the Briareus operator points with a free-form evaluator.
     mm) a large torus (R 13.5, r 10 mm) took a NIF part's cone and 40% of a cylinder
     beside it at rms 16 nm, and a fillet torus 9 boundary strips of the cylinder it
     blends into;
-  - band tessellations: strips with vertices only on their rims lie on any circle
-    through three rims, and four rims placed symmetrically (two cone bands at either end
-    of a cylinder) lie on one circle too: with tolerance `atol` the large torus above
-    came back through such rims, at round-off, over the cone and the cylinder's strips.
-  So tori are held to CAD round-off: tolerance `atol`, rms under `atol/16` (6 nm; the
-  NIF CAD tori fit at 0.1–5 nm), at least four evenly spaced points along the tube
-  circle (largest step under 3× the median past the empty arc), no plane, cylinder,
-  cone or sphere fitting the region, and merges that keep that rms. A torus within
-  2 tol of a sphere (R), cylinder (L²/8R) or cone/plane (L²/8r) is left to it, and a
-  torus growth that becomes one, or that a simpler surface fits to round-off, is given
-  up at its checkpoint; the patches of a rejected torus region (half its radius) grow no
-  torus again, and a torus starts from at most 64 patches (rings around CAD fan apexes
-  hold hundreds). Without these the cylinder–sphere–torus fit of the NIF capsule took
-  103–123 s (torus growths retracing the sphere and the fill tube's fans); with them
-  21 s against 18 s. A boxed closure in the LM step (`ntuple` over a reassigned matrix)
-  had made each torus fit 10× slower.
-  Synthetic (`test/cadfit.jl`): tilted and moved quarter-to-150° sections of R = 2,
-  r = 0.5 mm, fine (12.5k facets) and coarse (19° bands), through Float32 STL, facing out
-  or in, raw and remeshed with `reference`: one torus, R, r, center to 1e-6, axis to
-  1e-10. Fine fillet (all kinds): 7.9k / 32.8k / 65.5k facets in 0.13 / 0.51 / 1.6 s, one
-  region (without tori 4 s at 8k and ~80 s at 33k, quadratic; "Cost of fitting faces of
-  none of the kinds", below).
-  `TorusSurface` projection (rim-preserving since 2026-10-24): in the point's meridian
-  half-plane, inside the tube circle the nearest point of the circle (radially from the
-  spine point), on or outside it the circle's point at the same height on the point's
-  side of the spine (radially from the axis, as on a cone; the pole when above or below
-  the tube). The two agree on the circle. A rim (circle ψ = ψ0 about the axis) has its
-  chords at its height, displaced toward the axis by their sag δ: outside the tube for
-  ψ0 on the poles and the inner half (distance² r² + 2δr|cos ψ0| + δ²), so they map onto
-  the rim; inside it on the outer half, where only the outer equator (ψ0 = 0, the
-  horizontal is the radius) maps exactly. Facet points outside the tube lie within the
-  azimuthal sag of it horizontally (the meridional sag points inward), so the horizontal
-  map moves them by at most that sag: second order like the nearest point (max distance
-  from the nearest point on a quarter fillet 3.8e-2 / 9.6e-3 / 2.4e-3 / 6.0e-4 mm at
-  16 / 32 / 64 / 128 strips, ratio 4.00). Exact rims everywhere are not reachable by a
-  projection of points alone: exactness on every outer-half rim forces the horizontal
-  map throughout the inside of the outer half, whose tangential error ε tan ψ (depth ε)
-  is first order next to the poles (on a quarter fillet's cap strip, ~0.2 r Δψ). A
-  facet-aware map (barycentric in (φ, ψ)) would be exact everywhere but changes every
-  `surface_point` caller. Patch areas r |∮ (Rψ + r sin ψ) dφ| by Gauss–Legendre on edge
-  pieces, split by bisection where an edge crosses the tube circle (the integrand kinks
-  there); a fine subdivision of the projected facet agrees within its discretization error.
-  Covered to round-off (|error| ≤ 7e-16): closed torus, ψ ∈ [0, π], [−π/2, π/2],
-  [π/2, 3π/2], and the quarter fillet at 16 / 32 / 64 strips (before: +7.0e-3 / 1.8e-3
-  at 32 / 64, the cap-rim chords projecting past the rim); ψ ∈ [0, π/3] (rim at 60°)
-  +4.6e-2 / 1.1e-2 / 2.8e-3 (second order). The rounded hohlraum (rc = 1 mm) with its
-  corners as tori: fillet area exact (the frusta's chord polygon −15% / −3.8% / −1.0%
-  with 1 / 2 / 4 bands per corner), raw row sums max |1 − ΣF| 5.6e-3 / 3.0e-3 with 1 / 4
-  bands (frusta 7.1e-3 / 3.0e-3), on the fillets 6.0e-4 / 1.2e-3 (frusta 4.7e-3 /
-  2.2e-3; with the earlier projection 4.5e-5 / 1.8e-3, the one-band value a
-  cancellation of the cap rims' +1.8e-3 area against the quadrature). Exchange against
-  the frusta (Σ A_i F_ij): capsule–fillets −2.9e-3 / +1.5e-3 / +7.1e-4, fillets–LEHs
-  −9.6e-3 / −2.9e-3 / −1.5e-3 with 1 / 2 / 4 bands; `hohlraum` keeps its frusta (the
-  default 4 bands at h = 0.5; baselines). NIF CAD (14 parts other than the mount):
-  fits bitwise unchanged (fitting uses a model separate from the projection); the 16
-  tori's 11.2k elements 177.64 → 177.74 mm² (+6.0e-4): the full quarter fillets
-  (r 0.9 mm) from +2.1e-3 of their band to −2e-7, inner-half fillets (r 1.5 mm) from
-  −2.4e-3 to ≤ 1e-4, thin tori (r 25 µm, inner-half rims, azimuthal facets long against
-  r) +8–13% (a full one from −11% of its band to −1.3e-5), the convex round between
-  cones (rims −29°, +23°) unchanged to 1e-15, and a fillet (r 1.05 mm) whose region
-  takes a 0.4° sliver of cap past the pole −0.30%: facets lying nearly in the pole's
-  tangent plane are squeezed by the horizontal map (one 1e-3 mm² facet −91%), though
-  the band they tile is kept. Tori are not convex: their facets still occlude pairs
-  inside them.
-  NIF CAD workspace, its 14 parts other than the mount, raw facets, default kinds with
-  and without `:torus` (and cylinder–cone–sphere, cylinder–sphere): 9 parts bitwise
-  unchanged; on the other 5 every region that changes is a fillet patchwork replaced
-  whole, 29 small cones, cylinders and spheres (0.11–5.8 mm² per part) by 16 tori
-  (R 1.6–3.4 mm, r 0.025–1.5 mm, 0.31–61 mm² per part, which also take the fillet facets
-  that stayed unfitted), and on one part two spheres refitted (same patches, centers
-  1e-16 mm apart). The capsule (fill tube) is bitwise unchanged with every kind set,
-  no tori: with the default kinds its tapered tube is two cones (0.147°, 0.110°) at
-  round-off, with cylinders and spheres the 25 regions of "Cost of fitting faces of none
-  of the kinds" (tolerance-stopped cylinder pieces). Fit time for the 14 parts 9.0 → 4.3 s
-  (fillets no longer seed rejected growths); cylinder–cone–sphere 8.3 → 5.0 s;
-  cylinder–sphere 21.6 → 25 s (capsule 18 → 21 s). The 133k-facet mount (default
-  kinds, one thread): 1911 → 1948 regions, 1278 → 1100 s; 85 tori (347 mm², R 0.02–5.9
-  mm, r 0.02–1 mm, rms ≤ 6 nm) take 54 of the 61 regions that change (39 cones, 19
-  cylinders, 3 spheres; 7.4 mm²) whole, and every other region that changes or appears
-  shares vertices with a torus: a 106 mm² cylinder (R 3.58 mm) that
-  stayed unfitted before, and 0.3 mm² of small cylinders, cones and a sphere re-cut or
-  newly fitted beside fillets. **H** (measured locally and synthetic)
+  - band tessellations: strips with vertices only on their rims lie on any circle through
+    three rims, and four rims placed symmetrically (two cone bands at either end of a
+    cylinder) lie on one circle too: with tolerance `atol` the large torus above came back
+    through such rims, at round-off, over the cone and the cylinder's strips. So tori are
+    held to CAD round-off: tolerance `atol`, rms under `atol/16` (6 nm; the NIF CAD tori fit
+    at 0.1–5 nm), at least four evenly spaced points along the tube circle (largest step
+    under 3× the median past the empty arc), no plane, cylinder, cone or sphere fitting the
+    region, and merges that keep that rms. A torus within 2 tol of a sphere (R), cylinder
+    (L²/8R) or cone/plane (L²/8r) is left to it, and a torus growth that becomes one, or
+    that a simpler surface fits within round-off, is given up at its checkpoint; the patches
+    of a rejected torus region (half its radius) grow no torus again, and a torus starts
+    from at most 64 patches (rings around CAD fan apexes hold hundreds). Without these the
+    cylinder–sphere–torus fit of the NIF capsule took 103–123 s (torus growths retracing the
+    sphere and the fill tube's fans); with them 21 s against 18 s. A boxed closure in the LM
+    step (`ntuple` over a reassigned matrix) had made each torus fit 10× slower. Synthetic
+    (`test/cadfit.jl`): tilted and moved quarter-to-150° sections of R = 2, r = 0.5 mm, fine
+    (12.5k facets) and coarse (19° bands), through Float32 STL, facing out or in, raw and
+    remeshed with `reference`: one torus, R, r, center to 1e-6, axis to 1e-10. Fine fillet
+    (all kinds): 7.9k / 32.8k / 65.5k facets in 0.13 / 0.51 / 1.6 s, one region (without
+    tori 4 s at 8k and ~80 s at 33k, quadratic; "Cost of fitting faces of none of the
+    kinds", below). `TorusSurface` projection (rim-preserving since 2026-10-24): in the
+    point's meridian half-plane, inside the tube circle the nearest point of the circle
+    (radially from the spine point), on or outside it the circle's point at the same height
+    on the point's side of the spine (radially from the axis, as on a cone; the pole when
+    above or below the tube). The two agree on the circle. A rim (circle ψ = ψ0 about the
+    axis) has its chords at its height, displaced toward the axis by their sag δ: outside
+    the tube for ψ0 on the poles and the inner half (distance² r² + 2δr|cos ψ0| + δ²), so
+    they map onto the rim; inside it on the outer half, where only the outer equator (ψ0 =
+    0, the horizontal is the radius) maps exactly. Facet points outside the tube lie within
+    the azimuthal sag of it horizontally (the meridional sag points inward), so the
+    horizontal map moves them by at most that sag: second order like the nearest point (max
+    distance from the nearest point on a quarter fillet 3.8e-2 / 9.6e-3 / 2.4e-3 / 6.0e-4 mm
+    at 16 / 32 / 64 / 128 strips, ratio 4.00). Exact rims everywhere are not reachable by a
+    projection of the points only: exactness on every outer-half rim forces the horizontal
+    map throughout the inside of the outer half, whose tangential error ε tan ψ (depth ε) is
+    first order next to the poles (on a quarter fillet's cap strip, ~0.2 r Δψ). A
+    facet-aware map (barycentric in (φ, ψ)) would be exact everywhere but changes every
+    `surface_point` caller. Patch areas r |∮ (Rψ + r sin ψ) dφ| by Gauss–Legendre on edge
+    pieces, split by bisection where an edge crosses the tube circle (the integrand kinks
+    there); a fine subdivision of the projected facet agrees within its discretization
+    error. These cases are covered within round-off (|error| ≤ 7e-16): closed torus, ψ ∈ [0,
+    π], [−π/2, π/2], [π/2, 3π/2], and the quarter fillet at 16 / 32 / 64 strips (before:
+    +7.0e-3 / 1.8e-3 at 32 / 64, the cap-rim chords projecting past the rim); ψ ∈ [0, π/3]
+    (rim at 60°) +4.6e-2 / 1.1e-2 / 2.8e-3 (second order). The rounded hohlraum (rc = 1 mm)
+    with its corners as tori: fillet area exact (the frusta's chord polygon −15% / −3.8% /
+    −1.0% with 1 / 2 / 4 bands per corner), raw row sums max |1 − ΣF| 5.6e-3 / 3.0e-3 with 1
+    / 4 bands (frusta 7.1e-3 / 3.0e-3), on the fillets 6.0e-4 / 1.2e-3 (frusta 4.7e-3 /
+    2.2e-3; with the earlier projection 4.5e-5 / 1.8e-3, the one-band value a cancellation
+    of the cap rims' +1.8e-3 area against the quadrature). Exchange against the frusta (Σ
+    A_i F_ij): capsule–fillets −2.9e-3 / +1.5e-3 / +7.1e-4, fillets–LEHs −9.6e-3 / −2.9e-3 /
+    −1.5e-3 with 1 / 2 / 4 bands; `hohlraum` keeps its frusta (the default 4 bands at h =
+    0.5; baselines). NIF CAD (14 parts other than the mount): the fits are unchanged
+    (fitting uses a model separate from the projection); the 16 tori's 11.2k elements 177.64
+    → 177.74 mm² (+6.0e-4): the full quarter fillets (r 0.9 mm) from +2.1e-3 of their band
+    to −2e-7, inner-half fillets (r 1.5 mm) from −2.4e-3 to ≤ 1e-4, thin tori (r 25 µm,
+    inner-half rims, azimuthal facets long against r) +8–13% (a full one from −11% of its
+    band to −1.3e-5), the convex round between cones (rims −29°, +23°) unchanged to 1e-15,
+    and a fillet (r 1.05 mm) whose region takes a 0.4° sliver of cap past the pole −0.30%:
+    facets lying nearly in the pole's tangent plane are squeezed by the horizontal map (one
+    1e-3 mm² facet −91%), though the band they tile is kept. Tori are not convex: their
+    facets still occlude pairs inside them. NIF CAD workspace, its 14 parts other than the
+    mount, raw facets, default kinds with and without `:torus` (and cylinder–cone–sphere,
+    cylinder–sphere): 9 parts are unchanged; on the other 5 every region that changes is a
+    fillet patchwork replaced whole, 29 small cones, cylinders and spheres (0.11–5.8 mm² per
+    part) by 16 tori (R 1.6–3.4 mm, r 0.025–1.5 mm, 0.31–61 mm² per part, which also take
+    the fillet facets that stayed unfitted), and on one part two spheres refitted (same
+    patches, centers 1e-16 mm apart). The capsule (fill tube) is unchanged with every kind
+    set, no tori: with the default kinds its tapered tube is two cones (0.147°, 0.110°) at
+    round-off, with cylinders and spheres the 25 regions of "Cost of fitting faces of none
+    of the kinds" (tolerance-stopped cylinder pieces). Fit time for the 14 parts 9.0 → 4.3 s
+    (fillets no longer seed rejected growths); cylinder–cone–sphere 8.3 → 5.0 s;
+    cylinder–sphere 21.6 → 25 s (capsule 18 → 21 s). The 133k-facet mount (default kinds,
+    one thread): 1911 → 1948 regions, 1278 → 1100 s; 85 tori (347 mm², R 0.02–5.9 mm, r
+    0.02–1 mm, rms ≤ 6 nm) take 54 of the 61 regions that change (39 cones, 19 cylinders, 3
+    spheres; 7.4 mm²) whole, and every other region that changes or appears shares vertices
+    with a torus: a 106 mm² cylinder (R 3.58 mm) that stayed unfitted before, and 0.3 mm² of
+    small cylinders, cones and a sphere re-cut or newly fitted beside fillets. **H**
+    (measured locally and synthetic)
 - **Cost of `fit_surfaces` on finely faceted CAD (2026-10-18).** Not the sphere: a
   finely faceted sphere is one region grown from its first seed (lat-long spheres of
   10k and 40k facets, an icosphere of 20k: 0.01–0.07 s). The NIF CAD capsule part
@@ -1901,7 +1896,7 @@ fits below used the Briareus operator points with a free-form evaluator.
   degrees up to 801, so the patch-neighbor lists (patches sharing a vertex) held 4.4M
   entries (116 per patch), and each seed's two-ring start walked 1,600 lists of 1,600:
   83% of the time. Neighbors are now visited through each vertex once per pass, with
-  the same order of first occurrence, so results are bitwise unchanged (every region
+  the same order of first occurrence, so results are unchanged (every region
   of the workspace's 14 CAD parts, raw; the tutorial's parts raw and remeshed; synthetic
   frusta, capsules with tubes, tori). Capsule 0.50 → 0.11 s with the default kinds and
   121 → 20 s with `kinds = (:cylinder, :sphere)`; hohlraum halves 1.39/0.84 →
@@ -1933,9 +1928,9 @@ fits below used the Briareus operator points with a free-form evaluator.
   rejected growths stay under 512 patches (~200–500), so it is quadratic until they
   pass it (a torus kind would end that). NIF CAD workspace, its 14 parts other than the
   133k-facet mount, raw facets, kinds default / cylinder–cone–sphere / cylinder–sphere
-  (42 fits, shared machine): 41 bitwise unchanged (kind, surface, centroid, normal,
+  (42 fits, shared machine): 41 are unchanged (kind, surface, centroid, normal,
   patches, area, rms, max deviation, facing of every region); 8.3 → 8.6, 8.1 → 8.3,
-  59 → 22 s (capsule alone 56 → 18 s); the 133k-facet mount with the default kinds
+  59 → 22 s (56 → 18 s for the capsule only); the 133k-facet mount with the default kinds
   also unchanged (1911 regions), 1348 → 1278 s on one thread (that cost is still open).
   The capsule with cylinders and spheres changes:
   its tapered fill tube's tolerance-stopped cylinder pieces (rms ≈ tol/4) come out cut
@@ -1953,57 +1948,54 @@ fits below used the Briareus operator points with a free-form evaluator.
   the tube, too short to show the taper. The thresholds are patch counts, so a part
   faceted several times finer than the NIF parts would bring such marginal pieces
   under covers. **H** (measured locally and synthetic)
-- **Cost of fitting large CAD parts (2026-10-25).** Profiled `fit_surfaces` (default
-  kinds, one thread) on the 133k-facet NIF mount and on samples of it (the N patches
-  nearest its centroid). Before: 40k facets 26–30 s, 73% of it the merge of regions of
+- **Cost of fitting large CAD parts (2026-10-25).** Profiled `fit_surfaces` (default kinds,
+  one thread) on the 133k-facet NIF mount and on samples of it (the N patches nearest its
+  centroid). Before the change, 40k facets took 26–30 s, 73% of it the merge of regions of
   one kind (every pair rescanned after each merge, each pair recomputing both regions'
   extents: quadratic in the regions times the merges). The merge now tries each pair of
   region versions once (a pair's outcome depends on its two regions only) and keeps the
   tolerances, and the final fit of a growth reuses the last fit when the members are
-  unchanged. Bitwise unchanged (kind, surface, centroid, normal, patches, area, rms,
-  max deviation, facing) on 90 fits: the 14 other NIF parts with four kind sets, the
-  test shapes and a synthetic boss plate, and the mount samples; the full mount
-  identical to the 2026-10-24 run (1948 regions). Mount 1100 s → 29 s; samples 20k /
-  40k / 80k facets 7.4 / 26 → 2.9 / 6.0 / 17 s (now linear). Of the remaining time 53%
-  is the start fits on the seed rings (tori 29%, cones 13%), 37% refits while growing,
-  7% the merge. Comparisons must use one compile mode: the same code gives tori differing
-  by ~1e-13 compiled in the package image and compiled in the session (likely FMA).
-  Variable-radius fillet (spine ρ = 2 + r, tube r = 0.5(1 + 0.3 cos φ), all kinds):
-  16k / 26k / 37k / 50k facets 16 / 38 / 71 / 107 s; cylinder and cone growths end
-  tolerance-stopped (rms 0.41 of tol) at 200–370 patches, under the 512-patch covers,
-  so the cost is quadratic in that window and drops to ~N^1.3 once growths pass 512
-  (50k: 8,994 given up). No exact bound gives such a growth up early (the tolerance
-  grows with the region's extent, so its rms in tolerance units can fall); smaller
-  covers changed NIF parts before ("Cost of fitting faces of none of the kinds"), so
+  unchanged. Results are unchanged (kind, surface, centroid, normal, patches, area, rms, max
+  deviation, facing) on 90 fits: the 14 other NIF parts with four kind sets, the test shapes
+  and a synthetic boss plate, and the mount samples; the full mount identical to the
+  2026-10-24 run (1948 regions). Mount 1100 s → 29 s; samples 20k / 40k / 80k facets 7.4 /
+  26 → 2.9 / 6.0 / 17 s (now linear). Of the remaining time 53% is the start fits on the
+  seed rings (tori 29%, cones 13%), 37% refits while growing, 7% the merge. Comparisons must
+  use one compile mode: the same code gives tori differing by ~1e-13 compiled in the package
+  image and compiled in the session (likely FMA). Variable-radius fillet (spine ρ = 2 + r,
+  tube r = 0.5(1 + 0.3 cos φ), all kinds): 16k / 26k / 37k / 50k facets 16 / 38 / 71 / 107
+  s; cylinder and cone growths end tolerance-stopped (rms 0.41 of tol) at 200–370 patches,
+  under the 512-patch covers, so the cost is quadratic in that window and drops to ~N^1.3
+  once growths pass 512 (8,994 given up at 50k). No exact bound gives such a growth up early
+  (the tolerance grows with the region's extent, so its rms in tolerance units can fall);
+  smaller covers changed NIF parts before ("Cost of fitting faces of none of the kinds"), so
   none was adopted. **H** (measured locally and synthetic)
-- **Fitting CAD by default (2026-10-24, local).** Should `fit = true` follow `remesh`
-  in `cad_target`/`visrad_target`/the GUI (ROADMAP open question 1)? The NIF CAD
-  workspace, its 11 parts near the cavity (no mount, far parts or tent),
-  `visrad_target(...; orient = true, remesh = 0.6 or 0.3 (capsule half that),
-  inside = (0, 0, 0))`, 4 threads with other jobs running. Fit cost: `fit_surfaces` on
-  the parts' raw facets 7 s in all (halves 1.9–2.7 s; the 38k-facet capsule with its
-  fill tube 0.29 s with the default kinds: the quadratic case of the previous item needs
-  a face of none of the kinds), against ~220 s (0.6) and ~420 s (0.3) for the cavity
-  selection and remeshing. Components: 10 parts → 158 (0.6) / 159 (0.3) fitted, 68 with
-  `minfraction = 1e-3` (40 cylinders, 9 cones, 9 spheres, 9 rests, one part unsplit);
-  the capsule's mean flux and moments with 1e-3 are within 3e-4 and 0.04 points of
-  fitting everything (`:sampled` runs, below), so 1e-3 became `curved_components`' default. Left in with
-  `maxradius` off: cylinders of R 54–670 mm and spheres of R 0.94–6.4 mm besides the
-  capsule's (all of which `SphereKeepOut` would take by default). View factors, default
-  `:sampled` visibility: 47 → 49 s at 0.6, 177 → 161 s at 0.3; with `:centroid`
-  visibility at 0.6, 33 → 22 s. The 22× of the sliver tube (above) is a whole-part fit,
-  which the GUI already makes (`_whole_surface`). Accuracy against
-  `montecarlo_incident` on the flat facets (α = 0.7, a source on the inner walls,
-  4,000 paths per receiver), `:centroid` visibility: outer capsule flux flat +0.03%,
-  fitted +0.26% (MC `:element` 0.5096 ± 0.0003; the fitted capsule is the true sphere,
-  and `:hit` gives +1.3% over `:element`); halves (400 elements) flat −0.81%, fitted
-  −0.22%. **With the default `:sampled` visibility the
-  outer capsule's row sums are 0.21 (0.0–0.99) against 0.955 with `:centroid`, and its
-  flux 7× too low, flat or fitted; the halves' rows 0.79 against 0.91 (flux −15%).**
-  `_visibility_samples` averages each grid cell's sub-triangle points, and on an
-  element folded across the facets of a convex part (13.5 facets per capsule element)
-  that mean lies behind the facets, where every ray is blocked (the failure `Target`
-  avoids for the centroid by moving it onto the facets). Fix before relying on
+- **Fitting CAD by default (2026-10-24, local).** Should `fit = true` follow `remesh` in
+  `cad_target`/`visrad_target`/the GUI (ROADMAP open question 1)? The NIF CAD workspace, its
+  11 parts near the cavity (no mount, far parts or tent), `visrad_target(...; orient = true,
+  remesh = 0.6 or 0.3 (capsule half that), inside = (0, 0, 0))`, 4 threads with other jobs
+  running. As for the fit cost, `fit_surfaces` on the parts' raw facets 7 s in all (halves
+  1.9–2.7 s; the 38k-facet capsule with its fill tube 0.29 s with the default kinds: the
+  quadratic case of the previous item needs a face of none of the kinds), against ~220 s
+  (0.6) and ~420 s (0.3) for the cavity selection and remeshing. Components: 10 parts → 158
+  (0.6) / 159 (0.3) fitted, 68 with `minfraction = 1e-3` (40 cylinders, 9 cones, 9 spheres,
+  9 rests, one part unsplit); the capsule's mean flux and moments with 1e-3 are within 3e-4
+  and 0.04 points of fitting everything (`:sampled` runs, below), so 1e-3 became
+  `curved_components`' default. Left in with `maxradius` off: cylinders of R 54–670 mm and
+  spheres of R 0.94–6.4 mm besides the capsule's (all of which `SphereKeepOut` would take by
+  default). View factors, default `:sampled` visibility: 47 → 49 s at 0.6, 177 → 161 s at
+  0.3; with `:centroid` visibility at 0.6, 33 → 22 s. The 22× of the sliver tube (above) is
+  a whole-part fit, which the GUI already makes (`_whole_surface`). Accuracy against
+  `montecarlo_incident` on the flat facets (α = 0.7, a source on the inner walls, 4,000
+  paths per receiver), `:centroid` visibility: outer capsule flux flat +0.03%, fitted +0.26%
+  (MC `:element` 0.5096 ± 0.0003; the fitted capsule is the true sphere, and `:hit` gives
+  +1.3% over `:element`); halves (400 elements) flat −0.81%, fitted −0.22%. **With the
+  default `:sampled` visibility the outer capsule's row sums are 0.21 (0.0–0.99) against
+  0.955 with `:centroid`, and its flux 7× too low, flat or fitted; the halves' rows 0.79
+  against 0.91 (flux −15%).** `_visibility_samples` averages each grid cell's sub-triangle
+  points, and on an element folded across the facets of a convex part (13.5 facets per
+  capsule element) that mean lies behind the facets, where every ray is blocked (the failure
+  `Target` avoids for the centroid by moving it onto the facets). Fix before relying on
   `:sampled` CAD targets. **H** (measured locally) Fixed the same day: next entry.
 - **Sampled visibility on folded elements (2026-10-24, local and synthetic).** Cause
   confirmed on a public synthetic cavity (test/partial_visibility.jl: two `cad_half`
@@ -2019,7 +2011,7 @@ fits below used the Briareus operator points with a free-form evaluator.
   of the emitting element, rays toward the horizon of the facet under the sample that
   the element model (radiating from the mean plane) already counts. So an element of
   more than two facets no longer occludes the sample rays it emits (nor a receiving
-  element those it receives). Primitives keep `:sampled` bitwise unchanged (`==` on the
+  element those it receives). On primitives `:sampled` is unchanged (`==` on the
   bored cavity at 0.5 mm and `hohlraum(h = 0.8, capsule_h = 0.3)`). Raw factors
   (`closed = false`), a two-ring source on the driven walls, against `montecarlo_incident`
   (`:element`, 8,000 paths per receiver):
@@ -2059,7 +2051,7 @@ fits below used the Briareus operator points with a free-form evaluator.
   whole file facets): 8.4 s, 65 components, view factors 45.8 s, capsule −0.02%,
   halves −0.06%. Reports on the fitted target: `energy_balance` keyed by the 10 parts
   (68 with `by = :component`), components.csv 10 rows and no piece names,
-  `SphereKeepOut` default the capsule part alone (9 spherical components),
+  the `SphereKeepOut` default only the capsule part (9 spherical components),
   `show` "10 parts (68 components)". So fitting costs nothing measurable here and cuts
   the flux error 5–10×. **H** (measured locally)
 
@@ -2088,11 +2080,11 @@ fits below used the Briareus operator points with a free-form evaluator.
     and A₀₀ = 9.739.
   - It also gives A_L0 = A_L/√(2L+1); the example shows 1.143·√5 = 2.556 against
     A₂ = 2.563.
-  - Not stated: the fit weights and the Condon–Shortley phase. `visrad_legendre_fit`
+  - The fit weights and the Condon–Shortley phase are not stated. `visrad_legendre_fit`
     and `visrad_ylm_fit` are unweighted and have no phase. **L**
 - In VisRad, the grid size of Sphere, Cylinder, Cylindrical Hohlraum and similar
   objects is the outer wall; the inner wall lies inward by the Wall Thickness
-  (VR/intro/revision_history.html, v21.0.0). **H** The benchmark kit's README says so.
+  (VR/intro/revision_history.html, v21.0.0). **H** The benchmark kit's README states so.
 
 ### VisRad probe kits (2026-10-27): results
 
@@ -2124,8 +2116,8 @@ spatial profile parameters" on.
   plates at ρ = 1.2 and the default, and a hohlraum's wall hits) the forms hold to
   5 × 10⁻⁵ (a, b), 1.4 × 10⁻⁴ (n), 5 × 10⁻⁴ absolute (f_SQ) and 1.3 × 10⁻³ (ΔL). The ΔL
   slope is constant to 0.04% across plates, cones and ρ. **H** (fit to the parameters
-  VisRad exports). Not seen: any dependence on the final-optic distance or on F other than
-  through these forms (every run had 769.5 cm and f/20.755). **L** for other F.
+  VisRad exports). No dependence on the final-optic distance or on F other than through
+  these forms was seen (every run had 769.5 cm and f/20.755). **L** for other F.
 - **The profile.** The manual's blend, I = I₀(z) exp(−α) with
   α = f_SQ [(|x|/ΔL)^M + (|y|/ΔL)^M] + (1 − f_SQ) q^(n/2), x, y on the spot axes,
   evaluated with these parameters at the z of each point, leaves one unknown, M(z).
@@ -2138,7 +2130,7 @@ spatial profile parameters" on.
     parameter, the 48 plates are within 0.05–0.22% rms per element (elements above 1%
     of peak). The tabulated fit it replaces (`_VR_MEASURED`) left 0.5–4.5% on the same
     plates.
-  - The cut-off: on the default-ρ plates an elliptical cut at q = ρ leaves 1.7–2.0% at
+  - On the default-ρ plates an elliptical cut at q = ρ leaves 1.7–2.0% at
     15 mm, and a cut on α at ln 1000 (10⁻³ of the local peak) or none leaves 0.13–0.17%.
     On ρ = 1.2 plates (z = 0 and 10 mm) a cut at q = ρ leaves 4–6%; the fit improves up
     to a cut at ≈ 1.2ρ and is flat beyond, so ρ = 1.2 cuts nothing visible above
@@ -2164,7 +2156,7 @@ spatial profile parameters" on.
 - **Envelope ratio.** VisRad 21 replaced ratios of 2.0 and 3.0, written into the
   workspace, with the default (ln 1000)^(1/n₀) (1.53645 and 1.49576 in the saved file);
   1.2 was kept. `VisRadProfile` caps ρ at the default likewise. The lens radius ratio
-  (0.2, 0.4, 0.8) changes no profile parameter by more than 0.03%. **H**
+  (0.2, 0.4, 0.8) does not change any profile parameter by more than 0.03%. **H**
 - **Implemented** in `VisRadProfile` (2026-10-27), replacing the tables `_VR_MEASURED`,
   the hyperbolic semi-axes with growth γ = 0.67, and the `focal_length`, `growth` and
   `measured` options. The normalization ∫∫ exp(−α) is tabulated per spot in |z| (0.1 mm
@@ -2245,7 +2237,7 @@ spatial profile parameters" on.
   neither the beam's full power (2.49, 3.26, 1.73) nor no renormalization (1 within
   2 × 10⁻⁴). It fits a rescale of each beam to P × f_hit, with f_hit the share of some
   ray grid that hits an object. The grid is not identified: the 25 × 24 "cone power
-  frac" grid of the capture report is ruled out (50 × 48 gives a bit-identical
+  frac" grid of the capture report is ruled out (50 × 48 gives an identical
   deposition), and a search over polar and square grids found nothing beyond chance.
   **M**
 
@@ -2264,13 +2256,13 @@ A subagent's search found a model that does far better:
   1.4 × the cone half-angle per 1/e radius), as from a virtual source 19 mm (major axis)
   and 12 mm (minor) upstream of focus. Shadows and holes are magnified.
 
-Under it the per-element rms is 5.6% (washer foil), 6.5% (washer), 11.6% (sphere
-foil, mostly single-beam shadow edges) and 0.6% (sphere), against 20–33% for the axis
-model. Along element cuts the sphere foil matches element by element. **M** (both
-occluders sit 5 mm upstream, so an angle ∝ spot position and a fixed virtual point
-cannot be told apart; occluders at ~2 and 10 mm would). Not implemented: the shadow
-direction depends on the point's spot coordinates, so the visibility mask would depend
-on aim and spot, which a `DepositionOperator` built once per geometry does not allow.
+Under it the per-element rms is 5.6% (washer foil), 6.5% (washer), 11.6% (sphere foil,
+mostly single-beam shadow edges) and 0.6% (sphere), against 20–33% for the axis model. Along
+element cuts the sphere foil matches element by element. **M** (both occluders sit 5 mm
+upstream, so an angle ∝ spot position and a fixed virtual point cannot be told apart;
+occluders at ~2 and 10 mm would). The leaning shadows are not implemented: the shadow
+direction depends on the point's spot coordinates, so the visibility mask would depend on
+aim and spot, which a `DepositionOperator` built once per geometry does not allow.
 
 #### Spot rotation
 
@@ -2295,9 +2287,9 @@ mm outside the 10% contour, and plates tilted 68.0–69.7° through focus. Store
   cone within 0.05 mm of Briareus's envelope there. **H**
 - **Capture.** Fractions 0.983 and 0.993 at m = 0.3 and 0.4 mm, 1 from 0.6 mm: the
   fixed 0.5 mm again. **H**
-- **Incidence.** VisRad reads tilt + 1.384–1.390° on all five plates, toward either
+- **Incidence.** VisRad gives tilt + 1.384–1.390° on all five plates, toward either
   spot axis: the steepest ray of the f-cone (half-angle 1.380°, stored in each beam row),
-  not the ±1.64° ray-grid model. On normal plates it reads 1.95° = √2 × 1.38°, the
+  not the ±1.64° ray-grid model. On normal plates it gives 1.95° = √2 × 1.38°, the
   corner of a square cone of half-width 1.38°; a square cone also gives the tilted
   plates' extra 0.005–0.01°. **H** `talis_check` now adds atan(1/(2f#)) to the axis
   angle.
@@ -2458,7 +2450,7 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
   supports the reading of their pairing in the previous section: the as-built areal
   mass with the opacity of the expanded foil. At solid density K would be 1.8× larger
   (ρ^0.2), τ ≈ 11.
-- Held fixed: the density of the expanded foil (1 g/cm³ implicitly, through the
+- The density of the expanded foil is held fixed (1 g/cm³ implicitly, through the
   normalization). In the windows tutorial (NIF-like drive, 2 mm windows) the foils
   burn through at wall temperatures of 150–285 eV and the wall peaks near 310 eV, so
   the temperature-following transmission is about a tenth smaller over the pulse than
@@ -2485,7 +2477,7 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
   l = 1–3 to 0.02%, l = 4 unchanged, 0.14/0.09 mm rms; cannot restore the 3.4% drive.
   This replaces the earlier look's "re-pointing only trims m = 2" (two open 2 × 2 mm
   windows, a much larger loss).
-- In time: settings found at the peak overshoot before burnthrough (ΔP2 −1.3 to −1.4%,
+- Over time, settings found at the peak overshoot before burnthrough (ΔP2 −1.3 to −1.4%,
   m = 2 1.1% of the opposite phase, 5 ns to burnthrough). Per-quad power trims switched
   on with the burnthrough (NIF quads take their own pulse shapes) hold P2 and m = 2 at
   the no-window values throughout (m = 2 ≤ 0.04%), for +3.3% laser energy.
@@ -2591,7 +2583,7 @@ shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped
   A dropped bundle's mode 1 is fixed mostly by the quads around it; a stay of order
   1e-4 keeps most of the correction with powers within a few percent of the reference
   for all but a few quads.
-- Limits: the per-quad caps here are relative to the reference powers, not NIF's
+- The per-quad caps here are relative to the reference powers, not NIF's
   per-quad energy or power capability (which depends on the pulse and the laser's
   state). The view factors and pointing are the reference's through the pulse.
 - Remeasured 2026-11-02 with the level held (next section) and the active-set polish;
@@ -2612,7 +2604,7 @@ method change, no new constants.
   free retune |drive − 1| 1.4e-5 → 2.9e-7, worst predicted ε₁ 3.5e-5 → 1.8e-5; with
   `stay = 1e-2` 1.4% → 5e-13 (ε₁ 3.62 → 3.63%); with `smooth = 0.1` 74% → 1e-8 (the
   penalty had let smoothing hold the powers near the first step's; ε₁ 1.2 → 3.2%).
-  Without `stay` or `smooth` the 3ω capsule retune before the change was bitwise
+  Without `stay` or `smooth` the 3ω capsule retune before the change was
   identical to that of the earlier code.
 - **Solver.** L-BFGS-B stopped at a projected gradient near 2e-6 of the gradient's scale
   on these rank-deficient problems (46 quads, 25 rows); active-set Gauss–Newton steps
@@ -2652,7 +2644,7 @@ Source: Kritcher et al., Phys. Rev. E 106, 025201 (2022), Table I, Secs. II A an
   the capsule; per 0.1 mm of diameter over 3.0–3.6 mm, +1.6% escape, −0.5% capsule.
 - Briareus (`closed = true`, h = 0.4) against a Monte Carlo photon walk in the exact
   geometry: within 1e-4 (10⁸ histories, σ 3.5e-5). The uniform-flux power balance
-  reads the LEH loss 6.5–7% low and the capsule's share ~1% high.
+  gives the LEH loss 6.5–7% low and the capsule's share ~1% high.
 - Required-power ratio 3.1 vs 3.64 mm at fixed capsule drive: 0.890 (α_w 0.925),
   0.905 (α_w 0.90), against 441/487 = 0.906. This is consistent in size only, since the
   shots also changed Δλ, pointing and pulse length. **L**
@@ -2711,18 +2703,17 @@ Findings:
 
 `view_factors(...; visibility = :sampled, visibility_grid = g)` (also through
 `RadiationModel(t; visibility = :sampled)` and a `Scenario`'s `viewfactor_kw`). Each
-element's area is lumped into a g × g grid of its tangent plane (area-weighted points);
-up to four of those points (the extremes along ±e₁, ±e₂) are probes. Per facing pair,
-after the centroid ray: probe rays from each element's probes to the other's (lifted)
-centroid. All agreeing with the centroid ray → the `:centroid` factor, bitwise;
-otherwise the g² × g² sample rays give a visible fraction weighted by
-cosθᵢ cosθⱼ / r² that scales the unobstructed factor (computed even when the centroid
-ray is blocked). One fraction per unordered pair: reciprocity exact. Rays use the facets
-and the curved-surface skip rule of the centroid ray. Default `:centroid` checked equal
-(`==`) to main's `viewfactors.jl` on `hohlraum(h = 1, capsule_h = 0.4)` and the bored
-cavity at 1 mm.
+element's area is lumped into a g × g grid of its tangent plane (area-weighted points); up
+to four of those points (the extremes along ±e₁, ±e₂) are probes. Per facing pair, after the
+centroid ray: probe rays from each element's probes to the other's (lifted) centroid. When
+all agree with the centroid ray, the factor is exactly the `:centroid` factor; otherwise the
+g² × g² sample rays give a visible fraction weighted by cosθᵢ cosθⱼ / r² that scales the
+unobstructed factor (computed even when the centroid ray is blocked). With one fraction per
+unordered pair, reciprocity is exact. Rays use the facets and the curved-surface skip rule
+of the centroid ray. Default `:centroid` checked equal (`==`) to main's `viewfactors.jl` on
+`hohlraum(h = 1, capsule_h = 0.4)` and the bored cavity at 1 mm.
 
-Geometry: the primitive bored cavity of the CAD tutorial (R 2.875, L 9.4, 0.1 mm LEH
+The geometry is the primitive bored cavity of the CAD tutorial (R 2.875, L 9.4, 0.1 mm LEH
 bores of radius 1.55 with `nphi ÷ 2` facets, 20 µm waist gap, capsule 0.9, apertures on
 the LEHs and the gap exit), `closed = false`, 8 threads. Largest |row sum − 1| (rms):
 
@@ -2746,19 +2737,20 @@ bore (sagitta 0.05 mm on a 0.1 mm bore) over-shadows rays from the LEH rim, whic
 fractions then reproduce faithfully. With 64-facet bores at 0.5 mm the residual on the
 walls (4.5e-3, near the waist) is the 0.3 mm capsule's faceting.
 
-Reference: visible fractions of 56 changed pairs at 0.5 mm (the 30 of largest exchange
-change and 26 at random), against kernel-weighted visibility over 256 × 256 points per
-facet pair (same rays, no grid): centroid error mean 0.42, max 0.49; sampled (g = 4)
+The reference is the visible fractions of 56 changed pairs at 0.5 mm (the 30 of largest
+exchange change and 26 at random), against kernel-weighted visibility over 256 × 256 points
+per facet pair (same rays, no grid): centroid error mean 0.42, max 0.49; sampled (g = 4)
 mean 0.017, max 0.08. At 1 mm, one LEH element against every wall element: 0.020 / 0.16.
-Half-shadowed pair (unit squares 2 apart, one turned 45°, a plate over half the
-mid-plane; exactly ½ by point symmetry): 0.493 at g = 4, 0.500 at g = 8 (g = 3: 0.430,
-its center samples tie on the edge).
+Half-shadowed pair (unit squares 2 apart, one turned 45°, a plate over half the mid-plane;
+exactly ½ by point symmetry): 0.493 at g = 4, 0.500 at g = 8 (g = 3: 0.430, its center
+samples tie on the edge).
 
 Effect after Sinkhorn balancing (the tutorial's two-ring wall source): capsule flux
 +0.05%, a₂/a₀ −0.175 pp (0.5 mm) and −0.155 pp (0.25 mm), a₄/a₀ +0.11 pp at both, LEH
 loss −0.4%. The shift barely shrinks with the mesh, so balancing does not absorb the
 centroid rule's visibility error; which limit is right needs a finer mesh or a
-ray-traced radiosity reference (done: next entry, the sampled one is closer). **M**
+ray-traced radiosity reference. That reference is in the next entry, and the sampled
+rule is closer to it. **M**
 
 ## Monte Carlo radiosity reference for partial visibility (2026-10-22) *derived*
 
@@ -2781,7 +2773,7 @@ with exact view factors and visibility). Statistical errors from 64 batches. Che
 (test/montecarlo.jl): a closed cube with uniform source gives S/(1 − α) within 1%; an
 open-top cube against the closed-form factors (Hottel 0.199825 opposite,
 (1 − 0.199825)/4 adjacent) within 5σ and 1%; 8 × 8 elements per face against `solve`
-within 1.5% on face means (one element per face: the continuum differs by up to 26%).
+within 1.5% on face means (one element per face; the continuum differs by up to 26%).
 
 Since the Monte Carlo traces facets, the comparison uses flat elements (the same meshes
 with `surface = nothing`); the curved models are a different geometry (true surfaces)
@@ -2843,8 +2835,8 @@ elements, 6,612 on the capsule; the chord sagitta of the wall is 4e-4 mm). Geome
 10.1 × 5.75 mm, 3.1 mm LEHs, 0.9 mm capsule; wall gold α = 0.925 and 0.85, η = 0.8.
 Source: 48 NIF quads at 8 TW at the example cone aims (`examples/mesh_convergence.jl`
 "nominal"), deposited on each mesh by a separate `DepositionOperator` (totals agree to
-4e-5 between meshes) and scaled to the reference total. Departure: one outer-44 quad
-off; by linearity the Monte Carlo traces that quad's source alone (paired batches give
+4e-5 between meshes) and scaled to the reference total. The departure turns one outer-44 quad
+off; by linearity the Monte Carlo traces only the source of that quad (paired batches give
 its error). 298M paths at 0.925 (8.6 min on 16 threads), 198M at 0.85.
 `examples/mc_closure.jl`.
 
@@ -2855,11 +2847,11 @@ gives a₀ 8.4148 / 8.4116 / 8.4118 (± 0.0011) and a₂/a₀ −12.547 / −12.
 which `capsule_h` sets for model and reference alike). Converged to ~0.03% in a₀ and
 ~0.03 pp in a₂/a₀.
 
-Capsule incident flux: reference a₀ (TW/mm²), a₂/a₀, a₄/a₀ (%), and the departure
-(design − quad off: Δa₀ in %, Δa₂/a₀ and Δa₄/a₀ in pp); model rows are differences from
-the reference (a₀ in %, the rest in pp). Default visibility (centroid). Curved = the
-`hohlraum()` default; flat = the same meshes without surfaces, a coarser polygonal
-geometry than the reference (so its rows mix geometry error in).
+Capsule incident flux: reference a₀ (TW/mm²), a₂/a₀, a₄/a₀ (%), and the departure (design −
+quad off, with Δa₀ in % and Δa₂/a₀ and Δa₄/a₀ in pp); model rows are differences from the
+reference (a₀ in %, the rest in pp). Default visibility (centroid). Curved = the
+`hohlraum()` default; flat = the same meshes without surfaces, a coarser polygonal geometry
+than the reference (so its rows mix geometry error in).
 
 | α = 0.925 | a₀ | a₂/a₀ | a₄/a₀ | Δa₀ | Δa₂/a₀ | Δa₄/a₀ |
 |---|---|---|---|---|---|---|
@@ -2901,7 +2893,7 @@ Mean |row sum − 1| before balancing (curved): 7.6e-4 / 4.6e-4 / 2.0e-4, larges
 - Departures (one quad off) agree with the reference within 0.01 pp in Δa₂/a₀ and
   Δa₄/a₀ and 0.002% in Δa₀ for every model, raw or balanced: balancing is immaterial
   for departures here.
-- Not covered: bored LEHs, gaps and CAD cavities (larger row errors; the flat bored
+- Bored LEHs, gaps and CAD cavities are not covered (larger row errors; the flat bored
   cavity of the previous entry is the only data there), sampled visibility, windows.
   **H** for `hohlraum()` at these meshes and albedos; **M** beyond.
 
@@ -2922,7 +2914,7 @@ targets.
   hohlraum picked up odd-m capsule modes of ~6e-5 of the drive (test/runtests.jl and
   test/windows.jl selection rules, threshold 1e-10). The icosahedron now sits in its
   standard frame (vertices at the cyclic permutations of (0, ±1, ±ϕ)): its 2-fold axes
-  and mirror planes are x, y and z, so the selection rules hold to round-off. P2/P4
+  and mirror planes are x, y and z, so the selection rules hold within round-off. P2/P4
   convergence rates are a property of element shape and are unchanged in kind; the
   table's compact rows were not rerun in the new frame.
 - **GUI presets.** capsule_h 0.3 / 0.16 / 0.09 mm (320 / 980 / 2,880 capsule elements):
@@ -3005,10 +2997,10 @@ Two surfaces move at different speeds, and a view-factor model should treat them
   Pickworth), 14 µm (CH, 0.45 mg/cc, Izumi, at 30–40% lower peak power: transfer scales
   with intensity). Converted at 2.7 µm per % cone fraction: dCF_eff/dΔλ ≈ 0.15–0.18 per Å
   for HYBRID-E, 0.085 (0.6 mg/cc CH), 0.05 (0.45 mg/cc) (**L**).
-- **Where it happens**: outside the LEH the supersonic outflow drives inner → outer
-  transfer (into the 50° cone), inside it runs outer → inner, so Δλ = 0 is not zero
-  transfer; I-Raum needed 0.5 Å to null the flow-driven part (Pickworth HYDRA; Ralph
-  Nat. Commun. 2024, **H**). The 44° cone gives up more than the 50°.
+- **Where it happens**: outside the LEH the supersonic outflow drives transfer from inner to
+  outer (into the 50° cone), and inside it the transfer runs from outer to inner, so Δλ = 0
+  is not zero transfer; I-Raum needed 0.5 Å to null the flow-driven part (Pickworth HYDRA;
+  Ralph Nat. Commun. 2024, **H**). The 44° cone gives up more than the 50°.
 - **Plasma state**: no measured low-fill LEH ne, Te, Ti or flow history is public; Michel
   PoP 20, 056308 (2013, high fill, **H**) gives ne 0.03 nc, Te 2.8 keV, Ti 0.8 keV at the
   start of the main pulse with ion heating at 6–7 keV/ns, after which the gain is linear in
@@ -3044,7 +3036,7 @@ Two surfaces move at different speeds, and a view-factor model should treat them
   300 eV (Zylstra PRE 106, 025202 Fig. 2, **H-img**).
 
 ### Flux asymmetry → implosion observables (`asymmetry_transfer.md`)
-- **Mode 1 → hot-spot velocity**: ~100 km/s per 1% of a₁/a₀ (burn-off), linear to about
+- **Mode 1 and the hot-spot velocity**: ~100 km/s per 1% of a₁/a₀ (burn-off), linear to about
   0.75% then saturating (Young 2020: 0.44% → 37.6 km/s 3D HYDRA vs 44.7 km/s model;
   Kritcher 2024: 0.7% → 75 km/s burn-off, **H**; ratio **L**). Young's recipe is a
   Green's function G(t) in km/s per % per ns from 59 capsule-only impulse runs: negative in
@@ -3061,13 +3053,13 @@ Two surfaces move at different speeds, and a view-factor model should treat them
   RKE/(c·KE) = 1 − ρR_WHM/ρR_ave.
 - **Burn-on amplification**: Nora PoP 30, 092705 (2023, **H**) fits
   0.324 ln(Y_amp + 2.239) + 0.653; Kritcher 2024 Table II implies 1.27–1.39 (**L**).
-- **P2/P4**: Masse PoP 26 (2019, **H**) Green's functions: hot-spot P2 response flips
-  sign for drive before ~4.5 ns (early waist-hot → oblate), ρR response keeps one sign;
-  sensitivity peaks at the rise. Milovich PoP 23, 032701 (2016, **H**): picket P2 < 7.5%;
-  +6% P2 per 200 µm outward outer pointing; 2% P2 per 10% albedo change. Scott PRL
+- **P2/P4**: Masse PoP 26 (2019, **H**) Green's functions: hot-spot P2 response flips sign
+  for drive before ~4.5 ns (an early waist-hot drive makes it oblate), ρR response keeps one
+  sign; sensitivity peaks at the rise. Milovich PoP 23, 032701 (2016, **H**): picket P2 <
+  7.5%; +6% P2 per 200 µm outward outer pointing; 2% P2 per 10% albedo change. Scott PRL
   110, 075001 (2013, **H**): 10% flux P4 → ~20 µm a₄, up to 15× yield loss, sign set by
-  timing. Ralph Nat. Commun. 15, 2975 (2024, **H**): yield vs hot-spot P2/P0 is Gaussian,
-  W = 0.306, optimum +11.8% (HYBRID-E).
+  timing. Ralph Nat. Commun. 15, 2975 (2024, **H**): yield vs hot-spot P2/P0 is Gaussian, W
+  = 0.306, optimum +11.8% (HYBRID-E).
 
 ### N221204 benchmark (`n221204_benchmark.md`)
 - Input deck (**H** unless marked): hohlraum 11.24 mm × 3.2 mm radius, LEH radius 1.55 mm,
@@ -3084,7 +3076,7 @@ Two surfaces move at different speeds, and a view-factor model should treat them
   2DConA N240304 (2.9 Å) shell velocity 355 ± 5 km/s, shell P2 21.7 ± 1.3 µm, stagnation
   9.876 ns; rise cone fraction 0.21 → 0.24 raises shell P2 9.1 → 27.5 µm, 0.21 → 0.16
   leaves it (Ruof et al., PoP 2026, OSTI 3367476).
-- Still unpublished: absolute pointing, defocus and CPPs per cone; any 23.5°/30° or
+- These remain unpublished: absolute pointing, defocus and CPPs per cone; any 23.5°/30° or
   44.5°/50° wavelength split; window sizes and azimuths; corner/lip geometry; Au liner
   thickness; tabulated powers (data "available on request"). The benchmark uses
   an illustrative pointing, `hybride_mock_pointing()` ("Mock HYBRID-E pointing").
@@ -3187,7 +3179,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
     Use it as an upper estimate.
   - The Y_amp 80–500 branch as transcribed (13 ln(Y_amp + 1585) − 95) is 1.43 at 80,
     below the low branch's 1.87 at 40. *Resolved 2026-10-24* ("Young 2020 validation"
-    below): Eq. 4 prints rounded coefficients; Fig. 6's (13.105, 1585.225, −95.539) are
+    below): Eq. 4 gives rounded coefficients; Fig. 6's (13.105, 1585.225, −95.539) are
     implemented on 80–500, with 40–80 refused.
   - The shape term (Eq. 2) as transcribed does not give the stated 0.8–1.2 range for
     |P2| < 0.4 (0.19 at −0.4). *Resolved 2026-10-24*: that range is Table I's (3D);
@@ -3230,7 +3222,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   books τP as escaped and (1 − α − τ)P as absorbed; `drive_history` resolves the
   closure with `transition` steps and counts the lip with the entrance holes (not in
   `window_loss`). `ApertureKeepOut` keeps the full `leh_radius` rim (beams must still
-  clear the hardware). It converts no laser light. *Engineering model.* The plasma that
+  clear the hardware). It does not convert laser light. *Engineering model.* The plasma that
   closes the hole is not computed; closure time and radius are inputs. The Monte Carlo
   reference (`montecarlo_incident`) re-emits from a lip with its albedo at the time
   given (`albedo = albedos(t, time)`); test/montecarlo.jl checks it against `solve`.
@@ -3239,7 +3231,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   peak is ~0.84 r₀ and varies ≤ 4% through peak. The measured open area is
   1.25–1.4× the modeled (HYDRA) area. **H** (via the 2026-10-22 lit review).
   Young et al., PoP 27, 082702 (2020): a static view-factor model with all radii at 85%
-  reproduces the dynamic model at peak. **H**. 0.84 sits between them. **M**
+  reproduces the dynamic model at peak. **H**. 0.84 lies between them. **M**
 - **Timing.** Chen et al., PoP 27, 022702 (2020): at 0.15 mg/cc a ~1550 µm-radius LEH stays
   open until ~4.5 ns, then its x-ray-emitting size drops rapidly over 4.5–5 ns. Where the
   laser passes, the beams keep it open. **M** (secondary transcription). Swadling et al.,
@@ -3323,26 +3315,26 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     The bubble moves P2/P0 positive, as HYDRA's swing does, by +0.10 at 5.5 ns and
     +0.14 from 6.5 ns. Inner absorption is 54% (23°) and 44% (30°) at 5.5 ns, 88/79%
     at 6.5 ns, and > 99% by 8 ns. Capsule Tr falls 2–8 eV against wall + lips (the moved
-    power lands near the LEH). The tutorial pointing is not HYBRID-E's and its foot
+    power is deposited near the LEH). The tutorial pointing is not HYBRID-E's and its foot
     is not tuned (−0.17 against ≈0), so only the direction and the late rise compare.
 - **Stagnation and ridge stop (added 2026-10-23, same day).** The ballistic tip crossed a
   2.9 mm hohlraum by ~8 ns and clipped every inner beam (> 99% absorbed), so late-peak
   P2 plateaued at full inner absorption. Two options, on by default (*engineering*, **M**):
-  - *Stagnation depth.* `bubble_depth` is ballistic up to the knee x_max − w, then
-    x_max − w·exp(−(x_bal − x_max + w)/w) (C¹, stops at x_max). Defaults x_max = 0.80 R,
-    w = 0.08 R: exactly ballistic to 0.72 R (2.07 mm at R = 2.88), past both anchor
-    depths (1.75 / 2.01 mm at 5.5 ns), so **the anchors stay exact** (T_b 29% / 54%,
-    tested bitwise against the ballistic tip), and near the ~2.1 mm the ballistic fit to
-    Izumi's 0.3 mg/cc trajectories reaches by 6.5 ns; it stops between that and the
-    ~2.4 mm (0.83 R) of 0.15 mg/cc (end of the measured range, 1.2–2.4 mm).
-    Izumi 2023: the tip slows on back-pressure near the axis and is not ballistic in
-    low-contrast pulses (stall in the trough, relaunch ≤ 300 µm/ns at ~6 ns; not
-    modeled, set `speed`/`turn_on` for such pulses). *Not* x_max = R − 0.73 R: the ridge
-    radius is measured at the waist, and 0.78 mm would stop the tip before it reaches
-    the inner beams at z_b (1.3 mm from the wall, Izumi 2021) and contradict the
-    measured ballistic trajectories (1.2–2.4 mm over 4.5–6.5 ns). Izumi 2018's point that
-    attenuation follows the line-integrated density, not the displacement, is what the
-    (R/(R − x))² density factor stands for; it is not modeled further.
+  - *Stagnation depth.* `bubble_depth` is ballistic up to the knee x_max − w, then x_max −
+    w·exp(−(x_bal − x_max + w)/w) (C¹, stops at x_max). Defaults x_max = 0.80 R, w = 0.08 R:
+    exactly ballistic to 0.72 R (2.07 mm at R = 2.88), past both anchor depths (1.75 / 2.01
+    mm at 5.5 ns), so **the anchors stay exact** (T_b 29% / 54%, tested for exact equality
+    with the ballistic tip), and near the ~2.1 mm the ballistic fit to Izumi's 0.3 mg/cc
+    trajectories reaches by 6.5 ns; it stops between that and the ~2.4 mm (0.83 R) of 0.15
+    mg/cc (end of the measured range, 1.2–2.4 mm). In Izumi 2023, the tip slows on
+    back-pressure near the axis and is not ballistic in low-contrast pulses (stall in the
+    trough, relaunch ≤ 300 µm/ns at ~6 ns; not modeled, set `speed`/`turn_on` for such
+    pulses). *Not* x_max = R − 0.73 R: the ridge radius is measured at the waist, and 0.78
+    mm would stop the tip before it reaches the inner beams at z_b (1.3 mm from the wall,
+    Izumi 2021) and contradict the measured ballistic trajectories (1.2–2.4 mm over 4.5–6.5
+    ns). Izumi 2018's point that attenuation follows the line-integrated density, not the
+    displacement, is what the (R/(R − x))² density factor stands for; it is not modeled
+    further.
   - *Ridge stop.* After t_c a fraction g(t) (C¹ smoothstep over t_c ± 0.2 ns) of each
     inner beam's power left by the bubble is deposited on an axisymmetric band of the
     wall component centered at the height where the beam's axis crosses r = 0.73 R
@@ -3463,7 +3455,7 @@ them as they were run.
   lips) the curve never crosses zero before 8.5 ns.
 - **Capsule Tr peak** (313 eV drive Trad, AS24; Dante ≈311 eV at 8.2 ns): (b) static
   295.1, +wall 304.5, +lips 312.7 eV (all at 8.0 ns), +bubble 306.1 eV at 5.75 ns and
-  302.1 at 8 ns (the moved inner power lands near the LEH); (a) 288.7 → 302.1 (lips) →
+  302.1 at 8 ns (the moved inner power is deposited near the LEH); (a) 288.7 → 302.1 (lips) →
   299.3 eV. Without CBET 293.0 eV. The +lips value matching 313 eV is partly the
   undegraded laser (HYDRA degrades it 9–13%) against the missing windows and lip
   hardware, so it is not a calibration.
@@ -3477,14 +3469,14 @@ them as they were run.
      and overwhelms the 0.917 Å detuning. With (a) the static P2 is near zero and every
      dynamic piece pushes it positive, so (a) cannot show the swing; the comparison is
      informative only with (b). This is the CBET item of ROADMAP "Shot-data calibration": two crossing
-     zones per LEH (outer → inner inside), plasma-state (flow, Te, ne) inputs and a
+     zones per LEH (from outer to inner inside), plasma-state (flow, Te, ne) inputs and a
      multi-epoch `calibrate_cbet` against the published post-CBET per-cone powers
      (Fig. 9a/b, Fig. 1d) would fix it (done: "Two-zone CBET calibrated to PRE 109
      Fig. 9" below; the example now defaults to it).
   2. *With Fig. 9b's transfer the swing is reproduced in shape and timing of the
      minimum; the late side rises too early and too far.* Contributions at 8 ns: wall
      +0.086, lips +0.032, bubble +0.226; at 6.5 ns: +0.031, +0.035, +0.173. The bubble
-     dominates the swing, as Fig. 10's caption says ("as the wall enters and blocks the
+     dominates the swing, as the caption of Fig. 10 states ("as the wall enters and blocks the
      inner beams"), but its inner absorption (48 / 46% at 6.5 ns, 85 / 83% at 8 ns for
      23° / 30°) sits above Ralph 2018's 51–62% at peak, and the wall has moved 0.56 mm
      at 6 ns against 0.35–0.40 mm at the waist in PRE 109 Fig. 1a (constant 0.10 mm/ns
@@ -3495,7 +3487,7 @@ them as they were run.
      emitting-wall radius vs time (SXI/wall-motion imaging) for the wall speed and its
      start; LEH SXI for the lip closure time.
   3. *The foot is offset* by −0.04 to −0.07 with (b) (static −0.07 at 2 ns, −0.11 at
-     4 ns) where HYDRA holds ≈0: the foot P2 is set by pointing and foot cone fraction,
+     4 ns) where HYDRA stays at ≈0: the foot P2 is set by pointing and foot cone fraction,
      and the mock pointing and Fig. 9b's foot CF (read by eye, ±0.02 ≈ ±0.02 in P2) are
      not the shot's tuned foot. The moving wall alone adds +0.03 by 2 ns (0.16 mm).
 - **Caveats.** Mock pointing; unpublished geometry (corners, windows, liner, LEH
@@ -3574,7 +3566,7 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
   the order the beams meet them.
   - *Outside*: crossing plane 0.5 mm outside the LEH, supersonic outflow. The outflow's
     Doppler shift makes the steeper inner beams bluer in the flow frame, so this zone
-    moves power inner → outer even at Δλ = 0.
+    moves power from inner to outer even at Δλ = 0.
   - *Inside*: crossing plane 0.5 mm inside the LEH, Mach 0. Here the red-detuned inner
     beams gain.
   - This is P20's HYDRA picture. It is also why Δλ = 0 is not zero transfer at low fill
@@ -3633,7 +3625,7 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
     mean 0.16). The ROADMAP target is 0.15–0.18 per Å, derived from 40–50 µm/Å at
     2.7 µm/%CF.
   - The response is linear within 10% over 0.5–2.75 Å at 5.6 ns.
-  - At Δλ = 0 the net transfer is inner → outer (cone fraction 0.336 → 0.090 at peak).
+  - At Δλ = 0 the net transfer is from inner to outer (cone fraction 0.336 → 0.090 at peak).
     The null is at ≈1.2 Å, inside NC24's 1–1.55 Å for HYBRID-E.
   - Caveat: HYDRA's peak post-CBET cone fraction differs by only ≈0.07 between N210808
     (1.8 Å) and N221204 (2.75 Å): 0.55–0.6 against 0.65 in Fig. 1e. The calibrated model
@@ -3649,7 +3641,7 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
   - At 4–4.5 ns this is below Fig. 9b's 0.35–0.40, because DN24's input cone fraction
     there (0.13–0.14) is below Fig. 9b's (0.17–0.18). At 5.5 ns it is 0.04 above,
     from the higher intensity.
-  - Also changed in the example: the bubble's `capsule_scale` is now 1.135/0.91 = 1.25
+  - The example also changes the bubble's `capsule_scale`, now 1.135/0.91 = 1.25
     (*derived*). That is HYBRID-E's capsule against the ≈0.91 mm outer radius of the HDC
     basecamp SymCap (the "910 µm" HDC capsule class of the hydro-coupling review, M). It
     moves t_c to 5.41 ns from 5.9.
@@ -3685,7 +3677,7 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
      - The open items are the same as before: the bubble's inner absorption (48% at
        6.5 ns and 85% at 8 ns, above Ralph's 51–62% at peak) and the wall motion
        (constant 0.10 mm/ns from the turn-on).
-     - New: the collision time. Izumi's 0.4 ns per 20% of capsule radius is
+     - The collision time is new. Izumi's 0.4 ns per 20% of capsule radius is
        extrapolated here to 25% and to a 3.2 mm hohlraum. Whether r_cap or r_cap/R_hohl
        should set it is open; r_cap/R_hohl would give a scale of 1.12 and t_c ≈ 5.66 ns.
 - **Open.**
@@ -3713,8 +3705,8 @@ of one (design intent, not metrology). **M**
   mounted, the sheet runs on past 9.2 mm; that is not modeled.
 - **Thickness.** 38.7 µm median (1–99%: 37.7–40.7 µm).
 - **Axial position.** The area-mean mid-plane lies 0.623 mm (±0.005 mm, grid and
-  dimple sampling) inside the entrance-hole washer's inner face, i.e. toward the waist,
-  beside the hohlraum wall rather than beyond the hole. That face is the LEH plane
+  dimple sampling) inside the inner face of the entrance-hole washer. It is toward the
+  waist, beside the hohlraum wall, and not beyond the hole. That face is the LEH plane
   (`length/2`) of the matching `hohlraum` model.
 - **Profile.** Flat on average: no cone or axisymmetric dimple. The sheet carries a
   hexagonal array of shallow dimples, 2.48 mm pitch, their centers sunk toward the
@@ -3727,17 +3719,16 @@ of one (design intent, not metrology). **M**
   `DiskSurface`). The dimples are not axisymmetric; they move the true faces by up to
   ±0.12 mm, about the size of a hardware tolerance in `clearance`.
 - **Material.** The CAD carries none. The default is `BLACK` (engineering default).
-- **Radiation.** It plays no part. The shield sits beside the wall, 0.623 mm inside
-  the LEH plane, so the hohlraum wall hides the hole from it. Its
-  view-factor rows and columns with the hohlraum are exactly zero (`test/sombrero.jl`),
-  `closed = true` balancing leaves those rows alone, and the hohlraum's solution is
-  unchanged to 1e-12. One-sided, facing away from the waist: light from the port side
-  is booked on its elements, light from the waist side (e.g. backlighter beams) as
-  `sombrero_*_outside`.
+- **Radiation.** It has no effect on the radiation. The shield sits beside the wall, 0.623
+  mm inside the LEH plane, so the hohlraum wall hides the hole from it. Its view-factor rows
+  and columns with the hohlraum are exactly zero (`test/sombrero.jl`), `closed = true`
+  balancing leaves those rows alone, and the hohlraum's solution is unchanged to 1e-12.
+  One-sided, facing away from the waist: light from the port side is booked on its elements,
+  light from the waist side (e.g. backlighter beams) as `sombrero_*_outside`.
 - **Drive-beam clearance** *derived*. The test's cone-averaged NIF pointing (Build-A-
   Hohlraum example, 10.1 mm hohlraum, example cone aims) was run as 192 beams. The
   core 1e-4 envelope clears both shields by ≥ 2.09 mm in the worst case (outer 50°;
-  44° 2.50, 30° 2.41, 23° 3.25), and the ray trace puts no core power on them. With
+  44° 2.50, 30° 2.41, 23° 3.25), and the ray trace deposits no core power on them. With
   the engineering `nif_wings()` the envelope clearance is ≥ 1.24 mm. The wings'
   10⁻³ scatter floor puts ~1e-4 of each beam on a shield, so every beam is `:review`
   (above 1e-5) at 1.2e8 W/cm². Drive beams
@@ -3786,7 +3777,7 @@ the drawn outline, stroke centers per column, overlays checked by eye.
 
 Checks of the fits:
 - *Wall.* Young's radius is flat to 0.9 ns, falls at 0.185 mm/ns to 0.45 mm in by 3.3 ns
-  and then holds (0.43–0.48 mm) through the peak: the motion happens in the foot, not at
+  and then stays at 0.43–0.48 mm through the peak: the motion happens in the foot, not at
   a constant speed through the pulse. The fit's residuals are < 0.03 mm over 0.5–6.75 ns
   (`test/dynamics.jl`). On N221204 the old wall (0.10 mm/ns from the turn-on) was
   0.56 mm in at 6 ns and 0.86 at 9 ns; the new one is 0.38 from 3.3 ns on.
@@ -3948,16 +3939,16 @@ tick or gridline checks per axis, overlays checked.
 
 **Young's setup (what the comparisons must match).** Section III (dropped quads, offsets,
 tilt, windows) uses the *static* VisRad model of N170827: Table II's 11.3 mm × 3.1 mm
-hohlraum, 1.82 mm LEH, 1.05 mm corners and 0.98 mm capsule with "hohlraum, LEH, and
-capsule radii all reduced to 85%", albedo 0.8 (Au) / 0.3 (ablator), conversion 0.9, the
-*requested* (azimuthally symmetric) pulses, no windows, and the velocity from the N170827
-Green's function integrated over the whole pulse (negative in the foot, peaked at the
-rise and at 5.8 ns). Mode 1 is "the vector norm of the three P1m components",
-c_lm = 100 a_lm/a00 (Briareus `mode1_vector`; Young's x/y normalization of the associated
-Legendre functions was not checked, the z one is the same). Offsets: the whole target
-moved against fixed beams, or the capsule moved inside a fixed hohlraum. N170827's
-pointing is not published; Briareus uses the tutorials' pointing with z scaled by
-11.3/10.1, and unscaled as a check.
+hohlraum, 1.82 mm LEH, 1.05 mm corners and 0.98 mm capsule with "hohlraum, LEH, and capsule
+radii all reduced to 85%", albedo 0.8 (Au) / 0.3 (ablator), conversion 0.9, the *requested*
+(azimuthally symmetric) pulses, no windows, and the velocity from the N170827 Green's
+function integrated over the whole pulse (negative in the foot, peaked at the rise and at
+5.8 ns). Mode 1 is "the vector norm of the three P1m components", c_lm = 100 a_lm/a00
+(Briareus `mode1_vector`; Young's x/y normalization of the associated Legendre functions was
+not checked; the z one is the same). The offsets are of two kinds: the whole target moved
+against fixed beams, or the capsule moved inside a fixed hohlraum. N170827's pointing is not
+published; Briareus uses the tutorials' pointing with z scaled by 11.3/10.1, and unscaled as
+a check.
 
 **Comparisons** (Briareus static model, h 0.5 / capsule_h 0.15; the test suite runs
 h 0.6 with the same tolerances):
@@ -3972,21 +3963,21 @@ h 0.6 with the same tolerances):
 | capsule offset in the hohlraum, horizontal / vertical | 0.10 / 1.07 | 0.1 / 1.1 |
 
 **Findings.**
-- *Setup difference:* the ROADMAP "Implosion metrics and UQ" mismatches (inner/outer 1.3–1.6, horizontal offset
-  0.60 km/s/µm) came from the implosion-metrics tutorial's hohlraum (10.1 × 5.75 mm,
-  0.9 mm capsule, albedo 0.85, a static velocity at 100 km/s/%). A horizontal
-  whole-target offset moves the inner and outer footprints so that their mode 1
-  opposes; in Young's geometry they nearly cancel at peak (inner beams alone
-  0.0056%/µm, outer alone 0.0067%/µm, together 0.0012), on the tutorial's they do not
-  (0.030, 0.009, together 0.0059). The foot, with another cone balance, does not cancel
-  (Young's Fig. 14a: ~0.5% per 100 µm in the foot, ~0.1% at peak).
+- *Setup difference:* the ROADMAP "Implosion metrics and UQ" mismatches (inner/outer
+  1.3–1.6, horizontal offset 0.60 km/s/µm) came from the implosion-metrics tutorial's
+  hohlraum (10.1 × 5.75 mm, 0.9 mm capsule, albedo 0.85, a static velocity at 100 km/s/%). A
+  horizontal whole-target offset moves the inner and outer footprints so that their mode 1
+  opposes; in Young's geometry they nearly cancel at peak (the inner beams by themselves
+  0.0056%/µm, the outer by themselves 0.0067%/µm, together 0.0012), on the tutorial's they
+  do not (0.030, 0.009, together 0.0059). The foot, with another cone balance, does not
+  cancel (~0.5% per 100 µm in the foot and ~0.1% at peak in Young's Fig. 14a).
 - *Model error, fixed:* the mode analysis (`legendre_weights`, `ylm_weights` and the
   `Scenario` caches, hence `drive_history`) measured directions from TCC even when the
   capsule was offset. That mixes the capsule's P2 (−0.1 here) into a spurious mode 1 at
   first order in the offset: 0.0074%/µm of fake horizontal mode 1 (0.74 km/s/µm)
   against 0.00005%/µm about the capsule's center, and the vertical one had the wrong
   sign. They now default to `mode_center` (the center of the observed sphere; TCC
-  otherwise), so centered capsules are bitwise unchanged.
+  otherwise), so centered capsules are unchanged.
 - The 100 km/s/% default against Young's kernel: a flat 100 km/s/% over 4–7.75 ns gives
   11–17% less than G on these traces (∫G ≈ 117 km/s/%). The default is unchanged.
 
@@ -4005,13 +3996,13 @@ requested pulses (and, separately, a dropped 23.5° quad). Results (h 0.5):
 | direction difference | 2.5° | 0.8° | (75°, 265°) vs (67°, 270°), ~8° |
 
 Decomposition (imbalance proxy, static 52.2 km/s): dynamic radii with static albedos
-51.1; the capsule shrinking alone 50.4; static radii with Young's dynamic albedos 41.7;
+51.1; with only the capsule shrinking, 50.4; static radii with Young's dynamic albedos 41.7;
 static radii with a wall albedo of 0.87, 41.2. So **the 85% radii stand in for the
 moving wall, closing LEH and ablating capsule to 2% in velocity**, as Young found; **the
 albedo does not**: his dynamic wall albedo is 0.85–0.88 through the peak against the
 static 0.8, and the extra re-emission smooths the mode 1 by ~20% (the same physics as
 in his foot, where the lower albedo raises it). Young reports the static velocity only
-4.6% higher. Not resolved: his delivered imbalance has a time structure (larger
+4.6% higher. One point is not resolved: his delivered imbalance has a time structure (larger
 in the foot and rise, where the albedos are closer), which the proxy lacks; the
 delivered per-beam powers would settle it. The mean-difference numbers are on Young's
 scale (0.10 against 0.14% at peak for a similar peak mode 1) but depend on the source's
@@ -4035,21 +4026,21 @@ amplitude.
   went wrong. Both are implemented (`shape_amplification(P2)`,
   `shape_amplification(P2, θ)`). Table IV's shape column follows Table I for equatorial
   flows (N130530: 0.965 exactly) but not for polar ones from the listed angles (N210808
-  would need θ ≈ 77° where its flow is at 166°; N210531 matches no angle): the angle
+  would need θ ≈ 77° where its flow is at 166°; no angle matches N210531): the angle
   convention of Table IV is not recoverable from the paper.
 
 **Callahan 2018 and Izumi 2018 (trends; the repository had no hot-spot transfer).**
-Callahan's Fig. 6 line (digitized from its dotted fit, 29 pixels at the two ends):
-P2_hs − 2.7(CF − 33) = 101.9 − 85.0 x µm, x = √(E_picket,outer/(A_outer ρ_fill)) τ/R ·
-r_cap/R, zero at x = 1.199 (his Eq. 4: 1.2), σ 8 µm over 39 shots. The per-shot inputs are
-not tabulated, so the curve cannot be recomputed shot by shot; Briareus compares
-sensitivities. Transfer: Callahan's 2.7 µm per 1% cone fraction divided by the Briareus
-d(flux P2/P0)/dCF (−0.293% per %, peak 4.5–6.5 ns) gives −9.2 µm of hot-spot P2 per %
-of flux P2 (pole-hot flux → oblate). Setup: 10.1 × 5.75 mm Au hohlraum (albedo 0.8),
-0.908 mm capsule, the tutorials' pointing, N170827's pulses, `BubbleAbsorption` with its
-calibrated defaults (turn-on 0.25 ns), h 0.45. Izumi 2018 (LLNL-PROC-751038)
-single-parameter SymCaps, core P2 against the basecamp's +5.6 µm (the assignment of
-Fig. 6b's points to shots follows the image order of Fig. 6a, **L**):
+Callahan's Fig. 6 line (digitized from its dotted fit, 29 pixels at the two ends): P2_hs −
+2.7(CF − 33) = 101.9 − 85.0 x µm, x = √(E_picket,outer/(A_outer ρ_fill)) τ/R · r_cap/R, zero
+at x = 1.199 (his Eq. 4: 1.2), σ 8 µm over 39 shots. The per-shot inputs are not tabulated,
+so the curve cannot be recomputed shot by shot; Briareus compares sensitivities. Transfer:
+Callahan's 2.7 µm per 1% cone fraction divided by the Briareus d(flux P2/P0)/dCF (−0.293%
+per %, peak 4.5–6.5 ns) gives −9.2 µm of hot-spot P2 per % of flux P2 (a pole-hot flux makes
+it oblate). The setup is a 10.1 × 5.75 mm Au hohlraum (albedo 0.8), 0.908 mm capsule, the
+tutorials' pointing, N170827's pulses, `BubbleAbsorption` with its calibrated defaults
+(turn-on 0.25 ns), h 0.45. Izumi 2018 (LLNL-PROC-751038) single-parameter SymCaps, core P2
+against the basecamp's +5.6 µm (the assignment of Fig. 6b's points to shots follows the
+image order of Fig. 6a, **L**):
 
 | change | Briareus flux P2 (pp) → hot spot (µm) | Callahan's line at x ≈ 1.2 | Izumi 2018 measured change |
 |---|---|---|---|
@@ -4058,13 +4049,13 @@ Fig. 6b's points to shots follows the image order of Fig. 6a, **L**):
 | 0.15 mg/cc fill | −2.56 → +24 | −42 | +10 to +15 |
 | quad splitting | not modeled (the outer fluence change is not given) | — | +10 to +16 |
 
-All three Briareus signs match Izumi, magnitudes within a factor of 2. Callahan's fill
-term gets the low-fill shot's sign wrong (a point Izumi makes: the 0.15 mg/cc shot is an
-outlier of the bubble-size picture). Not blind: the bubble opacity's density exponent was
-fitted to Izumi 2021's 0.15/0.3 mg/cc anchors and the collision time to Izumi 2018's
+All three Briareus signs match Izumi, magnitudes within a factor of 2. Callahan's fill term
+gets the low-fill shot's sign wrong (a point Izumi makes: the 0.15 mg/cc shot is an outlier
+of the bubble-size picture). The check is not blind: the bubble opacity's density exponent
+was fitted to Izumi 2021's 0.15/0.3 mg/cc anchors and the collision time to Izumi 2018's
 separation times (basecamp, 1.5× picket, 1.18× capsule), so this checks the composition
-(bubble, view factors and transfer), not the inputs. Ralph 2018's 18.5% anchor stays
-skipped (unpublished pointing).
+(bubble, view factors and transfer), not the inputs. Ralph 2018's 18.5% anchor stays skipped
+(unpublished pointing).
 
 ## Wall material, conversion and capsule energetics (2026-10-24) *derived*
 
@@ -4112,7 +4103,7 @@ manuscripts): Döppner et al., PRL 115,
 `WallLossAlbedo` gains `factor` f, `factor_exponent` δ (at `factor_temperature` 300 eV),
 applied to gold's clamped loss, and an optional gold `liner` (areal mass) during which
 the loss stays gold's (an energy-content blend w = min(1, liner/m_F) with m_F the
-constant-T `HeatFront` mass; *engineering*). Defaults unchanged (gold, bitwise).
+constant-T `HeatFront` mass; *engineering*). The defaults (gold) are unchanged.
 
 - δ = −0.2 (Rosen −0.22; Schein's three LASNEX points give −0.19).
 - **f = 0.785, calibrated** (*superseded*: 0.836 at the wall's effective age, see the
@@ -4127,7 +4118,7 @@ constant-T `HeatFront` mass; *engineering*). Defaults unchanged (gold, bitwise).
   gold's Lindl loss leaves the wall ~30% of the x-ray source at a NIF peak (α ≈ 0.94),
   far from Schein's wall-dominated accounting (17.5% → 10% implies ~57%). Pure DU
   should be no better than the cocktail, so the calibrated f below Rosen's cocktail value
-  says the Lindl gold loss is low at late times, not that DU beats the cocktail.
+  indicates that the Lindl gold loss is low at late times, not that DU beats the cocktail.
 - On HYBRID-E (11.24 × 6.4 mm, same bands, 350 TW) the same f is worth 8.4–9.0% of
   power (6.0–6.5 eV) at 6–8 ns: the larger case-to-LEH ratio gives the wall a larger
   share. In the N221204 example (full dynamics, nif conversion, ablator) DU raises the
@@ -4139,7 +4130,7 @@ constant-T `HeatFront` mass; *engineering*). Defaults unchanged (gold, bitwise).
 ### 2. Conversion as a model (`Conversion`, `nif_conversion()`)
 
 η(t, I) = clamp(η₀(I) ((t − start)/1 ns)^s, range), η₀ constant or a table in log₁₀ I of
-the element's absorbed flux. Materials with a number keep the scalar path bitwise unchanged
+the element's absorbed flux. For materials with a number, the scalar path is unchanged
 (tested); intensity tables are generic in the number type (ForwardDiff through `solve`
 tested); `flux_response(...; laser)` linearizes an intensity-dependent conversion (secant,
 exact at `laser`); `Scenario`'s flux response evaluates a time-dependent one at its time.
@@ -4222,9 +4213,9 @@ Findings:
   calibrated DU factor, with η 0.87, and the shrinking capsule that removes the late sink
   (v1 → v4: +19 eV). Each piece is from data; together they are too reflective. The
   configuration that matches the LEH share (v4: Au loss, η 0.75) does so by the old
-  constant conversion standing in for the missing wall loss. Missing sinks here: the He
+  constant conversion standing in for the missing wall loss. The sinks missing here are the He
   gas (4.5%), the LEH windows, the M-band (Dewald 2020, not gray), and HYDRA's NLTE wall
-  emission. Not fixed by tuning: no default was changed to close it.
+  emission. The gap is not closed by tuning: no default was changed to close it.
 - **Backscatter and degradation** (v1) cool the peak by 13 eV and move the swing minimum
   from −0.168 to −0.138 (less inner power after CBET); they barely change the late P2.
 - **Fig. 10 (blind)**: with the full energetics the minimum is −0.134 at 5.25 ns
@@ -4289,7 +4280,7 @@ is split by Planck fractions `b_g(T)` at each element's emission brightness temp
 so the totals are the gray solution's whatever the group albedos (*energy as calibrated
 gray*); without it, it is lost to the wall. Groups at the gray albedo reuse the model's
 cached LU (or GMRES preconditioned with it; the GMRES became generic in the operator,
-the gray path bitwise unchanged); hard groups are solved jointly by unpreconditioned GMRES.
+and the gray path is unchanged); hard groups are solved jointly by unpreconditioned GMRES.
 
 Checks (`test/spectral.jl`): Planck tails against quadrature to 1e-8 (series/tail switch
 continuous to 6e-12); one group returns the gray `B`, `H` exactly (`==`); 16 groups, with
@@ -4336,8 +4327,9 @@ F_M 2.05, capsule M-band P2/P0 +0.145, boundary +0.200, Dante 0.125.
   pointing's thermal drive is waist-hot (−0.11 / −0.07) and the recirculating M-band
   (2/3 of it) carries that shape, where Dewald takes it as uniform. Likewise the
   boundary P2/P0 (−0.01 / +0.20) against his +0.53, which assumes a uniform background.
-- Not modeled: the outer-spot motion and inner-beam clipping in the outer bubble that
-  Dewald invokes for the late swing; angle dependence (sin⁴θ) of the conversion.
+- Two effects are not modeled: the outer-spot motion and inner-beam clipping in the outer
+  bubble that Dewald invokes for the late swing, and the angle dependence (sin⁴θ) of the
+  conversion.
 
 ### 3. Synthetic Dante (`DanteView`, `dante1`, `dante`)
 
@@ -4347,7 +4339,7 @@ partial views included; a ray through a closing lip is weighted by its open frac
 `Tr_open` over the open area. Channels: Gaussians at Rubery's 18 Dante 1 energies, FWHM
 0.3 E (**L**, widths unpublished; since replaced by the hardware responses, "Dante channel
 responses and the unfold" below); `color_temperature` fits a Planckian to the channels
-below 1.5 keV. Checks: a blackbody cavity reads T₀ to 5e-4 (after the caps' inscribed
+below 1.5 keV. Checks: a blackbody cavity gives T₀ to 5e-4 (after the caps' inscribed
 24-gon opening, 1.1% below the equal-area hole on the coarse test mesh: on coarse
 meshes the opening is smaller than π r²); lips at open fractions 0, ½, 1; a Planckian's
 channel signals unfold to its T to 1e-6.
@@ -4360,10 +4352,10 @@ N221204 (`examples/n221204.jl` full model, standard mesh, default energetics):
 | Dante 1, open area (lips at their open fraction) | 306.2 at 6.25 ns | 278.1 |
 | measured Dante 1 (Rubery 2024; Pak 2024 Fig. 1) | 313 ± 2 at ≈8.4 ns | ≈310 |
 
-- Dante 1 sees only the wall (no capsule, no cap) at 37°. Over the open area it reads
+- Dante 1 sees only the wall (no capsule, no cap) at 37°. Over the open area it gives
   7 eV above the capsule at the Dante peak, the sign of PRE 109's "internal ~13 eV below
   Dante" (**L**: the simulated internal temperature is not exactly our capsule mean).
-  Over the initial area it reads 13 eV *below* the capsule: the lips (closing to
+  Over the initial area it gives 13 eV *below* the capsule: the lips (closing to
   0.857 r₀) are dark to Dante here, while the real closing plasma radiates. Which of the
   two the measurement corresponds to depends on the LEH plasma's emission, which this
   model does not have; the two bracket the measured 313 only at the open-area end, and
@@ -4372,9 +4364,9 @@ N221204 (`examples/n221204.jl` full model, standard mesh, default energetics):
   ~30 eV by 8.5 ns, where Dante's keeps rising to its 8.4 ns peak. The default
   energetics (Au wall loss, constant conversion 0.75, ablator at its initial radius, no
   backscatter) and the bubble's growing inner-beam absorption lose drive through the
-  peak; this is the first absolute check of item 16, and it points at the late-time
-  energetics (wall loss vs time, conversion rising in time, the `energetics=new` options)
-  rather than at the line of sight. (Resolved in "N221204 late-time drive" below: the
+  peak; this is the first absolute check of item 16. It points at the late-time
+  energetics (wall loss vs time, conversion rising in time, the `energetics=new` options);
+  the line of sight is not the cause. (Resolved in "N221204 late-time drive" below: the
   wall loss was evaluated at the time since the pulse start; these numbers are the old
   evaluation.)
 
@@ -4493,7 +4485,7 @@ drive gives the same front P2 on r–z as on r–θ to 10–15% (−0.55 vs −0
 ns); a 3-D octant at 20 µm reproduces 1-D (front +0.5…+1.7 µm, ablator to 1e-4), and
 its response to b₂₂ = 0.2 equals its response to b₂₀ = 0.2 to 1–4% (−0.123 vs
 −0.122% of R_f at 0.6 ns), with ≤ 0.014% in Y₄₂ (cubic-grid coupling) and ≤ 0.003%
-elsewhere. Limits met: a band's coarse level takes the timestep of its covered nodes
+elsewhere. Two limits were met: a band's coarse level takes the timestep of its covered nodes
 (8× the uniform grid's steps), and tiled levels failed on this problem; a 1 µm 3-D
 shell (~10⁹ cells uniform) waits on those.
 
@@ -4502,7 +4494,7 @@ c54e366, CompactLES `briareus-drive-2`).** The drive is now `examples/n221204.jl
 model (+bubble: `nif_uranium()`, Young's albedo on the K24 schedule, release 1.0,
 calibrated two-zone CBET, measured backscatter, 11% degradation, wall, lips, bubble),
 coarse mesh 0.8/0.4, steps of 0.1 ns from 0.2 ns to bang (9.53 ns), l ≤ 6 with every m.
-The capsule Tr peaks at 306 eV at 8.0 ns (297 before) and holds 282 eV at 9.0 ns; P2/P0
+The capsule Tr peaks at 306 eV at 8.0 ns (297 before) and is still 282 eV at 9.0 ns; P2/P0
 +0.05 near 3.2 ns, −0.18 at 5.2 ns, +0.09 over 7.2–7.7 ns. Stage 0, 1 µm, ṁ = 2.85e5 T³,
 P₀ recalibrated to 145 Mbar (*calibrated* as before; the checks are PRE 109 Table I,
 HYDRA, N221204: v_imp 383 km/s, ablator remaining 5.7%, bang 9.61 ns simulated,
@@ -4551,33 +4543,33 @@ R/R₀, DT mean radius; keyhole N230110 shock timing, Ruof 2026 Table II, as a c
 | r33 (ṁ = 3.3e5 T³) | 4.86 | 371.1 | 2.41 | 9.84 | +0.94 / +0.60 / +0.37 / +0.28 |
 | r35 (ṁ = 3.5e5 T³) | 4.86 | 386.1 | 1.45 | 9.70 | +0.92 / +0.56 / +0.29 / +0.16 |
 
-Keyhole check: first shock into the ice 3.86–3.91 ns. Reading: the early lag (R/R₀ ≥ 0.85)
-is the first shock: every change that brings the shock to the keyhole timing (stiff
-carbon, stronger foot) cuts it. But the stiff-carbon shells then accelerate more slowly
-(300 km/s, 7–9% left) and the lag grows again to +0.7–0.8 ns by R/R₀ 0.2: fixing shock
-timing alone moves stagnation later, not earlier. Only burning more mass closes the late
-lag (r35: 386 km/s, lag +0.16, but 1.45% left against 5–6.6%), or a drive 0.3 ns earlier
-(sh03), which Dante rules out (±6 eV over 4.5–7.5 ns). No single closure change matches
-shock timing, v_imp, remaining mass and stagnation together: in a 1-D rocket model
+In the keyhole check, the first shock enters the ice at 3.86–3.91 ns. The early lag (R/R₀ ≥
+0.85) is therefore the first shock: every change that brings the shock to the keyhole timing
+(stiff carbon, stronger foot) cuts it. But the stiff-carbon shells then accelerate more
+slowly (300 km/s, 7–9% left) and the lag grows again to +0.7–0.8 ns by R/R₀ 0.2: fixing
+shock timing alone moves stagnation later, not earlier. Only burning more mass closes the
+late lag (r35: 386 km/s, lag +0.16, but 1.45% left against 5–6.6%), or a drive 0.3 ns
+earlier (sh03), which Dante rules out (±6 eV over 4.5–7.5 ns). No single closure change
+matches shock timing, v_imp, remaining mass and stagnation together: in a 1-D rocket model
 velocity and remaining mass are tied by the rocket relation through ṁ and the exhaust
-velocity (P/ṁ), and with ideal-gas carbon no ṁ gives HYDRA's 383 km/s *and* 5.7% left.
-This agrees with the user's reading that the lag is rooted in a 1-D rocket model tuned to
-3-D results (ṁ fitted to remaining mass), and points at A22's items 1–2 (P tied to ṁ, real
-carbon EOS) rather than at the drive. Side note: K24's late slope (335–345 km/s) and Ruof
+velocity (P/ṁ), and with ideal-gas carbon no ṁ gives HYDRA's 383 km/s *and* 5.7% left. This
+agrees with the user's reading that the lag is rooted in a 1-D rocket model tuned to 3-D
+results (ṁ fitted to remaining mass), and points at A22's items 1–2 (P tied to ṁ, real
+carbon EOS); the drive is not the cause. Side note: K24's late slope (335–345 km/s) and Ruof
 2026's 2DConA 355 ± 5 km/s (N240304) are near stage 0's 340, so the 383 km/s target itself
 is model-dependent.
 
 ## Large radiation models (2026-10-24) *derived*
 
-ROADMAP "Scale". Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
-remeshed CAD) practical on a laptop (Ryzen 9 4900HS, 4 threads of 8 used, 16 GB, another
-job sharing the machine). Workload, as a design session runs it: the GUI NIF hohlraum
-(10.1 × 2.875 mm, LEH 1.55, capsule 0.9) with a `WallLossAlbedo` wall, NIF quads;
+ROADMAP "Scale". The goal is to make 1e4–5e4-element radiation models (the fine hohlraum
+preset, remeshed CAD) practical on a laptop (Ryzen 9 4900HS, 4 threads of 8 used, 16 GB,
+another job sharing the machine). Workload, as a design session runs it: the GUI NIF
+hohlraum (10.1 × 2.875 mm, LEH 1.55, capsule 0.9) with a `WallLossAlbedo` wall, NIF quads;
 deposition operator, view factors, closure, a temperature-dependent `solve` at 2 ns, a
-6-step `drive_history`, a `Scenario` (62-row moment response), an optimizer gradient
-and `ev.flux`. Script: the session's scratchpad `prof.jl` (one process per mesh,
-`BRIAREUS_NO_WORKLOAD=true`, so first calls include compilation: "solve again" is the
-warm figure).
+6-step `drive_history`, a `Scenario` (62-row moment response), an optimizer gradient and
+`ev.flux`. Script: the session's scratchpad `prof.jl` (one process per mesh,
+`BRIAREUS_NO_WORKLOAD=true`, so first calls include compilation: "solve again" is the warm
+figure).
 
 ### Where the time and memory went (before)
 
@@ -4601,8 +4593,8 @@ The fine preset did not fit next to the other job, and 40k does not fit at all.
 
 1. **Float32 storage** (`Float32Matrix`, `view_factors(...; storage = Float32)`): Float32
    data read as Float64; every product accumulates in Float64, so it is exactly the
-   product with `Float64.(F.data)`. Assembled directly in Float32 (no Float64 peak),
-   bit-identical to `Float32.(view_factors(t))`. Balancing (`enforce_closure!`) runs in
+   product with `Float64.(F.data)`. It is assembled directly in Float32 (no Float64 peak)
+   and is identical to `Float32.(view_factors(t))`. Balancing (`enforce_closure!`) runs in
    Float64 on the stored values and rounds once: row sums to ~1.5e-8 (Float64 ~1e-12),
    negligible beside the 1e-3 discretization error it removes.
 2. **Factorization-free solves** (`RadiationModel(...; solver = :iterative)`): restarted
@@ -4615,13 +4607,13 @@ The fine preset did not fit next to the other job, and 40k does not fit at all.
    instead of the full observed × N response (still available, a solve per row).
 3. **Defaults**: above `Briareus.LARGE_MODEL[]` = 10,000 elements `RadiationModel`
    computes Float32 view factors and solves iteratively; below it nothing changes (dense
-   Float64 + LU, bitwise unchanged). `storage`/`solver` override; a given `F` keeps its
+   Float64 + LU, with identical results). `storage`/`solver` override; a given `F` keeps its
    storage. `Scenario(...; model)` reuses a model (no copy of F).
 4. **Kernels**: vector products threaded over row/column blocks at 28–33 GB/s (memory
    bound); a fused 4-column kernel for blocks of ≤ 48 columns (3–7× the widen-to-Float64
    + BLAS panels at k = 2–16; the panels win past ~50 columns). 17.6k: F x 43 ms,
    Fᵀx 37 ms, k = 2: 64/50 ms, k = 16: 280/240 ms, k = 62: 880/890 ms (panels).
-5. **View-factor assembly** (both storages, bitwise identical): the near-pair kernel's result
+5. **View-factor assembly** (both storages, identical results): the near-pair kernel's result
    was inferred `Any` (the CAD cell list is untyped), so every pair boxed its factor and
    dispatched the store dynamically: 13.7M allocations at 5k, and GC pressure across
    threads. A type assertion removed them: 10.5k 14.5 → 12.1 s (allocation 2.9 → 0.7
@@ -4672,16 +4664,16 @@ products, block GMRES, solve/flux_response/duals/drive_history/Scenario gradient
   CUDA extension would save ≲ 25% end to end; view-factor assembly (BVH rays and exact
   contour kernels, CPU) remains the largest cost. Not worth CUDA.jl yet.
 - **Hierarchical (H-matrix) view factors** are the real answer past ~30k: assembly and
-  storage are N², and both grow 4× per halving of h. Design: cluster tree by coordinate
-  bisection (as tried above); admissible cluster pairs (distance > η × diameter, and
-  visibility tested by a few rays per pair and found all-or-nothing) stored as low-rank
-  blocks (ACA on the far-pair kernel, rank 1–8), the rest (near pairs, partly occluded
-  pairs straddling the capsule shadow or LEH rims) dense; O(N log N) memory and
-  assembly. It needs only `mul!` with F and Fᵀ and row sums: the iterative path here
-  already uses nothing else, so an H-matrix type plugs in as another
-  `AbstractMatrix{Float64}` (balancing is a diagonal scaling s F s). Reciprocity per
-  block (G = AF symmetric) halves it again. Built: next section, "Hierarchical view
-  factors".
+  storage are N², and both grow 4× per halving of h. The design is a cluster tree by
+  coordinate bisection (as tried above). Admissible cluster pairs (distance > η × diameter,
+  and visibility tested by a few rays per pair and found all-or-nothing) are stored as
+  low-rank blocks (ACA on the far-pair kernel, rank 1–8), and the rest (near pairs, partly
+  occluded pairs straddling the capsule shadow or LEH rims) are stored dense. Memory and
+  assembly are O(N log N). It needs only `mul!` with F and Fᵀ and row sums: the iterative
+  path here already uses nothing else, so an H-matrix type plugs in as another
+  `AbstractMatrix{Float64}` (balancing is a diagonal scaling s F s). Reciprocity per block
+  (G = AF symmetric) halves it again. The next section, "Hierarchical view factors",
+  describes the build.
 
 ## Hierarchical view factors (2026-10-24) *derived*
 
@@ -4692,7 +4684,7 @@ iterative path uses through products only. `view_factors(t; storage = :hmatrix)`
 `Briareus.HMATRIX_MODEL[]` = 15,000 elements. Workload and machine as in "Large radiation
 models" (GUI NIF hohlraum 10.1 × 2.875 mm, LEH 1.55, capsule 0.9, `WallLossAlbedo` wall,
 NIF quads aimed at z = ±4; 4 threads, another job sharing the machine); script: the
-session's scratchpad `hmat/bench.jl` (warm: a small target through the same path first).
+session's scratchpad `hmat/bench.jl` (warmed by a small target through the same path first).
 
 ### Design
 
@@ -4702,7 +4694,7 @@ session's scratchpad `hmat/bench.jl` (warm: a small target through the same path
   with a balancing diagonal S. Reciprocity is exact; `enforce_closure!` (Sinkhorn, one
   product per iteration) updates S only. Dense blocks (near pairs, leaf pairs that do
   not compress) are Float32 with the entries `view_factors` computes (`_vf_pair`, now
-  split from the row loop; the dense path is bitwise unchanged). Low-rank blocks are
+  split from the row loop; the dense path is unchanged). Low-rank blocks are
   U Vᵀ (Float32 factors), and "scattered" dense blocks on index lists hold the rows a
   facing test cuts.
 - **Admissibility.** Cluster boxes (centroids padded by element size) at least η × the
@@ -4807,7 +4799,7 @@ with them, ACA ~45% (half of it on blocks that give up), dense leaves ~30%, leaf
 Above 15,000 elements `RadiationModel` takes the HMatrix (2× faster and 5× smaller at
 17.6k, moments within 1e-8); 10–15k stays Float32 (1.8× faster and 3.4× smaller at
 10.5k too, but the element-wise H error there reaches 8.6e-5 at an LEH element). Small
-models are bitwise unchanged (dense Float64 + LU), and so is the dense path itself.
+models are unchanged (dense Float64 + LU), and so is the dense path itself.
 The precompile workload runs a hierarchical model (leaves of 16) on its coarse hohlraum.
 
 ### Open (at the time; see "The H-matrix's N^1.5 remainder" below)
@@ -4976,13 +4968,13 @@ session measured −15 to −27% storage over 10.5k–28.6k. Assembly time is un
 
 A profile of the 10.5k assembly put ~45% of its work in `_contour_vf` over polar-sector
 loops (34 edges, one scalar `atan` each: wall and capsule points onto the end caps). The
-H-matrix assembly now gives sector receivers their loop as x, y, z arrays
-(`_SoAReceiver`) and takes the contour in one `@simd` loop with a branch-free
-`atan(y ≥ 0, x)` (`_atan_nb`: fdlibm's polynomial after reduction to |u| ≤ tan(π/8);
-≤ 2 ulp from `Base.atan` over 10⁶ random arguments, exact at 0, π/4, π/2, π), 2.4× faster
-per contour (714 → 306 ns). Not bitwise identical: the terms are summed in another order.
-`view_factors` (dense) keeps `_Receiver` and is bitwise unchanged (`==` on two hohlraums,
-2.0k and 4.0k elements). Measured against 5173a3d (4 threads, tol 1e-6, leaf 48):
+H-matrix assembly now gives sector receivers their loop as x, y, z arrays (`_SoAReceiver`)
+and takes the contour in one `@simd` loop with a branch-free `atan(y ≥ 0, x)` (`_atan_nb`:
+fdlibm's polynomial after reduction to |u| ≤ tan(π/8); ≤ 2 ulp from `Base.atan` over 10⁶
+random arguments, exact at 0, π/4, π/2, π), 2.4× faster per contour (714 → 306 ns). The
+results are not identical, since the terms are summed in another order. `view_factors`
+(dense) keeps `_Receiver` and is unchanged (`==` on two hohlraums, 2.0k and 4.0k elements).
+Measured against 5173a3d (4 threads, tol 1e-6, leaf 48):
 
 | N | 10,484 | 17,632 |
 |---|---|---|
@@ -4996,14 +4988,14 @@ per contour (714 → 306 ns). Not bitwise identical: the terms are summed in ano
 differences are small factors whose contour terms cancel (7e-7 with 1.1e-17 absolute).
 
 **Contiguous quadrature layout: tried, dropped.** The per-element point rules (`qnear`,
-`qmid`, `qfar`: three small arrays per element) were packed into three arrays with
-offsets, read as views. Neither faster nor bitwise identical: H-matrix build +2% (4.47–4.55 s
-at 10.5k, 9.03–9.05 s at 17.6k, on top of the contour change); dense Float32 11.79 against
-11.82 s and 30.2 against 30.8 s (one run each). Dense F changed in 15% of entries (max
-rel 3.9e-13), from `_point_kernel` and `_self_kernel` with the weights as views:
-StaticArrays' `dot` carries LLVM `reassoc contract` flags, so where FMAs are fused
-depends on the surrounding code, and a change of data layout in a kernel is not bit for
-bit in general.
+`qmid`, `qfar`: three small arrays per element) were packed into three arrays with offsets,
+read as views. The change is neither faster nor identical in results: H-matrix build +2%
+(4.47–4.55 s at 10.5k, 9.03–9.05 s at 17.6k, on top of the contour change); dense Float32
+11.79 against 11.82 s and 30.2 against 30.8 s (one run each). Dense F changed in 15% of
+entries (max rel 3.9e-13), from `_point_kernel` and `_self_kernel` with the weights as
+views: StaticArrays' `dot` carries LLVM `reassoc contract` flags, so where FMAs are fused
+depends on the surrounding code, and a change of data layout in a kernel does not
+in general keep results identical.
 
 ## H-matrix near-field quadrature: where the time goes (2026-10-27) *derived*
 
@@ -5026,21 +5018,21 @@ pairs per class): far pc 1.24 µs, mid pc 2.84 µs, far sector–sector 2.37 µs
 200 µs; of a near pc pair, ~half was `_distance_to` (32 point–triangle distances at
 every cell the adaptive rule visits), a quarter the contours.
 
-**Coarser rule: not viable.** The point rules' error is O((h/r)²): at the far tier's
-12 element sizes a point-to-point or one-point-per-cell sector rule is off by ~1e-4 to
-1e-3 relative, 100–1000× the block tolerance, and changes the discretization rather than
+**Coarser rule: not viable.** The point rules' error is O((h/r)²): at the far tier's 12
+element sizes a point-to-point or one-point-per-cell sector rule is off by ~1e-4 to 1e-3
+relative, 100–1000× the block tolerance. Such a rule changes the discretization instead of
 approximating the same matrix. An exact-enough quadrature of the same polygon (Gauss on a
-sector to < 1e-9 needs ~16 points plus the 32 chord segments) costs as much as the
-contour. Quadrature reuse between neighboring pairs has nothing to share in this
-workload: the dominant pairs are distinct points onto distinct receivers.
+sector to < 1e-9 needs ~16 points plus the 32 chord segments) costs as much as the contour.
+Quadrature reuse between neighboring pairs has nothing to share in this workload: the
+dominant pairs are distinct points onto distinct receivers.
 
 **What changed** (all on the receiver side; the cost is in evaluating the same kernel):
 
 1. `_closer_than` on a sector receiver (`_Receiver` with a loop) takes the distance from
    the loop in its plane's coordinates (height inside the polygon, else the nearest of
-   34 edges, one pass) and asks the 32 triangles only when the verdict is within 1e-9
+   34 edges, one pass) and tests the 32 triangles only when the verdict is within 1e-9
    (relative) of the threshold; `_adapt_tri` and `_adapt_sector` ask it through
-   `_within`. The refinement, and so every factor, is **bitwise** unchanged: `==`
+   `_within`. The refinement, and so every factor, is **exactly** unchanged: `==`
    on `view_factors` (dense) of `hohlraum(h = 0.6, capsule_h = 0.3)` and both bored
    cavities, and 0 wrong verdicts of 2.9M (points 1e-4 to 1 mm from sectors, in and off
    their plane, thresholds at D(1 ± 1e-6), D/2, 2D and D). Near pc pair 167 → 94 µs.
@@ -5070,7 +5062,7 @@ sector–sector 1.83 µs (−23%), near pc 114 µs (−43%).
 Against dense Float32 at 10.5k unchanged: a₀ −1.37e-9, P2/P0 2.67e-9, P4/P0 2.67e-9, H
 max 1.19e-7 (median 4.7e-9), moment response 7.8e-7. (The largest relative entry
 differences, up to 0.7, are factors of ~1e-17 whose contour terms cancel.) Dense
-`view_factors` gains from item 1 alone, with bitwise identical results:
+`view_factors` gains from item 1 only, with identical results:
 `bored_cavity(hw = 0.8, hc = 0.25)` 1.72–1.75 → 1.35–1.38 s, `bored_cavity()` 2.35–2.36 →
 1.98–1.99 s (4 threads).
 
@@ -5094,7 +5086,7 @@ the other.
 vertices).** Pairs sharing an edge took 71% of a box's view-factor time (4 × 4 quads
 per face: 72 pairs at 3.5 ms each), 58% of the flat CAD hohlraum's (1,959 pairs at
 8 ms; all of them involve an element folded across the wall's strips) and 87% of the
-sliver tube's (1,482 pairs at 74 ms: 130-facet folded elements). The fitted CAD model
+sliver tube's (1,482 pairs at 74 ms, with 130-facet folded elements). The fitted CAD model
 (walls on their cylinders) has almost none. Not a negligible share wherever flat
 elements meet.
 
@@ -5158,16 +5150,16 @@ disabled, interleaved; identical otherwise):
 
 Per pair (one thread): an edge-sharing pair of quads 3.3–7.6 ms → 2–100 µs (slivers the
 most), folded CAD wall pairs 8 ms → 0.4 ms, tube pairs 74 ms → 3.8 ms (132 × 132 outline
-edges). Non-touching near pairs: the box's faster (4 × 4 per face: 0.013 → 0.006 s with them,
-against edge-sharing pairs only), the CAD hohlraum's 25% faster, the tube's ~15% slower
-(its total still 4.7× faster). Primitive hohlraums and bored cavities have
-no flat non-curved elements and are bitwise unchanged; the H-matrix assembly goes
-through the same pair kernel. The flat CAD tutorial's radiation metrics move by little
-(drive of the tutorial, balanced F): capsule flux +4.2e-5, a₂/a₀ 10.587 → 10.584%,
-a₄/a₀ −0.788 → −0.787%, LEH and gap losses unchanged to 1e-5. The sliver tube's mean row
-sum moves 0.72210 → 0.72197 (the open cylinder's exact 0.72301; the rest is the mid and
-far tiers). Confidence: the method and the closed forms **H**; the ρ thresholds and the
-1e-9 front tolerance engineering choices, **M**.
+edges). With non-touching near pairs, the box is faster (4 × 4 per face, 0.013 → 0.006 s
+with them against edge-sharing pairs only), the CAD hohlraum's 25% faster, the tube's ~15%
+slower (its total still 4.7× faster). Primitive hohlraums and bored cavities have no flat
+non-curved elements and are unchanged; the H-matrix assembly goes through the same pair
+kernel. The flat CAD tutorial's radiation metrics move by little (drive of the tutorial,
+balanced F): capsule flux +4.2e-5, a₂/a₀ 10.587 → 10.584%, a₄/a₀ −0.788 → −0.787%, LEH and
+gap losses unchanged to 1e-5. The sliver tube's mean row sum moves 0.72210 → 0.72197 (the
+open cylinder's exact 0.72301; the rest is the mid and far tiers). Confidence: the method
+and the closed forms **H**; the ρ thresholds and the 1e-9 front tolerance engineering
+choices, **M**.
 
 ## H-matrix visibility certificates (2026-10-27) *derived*
 
@@ -5194,7 +5186,7 @@ were nearly all of a different kind: pairs that face each other only within the 
 the centroid facing test on curved elements, whose rays (lifted farther off the facet) are
 cast even in an empty shaft.
 
-**What changed** (`src/hmatrix.jl`; all exact, so `HMatrix` is **bitwise unchanged**):
+**What changed** (`src/hmatrix.jl`; all exact, so `HMatrix` is **unchanged**):
 
 1. Certificates per component, built once (`_hrim_data`): a *planar* part (all facets
    within 1e-10 relative of one plane: washers, LEH caps, discs, foils) keeps its facets
@@ -5233,16 +5225,16 @@ cast even in an empty shaft.
 | rays old → new | 2.9M → 0.98M | | 35.4M → 1.34M (0.9 CPU-s) |
 | stored blocks, all entries | identical (`==` on every dense, low-rank, scattered block) | identical | identical |
 
-The remaining hohlraum rays are capsule elements at their terminator facing slightly away
-(c ≤ 0 within the slack), whose own plane does not separate; all visible. The wall-clock
-gain is smaller than the ray CPU saved (bored: ~20 CPU-s of rays → ~10 CPU-s wall × 4):
-the certificates cost ~140 ns per pair, and the shaft search no longer stops early on a
+The remaining hohlraum rays are capsule elements at their terminator facing slightly away (c
+≤ 0 within the slack), whose own plane does not separate; all visible. The wall-clock gain
+is smaller than the ray CPU saved (on the bored cavity, ~20 CPU-s of rays → ~10 CPU-s wall ×
+4): the certificates cost ~140 ns per pair, and the shaft search no longer stops early on a
 leaf.
 
 **Exactness checks** (`test/hmatrix.jl`, "visibility certificates"): 57k random segments
 across the parts of the bored cavity and a hohlraum, and segments crossing a washer's plane
 within 1e-3 to 1e-12 (relative) of its inner and outer rims: every decided one (49k, 5,023
-of them hidden) agrees with `any_hit` against that part's facets alone; masks of every
+of them hidden) agrees with `any_hit` against the facets of that part only; masks of every
 certified leaf pair equal the ray masks (6,193 leaf pairs over three targets, a
 latitude–longitude capsule among them); the 833k pairs of empty-shaft leaves get
 `_vf_pair`'s factor (`===`). At the benchmark sizes the certified masks equal ray masks on
@@ -5272,18 +5264,18 @@ accuracy against dense Float32 (2.4e-7 → 2.3e-6); the loss was diagnosed as fo
 - *Not the certificates.* The masks of every block that takes one are exact: 11,134
   blocks (8,763 leaves), 33.5M pairs (3.4M hidden), all equal to the ray masks. The 20.5M
   pairs of the shafts that the capsule rule empties get `_vf_pair`'s factor (`===`).
-- *Not the capsule rule alone.* Above-leaf certificates alone reach the same block: its
-  parent's shaft holds capsule facets, which the balls certify pair by pair. They give
-  the same 2.28e-6. With both rules the blocks are identical to above-leaf alone, so the
-  capsule rule adds nothing there. By itself it saves ~3% (7.76 against 7.97 s), and it
-  is dropped.
+- *Not only the capsule rule.* Above-leaf certificates by themselves reach the same block:
+  its parent's shaft holds capsule facets, which the balls certify pair by pair. They give
+  the same 2.28e-6. With both rules the blocks are identical to those of above-leaf
+  certificates only, so the capsule rule adds nothing there. By itself it saves ~3% (7.76
+  against 7.97 s), and it is dropped.
 - *Fix.* The low-rank check (`_hcheck`) now adds the exact error of the entries where a
   row's or a column's quadrature tier switches (`_vf_tier`, `_htier_entries`). These are
   the pairs off their line's most common tier, taking the lines with the fewest such
   pairs first (an isolated jump is the one the pivots miss), at most m + n of them. There
   are none, and no pass over the pairs, when the centroid boxes are farther apart than
   `mid` × the largest element. The block above is rejected and refined. A block with no
-  such entries is checked as before, bitwise.
+  such entries is checked exactly as before.
 
 Bored cavity (11,360; 4 threads pinned, interleaved in one process, 2–3 builds each);
 balanced solve as `bench3.jl` (NIF quads aimed at z = ±4 mm deposited by
@@ -5298,21 +5290,20 @@ balanced solve as `bench3.jl` (NIF quads aimed at z = ±4 mm deposited by
 | H per element, max (median) | 1.01e-7 (3.5e-9) | 5.5e-7 | 5.5e-7 (5.7e-9) | 1.10e-7 (5.7e-9) |
 | capsule a0; P2/P0, P4/P0 | −1.7e-11; 1.1e-9, 6.6e-11 | | | −7.2e-10; 3.2e-9, −1.5e-9 |
 
-Hohlraum: above-leaf alone leaves the blocks identical to the committed build (10,484).
-The tier check rejects one more block at each size (10 → 11 at 10,484; 16 → 17 at
-17,632), so the hohlraum is **not bitwise identical**. At 10,484 the Frobenius error
-(2.679e-7) and the row sums (3.214e-7) are unchanged to four digits, storage is
-85.7 → 85.8 MB, and the build stays at 4.0–4.2 s. At 17,632 storage stays 183.6 MB and
-the build 7.8–8.0 s. The dense matrix is bitwise unchanged (`_vf_tier` is
-`_vf_kernel`'s tier test, factored out).
+Hohlraum: above-leaf certificates by themselves leave the blocks identical to the committed
+build (10,484). The tier check rejects one more block at each size (10 → 11 at 10,484; 16 →
+17 at 17,632), so the hohlraum is **not identical**. At 10,484 the Frobenius error
+(2.679e-7) and the row sums (3.214e-7) are unchanged to four digits, storage is 85.7 → 85.8
+MB, and the build stays at 4.0–4.2 s. At 17,632 storage stays 183.6 MB and the build 7.8–8.0
+s. The dense matrix is unchanged (`_vf_tier` is `_vf_kernel`'s tier test, factored out).
 
 Tests (`test/hmatrix.jl`): the mask-against-ray and empty-shaft checks of "visibility
 certificates" now cover every block up to `mask_size`, not only leaf pairs. "Quadrature-
-tier entries" uses a latitude–longitude hohlraum (3,254 far blocks): every entry returned
-is off its row's or its column's majority tier; every pair alone off its line's majority
-is returned when the cap is not reached; and a block with no entries has one tier.
-Confidence: the diagnosis and the measurements **H**; the m + n cap and the
-fewest-first order are engineering choices, **M**.
+tier entries" uses a latitude–longitude hohlraum (3,254 far blocks): every entry returned is
+off its row's or its column's majority tier; every pair that is the only one off its line's
+majority is returned when the cap is not reached; and a block with no entries has one tier.
+Confidence: the diagnosis and the measurements **H**; the m + n cap and the fewest-first
+order are engineering choices, **M**.
 
 **`:sampled` visibility (third pass, adopted).** Same bored cavity with
 `visibility = :sampled` (11,360 elements, 4 threads pinned, warm).
@@ -5342,7 +5333,7 @@ whole-ball one, so every occupied leaf took rays.
    - an end element's plane clearing a convex part: the samples of that end within
      `hdev` (≈ 0) of its plane, the other end's within rⱼ.
 
-   Zero radii reproduce the old arithmetic bitwise. A bundle is 0 if any part hides
+   Zero radii reproduce the old arithmetic exactly. A bundle is 0 if any part hides
    it whole, and 1 if all clear it whole. Otherwise `_visible_fraction` runs with each
    segment decided by the parts that did not clear the bundle (`_HSeen`), or by the ray.
 2. Exclusions valid for the samples. In `:sampled` mode the shaft's plane tests take the
@@ -5386,13 +5377,13 @@ have `_hfrac` `===` `_vf_visible`'s fraction. The 7,644 empty-shaft blocks have
 `_vf_pair_free` `===` `_vf_pair` per pair. No block of this target needs rays any more.
 `test/hmatrix.jl` "sampled visibility bundles" (1,068 elements) checks:
 - bundle verdicts against the rays of random segments inside the balls (some ends on
-  their surfaces), against that part's facets alone;
+  their surfaces), against the facets of that part only;
 - every certified block's fractions and every empty shaft's factors (`===`).
 
 Centroid-visibility H-matrices are identical block by block (bored cavity 11,360,
-hohlraum 10,484; 5.9 s and 3.5 s, unchanged). Dense centroid factors are bitwise unchanged.
+hohlraum 10,484; 5.9 s and 3.5 s, unchanged). Dense centroid factors are unchanged.
 Dense `:sampled` factors are not: 3.8% of entries move, by ≤ 4e-14 relative (item 5).
-They are 5% faster from item 4 (3,156 elements: 10.05 → 9.50 s). The dense path has no
+They are 5% faster from item 4 (10.05 → 9.50 s at 3,156 elements). The dense path has no
 shafts, so the bundle certificates do not apply to it. Confidence **H** for exactness and
 timings; the gap-certificate estimate is **M**.
 
@@ -5476,7 +5467,7 @@ near pairs of `bored_cavity()` 4.6 → 0.19 CPU-s.
 | with `sombrero = true` 1,888 | 0.49 s | 0.38–0.39 s | 6,400 | 7.1e-4 / 1.1e-3 |
 | `hohlraum()` 4,116 | 2.35–2.37 s | 2.18–2.21 s | 10,176 | 5.6e-4 / 7.6e-4 |
 
-**Not bitwise identical** wherever a sector meets a coaxial sector or inward cylinder near
+**Not identical** wherever a sector meets a coaxial sector or inward cylinder near
 by: every primitive hohlraum (cap–wall corner pairs; LEH disk–wall pairs), bored cavities,
 coaxial disks. That is the point of the change. Whole-matrix component exchanges (all
 tiers) against closed forms, old → new:
@@ -5527,7 +5518,7 @@ segments of gap–wall pairs), so the gap rays were ~13 CPU-s of 112 (~12%), not
 quarter estimated above (that came from `_vf_visible`'s cost per call, several rays
 each).
 
-**What changed** (`src/hmatrix.jl`; exact, so `HMatrix` is **bitwise unchanged**). A hull
+**What changed** (`src/hmatrix.jl`; exact, so `HMatrix` is **unchanged**). A hull
 part (`_HHull`, a cylinder or cone component) whose facets are all parallel to its axis and,
 seen along it, lie within 1e-10 (relative) of a set of lines that keep the axis inside
 (a wall or bore of chord rectangles) also keeps those side lines (`_hprism`: facets
@@ -5577,11 +5568,11 @@ that takes certified fractions, 33.2M facing pairs (2.92M hidden, 1.02M partial)
 (ends on facets lifted −1e-9 to 1e-6, within 1e-12 to 1e-1 of their axial ends at the
 polygon's vertex and inscribed radii, in the gap's slot, anywhere about the part): all
 304k decided agree with `any_hit` against that part's facets. `test/hmatrix.jl` "prism
-certificates" keeps 16k of these (half of the decided ones decided by the lines alone)
+certificates" keeps 16k of these (half of the decided ones decided by the lines only)
 and the arctangent's bound; "visibility certificates" and "sampled visibility bundles"
 pass unchanged and now run through the lines too.
 
-What is left: the capsule's ~21M rays (segments between its balls; a per-facet
+What is left is the capsule's ~21M rays (segments between its balls; a per-facet
 certificate for the convex capsule would save ≲ 7% of this build) and the per-segment
 certificate work itself (a gap–wall pair is 256 segments through up to six parts:
 10–19 µs per pair after this). Confidence **H** for exactness and timings.
@@ -5746,7 +5737,7 @@ rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 
 > the plasma and Dante"; the open items are kept in ROADMAP item 12.
 
 - **After the laser droop (from 8.05 ns)** the model falls with the power (−18 eV by
-  8.5 ns, −49 by 9 ns) while Dante holds 311 eV to 8.6 ns and reads 301.5 at 9 ns. A
+  8.5 ns, −49 by 9 ns) while Dante stays at 311 eV to 8.6 ns and measures 301.5 at 9 ns. A
   quasi-static radiosity with a self-similar wall loss cannot give stored wall energy
   back; re-emission from the hot surface layer of a wall under a falling drive is the
   missing physics. Not addressed.
@@ -5765,7 +5756,7 @@ rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 
 ## Wall re-emission and the capsule radius (2026-10-24) *derived*
 
 ROADMAP "Absolute energetics on N221204", the two open items of "N221204 late-time drive": (1) after the laser droop
-(8.05 ns) the model's drive fell with the power while Dante 1 holds 311 eV to 8.6 ns;
+(8.05 ns) the model's drive fell with the power while Dante 1 stays at 311 eV to 8.6 ns;
 (2) the capsule share, 11.6% against HYDRA's 16.2%. Dante 1 and Fig. 10 are checks
 here, never fit. All runs `examples/n221204.jl ... full energetics=new` (the full model:
 calibrated CBET, wall, lips, bubble; DU wall, `nif_conversion`, backscatter, 11%
@@ -5793,7 +5784,7 @@ unless "std" (0.28 / 0.16). Confidence: **H** primary text, **L** our constructi
 Rosen's lectures give the re-emission of a driven Marshak wave, not a cooling law: no
 published closure for a wall under a falling drive was found. The model below is our
 construction, checked against our own 1-D diffusion solve (an independent reference:
-it shares no code or assumption with the closure but the material power laws).
+it shares only the material power laws with the closure, and no other code or assumption).
 
 ### 1. Wall re-emission (`drive_history(...; wall_release = true)`, default)
 
@@ -5801,7 +5792,7 @@ The self-similar loss with history (`wall_history`) never returns energy: when T
 t_eff grows and the loss only shrinks. The closure (*L*, in `_wall_split`):
 
 - the history loss is the heating response, evaluated at each element's running maximum
-  T_h = max T (bitwise the old loss while T never falls below it);
+  T_h = max T (exactly the old loss while T never falls below it);
 - a drop is the deficit D = φ(T_h) − φ(T) in the wall-energy potential φ = (T/100 eV)^a
   (a = 4 + p = 3.3), and the wall answers it with the self-similar kernel of the loss,
   superposed (Duhamel, linear in φ): net flux in F = L(T_h, t_eff) −
@@ -5810,12 +5801,12 @@ t_eff grows and the loss only shrinks. The closure (*L*, in `_wall_split`):
   fast at first (the hot surface layer), then as the t^b of the heat wave;
 - D is piecewise linear between steps and the kernel integral exact for it. The term of
   the step itself is stiff (Δ^(b−1)); as an emission it made `solve`'s albedo iteration
-  diverge (first try: albedos of 10⁴), so below T_h it goes into the albedo, 1 − f_r C
+  diverge (the first try gave albedos of 10⁴), so below T_h it goes into the albedo, 1 − f_r C
   Δ^(b−1) φ(T)/H ∝ T^-0.7 (iterates like Lindl's), and the T-independent rest into a source
   term (`solve` gained a per-element emission from the albedo state; `sol.source`
   includes it, so B = source + αH stays exact). The effective wall albedo exceeds 1
   where the wall gives back more than it takes.
-- Bookkeeping: `drive_history` books `source` as ηP and `absorbed` net of the emission;
+- For bookkeeping, `drive_history` books `source` as ηP and `absorbed` net of the emission;
   `released` (new) is the re-emitted power per component and `energy_budget` integrates
   it. The budget still closes to 1e-15 on a falling drive. `keep_albedo` returns the
   effective albedo α + E/H, so a flux response about it reproduces the step exactly (a
@@ -5838,16 +5829,16 @@ at 8 ns):
 | 30% | −0.0148 | +0.0094 | −0.0291 | −0.0153 | 0.762 |
 
 The closure is linear in f_r for a prescribed T_D, so f_r is read off exactly; the same
-0.76–0.78 serves all three drops, and with 0.77 the net flux follows the reference
-point by point (10% drop, F/σT_D⁴ at 8.1 / 8.5 / 9.0 ns: +0.011 / −0.010 / +0.015
-against +0.013 / −0.009 / +0.014; 30%: +0.003 / −0.035 / −0.095 against +0.006 /
-−0.032 / −0.093). The linear response (f_r = 1) overshoots by ~1.6×: a cooled surface is
-more opaque and throttles the release. Without the release the wall keeps absorbing
-after the drop. Caveats: static wall (the ablating wall's b = 0.62 is not tested), one
-material's exponents; the history loss itself is 8% low against the reference early
-in the peak (5 ns: 0.112 against 0.122 of σT_D⁴) and within 2% from 6 ns.
+0.76–0.78 fits all three drops, and with 0.77 the net flux follows the reference point by
+point (10% drop, F/σT_D⁴ at 8.1 / 8.5 / 9.0 ns: +0.011 / −0.010 / +0.015 against +0.013 /
+−0.009 / +0.014; 30%: +0.003 / −0.035 / −0.095 against +0.006 / −0.032 / −0.093). The linear
+response (f_r = 1) overshoots by ~1.6×: a cooled surface is more opaque and throttles the
+release. Without the release the wall keeps absorbing after the drop. The caveats are a
+static wall (the ablating wall's b = 0.62 is not tested) and the exponents of one material;
+the history loss itself is 8% low against the reference early in the peak (0.112 against
+0.122 of σT_D⁴ at 5 ns) and within 2% from 6 ns.
 
-**Checks.** Rising drives: bitwise unchanged (`test/energetics.jl`, "wall re-emission"). Step
+**Checks.** Rising drives are unchanged (`test/energetics.jl`, "wall re-emission"). Step
 size: coarse N221204 at 0.125 against 0.25 ns steps (f_r 1): capsule Tr 302.1 / 283.9
 against 301.7 / 284.0 eV at 8.5 / 9.0 ns. The per-element net flux matches the formula
 evaluated from the recorded temperatures to 1e-6 of σT⁴.
@@ -5931,10 +5922,10 @@ Split with the release: wall 62.7 / LEH 25.6 / capsule 11.7% of the coupled ener
 
 ### What remains
 
-- The late drive: with the release the model falls 12 eV from 8 to 8.5 ns where Dante
+- In the late drive, the model with the release falls 12 eV from 8 to 8.5 ns where Dante
   rises 1; the hohlraum plasma's stored energy and the LEH after the laser turns off are
   the candidates (neither modeled).
-- The capsule share: 12.3% with published radius and albedo against 16.2%; the
+- The capsule share is 12.3% with published radius and albedo, against 16.2%; the
   absorbing radius outside the ablation front is the open input. (Superseded: 13.8% on
   the final defaults, "Capsule absorption, conversion and the ablating-wall release
   (2026-10-25)" §2; the release item was taken up there, §1.)
@@ -6018,7 +6009,7 @@ fitted to the foot and the peak, agrees with that within the analysis error. The
 integrated `drive_history` on the same basecamp with `leh_closure = :computed`
 reproduces the offline integration to 2e-5 mm and the data to rms 0.033 mm.
 
-Depth or fraction: 0.24–0.26 mm on 3.1–3.64 mm LEHs is also 0.84–0.86 r₀; the three
+A depth of 0.24–0.26 mm on 3.1–3.64 mm LEHs is also a fraction of 0.84–0.86 r₀; the three
 platforms cannot tell an absolute depth from a fraction. The depth is the model's form
 (the ridge stands where the beams meet the blow-off, which does not scale with the
 hole). On the Zylstra 2022 pair (§5 of "Wall material, conversion and capsule
@@ -6042,7 +6033,7 @@ area):
 | computed | 1.513 | 1.420 | 1.320 | 1.310 | 1.310 | 1.306 |
 
 The computed lip follows the prescribed ramp through the foot (free expansion at
-120–180 eV), is held 0.24 mm in from the rise on (prescribed: still closing to 8 ns), and
+120–180 eV), is held 0.24 mm in from the rise on (prescribed, still closing to 8 ns), and
 stays held through the droop: the intensity through each hole is 17.8 TW/mm² at 8.6 ns
 and 8.8 at 9.2 ns against the hold's 6–17, so the edge is free again only after ~9 ns.
 
@@ -6062,7 +6053,7 @@ Capsule Tr / Dante 1 over the initial / open LEH area (eV):
 
 +1 eV through the peak (the hole is 0.02 mm smaller from 5.5 ns), the LEH share 0.7
 points lower (HYDRA's 25.2% lies between), Fig. 10 within 0.005. **The late gap is not
-the LEH**: 8.0 → 8.5 ns the model still falls 11 eV (capsule), Dante rises 1. Bound: to
+the LEH**: 8.0 → 8.5 ns the model still falls 11 eV (capsule), Dante rises 1. As a bound, to
 hold the drive the losses must fall by ~4 × 3.5% ≈ 14% (T^~3.5 at fixed source); with
 the LEH 25% of the loss that is −56% of the LEH area, an edge 0.44 mm further in within
 0.45 ns (~1 mm/ns): 25× the fitted free speed at 300 eV, 10× LASNEX's post-laser-off
@@ -6085,7 +6076,7 @@ hohlraum plasma (He gas, gold blow-off) and given back after the droop has no st
 - **He gas** (the one published inventory). 0.3 mg/cc in 0.356 cm³ (6.4 × 11.24 mm less
   the capsule) is 0.107 mg, 1.6e19 ions; fully ionized at T_e 2.5 / 3 / 5 keV (the LEH
   T_e ≤ 5.5 keV of the two-zone CBET calibration; Chen's bubble interior 3–6 keV) it
-  holds 4.5 n T_e = 29 / 35 / 58 kJ. PRE 109 App. 3 books 4.5% of the incident energy
+  contains 4.5 n T_e = 29 / 35 / 58 kJ. PRE 109 App. 3 books 4.5% of the incident energy
   (~92 kJ) into the gas over the pulse, consistent with a store of that size drained into
   the wall as it goes. He radiates nothing to speak of (bremsstrahlung ~0.5 TW at
   n_e 9e19 cm⁻³); it gives its energy to the gold by conduction, at most the
@@ -6253,7 +6244,7 @@ Checks:
   mock HYBRID-E pointing; the inner total from the input cone fraction, split evenly
   23°/30°), its Δλ, and its timing (`delay` = its `pulse_rise` minus N221204's: −0.03 ns for
   N220919, −0.06 for N210808; the model is evaluated at t − delay). Targets: post-CBET
-  cone fraction every 0.2 ns over 0.8–8.4 ns where readable (107 rows: 39 / 31 / 37).
+  cone fraction every 0.2 ns over 0.8–8.4 ns where readable (107 rows, 39 / 31 / 37).
   Equal weights.
 - **Constraints.** Te ≤ 5.5 keV (bound; B16's high-fill 4.2 ± 0.2 keV at peak, Michel
   2009's 5–6 keV). Δλ null: a squared-hinge penalty (weight 10) on N221204's beams at 5.6
@@ -6282,7 +6273,7 @@ Checks:
   2.75 Å. Per-cone ratios (not fitted) stay as in the reference: 44° loses more than
   50° at peak (0.39 / 0.62 against HYDRA's 0.43 / 0.64), the transfer favors 30° (2.16
   against 1.88).
-- **What the data alone want** (free): no flow-driven zone (outside Mach → 0, the
+- **What the data by themselves favor** (free): no flow-driven zone (outside Mach → 0, the
   multipliers then degenerate: σ_u ~10³–10⁵), the null at Δλ = 0, a flatter response
   (0.10–0.12 per Å at 5.6 ns) and a Te of 14–20 keV, i.e. the gain scale pushed down as far
   as the bound allows. That is HYDRA's cross-shot flatness bought with an unphysical
@@ -6377,7 +6368,7 @@ the transfer? Confidence: **H** primary text, **L** our construction.
 - **The Δλ of round hot spots, not the transfer null (H).** NC24 (Nat. Commun. 15, 2975,
   p. 3): "In experiments, 1 ≤ Δλ ≤ 1.55 Å was required to minimize P2 in HYBRID-E designs
   and 0.5 Å Δλ was required in I-Raum experiments mostly to negate the flow-induced
-  CBET." P2 is that of the hot spot's 17% self-emission contour. The same paper says
+  CBET." P2 is that of the hot spot's 17% self-emission contour. The same paper states
   HYBRID-E "principally uses wavelength separation … to compensate for the inner beam
   absorption in the bubble and the flow-induced CBET": at a round hot spot the inner
   cones must *gain*, so HYBRID-E's transfer null lies below 1 Å.
@@ -6387,7 +6378,7 @@ the transfer? Confidence: **H** primary text, **L** our construction.
   +0.5 Å. A transfer null would not track capsule and pulse changes.
 - **The null itself (L for HYBRID-E).** The only published statement is I-Raum's:
   0.5 Å "mostly" negates the flow-induced CBET in a hohlraum built to need little
-  bubble compensation, so the null is ≤ 0.5 Å there; flow-driven inner → outer transfer
+  bubble compensation, so the null is ≤ 0.5 Å there; flow-driven transfer from inner to outer
   at Δλ = 0 exists (P20's HYDRA; NC24), so it is > 0. HYBRID-E has the same fill
   (0.3 mg/cc). Taken here as a band of 0.25–0.5 Å (the lower edge is our choice).
 - `hybride_cbet()`'s constraint (null in 1–1.55 Å) therefore over-constrained the joint
@@ -6465,7 +6456,7 @@ rows and start) with the null penalty at 0.25–0.5 Å; `clampfree` has no null 
   coefficient is not HYDRA's, so the values compare only roughly). Both trade against
   the inside multiplier (correlations −0.92 to −0.97): with the hard clamp binding, the
   peak gain is set by clamp × multiplier and Te enters through Im Γ/|Γ|. The
-  unconstrained fit lands in the same place, so the dip is the data's, not the null's.
+  unconstrained fit ends in the same place, so the dip is the data's, not the null's.
 - **Uncertainty** (Laplace, Gauss–Newton, σ from the residuals 0.025, penalty held
   fixed): outside multiplier ×/÷ 4.9, inside ±31%, Mach ±0.83 (−0.84 with the outside
   multiplier), Te knots ±7–15%, peak clamp ±29%, foot clamp unconstrained. Derived:
@@ -6510,7 +6501,7 @@ reproduce the previous section's rows to the last digit. Nothing was fitted to F
 ROADMAP "Backlighter physics". `kshell_line_energy`, `kshell_ce_data`, `kshell_ce_model`, `kshell_ce`,
 `mass_attenuation`, `filter_transmission`, `backlighter_signal` (`src/backlighter_signal.jl`,
 `test/backlighter_signal.jl`, `data/kshell_ce.csv`); used in the radiography tutorial
-(`docs/literate/dropped_bundle.jl`, "The radiograph's signal") and `examples/backlighter.jl`.
+(`docs/literate/dropped_bundle.jl`, "The radiograph signal") and `examples/backlighter.jl`.
 All of it is public literature plus generic detector geometry; no facility-specific
 backlighter design is used.
 
@@ -6550,7 +6541,7 @@ scatter **0.41 in ln CE (×1.51)** with 30 degrees of freedom (foil class rms 0.
 prepulsed 0.35). The optimum irradiance per line, `exp(−(c_c + e L)/2d)` × 1e15 W/cm²:
 foil Fe 1.2e15, Cu 2.1e15, Ge 3.8e15, Mo 1.8e16; prepulsed Zn 2.2e15, Ge 3.1e15, Zr 1.1e16.
 Peak CE: foil Fe 1.6%, Cu 0.71%, Ge 0.36%; prepulsed Cu 1.6%, Ge 0.78%, Zr 0.20%,
-Mo 0.15%. The peak falls as hν^-3.5 (foil Fe→Ge), inside the published hν^-(2.5–4).
+Mo 0.15%. The peak falls as hν^-3.5 (foil, from Fe to Ge), inside the published hν^-(2.5–4).
 - **Shortfalls, stated.** The peaks are flatter than the data: Workman's Fe peak (3%) and
   Barrios's Ge peak (1.5% at 1.5e15) sit ~2× above the fit, and the fitted prepulsed Ge
   optimum (3e15) is ~2× above Barrios's (1–1.5e15). The quadratic in ln I is the
@@ -6621,12 +6612,12 @@ tutorial rerun as a script), in brackets the weighted refit of the earlier form
   lowest), so extrapolated: CE 3.0% ×/÷ 1.52 [8.9% ×/÷ 1.53; 6.7% ×/÷ 1.78], ~240 J into
   4π, ~19 J/sr, ~2.6e11 photons/mm² [710 J, 56 J/sr, 7.8e11; 531 J, 42 J/sr, 5.8e11]. The
   held-out OMEGA Ti foil (~1.6% at 1.3e15) is 1.1σ below the fit there; the example's
-  comment says to pass a measured `ce`.
+  comment states that a measured `ce` should be passed.
 
 **Not modeled / next.** Pulse-length and spot-size dependence (data confounded);
 backside emission of thin foils; the line's opacity and limb brightening (the isotropic
 assumption); continuum and higher lines in a filter's pass band; detector response
-(image plate, CCD QE) and the object's transmission. The low-Z end: see the next
+(image plate, CCD QE) and the object's transmission. For the low-Z end, see the next
 section.
 
 ## Weighted He-α CE compilation (2026-10-26) *engineering*
@@ -6693,7 +6684,7 @@ C = (AᵀWA)⁻¹.
 - Optimum / peak (old → new): foil Fe 1.1e15 / 1.6% → 1.6e15 / 2.2%; Cu 2.1e15 / 0.71%
   → 2.9e15 / 0.97%; Ge 3.8e15 / 0.36% → 4.9e15 / 0.53%; prepulsed Cu 1.8e15 / 1.57% →
   1.5e15 / 1.63%; Ge 3.1e15 / 0.78% → 2.5e15 / 0.78% (closer to Barrios's 1–1.5e15);
-  Zr 1.1e16 / 0.20% → 8.1e15 / 0.21%. Peak slope Fe→Ge (foil) hν^-3.3, Cu→Ge
+  Zr 1.1e16 / 0.20% → 8.1e15 / 0.21%. Peak slope from Fe to Ge (foil) hν^-3.3, from Cu to Ge
   (prepulsed) hν^-3.6.
 - **CE at representative points, old → new** (%, ratio): foil Cr 1e15 3.09 → 4.14
   (×1.34); Fe 1e15 1.62 → 2.05 (×1.27); Fe 3e15 1.48 → 2.01 (×1.35); Cu 1e15 0.67 →
@@ -6704,7 +6695,7 @@ C = (AᵀWA)⁻¹.
   4.6e14 6.7 → 8.9 (×1.34, extrapolated; see below).
 
 **Held-out checks** (independent data, not the points fitted).
-- The form fitted to the 2026-10-24 rows alone (weighted, 37 points) predicts C19's 31
+- The form fitted only to the 2026-10-24 rows (weighted, 37 points) predicts C19's 31
   points: mean residual (data − fit) +0.11, rms 0.35; prepulsed −0.04 / 0.26, foil
   +0.27 / 0.42; normalized by the prediction's σ ⊕ 20%, rms 0.71 (`test/
   backlighter_signal.jl` asserts < 1.2). The unweighted 2026-10-24 model does about the
@@ -6736,8 +6727,8 @@ g = 0.63 ± 0.21 (0.58 ± 0.22 with a C19 offset of 0.10 ± 0.10; 0.60 ± 0.24 w
 0.6 ns point). It rests on C19's 2 ns Fe (2.8–3.2%) against W01's 1 ns Fe (2.4% at
 0.9e15); within C19, the 1 ns Fe at 1.98e15 (3.25%) is above the 2 ns Fe at 1.75e15
 (2.84–2.89%). So τ stays confounded with the source; not in the model. A C19 amplitude
-offset alone: +0.19 ± 0.11 (two-sided irradiation or calibration; not significant).
-Spot size: every source sets the irradiance with the spot (C19 and W01 change spot and
+offset by itself fits +0.19 ± 0.11 (two-sided irradiation or calibration; not significant).
+On spot size, every source sets the irradiance with the spot (C19 and W01 change spot and
 beam count together), so a spot term is degenerate with X here. *E*
 
 ## He-α CE: saturating peak (2026-10-26) *engineering*
@@ -6777,9 +6768,9 @@ was computed differently and its C19 value disagrees with the C19 held-out value
 line, 0.35). LOEO, adopted (mean/rms): Cr see below, Fe +0.38/0.54, Ni +0.03, Cu −0.17/0.35,
 Zn −0.29/0.33, Ge +0.10/0.54, Zr +0.12/0.23, Nb +0.44/0.47, Mo +0.30/0.30 (the previous
 form: Cr −0.42, Fe +0.41, Nb −0.03, Mo −0.07). The cubic's in-sample gain is overfitting
-(W01 left out: rms 3.8).
+(rms 3.8 with W01 left out).
 
-**What the comparison says.** (1) Most of the cross-validated gain is the
+**What the comparison shows.** (1) Most of the cross-validated gain is the
 reparametrization at the same parameter count (LOSO 0.55 → 0.44). (2) The plateau adds
 one parameter that the data inside Cr–Mo barely need: for `Lₛ` between Cr and Fe it is
 exactly a free Cr peak level (Fe and above follow `hν^b`), and Cr sits 0.24 below the
@@ -6790,7 +6781,7 @@ across that range: 3.2–2.4% (z −1.3 to −0.7); with no plateau (hνₛ belo
 of width 0.1 in `L` fits slightly worse and runs to the grid's edge (4.8 keV), back to
 the power law. (4) With Cr left out, hνₛ is not identified (any value up to Fe fits the
 rest equally); Cr's held-out residual then ranges from −0.21 (hinge below Cr) to +0.34
-(at Fe; what the refined grid lands on). (5) The prepulsed high-Z end (B14 Zr/Nb/Mo)
+(at Fe; the value the refined grid finds). (5) The prepulsed high-Z end (B14 Zr/Nb/Mo)
 loses: LOSO B14 0.30 → 0.40, Nb/Mo now underpredicted by 0.3–0.45, because the shared peak
 slope `b` is now the Fe–Ge slope.
 
@@ -6841,7 +6832,7 @@ bound toward low Z, because the absorbed fraction and the share of it radiated a
 bounded, and at the lower temperatures that suffice for low-Z He-like ions more of the
 energy goes into lower ionization stages and continuum. The Ti point (and the Gekko XII
 and Shenguang II Ti foils, 1.4–1.8% in 4–6 keV) are below the plateau, which would mean
-a turnover rather than a plateau; one point cannot separate them. *confidence: medium
+a turnover in place of a plateau; one point cannot separate them. *confidence: medium
 inside the data (unchanged), low below Cr.*
 
 **Tests** (`test/backlighter_signal.jl`): χ²/(68 − 8) = 1, weighted residual sums zero
@@ -6889,14 +6880,14 @@ digitized raster figure, **L** our construction or assumption.
 | Sentinel | DIM-mounted, 16 MiniXRDs (6 Al, 5 Ni, 5 Cr) behind Dante filters, polar DIM 000-000 or equatorial 090-078 / 090-315, ~7 m | Kemp 2020 §II | H |
 | Optical constants | Henke f₁, f₂, 10 eV–30 keV, 19 elements (`data/henke/`, CXRO, fetched 2026-10-24) | Henke, Gullikson & Davis, ADNDT 54, 181 (1993) + CXRO updates | H |
 
-Digitization (`data/rubery2023_dante.csv`): the figures are raster images in the
-accepted manuscript; the plot frames were located from the dark frame lines and the
-axis ends taken at the frame (where the end tick labels sit), each curve masked by color
-and its median row read per pixel column. Overlaying the read points on the figures
-agreed to about a pixel (~0.1% of full scale); the narrow edge spikes (XANES) are
-under-read by the median. Units: Fig. 3b's axis says V/GW; read as MV/GW like Fig. 8b's
-Al XRD — with V/GW the quantum efficiency would be ~10⁻⁸, and with MV/GW channel 2
-reproduces its published calibration (below).
+Digitization (`data/rubery2023_dante.csv`): the figures are raster images in the accepted
+manuscript; the plot frames were located from the dark frame lines and the axis ends taken
+at the frame (where the end tick labels sit), each curve masked by color and its median row
+read per pixel column. Overlaying the read points on the figures agreed to about a pixel
+(~0.1% of full scale); the narrow edge spikes (XANES) are under-read by the median. Units:
+the axis of Fig. 3b is labeled V/GW; read as MV/GW like Fig. 8b's Al XRD — with V/GW the
+quantum efficiency would be ~10⁻⁸, and with MV/GW channel 2 reproduces its published
+calibration (below).
 
 ### Model
 
@@ -6947,8 +6938,8 @@ on channel 3 (at the XRD, before attenuators), the scale of Harris's N190721 tra
 sensitivity or whole response read from CSV) interpolates linearly. The built-in
 channels do not use it: their filters are Beer–Lambert from Henke's f₂, itself
 interpolated log-log between the Henke energies, so the default Dante 1 responses and
-every Dante Tr are independent of this choice. Measured on the filters of the 18
-Dante 1 channels: each transmission tabulated on a log grid (50 eV – 30 keV), read
+every Dante Tr are independent of this choice. This was measured on the filters of the 18
+Dante 1 channels, with each transmission tabulated on a log grid (50 eV – 30 keV), read
 back by three rules, and the channel response (`R` × read/exact transmission) weighted
 by Planckians at 100, 200 and 300 eV against the exact one on the 3001-point Dante
 grid; the worst of the three temperatures:
@@ -7026,7 +7017,7 @@ take the spectrum as a Planckian at Tr_open (**L**). Tr over the initial LEH are
 < 1e-7.) The gray history is unchanged by this work: Dante 1 295.0 eV at 8 ns over the
 initial area, 318.6 over the open area, against 310.1 measured.
 
-- **The unfold reads the input's Tr**: the traditional unfold 0.8–1.3 eV high (0.3–0.4%
+- **The unfold recovers the input's Tr**: the traditional unfold 0.8–1.3 eV high (0.3–0.4%
   in Tr, ~1.5% in flux; its Gaussians spread the high channels' power into the
   thermal band), the smooth one within 0.05 eV. Both well inside Dante's quoted 1σ of
   1.5% in Tr (Rubery 2023 §II.C). So comparing the synthetic Dante's `Tr` with the
@@ -7035,27 +7026,27 @@ initial area, 318.6 over the open area, against 310.1 measured.
 - **Before/after for the channels**: with Gaussians there was no unfold, only the
   color temperature of the channels below 1.5 keV. That color temperature agrees
   between Gaussian and hardware channels for the Planckian spectra (≤ 1.5 eV), but
-  with the laser M-band the hardware channels read 5–33 eV hotter: their high-energy
+  with the laser M-band the hardware channels give 5–33 eV hotter values: their high-energy
   leakage (nominal-energy bands with tails past the absorption edges) picks up the
   M-band, which Gaussians cannot. The color temperature is a start value, not a
   result, so Tr is unaffected; it is a reason not to quote a < 1.5 keV color
   temperature from Dante as the wall temperature.
-- **Model finding — hot laser spots**: even without the laser M-band, 10–22% of what
-  Dante 1 sees lies above 1.8 keV and the color temperature is 23–52 eV above Tr: the
-  per-element Planckian split puts the laser spots at their brightness temperature
-  (B/σ)^¼, far above the wall's, and Dante 1 sees outer spots through the LEH. With the
-  intensity-form M-band on top the share reaches 0.33 at 8 ns, against Dewald's
-  measured 12–15% (with the per-cone `nif_mband()` and α_M 0.5 the Dewald setup gave
-  12%). Not acted on here: a spot's thermal emission should be split at a plasma
-  temperature model rather than its brightness temperature. (Resolved in "Laser-spot
-  spectrum (2026-10-24)" below: spots now thermal at the local Tr plus the M-band; the
-  0.33 was mostly the uncalibrated M-band pairing, 0.115–0.138 calibrated.)
+- **Model finding — hot laser spots**: even without the laser M-band, 10–22% of what Dante 1
+  sees lies above 1.8 keV and the color temperature is 23–52 eV above Tr: the per-element
+  Planckian split puts the laser spots at their brightness temperature (B/σ)^¼, far above
+  the wall's, and Dante 1 sees outer spots through the LEH. With the intensity-form M-band
+  on top the share reaches 0.33 at 8 ns, against Dewald's measured 12–15% (with the per-cone
+  `nif_mband()` and α_M 0.5 the Dewald setup gave 12%). One conclusion was not acted on
+  here: a spot's thermal emission should be split at a plasma temperature model in place of
+  its brightness temperature. (Resolved in "Laser-spot spectrum (2026-10-24)" below: spots
+  now thermal at the local Tr plus the M-band; the 0.33 was mostly the uncalibrated M-band
+  pairing, 0.115–0.138 calibrated.)
 
 ### XRD lines of sight
 
 `sentinel(:polar)` (Kemp 2020: polar DIM 000-000, θ 0°) views the hohlraum down its
 axis through the upper LEH: on the test hohlraum (LEHs r 1.6 mm, capsule r 0.9 mm) it
-sees the capsule and, around it, the lower LEH, so a blackbody cavity at 250 eV reads
+sees the capsule and, around it, the lower LEH, so a blackbody cavity at 250 eV gives
 the capsule's (0.9/1.6)² share (186 eV): the polar view measures the capsule, not the
 wall. The equatorial DIMs (090-078, 090-315) see a hohlraum only through a window
 (`through` required). The Sentinel filter set is not tabulated (Dante 1's channels
@@ -7069,7 +7060,7 @@ on the hohlraum axis chosen per shot and is left to `DanteView`.
   nominal) — real filters' oxide and contamination layers would move the low channels.
 - The SiO₂ mirror angle scale (published 3.5° behaves as 2.04° bulk SiO₂) applied to
   the 2.5° mirror is an assumption.
-- Within-group spectral shape: voltages assume a Planckian at Tr_open within each group;
+- Within each group, the voltages assume a Planckian spectral shape at Tr_open;
   finer groups near the channel edges would remove it.
 - Laser-spot spectra (above; done, "Laser-spot spectrum" below) and the M-band split
   per cone in time-dependent runs.
@@ -7081,7 +7072,7 @@ on the hohlraum axis chosen per shot and is left to `DanteView`.
 ROADMAP "Spectral radiosity": the finding above ("hot laser spots"). `spectral_solve` split each
 element's whole source as a Planckian at the brightness temperature (B/σ)^¼ of its total
 radiosity. On a laser spot B = ηI + αH with ηI ≈ 1.1 × 10¹⁵ W/cm² at the outer cones'
-1.5 × 10¹⁵, so a ~300 eV cavity put its spots at ~365 eV, whose Planck tail alone holds
+1.5 × 10¹⁵, so a ~300 eV cavity put its spots at ~365 eV, whose Planck tail by itself contains
 25% of the power above 1.8 keV (a 290 eV Planckian 12.4%, 300 eV 14.0%), and the
 laser M-band was then carved out of that already hard spectrum. Read (cite
 only): Dewald et al., "X-ray conversion efficiency of high-Z hohlraum wall
@@ -7121,11 +7112,11 @@ local radiation temperature (**L**: the Sacks form applied per element).
   wall without laser light that is (B/σ)^¼, as before); the M-band flat over its band.
   Both temperatures follow the group totals when hard groups lose energy.
 - `:wall`: the converted x-rays at the wall temperature too (a lower bracket).
-- `:brightness`: the earlier rule, bitwise unchanged (the Dewald scan and the N221204 rows
+- `:brightness`: the earlier rule, unchanged (the Dewald scan and the N221204 rows
   below reproduce the earlier tables to the printed digit).
 - Group sums are untouched: Planck fractions sum to one per element, so Σ_g S_g = S
   and every gray total of `test/spectral.jl` holds for all three rules (B, H to 1e-11,
-  absorbed power to 1e-11). New tests: the source rows against the closed form of each
+  absorbed power to 1e-11). New tests check the source rows against the closed form of each
   rule (1e-12), spots softer than under the brightness rule, the rules identical on
   unlit elements, a stored-energy emission split at the wall temperature.
 - `SpectralSolution` gains `spot_temperature`, `converted`, `spot`.
@@ -7156,13 +7147,12 @@ Cone fraction 1/3 (1/4 in brackets); Dante 1 Tr 291.9 (290.6) eV, Dewald 290.
 
 ### N221204 (`examples/n221204.jl energetics=new unfold=on`, standard mesh 0.28/0.16)
 
-Dante 1 over the initial LEH area (Tr; open-area Tr_open in brackets), unchanged (gray):
-5 ns 243.4 (256.6), 6 ns 265.0 (283.1), 7 ns 277.9 (299.5), 8 ns 291.2 (314.5), 8.5 ns
-282.4 (305.0) eV. "> 1.8 keV" is the share of what Dante 1 sees; Tc the
-hardware-channel color temperature; "cones" the per-cone M-band (`nif_mband()`, each
-cone from its post-CBET, post-bubble deposition, `mband_power`; laser → M-band 0.125–0.194
-of the absorbed laser, the intensity form 0.040–0.130) with the
-calibrated α_M, thermalized.
+Dante 1 over the initial LEH area (Tr; open-area Tr_open in brackets), unchanged (gray): 5
+ns 243.4 (256.6), 6 ns 265.0 (283.1), 7 ns 277.9 (299.5), 8 ns 291.2 (314.5), 8.5 ns 282.4
+(305.0) eV. "> 1.8 keV" is the share of what Dante 1 sees; Tc the hardware-channel color
+temperature; "cones" the per-cone M-band (`nif_mband()`, each cone from its post-CBET,
+post-bubble deposition, `mband_power`; the laser-to-M-band ratio is 0.125–0.194 of the
+absorbed laser, the intensity form 0.040–0.130) with the calibrated α_M, thermalized.
 
 | t (ns) | brightness | thermal | brightness + `MBandEmission()` | thermal + `MBandEmission()` | brightness, cones, α_M 0.5 | **thermal, cones, α_M 0.55** |
 |---|---|---|---|---|---|---|
@@ -7203,7 +7193,7 @@ matched to < 5e-4.
   300); the color temperature goes from 5–29 eV above Tr_open to 6–12 eV below it; the
   traditional unfold's bias falls from +0.8–1.2 to +0.13–0.50 eV (its Gaussians have
   less hard power to spread). With the calibrated M-band the color temperature sits
-  4–12 eV below Tr_open (brightness rule: 4–12 above).
+  4–12 eV below Tr_open (4–12 above under the brightness rule).
 - Neither is a Dante check: published N221204 color temperatures are not in hand, and
   the M-band share was compared, not fitted.
 
@@ -7295,9 +7285,9 @@ Findings:
   The sign is the same as the static result's (the model's larger LEH loses slightly too
   little). The difference does not depend on the energetics (old and new agree within
   1 eV): it is geometry, not wall or conversion physics.
-- **Dante's view widens the model's difference rather than closing it**: the capsule
+- **The view of Dante widens the model's difference**: the capsule
   sees +5 eV, Dante +9. Through the larger hole Dante 1 sees deeper into the hohlraum,
-  so the 3.64 mm shot reads hotter relative to its capsule. Comparing the model's capsule
+  so the 3.64 mm shot measures hotter relative to its capsule. Comparing the model's capsule
   Tr with the measured Dante would hide the residual.
 - **Computed lips widen it further** (+11–13 eV on the initial area): `LipClosure`'s
   absolute depth (0.24 mm) closes the 3.1 mm hole by a larger fraction, so Dante's
@@ -7305,7 +7295,7 @@ Findings:
   r₀) does better here; Young's 0.26 mm on 3.64 mm and Schneider's 0.25 on 3.1 mm cannot
   separate the two forms (see "Computed LEH closure").
 - **When the laser falls the difference flips sign too hard** (7.5 ns: −14 against
-  −4.4): N191118's model Tr drops with the power while its Dante holds for ~0.3 ns more.
+  −4.4): N191118's model Tr drops with the power while its Dante stays up for ~0.3 ns more.
   A 0.15 ns lag halves that (−7.4). This is the late-time drive problem below.
 - Absolute level, rise and peak: the measured Dante lies between the initial-area and
   open-area readings on both shots (N191118: +0.8 / +19 eV mean, initial / open,
@@ -7317,25 +7307,25 @@ On all three shots the model's drive falls far faster than Dante's after the pow
 drops. Model minus measured (initial / open area, `energetics=new`, standard mesh):
 N191118 −41 / −21 eV at 8.0 ns, −73 / −58 at 8.5, −71 / −58 at 9.0; N210601 −27 / −5 at
 8.0, −44 / −24 at 8.5, −68 / −51 at 9.0; N221204 −28 / −5 at 8.5, −41 / −20 at 9.0. At
-bang time Dante reads 226.0 eV (N191118) and 253.8 eV (N210601), the model 154.7 / 167.1
+bang time Dante measures 226.0 eV (N191118) and 253.8 eV (N210601), the model 154.7 / 167.1
 and 185.5 / 200.4. The ordering Zylstra points to ("by bang time Trad is significantly
 higher on N210601") is reproduced: model +31 eV (initial area), data +28. The level is
 not.
 
-Size of the gap (*L*): the LEH x-ray energy that Dante's Tr implies over the fall
-(σT⁴ over both initial LEH areas, Lambertian) exceeds the model's by 125 kJ (N191118,
-7.25–9.37 ns), 89 kJ (N210601, 7.75–9.48) and 71 kJ (N221204, 8.0–9.4). The LEHs carry
-25–31% of the model's losses, so holding the hohlraum at Dante's temperature would take
-~250–450 kJ more x-ray source after the laser falls, 15–25% of the laser energy. That is
-several times the He gas's 30–60 kJ ("Computed LEH closure") and more than the wall
-already gives back in the model (`wall_release`: 137–272 kJ). A 0.15 ns lag of the source
-(~60 kJ stored) recovers only 10–15 eV of it (N191118 at 8.5 ns, coarse: −59 instead of −73). So the
-tail is not a reservoir of the published size. What remains is either physics a gray,
-quasi-static radiosity lacks over a 1–2 ns coast (a hot, optically thick LEH plasma or
-gold blow-off in Dante's view; the wall's re-emission when the drive is fully cut, which
-`release` = 0.77 was calibrated for only up to 30% drops), or a Dante time base or
-analysis that differs after laser-off. The pair, with N191118's laser off 1 ns before
-bang, is the cleanest data for it. Open.
+Size of the gap (*L*): the LEH x-ray energy that Dante's Tr implies over the fall (σT⁴ over
+both initial LEH areas, Lambertian) exceeds the model's by 125 kJ (N191118, 7.25–9.37 ns),
+89 kJ (N210601, 7.75–9.48) and 71 kJ (N221204, 8.0–9.4). The LEHs carry 25–31% of the
+model's losses, so holding the hohlraum at Dante's temperature would take ~250–450 kJ more
+x-ray source after the laser falls, 15–25% of the laser energy. That is several times the He
+gas's 30–60 kJ ("Computed LEH closure") and more than the wall already gives back in the
+model (`wall_release`: 137–272 kJ). A 0.15 ns lag of the source (~60 kJ stored) recovers
+only 10–15 eV of it (N191118 at 8.5 ns, coarse mesh, −59 instead of −73). So the tail is not
+a reservoir of the published size. What remains is either physics a gray, quasi-static
+radiosity lacks over a 1–2 ns coast (a hot, optically thick LEH plasma or gold blow-off in
+Dante's view; the wall's re-emission when the drive is fully cut, which `release` = 0.77 was
+calibrated for only up to 30% drops), or a Dante time base or analysis that differs after
+laser-off. The pair, with N191118's laser off 1 ns before bang, is the cleanest data for it.
+Open.
 
 ### 3. Bang time and the hot spot (ROADMAP "Implosion metrics and UQ" metrics)
 
@@ -7353,7 +7343,7 @@ every Y_lm, and the metrics use the drive window from the start of the rise
 | Fig. 10 minimum / 8 ns / rms (blind) | −0.189 / +0.077 / 0.042 | −0.235 / +0.150 / 0.050 | −0.170 / +0.095 |
 | capsule Tr / Dante 1 (initial, open) at bang | 233.6 / 217.5, 235.0 eV | 208.6 / 194.5, 210.1 | no Dante after 9.4 ns |
 
-- **Velocity**: zero to round-off. The mock pointing and the hohlraum are mirror
+- **Velocity**: zero within round-off. The mock pointing and the hohlraum are mirror
   symmetric and there are no windows, so the model has no mode 1. N221204's 36 km/s
   comes from sources that are not in it: per-quad power imbalance (DN24 Fig. 1 left,
   not attributable per quad), capsule thickness mode 1 (0.13 µm), the three equatorial
@@ -7367,14 +7357,14 @@ every Y_lm, and the metrics use the drive window from the start of the rise
   (Callahan 2018's line on another platform, good to a factor of ~2), `energetics=new`
   gives a −6.5 µm (oblate) shift and the old energetics +22 µm. Neither is zero within
   the transfer's uncertainty band; the published energetics are 3× closer.
-- **Bang time as the end of the window**: extending the window from 8.9 ns to bang moves
-  the mean flux P2 by 0.0014 (new): the coast's flux is low and its P2 small, so the
-  window end hardly matters for P2. It matters for the drive. At bang the model's Tr is
-  70 eV below Dante on the pair (§2), and on N221204 the capsule Tr is 234 eV at bang
-  against ~276 eV that HYDRA gives N210808 there (Kr22 Table I; N221204 not tabulated).
-  This is the same late-time deficit. Coast time: the measured pulse's half-power fall
-  is at 8.75 ns, and 9.53 − 8.75 = 0.78 ns is AS24's coast time exactly (a consistency
-  check of the pulse data, not of the model).
+- **Bang time as the end of the window**: extending the window from 8.9 ns to bang moves the
+  mean flux P2 by 0.0014 (new): the coast's flux is low and its P2 small, so the window end
+  hardly matters for P2. It matters for the drive. At bang the model's Tr is 70 eV below
+  Dante on the pair (§2), and on N221204 the capsule Tr is 234 eV at bang against ~276 eV
+  that HYDRA gives N210808 there (Kr22 Table I; N221204 not tabulated). This is the same
+  late-time deficit. As for the coast time, the measured pulse's half-power fall is at 8.75
+  ns, and 9.53 − 8.75 = 0.78 ns is AS24's coast time exactly (a consistency check of the
+  pulse data, not of the model).
 
 ### 4. `energetics=new` as the example's default: decided, flipped
 
@@ -7405,7 +7395,7 @@ area), and on the capsule share. That share is HYDRA's, a model, and `energetics
 calibrated α_c on a drive that was then too hot, so it is a recalibration issue
 (ROADMAP "Absolute energetics on N221204"), not evidence for the old physics. **Decision**: `examples/n221204.jl` now
 defaults to `energetics=new`; `energetics=old` restores the 2026-10-24 settings. Untagged
-runs and CSVs before 2026-10-25 used the old energetics. No src default changed: the
+runs and CSVs before 2026-10-25 used the old energetics. No src default changed; the
 pieces stay opt-in (`du_wall_loss`, `nif_conversion`, `CapsuleAlbedo` are
 HYBRID-E-specific or calibrated, and the 0.75 materials default anchors every other
 baseline). *Superseded the same day* ("Energetics defaults and the capsule share
@@ -7430,7 +7420,7 @@ time). Scripts in the session scratchpad `depcost/` (`cmp.jl`, `harness.jl`, `vf
 `closed.jl`, `conv2.jl`, `plates.jl`); timings on the Ryzen 9 4900HS with other jobs
 sharing it (ratios are from interleaved runs).
 
-### Deposition operator: packet visibility (bitwise identical)
+### Deposition operator: packet visibility (identical results)
 
 - **Screening on the profile's cut-off does not apply.** The operator's points and
   masks are reused as aims, spots and defocus move (by `reach` with full resolution,
@@ -7456,7 +7446,7 @@ sharing it (ratios are from interleaved runs).
   if it passes all its ancestors: every ray tests exactly the triangles a
   per-ray `any_hit` reaches until one blocks it. Each direction's last blocking leaf is tried
   first (a cache across a work unit's triangles; 38% of blocked rays settle there).
-  The operator is bitwise identical (points, weights, normals, masks, destinations
+  The operator is identical (points, weights, normals, masks, destinations
   and `deposit`), on the 48-quad and 192-beam NIF operators. The facing test d·n < 0
   is now summed in a fixed order (`_facing_mask`): StaticArrays' `dot` is an `@simd`
   reduction whose rounding depends on the calling code, which flipped a direction lying
@@ -7488,7 +7478,7 @@ arc is more than 4× its width (or the reverse) is halved one way only. Either h
 longest edge, so `mindepth`/`maxdepth` keep their meaning. Primitive triangles are under
 the bound (walls ≤ 2.5, geodesic capsules 1.5, corner bands 2.45; latitude–longitude
 polar caps reach 5.2 but are never adaptive emitters), and their midpoint children are
-similar to them: **`view_factors` is bitwise unchanged** on `hohlraum()` (4116
+similar to them: **`view_factors` is unchanged** on `hohlraum()` (4116
 elements), h 0.8/0.4, h 0.6/0.3 with `sombrero = true`, with `corner_radius = 0.5`, and
 with `capsule_mesh = :latlong`. Reciprocity is exact as before (the pair is still
 averaged over both directions); the bored cavities change by ≤ 3.5e-4 in F and ≤ 4.3e-4
@@ -7530,12 +7520,12 @@ arcs, "Near sector pairs by the double contour with arcs".)
 
 ## Energetics defaults and the capsule share (2026-10-25) *calibrated*
 
-ROADMAP "Absolute energetics on N221204". The user's decisions: the published ("new") energetics become the defaults
-wherever they are the physics Briareus uses, the old paths go without deprecation, and
-the constants calibrated on the old, too reflective wall (constant-T loss at the time
-since the pulse start, before "N221204 late-time drive") are recalibrated. Dante 1,
-PRE 109 Fig. 10 and HYDRA's LEH share are checks here, never fit. Confidence: **H**
-primary text, **L** our construction.
+ROADMAP "Absolute energetics on N221204". The user decided that the published ("new")
+energetics become the defaults wherever they are the physics Briareus uses, the old paths go
+without deprecation, and the constants calibrated on the old, too reflective wall
+(constant-T loss at the time since the pulse start, before "N221204 late-time drive") are
+recalibrated. Dante 1, PRE 109 Fig. 10 and HYDRA's LEH share are checks here, never fit.
+Confidence: **H** primary text, **L** our construction.
 
 ### What became a default, and where
 
@@ -7665,7 +7655,7 @@ f = 0.836, wall history and re-emission, 11% degradation, measured backscatter,
   ~4.4 ns, *L*) and `nif_conversion` at 5.5 ns (0.86), cone fraction 1/3, F_M at α_M
   0.55 / 0.6 is 1.90 / 2.16 (was 2.06 / 2.33): F_M ≈ 2 needs α_M ≈ 0.57. The move is
   below the scan's 0.05 step and F_M ≈ 2 is itself approximate, so α_M stays 0.55
-  (negative result). The example now uses the consistent wall; its Dante 1 reads
+  (negative result). The example now uses the consistent wall; its Dante 1 gives
   277 eV against Dewald's 290 eV peak (292 before, where the too reflective wall and the
   low conversion compensated), and the share above 1.8 keV at α_M 0.55 is 0.133
   (Dewald 0.12; 0.114 before).
@@ -7677,7 +7667,7 @@ f = 0.836, wall history and re-emission, 11% degradation, measured backscatter,
 
 ### What remains
 
-- The capsule share: 13.9% against 16.2% at the albedo's bound; the absorbing surface
+- The capsule share is 13.9% against 16.2% at the albedo's bound; the absorbing surface
   outside the ablation front is the open input (a published HYDRA absorption radius, or
   the blow-off's opacity). (Now 13.8% with Young's albedo on the K24 schedule; the
   remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside_absorptance`, unset: "Capsule
@@ -7738,12 +7728,12 @@ T (eV) after the laser falls, capsule at R₀ (static / ablating / closure / Dan
 | 9.5 | 158 / 163 / 145 / 221 | 187 / 190 / 172 / 254 | 222 / 221 / 204 / — |
 
 - **No gold wall holds the drive.** From 7.0 to 9.0 ns on N191118 the ablating wall falls
-  35%, the static 43%, Dante 19%; on N210601 from 7.5 to 9.5 ns 30% against 15%. With
-  no capsule and the LEHs at 0.857 r₀ (the most favorable sinks) N191118's ablating wall
-  still falls 30% (298 → 210 eV) by 9.0 ns. The ablating wall stores 620–820 kJ at the
-  fall but gives back only 30–45 kJ in the next ns: most of its energy is kinetic or deep.
-  So the slow fall needs a source outside the wall, as HYDRA's internal Tr (−29 to −40 eV
-  from maximum to bang, against −94 to −127 eV for Briareus's capsule Tr on the pair) says
+  35%, the static 43%, Dante 19%; on N210601 from 7.5 to 9.5 ns 30% against 15%. With no
+  capsule and the LEHs at 0.857 r₀ (the most favorable sinks) N191118's ablating wall still
+  falls 30% (298 → 210 eV) by 9.0 ns. The ablating wall stores 620–820 kJ at the fall but
+  gives back only 30–45 kJ in the next ns: most of its energy is kinetic or deep. So the
+  slow fall needs a source outside the wall, as HYDRA's internal Tr (−29 to −40 eV from
+  maximum to bang, against −94 to −127 eV for Briareus's capsule Tr on the pair) indicates
   it has.
 - **The closure is good to ~10 eV.** It sits 2–3% below the ablating reference at the
   peak and 8–10% below it 1–1.5 ns after the fall (N191118 160 against 177 eV at 9 ns).
@@ -7781,13 +7771,13 @@ coarse mesh; measured Dante in the last column:
 | N221204 9.0 | 272.8 / 256.7 / 277.2 | 279.6 / 262.8 / 283.9 | 301.5 |
 | N221204 bang 9.53 | 230.6 / 214.7 / 232.0 | 248.9 / 231.8 / 250.4 | — |
 
-- Bitwise unchanged until the power falls (rising drives are unchanged by construction).
+- Results are unchanged until the power falls (rising drives are unchanged by construction).
 - The Dante deficit (initial area) at bang falls from −75 to −43 eV (N191118) and −71 to
   −48 eV (N210601); at 8.5 ns from −76 to −56 and −48 to −43; N221204 at 9.0 ns from −45
   to −39. So ~30–45% of the late gap at bang, 6–26% at 8.5 ns. The rest is the
   plasma (§4).
-- Fig. 10 (blind) unchanged to 8.5 ns (−0.183 at 5.25, 6.21 ns, +0.085, rms 0.045);
-  mean flux P2 rise→bang −0.0081 against −0.0076 (−6.1 against −6.5 µm). Split (N221204,
+- Fig. 10 (blind) unchanged to 8.5 ns (−0.183 at 5.25, 6.21 ns, +0.085, rms 0.045); mean
+  flux P2 from rise to bang −0.0081 against −0.0076 (−6.1 against −6.5 µm). Split (N221204,
   % of coupled): LEH 24.2 → 24.7, capsule 13.9 → 14.0; wall re-emitted 136 → 145 kJ
   (N191118: 270 → 295 kJ).
 
@@ -7876,7 +7866,7 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
 | `backscatter=uniform capsule=mesh schedule=k24` | 6.23 (+0.02) | −0.189 (5.25) | +0.062 | 16.2% | 0.047 |
 | PRE 109 Fig. 10 (HYDRA) | 6.67 | −0.170 (5.60) | +0.095 | 16.2% (App. 3) | — |
 
-1. **Capsule radius** (published: K24 Fig. 1): ≤ 0.04 ns either way, and the K24
+1. **Capsule radius** (published in K24 Fig. 1): ≤ 0.04 ns either way, and the K24
    schedule moves the crossing *earlier* (a larger capsule sees more of the late
    pole-hot pattern). Minimum within 0.012. It does not close the gap. The old
    schedule's time map is confirmed: K24's minimum falls at bang time (9.54 ns), as
@@ -7899,14 +7889,13 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
    by t_c alone would need t_c ≈ 6.9 ns; PRE 109 Fig. 1a already shows wall and ablator
    plasma meeting at z 2–3 mm at 6 ns (by eye, *L*), so a collision near 6.1 ns is the
    published picture. Not changed.
-5. **Bubble speed**: `picket_ratio` 0.8 (PRE 109 Fig. 1a's N210808 tip alone) gives +0.33 ns,
-   the largest single lever, as found before; Pak's pulse points the other way (1.23).
-   No HYBRID-E datum separates them.
-6. **Glint** (Lemos 2022, estimated, not run): < 8 TW out of the inner beams, ~1.8
-   points of cone fraction at peak, −0.005 in P2 at the crossing (d(P2/P0)/dCF
-   −0.29%/%), i.e. ≤ 0.03 ns *earlier*. LEH lips (computed closure): ≤ 0.005 in P2
-   (before). Gas fill: in the bubble speed and opacity scalings (0.3 mg/cc on both
-   platforms).
+5. **Bubble speed**: `picket_ratio` 0.8 (from only the N210808 tip of PRE 109 Fig. 1a) gives
+   +0.33 ns, the largest single lever, as found before; Pak's pulse points the other way
+   (1.23). No HYBRID-E datum separates them.
+6. **Glint** (Lemos 2022, estimated, not run): < 8 TW out of the inner beams, ~1.8 points of
+   cone fraction at peak, −0.005 in P2 at the crossing (d(P2/P0)/dCF −0.29%/%), i.e. ≤ 0.03
+   ns *earlier*. LEH lips (computed closure): ≤ 0.005 in P2 (before). The gas fill enters
+   through the bubble speed and opacity scalings (0.3 mg/cc on both platforms).
 
 So the published inputs move the crossing by −0.04 to +0.16 ns (HYDRA's CBET result and the
 uniform backscatter cut together); ~0.3 ns remains, and only the two least constrained bubble inputs
@@ -7948,8 +7937,8 @@ not discriminate between the crossing at 6.2 and at 6.7 ns.
 - A HYBRID-E (6.4 mm Au-lined DU, 0.3 mg/cc) thin-wall or G-LEH measurement of the
   inner-beam spots or the bubble tip against time (Izumi 2018's platform on this
   hohlraum): it sets the bubble speed and the collision time directly.
-- The N221204-design 2DConA in-flight shell P2 against radius (the calibration K24 says
-  was pending; Ruof 2026's N240304 surrogate gives only 270–160 µm, at 2.9 Å):
+- The N221204-design 2DConA in-flight shell P2 against radius (the calibration K24 reports as
+  pending; Ruof 2026's N240304 surrogate gives only 270–160 µm, at 2.9 Å):
   integrated constraints on the swing, through a hydro transfer.
 - The HYDRA cone-fraction and power multipliers behind Fig. 10 (unpublished), and
   whether HYDRA's flux is evaluated at the ablation front or a fixed radius.
@@ -7974,11 +7963,11 @@ default; `capsule=mesh` stays off.*
 
 ## Capsule absorption, conversion and the ablating-wall release (2026-10-25) *derived*
 
-> **Superseded in part (2026-10-26).** §2's bounds: the `young` schedule's 0.81 R₀ at
-> 6 ns lies below the lower bound, now 0.84 R₀ (K24's radius is the ablator–fuel
-> interface or fuel center of mass, not the ice–gas surface); the schedules are
-> `RadiusSchedule`s, bitwise the same ("Capsule radius schedules: published
-> histories and the API (2026-10-26)"). The numbers stand.
+> **Superseded in part (2026-10-26).** The bounds of §2 changed. The 0.81 R₀ of the
+> `young` schedule at 6 ns lies below the lower bound, now 0.84 R₀ (K24's radius is the
+> ablator–fuel interface or fuel center of mass, not the ice–gas surface). The schedules
+> are now `RadiusSchedule`s with exactly the same values ("Capsule radius schedules:
+> published histories and the API (2026-10-26)"). The numbers stand.
 
 ROADMAP "Absolute energetics on N221204" (and 9): the user's four decisions of 2026-10-25 on "Energetics defaults and
 the capsule share", "Late-time drive" and "The P2 swing", implemented together. Dante 1,
@@ -8008,7 +7997,7 @@ find that earlier single-species LASNEX/HYDRA inner-cone SBS models overpredicte
 magnitude and duration, that a multispecies (Au/He/D/T) treatment fixes this, and that a
 late-time density spike between capsule and LEH refracts the inner beams and ends the
 backscatter early; see also Higginson et al., PRL 134, 165101 (2025) and the outer-cone
-SBS paper, PoP 31, 042707 (2024). Cited only: a per-cone, time-dependent backscatter
+SBS paper, PoP 31, 042707 (2024). These are cited only; a per-cone, time-dependent backscatter
 model from them is a separate task. The measured per-cone SBS/SRS (shapes *L*) stays the
 physics default.
 
@@ -8030,7 +8019,7 @@ conservation verified to ε², ~8%).
 | T = 2.5 t^0.18 (to 3.05 heV) | 0.5 / 1 / 3 | 0.967 / 0.968 / 0.968 | 1.065 / 1.059 / 1.038 |
 
 - **It agrees within the accuracy of the solution**: stored energy to 1–3%, heated
-  mass 3–7% high, against ε² ≈ 8%. Zoning: halving the zone masses moves E ≤ 0.3% and
+  mass 3–7% high, against ε² ≈ 8%. Halving the zone masses moves E ≤ 0.3% and
   m_F ≤ 2.5% (`fine=on`).
 - With the flux limiter the reference otherwise uses (`limiter=on`) E is 9–12% lower at
   2–3 ns (0.71–0.77 at 0.25 ns): the limiter, absent from H&R, throttles the low-density
@@ -8097,8 +8086,8 @@ drive" §3 (α_c 0, `young` schedule, the same wall otherwise):
   −54 / −37 eV. The release takes ~30–45% of the late gap, as in "Late-time drive" §3;
   the capsule changes (Young's albedo, the K24-shaped schedules) add 1–2 eV. The rest is
   the plasma source after the fall, still not modeled.
-- Capsule shares on the pair: 14.9% (N191118), 14.7% (N210601); wall re-emitted 290
-  and 192 kJ (N221204 143 kJ).
+- The capsule shares on the pair are 14.9% (N191118) and 14.7% (N210601); the wall
+  re-emitted 290 and 192 kJ (N221204 143 kJ).
 - Tests: `test/energetics.jl` (presets, `outside`), `dynamics.jl`, `retune.jl`,
   `capsule_drive.jl`, `docrefs.jl` pass on the new defaults.
 
@@ -8127,7 +8116,7 @@ environment, not a dependency).
 largest single cost, 52 s of inference in energetics/retune/bubble/dynamics/capsule_drive
 and 4 s more in uncertainty/parallel_gradient. Every call site's `beams_at` closure (and
 each `lpi` type, `record` closure and `times` type) is a new type, so each recompiled the
-whole march: ~2 s per call site, and no precompiled copy could serve it. Next:
+whole march: ~2 s per call site, and no precompiled copy could be used for it. Next:
 `visrad_target(...; remesh)` (42 s inclusive in visrad.jl: `remesh_mesh` 10 s and
 `fit_surfaces` 10 s of inference over ~3,600 concrete method instances; nothing
 pathological, just never precompiled), `talis_check` 7.6 s, `write_visrad_kit` 7.4 s,
@@ -8171,9 +8160,9 @@ still skips.
 
 **Hot loops unchanged.** Drive history, 1,300 elements, 24 steps, wall loss and a
 recorder, warmed: min of 5 runs, four alternating pairs, base 1.80/1.77/1.97/1.89 s, new
-1.98/1.79/1.82/1.84 s (noise), allocations 196 → 182 MiB. Results bitwise unchanged (every
+1.98/1.79/1.82/1.84 s (noise), allocations 196 → 182 MiB. Results are unchanged (every
 field of the history, `isequal`). `optimize_pointing` (default NIF hohlraum, keep-outs,
-8 iterations): 0.379 vs 0.389 s, `x`, value and evaluation count bitwise equal.
+8 iterations): 0.379 vs 0.389 s, `x`, value and evaluation count are identical.
 
 **Not done.** The GUI's 0.75 s first-import tick and 0.16 s first field-coloring frame
 (ROADMAP "GUI on CAD") were not measured (they need the Qt window); the GUI's time panel and drives
@@ -8184,18 +8173,17 @@ element shapes). A robust objective (`uncertainty = ...`) is not in the workload
 
 ### Update (2026-10-25): the workload cut to the common session
 
-The user: the workload should cover what most sessions hit, and the VisRad kit is not
-that. The common session is a GUI-less script: build a `hohlraum`, NIF quads, a
+The user decided that the workload should cover what most sessions hit, and the VisRad kit
+is not that. The common session is a GUI-less script: build a `hohlraum`, NIF quads, a
 `Scenario` (deposition operator, view factors, radiation model), evaluate, moments,
 `optimize_pointing` with keep-outs, solve, report, clearance, and a `drive_history`. All
 nine tutorials and eleven examples build a `hohlraum`; four tutorials optimize pointing;
 `drive_history` is in six examples and four tutorials. Dropped from the workload:
 `write_visrad_kit` (GUI export only), `talis_check` (GUI only), `cad_target(...; remesh)`
 and its view factors (one example, one tutorial), `spectral_solve`/`dante` (two/three
-examples, the GUI's Dante panel) and the CBET drive history (three calibration
-examples). The `@nospecializeinfer` changes stay: they are what make each new closure
-cheap, workload or not. The pre-existing large-model, H-matrix and ray-trace items were
-not revisited.
+examples, the GUI's Dante panel) and the CBET drive history (three calibration examples).
+The `@nospecializeinfer` changes stay: they are what make each new closure cheap, workload
+or not. The pre-existing large-model, H-matrix and ray-trace items were not revisited.
 
 Package image (touch a src file, `julia --project=. -e 'using Briareus'`, same machine
 and session, another agent's runs alongside): 138 s → 96 s (twice 96 s; a first,
@@ -8348,15 +8336,15 @@ Does `closed = true` (Sinkhorn balancing, `enforce_closure!`) apply beyond the f
 `hohlraum()` of "Balancing on the curved path against a continuum Monte Carlo"? CAD
 decision 11 (2026-10-18, closed). `examples/mc_cavities.jl` (4 threads; ~30 min, cached).
 
-Geometry: the bored cavity of "Partial visibility" (R 2.875, 9.4 mm long, 0.1 mm LEH bores
-of radius 1.55, a 20 µm waist gap, capsule 0.9; apertures on the LEHs and the gap exit);
-the same cavity from CAD-like facets (each half a closed solid of 360 strips, test
+The geometry is the bored cavity of "Partial visibility" (R 2.875, 9.4 mm long, 0.1 mm LEH
+bores of radius 1.55, a 20 µm waist gap, capsule 0.9; apertures on the LEHs and the gap
+exit); the same cavity from CAD-like facets (each half a closed solid of 360 strips, test
 `cad_half`) through `cad_target(...; inside, remesh, fit = true)` (`:sampled`); and
-`hohlraum()` of the same size with an open 1.5 mm circular window at the waist and a
-closed 1 × 2 mm window (α 0.5) at z = 1, each in an open 50 µm gap. Wall α 0.9, η 0.75,
-capsule α 0.3. Every model's capsule is the same geodesic mesh (`icosphere_mesh`,
-n = 15, 4,500 elements); source: the CAD tutorial's two Gaussian rings on the inner wall,
-integrated over each element.
+`hohlraum()` of the same size with an open 1.5 mm circular window at the waist and a closed
+1 × 2 mm window (α 0.5) at z = 1, each in an open 50 µm gap. Wall α 0.9, η 0.75, capsule α
+0.3. Every model's capsule is the same geodesic mesh (`icosphere_mesh`, n = 15, 4,500
+elements); source: the CAD tutorial's two Gaussian rings on the inner wall, integrated over
+each element.
 
 References: `montecarlo_incident(...; reemit = :hit)` (the continuum) on flat copies
 faceted at 0.1 mm (capsule n = 29, 16,820 elements), watertight: bores, LEH disks and gap
@@ -8431,20 +8419,20 @@ is the size of most a₄ entries.
   balanced +0.1–0.2%). `cad_target` cannot know whether the user's apertures close the
   cavity (a missing small opening and polygon cracks give the same `open_fraction`), so
   closure is declared: `cad_target(...; closed = true)` and `visrad_target(...; closed =
-  true)` (new keyword, default `false`: existing targets are bitwise unchanged).
+  true)` (a new keyword, default `false`, so existing targets are unchanged).
   The GUI's CAD path still builds raw targets.
-- Not covered: thin-film windows that transmit (a transmitting aperture is a partial
+- Thin-film windows that transmit are not covered (a transmitting aperture is a partial
   loss, not a closure) and VisRad workspaces.
 
 ## Compact capsule rows at capsule_h = h/3 (2026-10-25) *derived*
 
-CAD decision 12 (2026-10-18, closed): on the compact capsule the LEH power-balance tutorial's raw
-error grew from h 0.4 to 0.25 mm. The tutorial's N210808 hohlraum (6.4 × 11.24 mm,
-3.1 mm LEHs, capsule 1.13 mm), capsule_h = h/3 unless stated, Float64 view factors,
-4 threads (scripts in the session scratchpad). Reference for the capsule rows: the
-enclosure is closed, so every capsule element's row sums to 1, and the capsule's exchange
-with the wall, the caps and the LEHs is the solid-angle fraction from its center
-(cos θ_c, cos θ_L − cos θ_c, 1 − cos θ_L), exact for a sphere.
+CAD decision 12 (2026-10-18, closed): on the compact capsule the LEH power-balance
+tutorial's raw error grew from h 0.4 to 0.25 mm. The tutorial's N210808 hohlraum (6.4 ×
+11.24 mm, 3.1 mm LEHs, capsule 1.13 mm), capsule_h = h/3 unless stated, Float64 view
+factors, 4 threads (scripts in the session scratchpad). The reference for the capsule rows
+rests on closure: the enclosure is closed, so every capsule element's row sums to 1, and the
+capsule's exchange with the wall, the caps and the LEHs is the solid-angle fraction from its
+center (cos θ_c, cos θ_L − cos θ_c, 1 − cos θ_L), exact for a sphere.
 
 | h / capsule_h | mesh | capsule rows − 1 (mean; largest) | capsule→wall / solid angle − 1 | wall rows − 1 (mean) |
 |---|---|---|---|---|
@@ -8519,7 +8507,7 @@ result changed. Confidence: **H** primary text or table, **H-img** digitized fig
 | Callahan et al., PoP 27, 072704 (2020) §II.B (LLNL-JRNL-809797) | scaling model | shell radius of a rocket model, m dv/dt = −4πr² P_abl, dm/dt = −4πr² ṁ, driven by their T_r(t) fit | — | — | an analytic r(t), but it needs an ablation rate and pressure fitted per design and the drive; not adopted (below) | H |
 | Zylstra et al., PRE 106, 025202 (2022) | N191118, N210601 | none published | — | — | bang times 9.37 / 9.48 ns, which place the pair's scaled schedule; no v_imp or RPV | H |
 
-**Which radius K24 Fig. 1 follows.** The curve holds 1.000 to 3.50 ns and reads 0.995 at
+**Which radius K24 Fig. 1 follows.** The curve stays at 1.000 to 3.50 ns and is 0.995 at
 3.75 (the N210808 capsule 0.999 at 3.50): it starts to move at ~3.6 ns, 0.2–0.3 ns before
 the N221204 design's keyhole breakout (3.86–3.91 ns), as the N210808 capsule (~3.4 ns)
 does before its keyhole breakout (3.65–3.71 ns), a common offset between HYDRA on N221204's
@@ -8556,7 +8544,7 @@ anchors (breakout, peak velocity and its time and radius, bang).
   base(t/time_scale); for a tabulated base the times are scaled once and interpolated as
   a table, which is what the example did, so the pair's schedule
   (`ScaledRadius(kritcher2024_radius(:n210808); time_scale = bang/9.18)`) is the same
-  table, bitwise. Its `source` says derived.
+  table, exactly. Its `source` records it as derived.
 - `TrajectoryRadius(; start, peak_time, peak_radius, velocity, bang, minimum, radius)`:
   a kinematic interpolant through published anchors, for a shot with anchors but no
   history: R(0) to `start`, a cubic Hermite segment to `peak_radius` at `peak_time` with
@@ -8583,7 +8571,7 @@ anchors (breakout, peak velocity and its time and radius, bang).
   timing error, not a schedule. A `RadiusSchedule` subtype can take one later, e.g.
   from CompactLES's trajectory as a `TabulatedRadius`.
 
-### Bitwise check
+### Check of identical results
 
 `examples/n221204.jl` now builds its schedules from the types (`kritcher2024_radius()`,
 `ScaledRadius(...)` for the pair, `TabulatedRadius(...)` for `young`). The capsule
@@ -8613,7 +8601,7 @@ the spherical pointing fields of `GroupPointing` (decision 5(a)) and the LMJ che
 **What exists and is used.** A bare sphere is a one-component target,
 `Target(Component(:capsule, icosphere_mesh(R; n), material; surface = SphereSurface(R)))`.
 `DepositionOperator`/`deposit` on it give hard-sphere illumination: straight rays, the
-incident `I cos ψ` absorbed where it first lands, the far side shadowed by the sphere
+incident `I cos ψ` absorbed where it is first incident, the far side shadowed by the sphere
 itself; `ncone = 1` makes the beams collimated (the parallel rays of MN17 and Te14).
 Direct-drive pointings are aims (documented in the `Beam` docstring, no new names): a
 surface point `s` is `aim = s` (first intersection when `port·(s − c) > 0`), a shift Δ
@@ -8626,17 +8614,18 @@ coefficients; σ = √(Σ_{1≤l≤lmax} Σ_m c_lm²)/|c₀₀|, generic in the 
 σ_l, total or its m = 0 / m ≠ 0 part; m = :zero is the Legendre spectrum
 |a_l/a₀|/√(2l+1)). Both work on the exact-solid-angle facet weights of `ylm_weights`,
 which now reuse their work array in `_real_ylm!` and evaluate cos mφ, sin mφ once per m
-(bitwise the same weights; n = 30 icosphere, lmax = 30: 5.3 s → 2.0 s).
+(the same weights exactly; n = 30 icosphere, lmax = 30: 5.3 s → 2.0 s).
 
 **Checks** (R₀ = 0.5 mm; icospheres n = 20 and 30, edges 0.055 R and 0.037 R; σ_l
 absolute in units of the mean):
 - *Skupsky–Lee separability* (J. Appl. Phys. 54, 3662, 1983), OMEGA's 60 ports
-  (`omega_ports`), SG4 spots (`omega_spot(:SG4)`), aimed at the center: the reference is
-  σ_l = |a_l/a₀| G_l/√(2l+1) with a_l from a 1-D Gauss quadrature of one beam and G_l from
-  the ports. σ (l ≤ 30): reference 0.0821%; Briareus 0.0792% (n = 20), 0.0807% (n = 30),
+  (`omega_ports`), SG4 spots (`omega_spot(:SG4)`), aimed at the center: the reference is σ_l
+  = |a_l/a₀| G_l/√(2l+1) with a_l from a 1-D Gauss quadrature of one beam and G_l from the
+  ports. σ (l ≤ 30): reference 0.0821%; Briareus 0.0792% (n = 20), 0.0807% (n = 30),
   Richardson-extrapolated 0.0819%. max_l |Δσ_l| = 3.5e-5 and 1.6e-5 (ratio 2.2, the h²
-  rate). Absorbed fraction equals the enclosed fraction of the spot inside the sphere's
-  disk to 1e-4. (Exploration at R = 0.43 mm: 0.1874% reference, 0.1869% at n = 30.)
+  rate). Absorbed fraction equals the enclosed fraction of the spot inside the sphere's disk
+  to 1e-4. (An exploration at R = 0.43 mm gave 0.1874% for the reference and 0.1869% at n =
+  30.)
 - *Facet quadrature at l ≤ 30*: the zonal spectrum of `ylm_weights` (level 2) and the
   Legendre spectrum of `legendre_weights` (level 3) agree to 3.8e-6.
 - *Temporal et al. 2014* (arXiv:1406.7762), one ring at 49°/131°, m = 4: the direct
@@ -8661,7 +8650,7 @@ absolute in units of the mean):
   1.1e-3 / 2.3e-3 (n = 30), 4.8e-5 / 7.4e-5 extrapolated; and with `absorption = 0.9`
   (below): 3.2e-3 / 7.3e-3, 1.4e-3 / 3.3e-3, 1.6e-5 / 3.5e-5. The two rings combined
   as Eq. 37 (E₂ = 0.4208) give Briareus B₂…B₁₀ ≤ 1.8e-4 at n = 30 and ≤ 7.4e-7
-  extrapolated: the absorption-weighted root is reproduced. MN17 gives no other
+  extrapolated: the absorption-weighted root is reproduced. MN17 does not give another
   weighted number (Figs. 5, 10, 12, 13 are figures only).
 
 **Absorption weight η_a(ψ) (2026-10-27) *derived*.** `deposit(op, beams; absorption =
@@ -8675,11 +8664,11 @@ parallel rays, no refraction of the deposition pattern). η⊥ has no default an
 user's estimate, not a calibrated or facility number (MN17 use 0.9 in §4 and 0.95 in
 Figs. 5, 12, 13). Unabsorbed light is dropped. Generic in the number type (beams and
 η⊥ may be duals; `test/inference.jl` has `@inferred` and JET cases).
-- *Off is bitwise unchanged.* With `absorption = nothing` (the default) the expressions are
+- *Off is unchanged.* With `absorption = nothing` (the default) the expressions are
   the previous ones: f-cone and VisRad-profile depositions on the NIF test hohlraum, their
   ForwardDiff Jacobians in (z, r, power) and OMEGA 60 on a sphere were `==` before and
   after the change. `absorption = 1` is the same model but a differently compiled
-  expression: equal to ~1 ulp, not bitwise.
+  expression: it agrees to ~1 ulp but is not identical.
 - *Independent check* (`test/direct_drive.jl`): Skupsky–Lee separability still holds
   for centered beams (ψ equals the polar angle from the beam axis), with aₗ of
   I_L(R₀ sin θ) η_a(cos θ) cos θ by 1-D Gauss quadrature. OMEGA 60, SG4, R₀ = 0.5 mm,
@@ -8712,7 +8701,7 @@ Ba24 Table I angles, relative shifts, a shifted center, the 192 beams with split
 taken from the beam table) to 1e-13 mm; the Te14 ring pointed by θ_s = 49° + asin(Δ/R₀)
 (the same axis as the shift Δ) gives the shifted-axis σ to 1e-10 relative and the
 quadrature reference to 1e-4; dσ/dθ_s and dσ/dΔφ_s by ForwardDiff match central
-differences to 1e-6 relative. The existing (non-spherical) paths are bitwise unchanged:
+differences to 1e-6 relative. The existing (non-spherical) paths are unchanged:
 `apply`, `bounds`, `initial_parameters`, their Jacobians and the NIF-hohlraum depositions
 and deposition Jacobians of five parameterizations were `isequal` before and after.
 
@@ -8752,8 +8741,9 @@ of the review: a documented comparison, never a fit target. Tutorial
   vacuum illumination of the 1.1 mm sphere over l ≤ 30; appendix: the beams of a quad
   overlap exactly at the aim point on the sphere, each beam a plane wave whose
   super-Gaussian 1/e radii grow as w₀(1 + κd), κ = 0.30/0.40/0.80/0.95 per 50 mm (fitted
-  to pF3D). Not published: w₀ and the profile shapes (Ifriit's internal "NIF-inner-23" …
-  "NIF-outer-50", named in Polaris's deck generator, **H**), and the intensity convention.
+  to pF3D). Neither w₀ nor the profile shapes (Ifriit's internal "NIF-inner-23" …
+  "NIF-outer-50", named in Polaris's deck generator, **H**) nor the intensity convention
+  is published.
 - *Briareus setup.* `GroupPointing(nif_quads(); fields = (:theta_s, :dphi_s, :defocus,
   :power), radius = 1.1)` at Table I gives the 48 quad aims; each of the 192 `nif_beams`
   takes its quad's aim, defocus and a quarter of its power (Ba24's overlap; the quad's
@@ -8775,23 +8765,22 @@ of the review: a documented comparison, never a fit target. Tutorial
 | emulated, incident I (quadrature) | 14.25 | 13.66 | 4.06 | — | σ₄ 8.71, σ₂ 7.91 |
 | own beams, η_a at η⊥ = 0.9 (n = 30) | 14.36 | — | — | 0.620 | — |
 
-- *Which reading of Table I* (review §4 item 3). Caption: polar angle from the pole,
-  offset from the port's azimuth (reading A, `:theta_s`/`:dphi_s`). Method text and
-  Polaris's `create_run_files_pdd` (**H**, code read): the aim is the port's surface
-  point rotated by θ_o away from the port, in the direction φ_o about it, aim =
-  Rz(φ_p) Ry(θ_p) Rz(φ_o) Ry(θ_o) R ẑ with (θ_p, φ_p) the quad's mean port, defined in
-  the lower hemisphere's frame and carried to the upper by φ_o → 180° − φ_o ("symmetric")
-  or φ_o + 180° ("anti-symmetric", Polaris's default). Emulated beams, quadrature,
-  projected σ₁: A 7.87%; about the port, symmetric 144.7%, anti-symmetric 144.7%, and
-  with φ_o counted from the toward-equator direction 30.0% (own beams, symmetric: 150%).
-  About the port, the 50° cone's beams aim 85.6° from their ports and graze the sphere.
-  *Settled*: Table I lists the published aims in the caption's reading (the
-  about-the-port parameters are the search variables of the method; the table gives the
-  resulting aim angles); confidence **H** for the factor 4–20 between the readings, *L*
-  for the interpretation of the text. Reversing the offset's sense in the lower
-  hemisphere (the ports' rotational symmetry instead of Ba24's "same direction in each
-  hemisphere") gives 8.16% (m = 0 unchanged, m ≠ 0 3.71 → 4.29%), so σ₁ does not
-  decide it; the text does.
+- *Which reading of Table I* (review §4 item 3). The caption gives the polar angle from the
+  pole and the offset from the port's azimuth (reading A, `:theta_s`/`:dphi_s`). Method text
+  and Polaris's `create_run_files_pdd` (**H**, code read): the aim is the port's surface
+  point rotated by θ_o away from the port, in the direction φ_o about it, aim = Rz(φ_p)
+  Ry(θ_p) Rz(φ_o) Ry(θ_o) R ẑ with (θ_p, φ_p) the quad's mean port, defined in the lower
+  hemisphere's frame and carried to the upper by φ_o → 180° − φ_o ("symmetric") or φ_o +
+  180° ("anti-symmetric", Polaris's default). Emulated beams, quadrature, projected σ₁: A
+  7.87%; about the port, symmetric 144.7%, anti-symmetric 144.7%, and with φ_o counted from
+  the toward-equator direction 30.0% (150% with the native Briareus beams, symmetric). About
+  the port, the 50° cone's beams aim 85.6° from their ports and graze the sphere. *Settled*:
+  Table I lists the published aims in the caption's reading (the about-the-port parameters
+  are the search variables of the method; the table gives the resulting aim angles);
+  confidence **H** for the factor 4–20 between the readings, *L* for the interpretation of
+  the text. Reversing the offset's sense in the lower hemisphere (the ports' rotational
+  symmetry instead of Ba24's "same direction in each hemisphere") gives 8.16% (m = 0
+  unchanged, m ≠ 0 3.71 → 4.29%), so σ₁ does not decide it; the text does.
 - *Spot sensitivity* (emulated, quadrature): all spots × 0.8/0.9/1.0/1.1/1.2/1.3/1.4 →
   σ₁ 15.98/8.78/7.87/9.26/10.50/11.25/11.65% (the LMF size sits near the minimum, so
   Ba24's w₀ are probably of that size, *L*); a common order 2/3/4/5/6 with the same 1/e
@@ -8801,7 +8790,7 @@ of the review: a documented comparison, never a fit target. Tutorial
   smooths the discrete outer spots more than the linear growth, σ₁ 6.57 against 7.87%
   with the same w₀); CBET and plasma are absent from σ₁ in both. Ba24's mode spectrum is
   a figure (Fig. 2a), not compared.
-- *Optimization of σ₁ alone* (decision 6; own beams, n = 20 sphere, Ba24's 16 parameters
+- *Optimization of σ₁ only* (decision 6; own beams, n = 20 sphere, Ba24's 16 parameters
   and bounds θ_s 0–90°, Δφ_s ±180°, defocus 0–10 mm, power 2–4 TW/quad; 8 threads pinned
   to one CCX, shared with another job, so times are indicative). Evaluation 0.33 s, a
   ForwardDiff gradient in 16 parameters 1.26 s (≈ 4 evaluations; against central
@@ -8821,7 +8810,7 @@ of the review: a documented comparison, never a fit target. Tutorial
   more parameters (per-quad or split pointings). Different starts end at different σ₁
   (2.4–5.3% in 75 evaluations), so σ₁ has several optima; the L-BFGS-B optimum puts
   both inner cones near the pole (θ_s ≈ 0–1°) and the outer ones at 54° and 83°, with
-  defocus and power at bounds. Ba24 report > 10 000 evaluations to settle σ₁ alone with
+  defocus and power at bounds. Ba24 report > 10 000 evaluations to settle σ₁ by itself with
   their GA and coordinate descent (*H* for the number; their evaluations are Ifriit runs
   with a plasma). These optima are CBET-free vacuum illuminations, not designs.
 
@@ -8899,7 +8888,7 @@ b/r_c = 0.95 0.261 and 0.349 (η_a 0.070), and rays that miss the critical spher
 (b > r_c) still absorb (0.12 at b = 1.2 r_c, L/r_c = 0.2), which a hard sphere cannot
 do. So η_a is consistent with the corona only for thin coronas (at b/r_c = 0.9: 4%
 at L/r_c = 0.0025, 13% at 0.01); for PDD, where the equatorial drive comes from exactly these grazing
-rays, it is not (OMEGA case below: σ 5.7% against 10.4%) (*derived*).
+rays, it is not (σ 5.7% against 10.4% on the OMEGA case below; *derived*).
 
 **OMEGA 40-beam PDD comparison** (`compare.jl`; public inputs, review §4.1): rings
 21.4°/42.0°/58.9° of `omega_beams` shifted Δr = 90/150/150 µm normal to the beam toward
@@ -8971,9 +8960,9 @@ perturbative correction measured with (c) would capture.
    closed forms; (b) evaluates a pointing change 60–110× faster than converged (c),
    gives exact harmonics, and its gradient in 80 aims costs 11 s against an estimated
    150 s. It keeps the operator structure, so it slots into the optimizer like
-   `deposit`. One change from the prototype: take (b)'s rays from a transverse lattice
-   per sub-beam, as (c) does, rather than from the `DepositionOperator`'s points on the
-   R_out sphere: the lattice converged at 391 k rays where the sphere sampling needs
+   `deposit`. One change from the prototype is to take (b)'s rays from a transverse lattice
+   per sub-beam, as (c) does, in place of the points of the `DepositionOperator` on the
+   R_out sphere. The lattice converged at 391 k rays where the sphere sampling needs
    17.6 M (n = 40) for the same l ≤ 30 accuracy, so the map and the evaluation would be
    ~10–40× smaller again (built 2026-10-27: 7× faster per evaluation, 250× less memory;
    next section).
@@ -9024,12 +9013,12 @@ each, a deposit at each panel's mid angle. Changes from the prototype:
 - *Rotation by a fixed matrix*: the frame is R_z(α)R_y(β) (Euler angles of −d) and its
   harmonic rotation Z(α) J Z(β) Jᵀ with J the blocks of R_x(−90°) (one 39 711-entry set
   for l ≤ 30, by product quadrature) and Z the cos/sin mixing per m. The prototype stored
-  a block set per sub-beam (0.09 s and 318 kB each: 790 MB for NIF's 192 × 13). The
+  a block set per sub-beam (0.09 s and 318 kB each, so 790 MB for NIF's 192 × 13). The
   factorization reproduces the quadrature blocks of R_z(α)R_y(β) to 8.8e-14 (l ≤ 30).
 - *Exact screen*: the lattice rows and columns that can reach the spot are bounded by
   Cauchy–Schwarz (|h i − c₁| ≤ √qcut ‖(a e₁·e₁′, b e₂·e₁′)‖, plus one index); rays
   outside add exact zeros. Dual beams are screened on values, as in `deposit`; the dual
-  path's values equal the Float64 path's bitwise (tested).
+  path's values equal the Float64 path's exactly (tested).
 - *Profiles*: `CoronaProfile(r, ne_over_nc, Te; Z, lnΛ, wavelength)` tabulates a snapshot (the
   hook for the CompactLES example), cubic Hermite in ln(n_e/n_c) and ln of the rate with
   three-point slopes on a non-uniform grid, so exponential profiles are exact. Rate
@@ -9109,10 +9098,10 @@ of every ray (the t-grid of r = r_t + (R − r_t)t² takes t = √((e − r_t)/(
 each edge inside the ray), so each panel lies in one shell and its deposit and mid angle
 are as before; per shell the operator keeps a zonal kernel set and the absorbed fraction
 per impact-parameter class, and `deposit` contracts and rotates each shell as it does
-the totals. Without `shells` the operator and `deposit` are bitwise the previous
+the totals. Without `shells` the operator and `deposit` are identical to the previous
 code (kernels, `ylm`, `per_beam`, Float64 and duals; checked against the previous
 `corona.jl` loaded beside the new one). With shells the totals come from the refined
-panels: absorbed power equal to round-off, harmonics within 0.7–12 × 10⁻⁷ of c₀₀ for
+panels: absorbed power equal within round-off, harmonics within 0.7–12 × 10⁻⁷ of c₀₀ for
 14–448 shells on the OMEGA case below (the angular placement at panel mid angles).
 Checks (references independent of the operator):
 - radial ray of the truncated exponential corona: one-pass depth outside r,
@@ -9199,10 +9188,10 @@ facets): 1.9 M passes in 160 s, almost all rejected because the new facet itself
 beyond `rmax` of the new centroid, and 267 of 298 dissolutions ended stuck and were
 undone. Now a facet is retried only after a neighbor of it moved or an element it tried
 grew, the element sums are extended by the new facet (the same left folds), and the
-flatness and reach of the new facet alone are tested before the pass over the element (the
+only the flatness and reach of the new facet are tested before the pass over the element (the
 answers are those of the full test). Capsule: 4.1 s at 0.6 mm (663 elements), 8.4 s at
 0.28 mm (978); before the merge commit ~1 s, so the merge pass still costs 3–7 s on it.
-Bitwise unchanged: the remeshes of the 13 other CAD parts and two synthetic meshes at 0.28
+Results are unchanged: the remeshes of the 13 other CAD parts and two synthetic meshes at 0.28
 and 0.6 mm equal the old code's (`==` on vertices, triangles and patches);
 test/meshops.jl and test/cadfit.jl pass. GUI import of the workspace (coarse, no window,
 first call): 12 s.
@@ -9249,45 +9238,44 @@ skips more on finer faceting). Scripts: scratchpad `dsk/` (`instr.jl`,
 `survey_cad.jl`, `survey_tests.jl`, `survey_more.jl`, `time_capsule.jl`,
 `cap_stats.jl`, `mock.jl`).
 
-**A curvature-scaled minimum area: measured, not adopted (H).** The merge's minimum
-area, `minarea` size² = size²/3, counts almost every element of a curved part as small
-where the angle, not the size, bounds the elements. Tried: scale it per element by
-min(1, R sin(angle)/size)², R sin(angle) being the reach of a spherical cap within
-`angle` of its axis (as `rmax` = size is on flat parts), with 1/R the area-weighted
-curvature of the element's facets (each facet's largest dihedral angle to an edge
-neighbor within `angle`, over the distance between their centroids; 0 on flat parts, so
-those stay bitwise unchanged). Replayed on every remesh of test/meshops.jl, test/cadfit.jl,
-test/partial_visibility.jl, test/hmatrix.jl (54 meshes) and the cad_hohlraum tutorial
-(15), synthetic spheres, tubes and cylinders, and the NIF CAD capsule (timing and counts
-only). 48 of 85 unchanged (flat parts, tubes, the tutorial capsule at 0.15/0.1 mm, the
-finest spheres); 37 changed, all by **more** elements: the merges it stops are unions of
-angle-bounded elements that pass every acceptance test, not slivers.
-`sphere_mesh(1.1; ntheta = 100, nphi = 200)` at 0.6 mm 229 → 270 elements,
-`sphere_mesh(0.9; ntheta = 60, nphi = 120)` at 0.4 and 0.6 mm 221 / 218 → 264, the test
-meshes up to +12% (cadfit's sphere at 0.3 mm 474 → 531), the tutorial's wall parts at
-0.5 mm 457 → 462, 465 → 468, 21 → 24, and the CAD capsule 670 → 865 at 0.6 mm, 990 → 1,016
-at 0.28. Elements a little more compact (that sphere at 0.6: diam/√A median 1.42 → 1.36,
-95th percentile 1.53 → 1.46; max tilt 9.999 → 9.317°). The capsule's slivers (min area
-3e-6 size², diam/√A to 29.8) are untouched: they are under either minimum, and no
-neighbor takes them in either. Downstream, the inside of the spheres as an integrating
-sphere (F_ij = A_j/A exactly): flat elements, closure max 6.5e-3 → 5.0e-3, 1.1e-2 →
-4.9e-3, 5.8e-3 → 4.7e-3 (the three spheres at 0.6 mm), mean |closure| 4.3e-3 → 3.6e-3,
-but the rms relative error of F_ij worse (6.8e-3 → 7.5e-3, 2.3e-3 → 1.4e-2, 4.5e-3 →
-6.3e-3); fitted spheres exact to 1e-14 either way. Time: the capsule's remesh unchanged
-(1.0 s at 0.6 mm, 2.0 s at 0.28), and `_DISSOLVE_MAX` still needed (without it 4.1 s and
-8.3 s: the slow dissolutions are of elements small under either criterion). Net: +18–29%
-elements on curved parts at sizes the angle bounds (view-factor cost ~1.4–1.65×) for
-slightly more compact elements, no speed-up and no sliver removed; not adopted. Scripts:
-scratchpad `amin/` (`record.jl` logs every remesh input of the test files and the
-tutorial, `replay.jl` remeshes and compares, `vf.jl` the integrating sphere,
-`meshops_scaled_amin.jl` the variant).
+**A curvature-scaled minimum area: measured, not adopted (H).** The merge's minimum area,
+`minarea` size² = size²/3, counts almost every element of a curved part as small where the
+angle, not the size, bounds the elements. One variant tried was to scale it per element by
+min(1, R sin(angle)/size)², R sin(angle) being the reach of a spherical cap within `angle`
+of its axis (as `rmax` = size is on flat parts), with 1/R the area-weighted curvature of the
+element's facets (each facet's largest dihedral angle to an edge neighbor within `angle`,
+over the distance between their centroids; 0 on flat parts, so those stay unchanged).
+Replayed on every remesh of test/meshops.jl, test/cadfit.jl, test/partial_visibility.jl,
+test/hmatrix.jl (54 meshes) and the cad_hohlraum tutorial (15), synthetic spheres, tubes and
+cylinders, and the NIF CAD capsule (timing and counts only). 48 of 85 unchanged (flat parts,
+tubes, the tutorial capsule at 0.15/0.1 mm, the finest spheres); 37 changed, all by **more**
+elements: the merges it stops are unions of angle-bounded elements that pass every
+acceptance test, not slivers. `sphere_mesh(1.1; ntheta = 100, nphi = 200)` at 0.6 mm 229 →
+270 elements, `sphere_mesh(0.9; ntheta = 60, nphi = 120)` at 0.4 and 0.6 mm 221 / 218 → 264,
+the test meshes up to +12% (cadfit's sphere at 0.3 mm 474 → 531), the tutorial's wall parts
+at 0.5 mm 457 → 462, 465 → 468, 21 → 24, and the CAD capsule 670 → 865 at 0.6 mm, 990 →
+1,016 at 0.28. Elements a little more compact (that sphere at 0.6: diam/√A median 1.42 →
+1.36, 95th percentile 1.53 → 1.46; max tilt 9.999 → 9.317°). The capsule's slivers (min area
+3e-6 size², diam/√A to 29.8) are untouched: they are under either minimum, and no neighbor
+takes them in either. Downstream, the inside of the spheres as an integrating sphere (F_ij =
+A_j/A exactly): flat elements, closure max 6.5e-3 → 5.0e-3, 1.1e-2 → 4.9e-3, 5.8e-3 → 4.7e-3
+(the three spheres at 0.6 mm), mean |closure| 4.3e-3 → 3.6e-3, but the rms relative error of
+F_ij worse (6.8e-3 → 7.5e-3, 2.3e-3 → 1.4e-2, 4.5e-3 → 6.3e-3); fitted spheres exact to
+1e-14 either way. The time of the capsule's remesh is unchanged (1.0 s at 0.6 mm, 2.0 s at
+0.28), and `_DISSOLVE_MAX` is still needed (without it 4.1 s and 8.3 s: the slow
+dissolutions are of elements small under either criterion). Net: +18–29% elements on curved
+parts at sizes the angle bounds (view-factor cost ~1.4–1.65×) for slightly more compact
+elements, no speed-up and no sliver removed; not adopted. Scripts: scratchpad `amin/`
+(`record.jl` logs every remesh input of the test files and the tutorial, `replay.jl`
+remeshes and compares, `vf.jl` the integrating sphere, `meshops_scaled_amin.jl` the
+variant).
 
 **The window's GUI-thread stalls (H).** Scripted Qt window (scratchpad
 `gui_timing.jl`: a coarse hohlraum's drive, coloring by a field, a selection, the
 workspace import, the largest part left out and put back, the template and the import
 again), the longest gap between ticks after each step, first and warm, two runs each;
 "before" is the GUI as of 576587b with the remesh fix. Most of the first-call stalls
-were compilation on the GUI thread rather than GUI work, of two kinds:
+were compilation on the GUI thread, not GUI work. The compilation was of two kinds:
 (1) `_run_job(job, spawn)` was specialized on each job's closure, and inferring its
 inline branch inferred the whole job (the import's reading and meshing, a part's
 remeshing, the drive's scenario) on the GUI thread before spawning it; it is now
@@ -9310,7 +9298,7 @@ hundreds while a worker compiles the CAD remesh.
 
 Without a window (scratchpad `gui_import_ticks.jl`, a session with a queue, first
 call): import call 1.33 s → 8 ms, its commit 0.85 → 0.05 s; leave out 0.33 →
-0.05–0.09 s, put back 1.16 s → 0. Also: `import_visrad_workspace!` is
+0.05–0.09 s, put back 1.16 s → 0. Also, `import_visrad_workspace!` is
 `@nospecializeinfer` on `include` and `done` (each new `done` closure recompiled its
 body, 0.85 s); the GUI workload leaves its disk part out and puts it back through a
 window-style queue and starts an import of a missing file (the call's path), and
@@ -9344,7 +9332,7 @@ x-rays and, thermalized, the group sums are the gray solution's, so the gray his
 not depend on it.
 
 **Checks.** (`test/spectral.jl`, "drive history M-band", coarse 10.1 × 5.75 mm hohlraum,
-constant-albedo gold, an outer → inner transfer growing in time.) The gray records with
+constant-albedo gold, a transfer from outer to inner growing in time.) The gray records with
 `mband` equal those without (`==`); the history's M-band moments equal a static solve at
 each time with the M-band summed cone by cone by hand from the post-transfer beams to
 1e-10, its M-band power to 1e-12; with unit fractions the per-cone sum is the deposition
@@ -9400,7 +9388,7 @@ a deposition is most of a step). Two changes took it out:
 - **The cones split in the deposition pass of the step.** `drive_history` deposits once
   with a per-group split (`_deposit(op, beams, split)`; the bubble's ridge stop through
   `_lpi_deposit`): each lit point also adds its value to its beam group's column. The
-  deposition itself is that of `deposit`, bitwise (the same sums in the same order; the
+  deposition itself is exactly that of `deposit` (the same sums in the same order; the
   history's gray records `==` with and without the M-band), and each column is exactly
   the group deposited alone, `==` (zero-power beams add exact zeros; checked on the test
   hohlraum with CBET and on N221204 with the bubble's ridge stop at 8 ns, ridge fraction
@@ -9408,7 +9396,7 @@ a deposition is most of a step). Two changes took it out:
   0.28/0.16). `mband_power(m, op, beams; lpi)` uses the same pass (from 0.27 to 0.06 s).
 - **The two-group thermalized solve skips its gray-albedo group**: thermalized, the group
   sums are the gray radiosity, so the one group at the gray albedo is `B_gray − B_M`
-  rather than another gray-type solve (a factorization or GMRES; 0.42 → 0.31 s per step on
+  in place of another gray-type solve (a factorization or GMRES; 0.42 → 0.31 s per step on
   the standard mesh). The M-band group is untouched (N221204's M-band P2/P0, share and
   laser M-band columns are identical to the printed digits); the soft group matches the
   dense solve of the coupled system to 1e-9 (`test/spectral.jl`).
@@ -9449,9 +9437,9 @@ calibrated rows (brightness α_M 0.5 / thermal α_M 0.55):
 | 8.0 | −0.0000 / −0.0000 | −0.01 / −0.00 eV | 0 | 0.1934 → 0.1935 |
 | 8.5 | +0.0002 / +0.0002 | +0.04 / +0.04 eV | 0 | 0.1930 → 0.1937 |
 
-So |Δ| ≤ 0.0021 in the share, ≤ 0.34 eV in Tc and ≤ 0.003 in the laser → M-band ratio,
-largest at 5–7 ns, where CBET moves power between the cones; the gray Tr, Tr_open and the
-CSV (P2, P4, Tr, Dante) are byte-identical. The standard-mesh table of "Laser-spot
+So |Δ| ≤ 0.0021 in the share, ≤ 0.34 eV in Tc and ≤ 0.003 in the ratio of M-band to laser
+power, largest at 5–7 ns, where CBET moves power between the cones; the gray Tr, Tr_open and
+the CSV (P2, P4, Tr, Dante) are byte-identical. The standard-mesh table of "Laser-spot
 spectrum" (N221204 section) was rerun after the switch (2026-10-27).
 
 ## Example NIF cone pointing: unsourced (2026-10-27) *decision*
@@ -9543,7 +9531,7 @@ conventions below are assumed, not taken from a facility document.
 - **Euler order and sense** **L**. `euler_rotation(polar, azimuth, rotation) =
   Rz(azimuth) Ry(polar) Rz(rotation)`, right-handed, the reading already assumed for
   VisRad object orientation ("VisRad workspace files (2026-10-17)"); the VisRad
-  workspace reader now calls it, bitwise the same matrices as before.
+  workspace reader now calls it and gets the same matrices as before.
 - **Cylindrical coordinates** *decision*. `coords_of`/`point_of` order cylindrical
   coordinates (r, φ, z), as the GUI's part positions do; VisRad's summary table is
   read as (r, z, φ) (`_vrw_point`, a separate assumption). The two are kept apart.
@@ -9601,7 +9589,7 @@ Kline).
 ### Corrections to the earlier sections
 
 - **Grids are tantalum.** 25 µm Ta, 8.8% open (Kemp 2020 Tables I–III; Fournier 2010;
-  May 2015); only Rubery 2023 §II.A says tungsten ("Spectral radiosity, M-band and a
+  May 2015); only Rubery 2023 §II.A states tungsten ("Spectral radiosity, M-band and a
   synthetic Dante", "Dante channel responses and the unfold": "W grids"). The model
   treats a grid as opaque wires (transmission = open fraction), so nothing changes for
   the current channels; a grid on a channel above ~10 keV would need the Ta transmission.
@@ -9640,11 +9628,11 @@ Kline).
 | Sentinel | ≈ 7 m (can be closer); entrance 12.9 mm² (1.45 × 8.89 mm), 18.1 mm² active, plates at 45° to the axis | Kemp 2020 Sentinel §II | H |
 | Z LOS50 | 12° polar, 50° azimuth: XRD 23.20 m (11.6°), bolometer 18.84 m, PCD 18.36 m; sees the bottom 75% of a 10 mm array | Jones 2014 Tables 1–2 | H |
 
-Not public: the NIF collimators and field of view as fielded (only the 2004 design and
-the MLM channel's 12 mm), the large-aperture channels' geometry, Omega Dante's standoff
-and solid angles, Dante 2's solid angles, current grid transmissions.
+These are not public: the NIF collimators and field of view as fielded (only the 2004 design
+and the MLM channel's 12 mm are), the large-aperture channels' geometry, Omega Dante's
+standoff and solid angles, Dante 2's solid angles, current grid transmissions.
 
-Consequence: a NIF Dante sees the whole target, so the synthetic view is limited by
+As a consequence, a NIF Dante sees the whole target, so the synthetic view is limited by
 occlusion and the target's extent, not by the collimator, except the MLM channel (12 mm)
 and large assemblies (a halfraum pair, a package off TCC).
 
@@ -9854,18 +9842,18 @@ Meadowcroft (2008) and Maddox (2011) image-plate papers (quoted by Rosenberg onl
 ## Dante field of view and reference area (2026-10-29) *derived*
 
 `DanteView(...; field_of_view, center, area)` (`src/dante.jl`; design in
-`reference/diagnostics-design.md`). A field of view casts the parallel rays over a disk
-of the given diameter normal to the line of sight about `center`, cut to the target's
-extent; the view through a hole (no field of view) is the square about the hole, as
-before. Every surface facing the instrument counts, occluded by any part; the outsides
-of one-sided surfaces are dark. Tr's reference: the aperture's initial area (default),
-a number, or a part's visible projected area (`area = :part`, Fournier 2010's
-convention). No value here is fitted.
+`reference/diagnostics-design.md`). A field of view casts the parallel rays over a disk of
+the given diameter normal to the line of sight about `center`, cut to the target's extent;
+the view through a hole (no field of view) is the square about the hole, as before. Every
+surface facing the instrument counts, occluded by any part; the outsides of one-sided
+surfaces are dark. The reference area for Tr is the aperture's initial area (default), a
+number, or a part's visible projected area (`area = :part`, Fournier 2010's convention). No
+value here is fitted.
 
 Checks (`test/spectral.jl`, "Dante field of view"):
-- Through-hole path unchanged: `dante1()`, `dante2()`, an area override and `sentinel()`
-  on the coarse hohlraum with random radiosity give `isequal` intensity, Tr, area, cos,
-  Tr_open and visible areas before and after the change.
+- The through-hole path is unchanged: `dante1()`, `dante2()`, an area override and
+  `sentinel()` on the coarse hohlraum with random radiosity give `isequal` intensity, Tr,
+  area, cos, Tr_open and visible areas before and after the change.
 - The blackbody cavity of "synthetic Dante" seen with a 60 mm field (800 pixels): the
   intensity of the view through the hole to 2e-3 and the same visible parts (the
   cavity is seen only through its hole).
@@ -9902,7 +9890,7 @@ Checks (`test/cavities.jl`; GUI `test_halfraum.jl`, "per-cavity wall temperature
 - An 8 mm field about one hohlraum receives exactly zero from a blackbody in the other;
   it matches the view through the hole of that hohlraum to 1.2e-4 (400 pixels), a 60 mm
   field the sum of both holes' views to 1.4e-4 (1200 pixels); on the shock tube the
-  whole-target view reads the view through the lower hole to 3.5e-4 (the package is black
+  whole-target view matches the view through the lower hole to 3.5e-4 (the package is black
   and the outsides of one-sided surfaces dark, so only that hole shows radiance).
 
 ## Named ports and per-channel fields (2026-11-03) *derived*
@@ -9938,32 +9926,32 @@ spectral shape (a Planckian at the view's `Tr_open`) stay the view's. Applied: D
 channel 2, the 2–4 keV multilayer, 12 mm (Rubery et al. 2022, OSTI 1959490, **H**; the
 one public per-channel field) in `nif_dante1_2021`, so in `nif_dante1` and `dante1()`.
 `dante2()` and `sentinel()` take Dante 1's channels without it (their fields are not
-public). Change: none on a hohlraum of N221204's size (10.1 × 5.75 mm, LEH 3.2 mm; a
+public). Nothing changes on a hohlraum of N221204's size (10.1 × 5.75 mm, LEH 3.2 mm; a
 blackbody cavity and a driven radiosity solution, 42 groups): its extent across Dante
 1's line of sight is under 6 mm, so the 12 mm and 60 mm fields cast the same rays
 (`DanteView`'s rays cover the field cut to the target's extent) and channel 2 gives the
-same voltage, bitwise. A channel's field changes a signal only on a target wider than
-the field (a halfraum pair, a package off TCC). Also: `sentinel(:equatorial_78)` moves
+same voltage exactly. A channel's field changes a signal only on a target wider than
+the field (a halfraum pair, a package off TCC). Also, `sentinel(:equatorial_78)` moves
 to the table's φ 78.75° (P90-78) from 78°.
 
 **`dante2()` from its definition.** `dante2()` builds `nif_dante2` (port P64-350, the
 upper hole, 400 pixels) with Dante 1's channels without their per-channel fields: an
 assumption in code (**L**), since Dante 2's channel set, solid angles and fields are not
-public (section 2 above); the definition holds no channels and stays unusable from the
+public (section 2 above); the definition has no channels and stays unusable from the
 search path until a file that extends it supplies them. Checks (`test/diagnostics.jl`,
 `test/dante_response.jl`): its geometry equals the bare `DanteView(64, 350; through =
 :leh_top)` it replaced, and on the blackbody hohlraum its intensity, Tr, channel
-voltages and unfolded Tr equal that view's (with Dante 1's channels, no fields) bitwise;
+voltages and unfolded Tr equal that view's exactly (with Dante 1's channels, no fields);
 against the bare view before the per-channel field, nothing changes.
 
 Checks (`test/cavities.jl`, two hohlraums 12 mm apart as blackbodies, 400 pixels):
-a channel given the 60 mm field of the view gives bitwise what it gives without one
+a channel given the 60 mm field of the view gives exactly what it gives without one
 (every output, the unfold included); channel 1 with 8 mm about one cavity, in the 60 mm
-view, reads exactly 0 from the other while the other channels read it, and matches the
+view, receives exactly 0 from the other while the other channels receive it, and matches the
 8 mm view's channel 1 to 1.5e-6 (the same rays; the in-group shape is each view's
-Tr_open); the other channels equal those of the 60 mm view bitwise; through one hole, a
+Tr_open); the other channels equal those of the 60 mm view exactly; through one hole, a
 60 mm channel field changes nothing and an 8 mm field about TCC (the hole 6 mm off it)
-reads 0.
+receives 0.
 
 ## Public diagnostic definitions and the time-dependent Tr area (2026-10-29) *derived*
 
@@ -10069,7 +10057,7 @@ Checks (`test/imager.jl`):
 conversion efficiency and the photometric chain (2026-10-24)" (the laser energy on each
 foil element, the CE fit, the angular distribution, hardware occlusion), and the
 point-spread function and gates are those of "The x-ray pinhole imager model and its
-public definitions (2026-10-29)"; both are shared code, bitwise unchanged. No value
+public definitions (2026-10-29)"; both are shared code and unchanged. No value
 here is fitted.
 
 Model (each an approximation, stated in the docstrings):
@@ -10153,7 +10141,7 @@ Checks (`test/radiography.jl`, independent references):
   aperture disk closing the end (with view factors for the disk) within 0.8–1.5e-3. The
   errors are the view factors' (they do not fall steadily with h). `test/halfraum.jl`.
 - **Per-end radius.** An end given a radius other than `leh_radius` takes separate ring
-  counts from `h`; one given `leh_radius` is the default end, bitwise.
+  counts from `h`; one given `leh_radius` is exactly the default end.
 - **Closed end.** The cap and the hole's mesh (and its lip's) merged, of the wall's
   material: the GUI hohlraum part's closed end since phase B, moved into core unchanged.
 - **Starters: illustrative mock-ups, no experiment's dimensions.** *Halfraum pair with
@@ -10198,7 +10186,7 @@ the Sinkhorn balancing of "Balancing on the curved path against a continuum Mont
 applied separately to the block of each cavity in the exchange matrix `Aᵢ Fᵢⱼ`, so the
 rows of each cavity sum to one over its elements; elements in no cavity keep a factor of
 one, and the one diagonal scaling applies to the whole matrix (reciprocity everywhere).
-One cavity of every element is the whole-target balancing, bitwise. A cavity is the
+One cavity of every element is exactly the whole-target balancing. A cavity is the
 caller's declaration (element indices, or component or part names);
 `open_fraction(target; cavity)` checks it by rays: diffuse rays from the cavity's
 elements that meet nothing, or first meet an element side outside the cavity (or a
@@ -10262,7 +10250,7 @@ Checks against independent references:
   +7.7e-4 at every h: raw does not converge to the same limit at the 1e-4 level (its row
   excess, about −2e-4 area-weighted, is amplified by the bounces).
 
-Changes to results: the default design, the frustraum and the opacity halfraum
+As for changes to results, the default design, the frustraum and the opacity halfraum
 (standard size) have the same drive and drive history, every serialized field, before
 and after. The shock tube (standard, 1840 elements): the observed face's mean flux
 −4.40e-4, its RMS 4.7098 → 4.7020%, peak −1.03e-3, lowest −4.7e-4; each halfraum's wall
@@ -10316,7 +10304,7 @@ checked against the page image of Fig. 1.
   in radius, `DiskSurface`. A cone section's patches are trapezoids between parallel
   chords at the same azimuths (planar); all sections share the azimuthal grid, so they
   share every vertex. A profile of one cylindrical section is the cylindrical
-  hohlraum, bitwise (`test/profiles.jl`).
+  hohlraum exactly (`test/profiles.jl`).
 - **Validation, closed forms.** A closed frustraum (length 4, waist radius 2, end radius
   1.2 mm, both ends closed, no capsule): every exchange follows from the coaxial-disk
   factor alone, because the ends see each other unobstructed and the waist plane splits
@@ -10326,7 +10314,7 @@ checked against the page image of Fig. 1.
   0.40105. With the cone surfaces, h 0.4 / 0.25 / 0.16 mm (576 / 1512 / 3200 elements):
   end to end −1.8e-4 / −7.3e-5 / −4.0e-5; end to far cone −7.4e-5 / −1.3e-5 / −5.9e-6; end
   to own cone 9.8e-4 / 9.1e-4 / 7.3e-4; cone to cone 1.7e-3 / 1.5e-3 / 9.4e-4; cone to
-  itself 5.7e-4 / 5.4e-4 / 3.4e-4; cone areas exact to round-off, reciprocity to 1e-16.
+  itself 5.7e-4 / 5.4e-4 / 3.4e-4; cone areas exact within round-off, reciprocity to 1e-16.
   Flat facets instead: end to end −9.8e-3 / −3.1e-3 / −1.5e-3 and cone areas short by
   2.3e-3 / 7.4e-4 / 3.6e-4.
 - **Validation, transport.** The frustraum with entrance holes of 0.7 mm radius and a
@@ -10349,7 +10337,7 @@ BriareusGUI's NIF presets in a frustraum part's entrance holes (`FRUSTRAUM_CONE_
   (text); Fig. 3(b)'s abscissa, "50 deg. z pointing (mm)", read from the page image at
   400 dpi (±0.01 mm): N200217 and N200721 5.99, N201018 6.09, N200108 6.19. Fig. 3(a)
   sketches the 50° beams' footprint on the wall for two shots, without numbers. The text
-  says the 44.5° cone's z pointing was farther from the capsule than the 50° cone's in
+  states that the 44.5° cone's z pointing was farther from the capsule than the 50° cone's in
   the layered shots (no value), and the 25° wall moves the outer spots by an effective
   ~0.13 mm in z. No inner-cone pointing, radial offsets or defocus are given. The shots'
   frustraum dimensions are not tabulated per shot (the paper's main geometry is the
@@ -10414,9 +10402,9 @@ BriareusGUI's NIF presets in a frustraum part's entrance holes (`FRUSTRAUM_CONE_
   to the polygon's edges to 1e-12, and within the polygon's sag (1.8e-3 mm) of the true
   ellipse (6.8e-4 mm here); oblique within 1e-9 mm of the dense polygon. A circle on its
   `DiskSurface`, a 24-gon or a 16-gon disk in a 32-gon ring: within 1e-9 mm of 4e5
-  points on the circle. The basics case: within 4e-12 mm of the circle reference.
+  points on the circle. The basics case agrees within 4e-12 mm with the circle reference.
 - **Changed results.** Circular holes: clearances lower by the old sampling error (up to
-  1.2e-4 mm); the keep-out penalty moves accordingly. Noncircular holes: the true rim in
+  1.2e-4 mm); the keep-out penalty moves accordingly. Noncircular holes use the true rim in
   place of the circumscribed circle. Cost: 1.1 ms for 48 beams (about 2.7 times the old
   96 samples).
 
@@ -10466,12 +10454,12 @@ pp; a₀ +6.0e-3 and +6.1e-3, the coarse mesh's cracks at the entrance-hole rims
 balancing fills and the rays leak through). The shock-tube starter (standard) has no
 pair a rim shadows: identical factors, 0.73 → 1.36 s.
 
-Decision: the default stays `:centroid` for primitive targets. `:sampled` costs 3.4–4.2×
-the build on the hohlraum presets (over the 2× bound set for the change), and after
-balancing it moves no result by more than 3e-5 relative or 0.03 pp. The 1–6% row sums at
-LEH rims belong to bored entrance holes and gaps (the bored cavity of "Partial
-visibility"), which `cad_target` and `visrad_target` already sample; on flush holes the
-largest row-sum error is the wall's 0.66% at the coarse size.
+Decision: the default stays `:centroid` for primitive targets. `:sampled` costs 3.4–4.2× the
+build on the hohlraum presets (over the 2× bound set for the change), and after balancing it
+does not move any result by more than 3e-5 relative or 0.03 pp. The 1–6% row sums at LEH
+rims belong to bored entrance holes and gaps (the bored cavity of "Partial visibility"),
+which `cad_target` and `visrad_target` already sample; on flush holes the largest row-sum
+error is the wall's 0.66% at the coarse size.
 
 ## Entrance holes at the caps' azimuthal count (2026-11-03) *derived*
 
@@ -10542,7 +10530,7 @@ collision"); no standard-mesh run was made. Confidence: **H** primary text, **L*
   mean −0.006 over 4.25–5.0 ns; the foot within ±0.016 over 1.0–2.5 ns and *above* Fig. 10
   over 3.0–4.0 ns (+0.054, +0.015, +0.027), where the outer power steps from 30 to 60–80
   TW. The change from the 2026-10-24 baseline most likely came with the energetics of
-  2026-10-24/25 (wall history, DU wall, conversion, measured pulse) rather than later
+  2026-10-24/25 (wall history, DU wall, conversion, measured pulse), not with later
   commits: the 2026-10-25 runs match today's swing metrics to the digit, but they did not
   record the foot (*L*). The foot's causes stay those named then (mock pointing, DN24's foot
   cone fraction read by eye).
@@ -10552,8 +10540,8 @@ collision"); no standard-mesh run was made. Confidence: **H** primary text, **L*
 **What was fitted to what.** `LipClosure`'s speed (0.022 mm/ns at 100 eV), depth
 (0.240 mm) and hold time (0.40 ns) are fitted to Chen et al., PoP 27, 022702 (2020)
 Fig. 27: 31 G-LEH effective radii on five basecamp shots, where the edge is the peak
-gradient of the image in the G-LEH band, 3–5 keV (Ti filter: N171010, N171212) or > 5 keV
-(Al: N180102, N180103, N180117) (Chen Table III, **H**); rms 0.033 mm ("Computed LEH
+gradient of the image in the G-LEH band, 3–5 keV (Ti filter on N171010 and N171212) or > 5 keV
+(Al on N180102, N180103 and N180117) (Chen Table III, **H**); rms 0.033 mm ("Computed LEH
 closure"). The example's default prescribed lips (0.857 r₀ along Young's ramp) end at
 Young 2020's SXI value, the SXI's clear aperture being measured in its 3–5 keV channel
 (Schneider, RSI 81, 10E538 (2010), and HTPD 2012, **H**; *L* that Young's value is that
@@ -10577,13 +10565,13 @@ channel's). The x-ray loss through the hole is set by the thermal band (~0.9 keV
 - Schneider et al., HTPD 2012 (OSTI 1043636, **H**): the 870 eV SXI channel sees part of
   the thermal flux from outside the 3–5 keV clear aperture; the Dante correction
   f (R_LEH/R_CA)² is ~1.15 whatever the LEH size. With R_CA 0.84–0.86 r₀, f ≈ 0.81–0.85
-  (*L*): the lip blow-off emits in the thermal band, which Dante's open-area reading
-  brackets, rather than bounding a smaller hole.
+  (*L*): the lip blow-off emits in the thermal band, and Dante's open-area value
+  brackets that emission; it does not bound a smaller hole.
 
 **The thermal-band radius the model implies** (*L*): the edge at the G-LEH value minus
 Δ = 0.052 mm × ln(ratio), i.e. Δ ≈ 0.04–0.10 mm for the Ti-band shots and 0.10–0.13 mm
 for the Al-band ones, between 0 (Chen's hydrodynamic edge) and ~0.13 mm. On N221204 the
-computed lower-LEH edge is 1.513 mm at 2.0 ns, 1.420 at 4.5, 1.320 at 5.5 and holds at
+computed lower-LEH edge is 1.513 mm at 2.0 ns, 1.420 at 4.5, 1.320 at 5.5 and stays at
 1.310 mm (0.845 r₀) from 8.0 to 9.0 ns (1.305); the thermal-band edge would be
 ~0.06–0.12 mm further in, ~1.19–1.25 mm through the peak. Since the fit mixes the two
 bands (2 Ti, 3 Al shots), the implied depth for the x-ray loss is ~0.30–0.36 mm instead
@@ -10742,12 +10730,12 @@ the footprint's effective area. Which papers' definition (**H** for the definiti
 | Callahan 2018 (size ∝ (E/A)^0.5) | outer picket energy over the one-side outer spot area, 53 mm² (all of one side's outer beams) | a footprint of many spots: energy over the footprint's effective area |
 | Izumi 2021 (speed ∝ E^0.2) | picket fluence relative to the basecamp's; −27% from quad and cone splitting at the same energy | the overlap of spots on the wall: k coincident spots k× one, separated spots 1× |
 
-Not chosen: the peak over elements (one element, mesh-dependent: the dz −0.5 mm variant
-below has a peak ratio 1.126 at h 0.4 mm and 1.143 at h 0.2 mm, where F̄'s ratio moves
-1.1629 → 1.1499), and the mean over the area above half the peak (inherits the peak's
+The peak over elements was not chosen (it is one element and mesh-dependent; the dz −0.5 mm
+variant below has a peak ratio 1.126 at h 0.4 mm and 1.143 at h 0.2 mm, where F̄'s ratio
+moves 1.1629 → 1.1499), and the mean over the area above half the peak (inherits the peak's
 threshold, and is not smooth in the pointing). F̄ is an integral: smooth in the aims
-(ForwardDiff through the pointing, checked against central differences to 1e-5), and
-its mesh error is O(h²).
+(ForwardDiff through the pointing, checked against central differences to 1e-5), and its
+mesh error is O(h²).
 
 **Checks** (`test/picket_fluence.jl`; flat plate, normal incidence, collimated beams,
 elements 0.04 mm, 0.06 mm for the pair):
@@ -10766,7 +10754,7 @@ elements 0.04 mm, 0.06 mm for the pair):
   on HYBRID-E) gives the same −27% on this geometry (**L**: the split geometry of Izumi's
   shot, N180117, is not published, and it split the cones as well).
 
-**Mesh** (F̄ on the hohlraum alone, separate from the radiation mesh; kJ/mm²):
+**Mesh** (F̄ on the hohlraum only, separate from the radiation mesh; kJ/mm²):
 
 | h (mm) | basecamp, 26 kJ | N221204 mock pointing, 43.04 kJ | E = ratio |
 |---|---|---|---|
@@ -10820,14 +10808,14 @@ the wall; then the full model, coarse mesh 0.8 / 0.4, measured backscatter, E fi
 | mock, absolute E (`basecamp_picket_fluence`, h 0.1) | 43.04 | | 1.1472 | | −0.177 (5.25) / 6.17 / +0.081 | −0.028 ns |
 | PRE 109 Fig. 10 | | | | −0.170 (5.60) / 6.67 / +0.095 | | |
 
-- **Moving both outer cones along z leaves the picket fluence alone** (F̄ within
+- **Moving both outer cones along z barely changes the picket fluence** (F̄ within
   −0.02% to +1% over ±0.5 mm: the two cones move together, so their overlap and the
   quads' splits are unchanged and the incidence changes little), and the bubble link
   moves the crossing by ≤ 0.013 ns. The same re-pointing moves the swing through the
   geometry by −0.05 to +0.23 ns (crossing 6.14–6.42 ns, minimum −0.15 to −0.23): what
   a z re-pointing does to the swing is the deposition's, not the bubble speed's.
 - **Overlap is what moves it.** Unsplitting the outer quads raises F̄ 19% and moves the
-  crossing −0.19 ns through the bubble alone (the geometry alone −0.01 ns); a 0.45 mm
+  crossing −0.19 ns through the bubble only (−0.01 ns through the geometry only); a 0.45 mm
   split +6% (−0.04 ns); s 0.75 +9% (−0.06 ns: the split pairs begin to land on the
   neighboring quads' spots, so F̄ rises again past s ≈ 0.5, and at s 1.0 the beams clip
   8% on the entrance hole). Per unit of ln E the crossing moves −0.7 to −1.1 ns
@@ -10867,7 +10855,7 @@ pieces, *derived* (no default, exponent or calibrated constant changed; nothing 
   with E = `bubble.picket_ratio` × F̄(beams)/F̄(reference) recomputed from the beams of
   every evaluation (two picket depositions per evaluation), so that `evaluate`, mode
   gates, objectives and `drive_history` see the bubble a re-pointing grows; at the
-  reference it is `bubble`, bitwise (`picket_ratio` now forms `at × (F̄/F̄_ref)`, `at`
+  reference it is exactly `bubble` (`picket_ratio` now forms `at × (F̄/F̄_ref)`, `at`
   exactly at the reference: a change of rounding only). The per-beam sensitivities
   (`mode_sensitivity`) deposit beams one at a time and refuse it (`linked_bubble`
   resolves it for given beams).
@@ -10885,21 +10873,21 @@ the peak's stand-in (`exact = false`); with the exact peak the run ends 0.4% bel
 limit, the stand-in running above the peak near that limit and the working limit only
 being lowered (the same machinery as `irradiance_ceiling(...; exact = true)`). The linked
 bubble equals `remake(bubble; picket_ratio)` by hand to 1e-12, and a drive history with
-it equals that of the resolved bubble, bitwise.
+it equals that of the resolved bubble exactly.
 
 *Inference (2026-11-18, later).* `BubbleAbsorption`'s `apply_lpi`, `lpi_deposit` and
-`bubble_fractions` formed their number type by splatting over the beams in
-`promote_type` and inferred abstract containers; they now dispatch on the beams' type
+`bubble_fractions` formed their number type by splatting over the beams in `promote_type`
+and inferred abstract containers; they now dispatch on the beams' type
 (`AbstractVector{Beam{S}}`; a vector of mixed types is converted to one type first, which
 also fixes that conversion for beams whose aim and power differ in type). They infer
 concretely on Float64 and on the optimizer's duals, for the bubble and the linked bubble
-(`test/inference.jl`: `@inferred`, and JET from Julia 1.11, the clipping alone also on
-1.10). Results bitwise unchanged: an evaluation with the bubble at 6 ns (Float64, and
+(`test/inference.jl` runs `@inferred`, and JET from Julia 1.11; the clipping is also checked
+on 1.10). Results are unchanged for an evaluation with the bubble at 6 ns (Float64, and
 12-partial duals' values and partials) and the N221204 coarse CSV, against the base commit.
 What it bought is the guard, not time: one `evaluate` at 6 ns on the inference fixture's 48
 quads (one thread, best of 10) 23.6 → 23.1 ms (22.7 ms without the bubble), with duals 44.4
-→ 44.2 ms; `apply_lpi` alone 0.57 → 0.56 ms, its allocations 52 → 46 kB (Float64) and
-123 → 101 kB (duals). The per-beam iris integrals were already behind a function barrier.
+→ 44.2 ms; `apply_lpi` alone 0.57 → 0.56 ms, its allocations 52 → 46 kB (Float64) and 123 →
+101 kB (duals). The per-beam iris integrals were already behind a function barrier.
 
 **The benchmark's table, linked column, through `bubble_prediction`** (coarse mesh, full
 model, measured backscatter; F̄ and the peak on the h 0.1 map; the reference is the mock
@@ -10927,23 +10915,22 @@ pointing at E = 1.1, minimum −0.181 at 5.25 ns, upward zero 6.194 ns):
   on F̄ here, but a design can grow its bubble by ~1% in F̄ (0.2% in tip speed) under
   it. The bubble's prediction reads F̄; the peak is the user's limit.
 
-**The dropped-bundle tutorial's design, given a pulse** (scratch; the tutorial's
-`limited` run reproduced on the mesh and options of the tutorial: 997 evaluations, ending at
-the box, under its peak-power ceiling with `exact = false`). Its scenario has no pulse;
-Young et al. 2020's requested N170827 pulse (`young2020_pulses()`, a 5.75 mm HDC
-hohlraum like the tutorial's) per quad, the picket the first ns after the outer turn-on
-at 0.25 ns, `BubbleAbsorption(radius = 2.875, turn_on = 0.25, capsule_radius = 0.9)` at
-E = 1 for the 48 quads. On the scenario's mesh, freeing bundle 11 leaves the picket's
-peak (×1.0000) and lowers F̄ to ×0.9865 (its outer quads are gone); the re-pointed
-design raises the picket's peak to ×1.0110 (its peak-power irradiance ×1.0017) and F̄
-to ×0.9939. On a 0.2 mm map the design's F̄ is ×0.9934 and its peak ×0.9983 of the 48
-quads': the peak's ratio depends on the mesh by more than the change in the ratio itself.
-Predicted: tip speed ×0.9987, collision +0.006 ns. A drive history on the tutorial's static
-model (constant albedo 0.85, no wall motion, 1–8 ns): the upward zero of P2/P0 moves +0.153
-ns (6.176 → 6.328 ns), of which +0.144 ns through the deposition and +0.009 ns through the
-bubble; the minimum (−0.136 at 4.25 ns) moves by −0.001. The static model is a proxy for
-the swing's timing (no moving wall, no closing holes, no CBET); the split between the
-two causes is the result.
+**The dropped-bundle tutorial's design, given a pulse** (scratch; the tutorial's `limited`
+run reproduced on the mesh and options of the tutorial: 997 evaluations, ending at the box,
+under its peak-power ceiling with `exact = false`). Its scenario has no pulse; Young et al.
+2020's requested N170827 pulse (`young2020_pulses()`, a 5.75 mm HDC hohlraum like the
+tutorial's) per quad, the picket the first ns after the outer turn-on at 0.25 ns,
+`BubbleAbsorption(radius = 2.875, turn_on = 0.25, capsule_radius = 0.9)` at E = 1 for the 48
+quads. On the scenario's mesh, freeing bundle 11 leaves the picket's peak (×1.0000) and
+lowers F̄ to ×0.9865 (its outer quads are gone); the re-pointed design raises the picket's
+peak to ×1.0110 (its peak-power irradiance ×1.0017) and F̄ to ×0.9939. On a 0.2 mm map the
+design's F̄ is ×0.9934 and its peak ×0.9983 of the 48 quads': the peak's ratio depends on
+the mesh by more than the change in the ratio itself. The predicted tip speed is ×0.9987,
+and the collision +0.006 ns. A drive history on the tutorial's static model (constant albedo
+0.85, no wall motion, 1–8 ns): the upward zero of P2/P0 moves +0.153 ns (6.176 → 6.328 ns),
+of which +0.144 ns through the deposition and +0.009 ns through the bubble; the minimum
+(−0.136 at 4.25 ns) moves by −0.001. The static model is a proxy for the swing's timing (no
+moving wall, no closing holes, no CBET); the split between the two causes is the result.
 
 Confidence **L** for the link itself (above); the picket powers of a design without a
 separate pulse are an assumption to state with each use.
@@ -10977,7 +10964,7 @@ separate pulse are an assumption to state with each use.
   beam-profile probe, within 0.02° on 48 plates). Whether the facility's spots follow it is not
   established. **H** for VisRad, **L** for the facility.
 - **Measured-table fallback.** The tabulated VisRad profiles (`_VR_MEASURED`) were
-  replaced by VisRad's closed-form law (§ VisRad's beam profile law), which serves every
+  replaced by VisRad's closed-form law (§ VisRad's beam profile law), which applies to every
   spot, so no spot falls back to another profile and no warning applies.
 
 ## Capture and clearance rules as optimization quantities (2026-11-18) *derived*
@@ -10990,7 +10977,7 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
 (12 facets) across the hole; the 48 NIF quads at the cone aims of the basics test.
 
 - **Penalty terms.** `keepout_penalty`, `keepout_clearance` and `direct_fraction` are
-  the terms of the objectives (`_penalties` equals the public fractions bitwise).
+  the terms of the objectives (`_penalties` equals the public fractions exactly).
 - **Power on named parts.** `power_fraction(ev, names...)` (absorbed on the parts'
   elements) plus `clipped_fraction(ev, names...)` (their back sides) is all the light the
   parts receive. Against `component_power`: 1e-12 relative; with the missed light, the
@@ -11013,24 +11000,24 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   derivative: the exact minimum, not a sample. Derivatives by Danskin's theorem at the
   closest point; on the medial strip the mixture of the two closest points' that
   leaves the minimum stationary (minimax saddle).
-- **Validation** (`test/keepout.jl`, `test/design_rules.jl`). Closed forms (plates
-  normal to and along a beam, a plate cut by the landing plane, the center of an
-  elliptical spot on a plate through the axis with its gradient [0, 0, 1/2F, 0, −ρ]):
-  1e-12 relative. An oblique (35°), defocused f/8 beam beside a tilted plate: within
-  1e-8 mm of 1.6e5 points on its rim. Against `clearance` (`rtol = 0`, resolution
-  1e-7 mm) on the mock-up's 48 quads: within 1e-6 mm (7.6e-7 measured) wherever
-  −0.5 < clearance < 1 mm; the keep-out is lower (conservative) on 5 of 24 shield
-  beams by 3e-4 to 0.40 mm, all above 1.2 mm, where `clearance` skips shield points
-  the cap hides from the beam (the keep-out, as `talis_check`'s 3ω clearance, counts
-  them). In deep violations (clearance < −0.75 mm) the report reads up to 6e-5 mm lower:
-  its point–ellipse distance (`_ellipse_distance`, Eberly's bisection) loses digits
-  within ~1e-9 mm of the major axis inside the medial segment (2.4e-5 mm at a point
-  3e-13 mm off the axis, against the keep-out's value, which a 1e6-point grid about the
-  point confirms to 1e-10). *Since 2026-11-18* (§ Optimization defaults decided) the
-  distance is exact there too and the two agree within 1e-7 mm on every row below 1 mm. Derivatives in aim, defocus and spot axes against central
-  differences: within 1e-8 on every beam below 3 mm, medial-strip minima included; not
-  where the minimum lies on the landing plane's cut (the cut does not move in the
-  derivatives: one bottom beam at 10 mm from the stalk hidden behind the hohlraum).
+- **Validation** (`test/keepout.jl`, `test/design_rules.jl`). Closed forms (plates normal to
+  and along a beam, a plate cut by the landing plane, the center of an elliptical spot on a
+  plate through the axis with its gradient [0, 0, 1/2F, 0, −ρ]): 1e-12 relative. An oblique
+  (35°), defocused f/8 beam beside a tilted plate: within 1e-8 mm of 1.6e5 points on its
+  rim. Against `clearance` (`rtol = 0`, resolution 1e-7 mm) on the mock-up's 48 quads:
+  within 1e-6 mm (7.6e-7 measured) wherever −0.5 < clearance < 1 mm; the keep-out is lower
+  (conservative) on 5 of 24 shield beams by 3e-4 to 0.40 mm, all above 1.2 mm, where
+  `clearance` skips shield points the cap hides from the beam (the keep-out, as
+  `talis_check`'s 3ω clearance, counts them). In deep violations (clearance < −0.75 mm) the
+  report gives values up to 6e-5 mm lower: its point–ellipse distance (`_ellipse_distance`,
+  Eberly's bisection) loses digits within ~1e-9 mm of the major axis inside the medial
+  segment (2.4e-5 mm at a point 3e-13 mm off the axis, against the keep-out's value, which a
+  1e6-point grid about the point confirms to 1e-10). *Since 2026-11-18* (§ Optimization
+  defaults decided) the distance is exact there too and the two agree within 1e-7 mm on
+  every row below 1 mm. Derivatives in aim, defocus and spot axes against central
+  differences: within 1e-8 on every beam below 3 mm, medial-strip minima included; not where
+  the minimum lies on the landing plane's cut (the cut does not move in the derivatives: one
+  bottom beam at 10 mm from the stalk hidden behind the hohlraum).
 - **Cost** (48 quads, one thread): 0.43 ms for the 48-triangle shield, 0.78 ms for the
   96-triangle stalk, 3.3 ms for a 3840-triangle stalk (the same with 12-partial duals:
   the search runs on values, the duals enter at the closest point only); the aperture
@@ -11047,45 +11034,42 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   tolerance jumps where the closest point does (by tan 0.5° times the change in r); the
   exact rule needs the tolerance term inside the minimization (a concave term, so the
   per-segment convexity and the medial-strip argument hold only approximately).
-- **TaLIS 3ω clearance as a keep-out** (`HardwareKeepOut(...; tolerance, pivot, miss)`).
-  The rule tolerance −r tan α (r from the pivot: TCC, the aim point, the larger of the
-  two, or a point) is subtracted inside the minimization. It is concave, and off the
-  medial strip the envelope distance's Hessian has rank one, so in every plane the sum
-  curves down along some direction: the minimum stays on the segments (edges, strip
-  crossings, landing cuts). Along a segment the sum is not convex; each segment is
-  minimized with the term replaced by its chord (a lower bound, exact at the ends: the
-  convex search of the keep-out applies), and split at the chord's minimizer while the
-  term there lies more than 1e-14 mm above the chord; cluster and segment bounds
-  subtract tan α (r + radius). `miss = :all` judges a beam whose axis meets no target
-  along its whole length (TaLIS: "everything along the beam is checked"), and a beam
-  landing on one of the parts of the keep-out gets `Inf` (`talis_check` skips the landed
-  component). With `targets = capture`, `tolerance = 0.5`, `miss = :all` and the
-  defaults otherwise, on the mock-up's 48 quads against `talis_check(...; capture =
-  (:wall, :capsule), hardware = (:shield, :stalk), omega1 = false, resolution = 1e-7,
-  rtol = 0)`, every `:clearance_3w` row (24 shield and 25 stalk rows finite, the rest
-  `Inf` in both): the keep-out is 6e-8 to 1.1e-7 mm above the report's lower bound on
-  the 43 rows whose worst point lies off the major axis. On the 6 rows whose worst point
-  lies within 3e-10 mm of the major axis inside the medial segment (−0.82 to −1.11 mm,
-  deep violations), it is 1.7e-7 to 6.4e-6 mm above: there `_ellipse_distance` reads
-  low (`clearance.jl`, a known loss of digits left to the user), and the closed form on
-  the axis, −B √(1 − u²/(A² − B²)), at the worst point of the report lies 7e-9 to 2.2e-7
-  mm above the keep-out's minimum (the keep-out misses no lower point). *Since
-  2026-11-18* (§ Optimization defaults decided) those 6 rows (now 4, the worst points
-  having moved) agree within 1.0e-7 mm as well. Continuity
-  (closed form, two plates beside a beam down −z, their closest points at r = √10 and
-  √82 mm from TCC): the
-  keep-out equals the closed form min over the plates of (far edge distance − cone ·
-  axial − tan α r) to 1e-12 relative on an aim scan of ±0.1 mm through the switch of
-  the closest point, with no step larger than the aim step (1e-3 mm); the tolerance
-  taken a posteriori at the tolerance-free closest point steps by 0.050 mm there.
-  Derivatives in aim, defocus and spot axes against central differences (h = 1e-6):
-  within 9.4e-8 on the beams below 3 mm for pivots TCC, aim, max and a point (1e-8
-  without the tolerance; the chord split's 1e-14 mm stop sets the FD noise). Cost (48
-  quads, one thread): 0.64 ms for the shield and 0.83 ms for the stalk (0.42 and 0.74 ms
-  without the tolerance), 3.2 ms for a 3840-triangle stalk; the same with 8-partial
-  duals. `talis_check` on the same mock-up and settings: 27 s on one thread. With
-  `tolerance = 0` (the default) every existing result is bitwise unchanged
-  (keep-out values and gradients, `clearance` and `talis_check` reports on the mock-up).
+- **TaLIS 3ω clearance as a keep-out** (`HardwareKeepOut(...; tolerance, pivot, miss)`). The
+  rule tolerance −r tan α (r from the pivot: TCC, the aim point, the larger of the two, or a
+  point) is subtracted inside the minimization. It is concave, and off the medial strip the
+  envelope distance's Hessian has rank one, so in every plane the sum curves down along some
+  direction: the minimum stays on the segments (edges, strip crossings, landing cuts). Along
+  a segment the sum is not convex; each segment is minimized with the term replaced by its
+  chord (a lower bound, exact at the ends: the convex search of the keep-out applies), and
+  split at the chord's minimizer while the term there lies more than 1e-14 mm above the
+  chord; cluster and segment bounds subtract tan α (r + radius). `miss = :all` judges a beam
+  whose axis meets no target along its whole length (TaLIS: "everything along the beam is
+  checked"), and a beam landing on one of the parts of the keep-out gets `Inf`
+  (`talis_check` skips the landed component). With `targets = capture`, `tolerance = 0.5`,
+  `miss = :all` and the defaults otherwise, on the mock-up's 48 quads against
+  `talis_check(...; capture = (:wall, :capsule), hardware = (:shield, :stalk), omega1 =
+  false, resolution = 1e-7, rtol = 0)`, every `:clearance_3w` row (24 shield and 25 stalk
+  rows finite, the rest `Inf` in both): the keep-out is 6e-8 to 1.1e-7 mm above the report's
+  lower bound on the 43 rows whose worst point lies off the major axis. On the 6 rows whose
+  worst point lies within 3e-10 mm of the major axis inside the medial segment (−0.82 to
+  −1.11 mm, deep violations), it is 1.7e-7 to 6.4e-6 mm above: there `_ellipse_distance`
+  returns values that are low (`clearance.jl`, a known loss of digits left to the user), and
+  the closed form on the axis, −B √(1 − u²/(A² − B²)), at the worst point of the report lies
+  7e-9 to 2.2e-7 mm above the keep-out's minimum (the keep-out does not miss a lower point).
+  *Since 2026-11-18* (§ Optimization defaults decided) those 6 rows (now 4, the worst points
+  having moved) agree within 1.0e-7 mm as well. Continuity (closed form, two plates beside a
+  beam down −z, their closest points at r = √10 and √82 mm from TCC): the keep-out equals
+  the closed form min over the plates of (far edge distance − cone · axial − tan α r) to
+  1e-12 relative on an aim scan of ±0.1 mm through the switch of the closest point, with no
+  step larger than the aim step (1e-3 mm); the tolerance taken a posteriori at the
+  tolerance-free closest point steps by 0.050 mm there. Derivatives in aim, defocus and spot
+  axes against central differences (h = 1e-6): within 9.4e-8 on the beams below 3 mm for
+  pivots TCC, aim, max and a point (1e-8 without the tolerance; the chord split's 1e-14 mm
+  stop sets the FD noise). Cost (48 quads, one thread): 0.64 ms for the shield and 0.83 ms
+  for the stalk (0.42 and 0.74 ms without the tolerance), 3.2 ms for a 3840-triangle stalk;
+  the same with 8-partial duals. `talis_check` on the same mock-up and settings: 27 s on one
+  thread. With `tolerance = 0` (the default) every existing result is unchanged (keep-out
+  values and gradients, `clearance` and `talis_check` reports on the mock-up).
 - **TaLIS 3ω capture as a quantity** (`CaptureKeepIn`, `capture_margin`). The part
   landed on is the first of the capture parts the nominal axis meets; the margin is the
   envelope distance at the 10% contour minimized over that part's free edges (as
@@ -11122,15 +11106,16 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   counts a sub-triangle in full once reached and fades it over Δθ/sharpness mm outside.
   `sharpness = 100°/mm` is an engineering default (a sub-triangle 0.01 mm outside the
   footprint counts 1° less). Best first over the sub-triangles by an upper bound (their
-  angle less sharpness × a lower bound of d). Checks: closed form (a part of a plate
-  normal to a round beam and a 60° plate beside it, the clearance of the latter from
-  −0.1 to 0.7 mm): 1e-12 relative, the derivative in the aim 100°/mm to 1e-9; it lies at
-  or above `talis_check`'s step and equals it outside the 0.6 mm fading band. Against
+  angle less sharpness × a lower bound of d). Checks: closed form (a part of a plate normal
+  to a round beam and a 60° plate beside it, with the clearance of the second plate from
+  −0.1 to 0.7 mm): 1e-12 relative, the derivative in the aim 100°/mm to 1e-9; it lies at or
+  above `talis_check`'s step and equals it outside the 0.6 mm fading band. Against
   `talis_check` on the design-rules hohlraum (wall and capsule, exact cylinder and sphere
-  normals, 48 quads, 8 of them above 70°) and on the capture foil (13 landed rows): equal
-  on every row (on each the largest angle lies inside the footprint, where no fading
-  applies: the quantity is locally constant in the pointing, as the rule is). Cost: 12 ms for the 48 quads on the
-  hohlraum's 6976 sub-triangles, 0.63 ms for 24 beams on the foil's 640 (one thread).
+  normals, 48 quads, 8 of them above 70°) and on the capture foil (13 landed rows): equal on
+  every row (on each the largest angle lies inside the footprint, where no fading applies:
+  the quantity is locally constant in the pointing, as the rule is). Cost: 12 ms for the 48
+  quads on the hohlraum's 6976 sub-triangles, 0.63 ms for 24 beams on the foil's 640 (one
+  thread).
 - **TaLIS 1ω clearance as a quantity** (`Omega1KeepOut`, `omega1_clearance`). The
   footprint of `talis_check` (per NIF beamlet a square, near edge 4.45 mm from the 3ω
   axis, tapering to the 1ω focus, the focus error as ±1 mm shifts), less the error
@@ -11143,7 +11128,7 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   and defocus). Checks: closed form (one beamlet's prism footprint and a plate between it
   and the beam): 1e-9 relative. Against `talis_check` (resolution 1e-7, `rtol = 0`) on
   the mock-up's 48 quads, shield and stalk (worst −0.25 to 3.8 mm): 9.5e-8 to 1.0e-7 mm
-  above the report's lower bound on all 96 rows. An aim scan: no step beyond the
+  above the report's lower bound on all 96 rows. An aim scan finds no step beyond the
   Lipschitz bound. Derivatives against central differences (h = 1e-4, resolution 1e-11):
   3e-11. Cost (48 quads, one thread): 160 ms (shield) and 184 ms (stalk) at 1e-9, 91 and
   124 ms at 1e-7: three times one deposition of the coarse mock-up, the price of the
@@ -11159,8 +11144,8 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   of a semi-axis low on a 0.40/0.39 spot and 5.1e-7 on 0.4/0.399999 (against the
   BigFloat minimum on 7,020 points, seven ellipses; the exact path: 6.6e-16). On a
   `HardwareKeepOut` whose nearest point is a triangle's vertex 9.99e-7 B off the axis at
-  the center of curvature of a 0.4/0.3999 spot, the keep-out read 1.02e-7 mm low. Now
-  `_ellipse_closest` has no snap (`clearance`'s exact path bitwise unchanged) and a
+  the center of curvature of a 0.4/0.3999 spot, the keep-out was 1.02e-7 mm low. Now
+  `_ellipse_closest` has no snap (the exact path of `clearance` is unchanged) and a
   keep-out's minimum takes the medial derivative where the closest point's mirror image
   across the major axis is as near to within 1e-10 of the semi-major axis, inside the
   medial segment (`_medial_tie`): the minima the search finds on the strip lie within
@@ -11215,7 +11200,7 @@ as the source and with Briareus's.
   them leaves the cavity's solution unchanged. One Briareus model per mesh (raw view
   factors, default `:sampled` visibility, constant albedo and conversion as imported)
   solves all three sources; differences are taken against the solve on VisRad's
-  deposition. Regions of the gold: elements whose laser source ηI exceeds B/5
+  deposition. The regions of the gold are the elements whose laser source ηI exceeds B/5
   ("spots", 32–33% of the gold's area), the corners (within 0.6 mm of the wall–cap
   edge), the entrance-hole rim (within 0.6 mm of it) and the rest. Modes are the
   capsule's incident flux in real spherical harmonics by exact solid angles
@@ -11286,7 +11271,7 @@ as the source and with Briareus's.
   point at partial visibility, one of the point-kernel size at the view-factor
   quadrature.
 - **What would settle it** (no new kit needed: the saved hohlraum workspaces hold the
-  geometry, beams and VisRad's up-to-date deposition). In VisRad: open a saved run per
+  geometry, beams and VisRad's up-to-date deposition). In VisRad, open a saved run per
   mesh (one at 0.6 mm, one at 0.1 mm), compute the radiosities, save, and export the
   Surface Element Properties (Flux In, Flux Out, Rad T, Emis T with the surface index)
   of the gold objects and the capsule, and the Power Summary. Back in Briareus:
@@ -11314,7 +11299,7 @@ as the source and with Briareus's.
 Roadmap item 36. `optimize_pointing(...; constraints)` takes `Constraint`s (ceilings and
 floors on any function of an `Evaluation`) and solves them by an augmented Lagrangian
 around the same L-BFGS-B; `irradiance_ceiling` and `mode_gate` are the ready-made ones,
-`drive_objective` the objective they go with. Public case: the dropped-bundle tutorial
+`drive_objective` the objective they go with. The public case is the dropped-bundle tutorial
 (bundle 11 freed, the other 46 quads re-pointed in `:phi` and `:z` within ±0.3 mm, the
 tutorial's mesh, 1,728 wall elements, and its coarse deposition operator), the largest
 drive with each degree's departure from the 48-quad shape within the gate
@@ -11329,7 +11314,7 @@ inequalities on the normalized violations `gᵢ = ±(value − limit)/scale`, wi
 ALGENCAN's updates (Andreani, Birgin, Martínez and Schuverdt, SIAM J. Optim. 18, 1286,
 2008): λ ← max(0, λ + μg); μ × 10 when `V = max |max(gᵢ, −λᵢ/μ)|` has not halved; first
 μ = 10 max(1, |f|)/max(1, ½Σ max(0, g)²), clamped to [1e-6, 1e6]; infeasible once μ has
-grown 1e8-fold. Inner runs: `_lbfgsb` (the unconstrained path, unchanged) warm-started,
+grown 1e8-fold. The inner runs are `_lbfgsb` (the unconstrained path, unchanged) warm-started,
 projected-gradient tolerance from 1e-3 tightened tenfold per outer iteration to
 `g_tol`, and a relative value tolerance of 1e-10 (Optim's `f_reltol`; engineering
 default). Without it each inner run on the drive objective crept for hundreds of
@@ -11409,7 +11394,7 @@ drive's coefficients through l = 2, regularized, under a total-power ceiling): t
 matches the KKT solution to 4e-6 relative and its multiplier to 1e-5 (tested to 1e-4 and
 1e-3); a box that keeps the powers above the ceiling ends `:infeasible_box` after 10
 outer iterations. Constraint values' gradients against central differences: 1e-8–1e-9
-relative. Unconstrained runs are bitwise those of the base commit (three tutorial
+relative. Unconstrained runs are identical to those of the base commit (three tutorial
 runs: x, value, iterations, evaluations, reason, at-bounds).
 
 **Bubble drivers.** The ceiling at the reference's peak irradiance is an engineering
@@ -11423,7 +11408,7 @@ picket's fluence map on the same machinery, at one more deposit per evaluation.
 `clearance_floor(keepout; minimum = keepout.minimum, scale = 1 mm)` holds each beam's
 `keepout_clearance` at or above the minimum: one component per beam of the evaluation,
 labeled by its name (a `Constraint`'s labels may now be a function of the evaluation,
-so the components follow the beams and one constraint serves a stage on quads and one
+so the components follow the beams and one constraint applies to a stage on quads and one
 on their beams). Any keep-out with a `keepout_clearance` method and a `minimum` field
 takes part: `ApertureKeepOut`, `SphereKeepOut`, `HardwareKeepOut`, `CaptureKeepIn`,
 `IncidenceRule`, `Omega1KeepOut`. A beam the keep-out does not apply to (`Inf`) has the
@@ -11485,7 +11470,7 @@ result. (b) needs every stage-dependent piece as a closure of the previous beams
 parameterization, the held set re-derived from the beams), the deposition options
 anyway (a scenario does not record them) and a pair (scenario, result) per stage,
 since `evaluate`, `check_constraints` and `pointing_summary` take the scenario; it
-saves no line of the tutorial's case and hides the check between the stages that
+does not save a line of the tutorial's case and hides the check between the stages that
 matters most (below). Chosen: (a), no new API; the change it needed was constraints
 whose components follow the beams. Not built, so not measured: multipliers carried from
 one stage to the next.
@@ -11503,7 +11488,7 @@ drive), with the drive unchanged (0.95685 against 0.95688 at its start): found h
 independently of the next section, whose fix (320335b) the tutorial runs on; with a
 stopping rule that also accepted an inner run ended by its value tolerance (the rule
 tried here first) the polish converged in 97 evaluations to the same drive (0.95842)
-and the section's earlier run kept its 765 evaluations, bitwise unchanged. The tutorial as a
+and the earlier run of the section kept its 765 evaluations, unchanged. The tutorial as a
 script on 8 threads: 249 s, of which the study adds about 100 s (141 s before the
 convergence fix and the study).
 
@@ -11530,7 +11515,7 @@ driver with `--check-bounds=yes` on 8 threads reaches a third (peak 0.9909, norm
 drive 0.96251211, 742 evaluations, `:interior`; `exact = true` there changes nothing).
 The drives differ by 8e-5 relative, more than rounding: the gates leave a flat family of
 designs, and which one a run ends at depends on rounding and thread layout. The stand-in
-alone bounds the peak to no fixed margin; the test now holds the peak with
+by itself does not bound the peak to a fixed margin; the test now holds the peak with
 `exact = true`.
 
 **Exact peak** (`irradiance_ceiling(...; exact = true)`). After the run has converged
@@ -11551,42 +11536,41 @@ its limit after the plain run):
 | random in the box, the 48-quad peak | 1.0288, 7, 1,306, 0.96260 | 0.9872, 8, 1,363, 0.96259 |
 
 One lowering round each, 4–9% more evaluations, the drive the same to 1e-5. The peak
-lands below the limit rather than on it (the norm-to-peak ratio moved with the design),
+ends below the limit, not on it (the norm-to-peak ratio moved with the design),
 and one or two gates leave their limits by up to 3% of the gate. Default kept at
-`exact = false` (today's behavior), as a decision for the user; recommended: `true`,
+`exact = false` (today's behavior), as a decision for the user; the recommendation is `true`,
 where the literal criterion is the peak over the elements. *2026-11-18, later:* the user
 decided `exact = true` as the default (§ Optimization defaults decided).
 
 **Warm restarts** (`from = result`). The result's `state` carries the multipliers, the
 penalty parameter and its ceiling, the inner tolerance, the last infeasibility–
-complementarity measure and the working limits. On the quadratic program (58
-evaluations, 8 outer iterations uninterrupted): split by `outer = 2`, the continued run
-is the uninterrupted one, bitwise (each inner run restarts its L-BFGS-B anyway); split
-inside an inner run by the evaluation budget, the continued run loses that inner run's
-L-BFGS-B memory and reaches the same optimum to 0.6–1.6e-7 relative (multiplier to
-2e-5–3.5e-4), in 55, 24 and 20 evaluations after splits at 10, 20 and 40, against 49, 28
-and 28 from `x` alone with the multipliers relearned. On the dropped-bundle test case
-(uninterrupted: 1,044 evaluations, 7 outer iterations, drive 0.96259), split at 400
-evaluations (3 outer iterations): the restart with `from` converges in 311 more (5
-outer iterations), from `x` alone in 394 (7); both end at the same design (drive
-0.96247, the ceiling's peak at 1.0215 of its limit, every gate within 0.6%), 1.6%
-in `x` from the uninterrupted run's: the flat family of designs above, so a split
-run reaches the same design as the uninterrupted one only where the optimum is unique
-(the quadratic program).
+complementarity measure and the working limits. On the quadratic program (58 evaluations, 8
+outer iterations uninterrupted): split by `outer = 2`, the continued run is identical to the
+uninterrupted one (each inner run restarts its L-BFGS-B anyway); split inside an inner run
+by the evaluation budget, the continued run loses that inner run's L-BFGS-B memory and
+reaches the same optimum to 0.6–1.6e-7 relative (multiplier to 2e-5–3.5e-4), in 55, 24 and
+20 evaluations after splits at 10, 20 and 40, against 49, 28 and 28 from `x` only, with the
+multipliers relearned. On the dropped-bundle test case (the uninterrupted run took 1,044
+evaluations and 7 outer iterations, drive 0.96259), split at 400 evaluations (3 outer
+iterations): the restart with `from` converges in 311 more (5 outer iterations), from `x`
+only in 394 (7); both end at the same design (drive 0.96247, the ceiling's peak at 1.0215 of
+its limit, every gate within 0.6%), 1.6% in `x` from the uninterrupted run's: the flat
+family of designs above, so a split run reaches the same design as the uninterrupted one
+only where the optimum is unique (the quadratic program).
 
 **Time limit** (`time_limit`, seconds). Checked after each evaluation, after the
 evaluation budget; `reason` and `outcome` `:time_limit`, the best design kept, the state
 kept for `from`.
 
-**Bound sensitivities** (`bound_gradient`, `bound_sensitivity`). For a parameter at a
-bound, the optimum's derivative with respect to the bound is the Lagrangian's partial
-derivative there (envelope theorem, active set held), `∂L/∂xᵢ` with the multipliers of
-the normalized violations; `∂f/∂xᵢ` is that of the objective alone. Check: on the quadratic
-program, one power's upper bound 0.5 below its optimum, against central differences
-of the re-optimized objective in the bound (δ = 0.05 and 0.01): 1.2e-5 relative without
-constraints (limited by the runs' convergence: the same at both δ), 2e-6–4e-5 with the
-total-power ceiling active (the derivative of the objective alone there 1.76 times the
-optimum's). One gradient each after the run, only when a parameter is at a bound.
+**Bound sensitivities** (`bound_gradient`, `bound_sensitivity`). For a parameter at a bound,
+the optimum's derivative with respect to the bound is the Lagrangian's partial derivative
+there (envelope theorem, active set held), `∂L/∂xᵢ` with the multipliers of the normalized
+violations; `∂f/∂xᵢ` is that of the objective only. Check: on the quadratic program, one
+power's upper bound 0.5 below its optimum, against central differences of the re-optimized
+objective in the bound (δ = 0.05 and 0.01): 1.2e-5 relative without constraints (limited by
+the convergence of the runs, since it is the same at both δ), 2e-6–4e-5 with the total-power
+ceiling active (the derivative of the objective only is there 1.76 times the optimum's). One
+gradient each after the run, only when a parameter is at a bound.
 
 **Summary line.** `pointing_summary(...; drive_reference)` (an evaluation or its
 `flux_ylm` coefficients) adds the drive ratio (c₀₀ over the reference's; equal to the
@@ -11641,16 +11625,16 @@ runs each. Three forms compared:
   over them.
 
 Cases: the closed-form problem of `test/constraints.jl` (48 quad powers; the drive
-`mean_flux` is linear in the powers, so the largest drive at a total power and the
-least power for a drive are fills of the quads in decreasing drive per power, a closed
-form) with a 120 TW cap and a drive floor 5% above the cap's largest drive, 1 thread;
-the dropped-bundle test case of `test/constraints.jl` (46 quads in `:phi` and `:z`,
-0.45 mm wall elements, drive objective, the four gates and the wall ceiling; 8
-threads), made infeasible by a box of ±0.02 mm (the gates against the box) and by the
-ceiling at 0.8 of the 48-quad peak (the ceiling against the box: alone it reaches 0.84
-at best from this start), budget 3,000 evaluations and 90 s. Gates tightened to 0.3
-and 0.1 of their values, and the ceiling to 0.9 and 0.86, all stayed feasible: on this
-case the gates and the ceiling hardly conflict.
+`mean_flux` is linear in the powers, so the largest drive at a total power and the least
+power for a drive are fills of the quads in decreasing drive per power, a closed form) with
+a 120 TW cap and a drive floor 5% above the cap's largest drive, 1 thread; the
+dropped-bundle test case of `test/constraints.jl` (46 quads in `:phi` and `:z`, 0.45 mm wall
+elements, drive objective, the four gates and the wall ceiling; 8 threads), made infeasible
+by a box of ±0.02 mm (the gates against the box) and by the ceiling at 0.8 of the 48-quad
+peak (the ceiling against the box; by itself the ceiling reaches 0.84 at best from this
+start), budget 3,000 evaluations and 90 s. Gates tightened to 0.3 and 0.1 of their values,
+and the ceiling to 0.9 and 0.86, all stayed feasible: on this case the gates and the ceiling
+hardly conflict.
 
 | case | augmented Lagrangian (today) | (c) stall rule | (a) phase 1 | (b) elastic, γ = 10 |
 |---|---|---|---|---|
@@ -11684,7 +11668,7 @@ flat family of designs ends at another, within 3.2e-4 of the drive).
 
 The stall rule. On the ceiling case phase 1 converges slowly toward its local minimum:
 ψ within 3% of its final value after 400 evaluations, within 1e-5 after 2,000, the
-L-BFGS-B convergence after 2,681 (with the ceiling alone: within 1% after 140, done
+L-BFGS-B convergence after 2,681 (with only the ceiling, within 1% after 140, done
 after 766). Every feasible case reached the limits within 323 phase-1 evaluations, with
 ψ falling by orders of magnitude per hundred. Ending phase 1 when its least ψ falls by
 less than 1% over 100 evaluations (engineering defaults) gave the verdict at 577
@@ -11718,7 +11702,7 @@ whether to switch it on by default is the user's decision; recommended, as it co
 most 29% on the drive problems and turns a run to the time limit into a verdict;
 **Superseded**: phase 1 on by default since "Defaults changed (2026-11-19)" §5). Today's run is
 unchanged without the keywords: unconstrained runs and default constrained runs are
-bitwise those of the base commit. Confidence: two public infeasible cases and the
+identical to those of the base commit. Confidence: two public infeasible cases and the
 closed form; the stall rule's 1% per 100 evaluations is an engineering default
 measured on one creeping case.
 
@@ -11730,7 +11714,7 @@ matched the largest gate multiple found by hand (runs minimizing it) within 2%, 
 keep-out relaxed alone fell inside the bracket the hand-found feasibility runs had set
 (that relaxation stopped by the time limit, the other constraints within a few percent),
 and the ceiling relaxed alone was reported as not enough: the conflict the hand-found
-runs had named. On its case with the outer quads re-pointed alone (the keep-out as a
+runs had named. On its case with only the outer quads re-pointed (the keep-out as a
 floor), the verdict came in seconds and the whole call, relaxations included, in under
 two minutes: the gates relaxed alone matched the hand-found multiple within 1%, and
 the ceiling and the keep-out relaxed alone were each reported as not enough. The last
@@ -11746,14 +11730,13 @@ is now shared by the ceiling, the gate and the drive floor). The reference may b
 another target (a hohlraum without the design's windows, as in the study), since the
 gate compares shapes, not elements. The coefficient-vector method stays unchecked.
 
-**Drive floor.** On the study, an absolute ceiling with a power scale per cone (≤ 1)
-was met by cutting power, at a large loss of drive.
-`drive_floor(reference; fraction)` holds `mean_flux` at or above `fraction` times the
-reference's (scale: the limit; the model check as for the gate). Test: on the closed
-form, the least total power that keeps 0.9 of the start's drive, the floor active with
-a positive multiplier, against the fill of the quads in decreasing drive per power
-(1e-6). No default fraction: a reference with more beams than the design delivers more
-drive, so 1 is not always reachable.
+**Drive floor.** On the study, an absolute ceiling with a power scale per cone (≤ 1) was met
+by cutting power, at a large loss of drive. `drive_floor(reference; fraction)` holds
+`mean_flux` at or above `fraction` times the reference's (scaled by the limit; the model
+check is as for the gate). Test: on the closed form, the least total power that keeps 0.9 of
+the start's drive, the floor active with a positive multiplier, against the fill of the
+quads in decreasing drive per power (1e-6). There is no default fraction: a reference with
+more beams than the design delivers more drive, so 1 is not always reachable.
 
 **`pointing_summary` and a clearance of −Inf.** The summary's least clearance per
 keep-out filtered every non-finite value, so a beam the rule cannot place (−Inf, a
@@ -11799,14 +11782,14 @@ source and uncertainty. `material_library()`, `material_default(name)`,
 or the GUI changes: no default, constant or constructor is touched. Confidence as at the
 top of this file (**H** primary text, **M** abstract or secondary, **L** inference);
 sections cited by title hold the earlier sources and are not repeated. Literature
-searched this session: the Z dependence of laser → x-ray conversion (Nakano & Kuroda,
+searched this session: the Z dependence of laser-to-x-ray conversion (Nakano & Kuroda,
 PRA 27, 2168 (1983), abstract: periodic in Z, no numbers; the 0.53 µm and 0.26 µm
 Z scans of PRA 33, 525 (1986) and PRA 34, 4184 (1986), abstracts only: undulatory in Z,
 no numbers read) and low-Z (CH) conversion at 351 nm (no number found).
 
 ### Survey
 
-"Today" is the value the package uses and where it is set; "inside" says whether it lies
+"Today" is the value the package uses and where it is set; "inside" states whether it lies
 within the published spread.
 
 | Material | Quantity | Today (where) | Published (source, conf.) | Uncertainty / spread | Inside? |
@@ -11845,7 +11828,7 @@ published alternatives `:gold_young2020` (0.8 / 0.9), `:gold_swadling2025` (0.77
 0.95) and `:gold_disk` (Lindl's loss; Dewald's 0.95 / 0.80 intensity table; with the 3ω
 absorption and 1ω cold reflectance recorded but not used).
 
-*Decision*: unsourced values are left out rather than included flagged as engineering
+*Decision*: unsourced values are left out; they are not included as flagged engineering
 defaults. A library entry is a claim that the numbers have a source; a flagged entry
 would put unsourced numbers behind the same call and invite their use. The cost is that
 `ablator()` has no entry: its albedo 0.3 is Young 2020's, but its conversion 0.3 has no
@@ -11894,7 +11877,7 @@ Not changed; for the user (recommendations):
 4. **Foil conversion 0.05 (core) and 0.02 (GUI)**: both 10–48× below every published
    value for gold. Recommended: `:gold_disk` for gold foils; for mid-Z foils, require
    the conversion from the user (no public total-conversion data were found). The `foil`
-   docstring says `material = gold()` while the code uses `gold(conversion = 0.05)`.
+   docstring states `material = gold()` while the code uses `gold(conversion = 0.05)`.
 5. **GUI free parts 0 / 0**: a black body by definition (`:black`). Recommended: keep,
    with the material picked from the library named in the part's properties.
 
@@ -12105,7 +12088,7 @@ At 7.0 ns (1.8–2.75 Å): models 0.143 / 0.143 / 0.089; with f = 0.6 0.112 / 0.
 - **The plasma state moves the slope by ≤ 0.02 at fixed transfer** on the joint fits
   (Te ×0.7 / ×1.3, gain rescaled: `iraum` 0.143 / 0.129, `hybride_cbet()` 0.196 / 0.167); a
   colder plasma brings the resonance nearer and steepens it (`n221204_cbet()` 0.255).
-- **The outside zone adds 0.005–0.03 per Å** (its flow-driven inner → outer transfer
+- **The outside zone adds 0.005–0.03 per Å** (its flow-driven transfer from inner to outer
   shrinks as the inner cones redden).
 
 What HYDRA's cross-shot numbers would require instead: the inside-zone gain that puts
@@ -12146,14 +12129,14 @@ HYDRA predicted −10 µm); its cause lies outside the transfer at the LEH (**L*
 ### 3. A drive-following Te(t) prior (a measurement; not adopted)
 
 `hybride_cbet_iraum()`'s Te(t) dips to 2.5 keV at 5.5 ns between 4.5 keV at 4 ns and 3.0
-at 6.5 ns, its peak clamp (1.4×10⁻⁴) lies below HYDRA's deck values, and Te sits at the
+at 6.5 ns, its peak clamp (1.4×10⁻⁴) lies below HYDRA's deck values, and Te is at the
 5.5 keV bound at 8 ns. B16 (**H**, high fill): LEH Te "follows the drive" and peaks late.
 
 - **Prior.** Te at the 4, 4.75, 5.5, 6.5 and 8 ns knots tied to N221204's measured
   Dante 1 radiation temperature (Pak et al., PRE 109, 025203 Fig. 1, `n221204_pulse()`:
   178.8, 219.9, 263.1, 282.8, 310.0 eV): Te(t) = Te(8 ns) · (Tr(t)/Tr(8 ns))^β, with
   Te(8 ns) ≤ 5.5 keV and β ∈ [0, 4] fitted; the 1 and 3 ns knots stay free (Dante 1
-  starts at 3.3 ns and B16 says nothing of the foot). The form is ours (**L**); B16 gives
+  starts at 3.3 ns and B16 does not discuss the foot). The form is ours (**L**); B16 gives
   only the shape. 9 parameters instead of 12.
 - **Data and everything else as `iraum`.** The same 107 rows of HYDRA post-CBET cone
   fraction (N221204 PRE 109 Fig. 9b, N220919 Fig. 9b black, N210808 PRE 109 Fig. 1e with
@@ -12194,12 +12177,12 @@ section's (0.040 / 0.044 / 0.052) through the defaults changed since.
   inside the 5×10⁻⁴–7.5×10⁻³ of HYDRA decks (K18, PRE 109; Ruof 2026's fits 0.005–0.007;
   the ion-wave coefficients differ, so the comparison is rough). So the low clamp was
   the partner of the dip, as the correlations of −0.92 to −0.97 suggested. Te at 8 ns
-  stays at the 5.5 keV bound: the late transfer still wants a weaker coupling (hotter
+  stays at the 5.5 keV bound: the late transfer still needs a weaker coupling (hotter
   electrons) than the bound allows.
 - The fit loss doubles (0.059 → 0.122), back to `hybride_cbet()`'s 0.120. Every shot
   fits worse, N210808 most (rms 0.028 → 0.043; its peak CF 0.504 against HYDRA's 0.596).
-  Under this model the HYDRA cone-fraction histories ask for the dip; which feature of
-  the three histories it serves was not isolated.
+  Under this model the HYDRA cone-fraction histories require the dip; which feature of
+  the three histories it fits was not isolated.
 - The Δλ slope falls 13–15% (0.117 per Å), still twice HYDRA's cross-shot 0.055.
 - **Blind check: worse on every shot.** rms against Fig. 10 +0.006 to +0.012 (N221204
   0.038 → 0.046), the minimum 0.25–0.5 ns earlier (5.00 ns against Fig. 10's 5.5–5.6),
@@ -12207,9 +12190,9 @@ section's (0.040 / 0.044 / 0.052) through the defaults changed since.
   5.5 ns (CF 0.573 on the delivered powers, against 0.631) and the swing's minimum moves
   into the rise.
 - **Not adopted.** The calibrated constants are unchanged. The prior removes what looks
-  unphysical in the Te history but pays for it in the fit to the data it was fitted to
-  and in the blind check, so the dip is not an artifact the data are indifferent to.
-  Since §2 reads HYDRA's cross-shot differences as per-run settings, the dip is best read
+  unphysical in the Te history but pays for it in the fit to the data it was fitted to and
+  in the blind check, so the dip is not an artifact the data are indifferent to. Since §2
+  interprets HYDRA's cross-shot differences as per-run settings, the dip is best interpreted
   as the model absorbing those settings into the one place that varies in time (**L**).
 
 Not run (lock time): the laser-power form of the prior (Te ∝ P_laser^α, flat through the
@@ -12238,7 +12221,7 @@ them, and no default or calibrated constant changed. Runs: a scratch copy of
 measured backscatter, defaults of commit 865f161; 45–55 s per variant on 8 threads;
 the uniform-cut rerun skipped). The copy adds only switches the example lacks (the wall
 conversion as another `Conversion`, the DU loss factor) and a per-step record: Dante 1
-over its whole field and through the hole alone, the share of its intensity that is
+over its whole field and through the hole only, the share of its intensity that is
 converted laser light seen directly (`sol.converted`), and one diffuse bounce of each
 step's absorbed laser through the step's view factors. The coarse baseline reproduces
 "The swing and the bubble without new data" §1 to the printed digit (capsule / LEH share
@@ -12249,10 +12232,10 @@ Zylstra's pair. Confidence: **H** primary text, **M** abstract or secondary, **L
 
 ### 1. The current state with the whole-field Dante 1
 
-Coarse, full model; Dante 1 (`dante1()`, the 60 mm field) over the initial LEH area
-(Dante's convention, Rubery et al., PRL 132, 065104 (2024): "a lower bound") and over
-the open area; eV. "Direct share": the fraction of Dante 1's intensity that is converted
-laser light, the spots seen directly.
+Coarse, full model; Dante 1 (`dante1()`, the 60 mm field) over the initial LEH area (Dante's
+convention, which Rubery et al., PRL 132, 065104 (2024), call "a lower bound") and over the
+open area; eV. "Direct share": the fraction of Dante 1's intensity that is converted laser
+light, the spots seen directly.
 
 | t (ns) | capsule Tr | Dante 1, initial | Dante 1, open | measured | initial − measured | open − measured | open fraction A_open/A₀ | direct share |
 |---|---|---|---|---|---|---|---|---|
@@ -12382,7 +12365,7 @@ absorbed laser; *L*):
 | 8.0 | 0.718 | 0.144 | 0.046 | 0.068 | 0.023 |
 
 With a scattered fraction r = 0.05–0.09 (Ze's disks), 0.3–0.6% of the coupled energy
-leaves through the holes and 0.2–0.8% lands on the capsule as 3ω light (+0.2–0.8
+leaves through the holes and 0.2–0.8% is deposited on the capsule as 3ω light (+0.2–0.8
 points of capsule share if the ablator keeps it; the capsule share counts only x-rays
 today). Both are below the 2.4–4.2 points of the capsule share and below the coarse
 mesh's resolution of the drive. *Decision*: no opt-in diffuse laser reflectance (a 3ω
@@ -12393,7 +12376,7 @@ history, and what it would move is ≤ 1 eV and ≤ 1 point.
 input above. `capsule_outside=0.15` (the blow-off absorptance that would close the
 capsule share, "Capsule absorption, conversion and the ablating-wall release" §2) gives
 15.8% (HYDRA 16.2) but takes the LEH share from 24.2 to 23.6% (HYDRA 25.2) and
-Dante 1 at 8 ns down 2.9 eV (9.0 ns: −4.2); Fig. 10 +0.092 at 8 ns (+0.080 before). The
+Dante 1 at 8 ns down 2.9 eV (−4.2 at 9.0 ns); Fig. 10 +0.092 at 8 ns (+0.080 before). The
 gas moves neither share (−0.2 / −0.1 points). Only a lower wall loss (DU factor ×0.9)
 raises both (14.5 / 25.4%) and Dante 1 (+2.4 to +4.1 eV); Döppner's 6.5% equivalence
 fixes the factor to 0.827–0.838 ("Energetics defaults and the capsule share"), so that
@@ -12411,7 +12394,7 @@ is not a lever without new data.
 - The capsule share (13.9%, HYDRA 16.2) and the LEH share (24.2%, 25.2) together: no
   sink or input moves both up except a lower wall loss, which the DU calibration rules
   out.
-- Sinks: the gas is 80 kJ and 3–4 eV at peak and at 8 ns (sized, not modeled); windows,
+- Of the sinks, the gas is 80 kJ and 3–4 eV at peak and at 8 ns (sized, not modeled); windows,
   diffuse scattering and glint are each ≤ 2 eV and ≤ 1 point.
 
 ## Optimization defaults decided (2026-11-18) *measured*
@@ -12420,7 +12403,7 @@ The user's decisions of 2026-11-18 on roadmap items 34–36, each measured on th
 cases below.
 
 **`irradiance_ceiling`'s `exact` defaults to `true`** (item 36). The peak over the
-elements is what a ceiling holds by default; `exact = false` keeps the smooth norm alone
+elements is what a ceiling holds by default; `exact = false` keeps only the smooth norm
 (§ Constrained re-pointing, "Exact peak", for the method and its cost). The
 dropped-bundle test case of `test/constraints.jl` already ran with `exact = true` and
 does not move; it passes plain and under `--check-bounds=yes` (121 tests each), which
@@ -12439,7 +12422,7 @@ after a constrained run has converged, so a run stopped by its budget reports th
 as it stands (0.8% over here), where with `exact = false` the report shows the norm
 (the earlier tutorial printed the peak beside a report of every limit met). The tutorial
 keeps its 120-evaluation polish (a converged one costs five and a half more minutes of
-the docs build) and says so; a design to hand off runs to convergence.
+the docs build), and its text states so; a design to hand off runs to convergence.
 
 **`GroupPointing`'s `unit` defaults to `:quad`** (items 23 and 34). The user's
 condition: "Quads-as-units is a default for pointing, but quad-splitting shouldn't
@@ -12450,28 +12433,28 @@ change, as a user meets it:
   are then in its quad's port azimuth. `unit = :beam` (one keyword) puts them in the port
   azimuth of the beam.
 - *A split about the quad's aim point*: there was no cylindrical split field
-  (`hybride_mock_pointing` splits by a fixed table; `:split_theta`/`:split_phi` are on
-  the capsule sphere). Added: `:split` (mm, along the quad's φ̂, each beam `±split` by
-  the side of its port's azimuth from the quad's mean port; positive opens the quad in
-  the sense of its ports, as `:split_phi`; `hybride_mock_pointing`'s crossing `s` is
+  (`hybride_mock_pointing` splits by a fixed table; `:split_theta`/`:split_phi` are on the
+  capsule sphere). The new field is `:split` (mm, along the quad's φ̂, each beam `±split` by
+  the side of its port's azimuth from the quad's mean port; positive opens the quad in the
+  sense of its ports, as `:split_phi`; `hybride_mock_pointing`'s crossing `s` is
   `split = -s`), absolute (it sets each beam's tangential offset from its quad's mean
   template aim) or a shift with `relative`, needing `unit = :quad` and quad names. Two
-  lines: `p = GroupPointing(nif_beams(); by = :quad, fields = (:z, :r, :phi, :split))`
-  and `apply(p, parameters(p, "Q31T" => (z = 5.8, split = 0.5)))`. Checked against beams
-  split by hand (each aim moved by ±split along the quad's φ̂ computed in the test from
-  the port table) and against `hybride_mock_pointing` per cone, to 1e-12 mm; the
-  template's split read back by `initial_parameters` and `parameters(p, beams)` to
-  1e-12; d aim/d split equals the side times the quad's φ̂ to 1e-14 (ForwardDiff); a
-  quad held as one beam gets none, bitwise; inferred and JET-clean on Float64 and
-  the optimizer's duals, absolute and relative.
+  lines: `p = GroupPointing(nif_beams(); by = :quad, fields = (:z, :r, :phi, :split))` and
+  `apply(p, parameters(p, "Q31T" => (z = 5.8, split = 0.5)))`. Checked against beams split
+  by hand (each aim moved by ±split along the quad's φ̂ computed in the test from the port
+  table) and against `hybride_mock_pointing` per cone, to 1e-12 mm; the template's split
+  read back by `initial_parameters` and `parameters(p, beams)` to 1e-12; d aim/d split
+  equals the side times the quad's φ̂ to 1e-14 (ForwardDiff); a quad held as one beam gets
+  exactly none; inferred and JET-clean on Float64 and the optimizer's duals, absolute and
+  relative.
 - *A per-beam table* (`read_visrad_sst(path; template = nif_beams(quads))`, an as-shot
   table): `relative = true` keeps its beams' differences under one shift per quad, in
   the quad's frame now; absolute `:z`, `:r`, `:phi` collapse each quad to one aim point,
   and absolute `:split` keeps the table's mean split.
 
-Callers: every one built on quads held as one beam (`nif_quads`, the tests, examples
-and tutorials but one) or on beams without quad names (OMEGA) is the same either way,
-bitwise; the spherical fields do not use the frame. Results change only for beam
+Every caller built on quads held as one beam (`nif_quads`, the tests, examples
+and tutorials but one) or on beams without quad names (OMEGA) is identical either way;
+the spherical fields do not use the frame. Results change only for beam
 lists holding a quad's beams separately with an aim field in play:
 `test/parameters.jl`'s per-beam case (pinned to `unit = :beam`, the case it checks),
 `test/basics.jl`'s relative per-beam table (the new default intended; its checks hold
@@ -12480,7 +12463,7 @@ intended: its tangential shifts are along the quad's φ̂; measured with the nex
 change, below). `BriareusGUI` already
 passed `unit = :quad` everywhere (left explicit). `Scenario(target, beams)`'s default
 parameterization on a 192-beam list now has the quad frame; `examples/n221204.jl`
-builds no parameterization, and its coarse CSV (`0.8 0.4 full`) is byte-identical to
+does not build a parameterization, and its coarse CSV (`0.8 0.4 full`) is byte-identical to
 the base commit's (8 threads, 2 min 12 s each).
 
 **The point–ellipse distance next to the major axis** (item 35). `_ellipse_distance`
@@ -12527,37 +12510,36 @@ on the medial segment, 1.7e-7 to 6.4e-6 → 1.0e-7 (the other rows 6e-8 to 1.1e-
 before). Every row now agrees within the reports' resolution, deep violations
 included (`test/design_rules.jl` tests 2e-7 on every `:clearance_3w` row and 1e-6 on
 every `clearance` row below 1 mm, where it had excluded those below −0.5 mm and
-allowed 1e-5 on the medial rows); `clearance` still reads up to 0.40 mm higher than the
+allowed 1e-5 on the medial rows); `clearance` still gives values up to 0.40 mm higher than the
 keep-out on shield beams above 1 mm, where it skips points the cap hides.
 
-The tutorial with this change and the quad frame (8 threads, 240 s): the runs on quads
-without a hardware keep-out are the same (within limits, 1,079 evaluations); stage 1,
-whose cap `HardwareKeepOut` derivatives moved by ≤ 1e-9, takes another path through
-the flat family of designs (1,092 → 1,526 evaluations, drive 0.95733 → 0.9574, the
-keep-out 18 µm, gates l = 2 and 4 active, no aim at the box); the 120-evaluation polish
-(its tangential shifts now along each quad's φ̂) ends at drive 0.9593 with the wall's
-peak 0.44% over the ceiling, mode 2 0.12% over its gate and the keep-out active on six
-beams (the clearance check: 9.5 µm, no beam failing). The tutorial asserts a normalized
-violation of at most 0.01 for the capped polish.
+The tutorial was rerun with this change and the quad frame (8 threads, 240 s). The runs on
+quads without a hardware keep-out are the same (within limits, 1,079 evaluations). Stage 1,
+whose cap `HardwareKeepOut` derivatives moved by ≤ 1e-9, takes another path through the flat
+family of designs (1,092 → 1,526 evaluations, drive 0.95733 → 0.9574, the keep-out 18 µm,
+gates l = 2 and 4 active, no aim at the box). The 120-evaluation polish (its tangential
+shifts now along each quad's φ̂) ends at drive 0.9593, with the wall's peak 0.44% over the
+ceiling, mode 2 0.12% over its gate and the keep-out active on six beams (the clearance
+check gives 9.5 µm, with no beam failing). The tutorial asserts a normalized violation of at
+most 0.01 for the capped polish.
 
-**`keepout_penalty` and `clearance_floor` on a clearance of −Inf** (item 35). The
-penalty skipped every non-finite clearance, so a −Inf (a `CaptureKeepIn` beam whose
-axis misses every capture part when no part has a free edge to continue the margin
-from) was dropped silently, and the constraint form turned it into a violation of +Inf,
-an infinite augmented Lagrangian without a message. Options: (a) a large finite penalty
-(the objective stays finite, but the cause is hidden and the gradient is zero); (b) an
-`ArgumentError` naming the keep-out and the beam; (c) skip it (the old behavior).
-Chosen: (b), for −Inf and NaN alike, in both `keepout_penalty` and `clearance_floor`
-(the check is shared); +Inf, a beam the keep-out does not apply to, still adds nothing
-and holds as a constraint. A −Inf arises only where the rule has no finite margin to
-offer, so no step of the optimizer can recover from it; the run stops at the first
-evaluation with the beam named. Existing results do not move (the sum runs over the
-same terms in the same order).
+**`keepout_penalty` and `clearance_floor` on a clearance of −Inf** (item 35). The penalty
+skipped every non-finite clearance, so a −Inf (a `CaptureKeepIn` beam whose axis misses
+every capture part when no part has a free edge to continue the margin from) was dropped
+silently, and the constraint form turned it into a violation of +Inf, an infinite augmented
+Lagrangian without a message. The options were (a) a large finite penalty (the objective
+stays finite, but the cause is hidden and the gradient is zero); (b) an `ArgumentError`
+naming the keep-out and the beam; (c) skip it (the old behavior). Chosen: (b), for −Inf and
+NaN alike, in both `keepout_penalty` and `clearance_floor` (the check is shared); +Inf, a
+beam the keep-out does not apply to, still adds nothing and holds as a constraint. A −Inf
+arises only where the rule has no finite margin to offer, so no step of the optimizer can
+recover from it; the run stops at the first evaluation with the beam named. Existing results
+do not move (the sum runs over the same terms in the same order).
 
 **The aperture keep-out's slope along the aim** (checked on a report from a
 re-pointing study whose objective's derivative disagreed with central differences when
 `ApertureKeepOut`'s penalty, weight 1e3, was active: −1.229 against −1.169, −1.193,
-−1.207 at h = 1e-3, 1e-4, 1e-5 mm). Public mock-up: the dropped-bundle tutorial's
+−1.207 at h = 1e-3, 1e-4, 1e-5 mm). The public mock-up is the dropped-bundle tutorial's
 hohlraum and keep-out (1% contour, minimum 10 µm), the 48 quads each moved along a
 random direction to within ±20 µm of the minimum. Against central differences along 240
 random aim directions (5 per quad) the forward-mode slope agrees to second order in h
@@ -12572,7 +12554,7 @@ a few micrometers, ~300 mm⁻¹), which are smooth (the jump falls linearly with
 but put central differences at h ≥ 1e-5 mm far off. The squared hinge adds a jump in
 curvature (2·weight·c′², 500 at weight 1e3 and slope 0.5) where a clearance
 crosses the minimum, which central differences straddling it resolve only to O(h).
-The reported mismatch is what a line search sees across such points on several beams
+The reported mismatch is what a line search encounters across such points on several beams
 at once; it is not an AD error. `clearance_floor` per beam keeps the kink in the
 active beam's component (it does not remove it) but confines it to one multiplier;
 a floor on a minimum of two branches is the intersection of two smooth floors, so the
@@ -12618,7 +12600,7 @@ what bears on a view-factor drive model:
 - **Scales for gates.** Mode gates set at a fraction of the pointing-noise floor
   (tenths of a percent of the drive per degree) are several times inside both the band
   with no yield effect and the repeatability above. They state "no change from the
-  reference" rather than a physical tolerance; where such a gate costs drive, a gate in
+  reference" in place of a physical tolerance; where such a gate costs drive, a gate in
   physical units (0.5% in P2/P0, the modelers' repeat uncertainty) is defensible. A
   reference shot's drive is not thereby a good target: N230729's inferred drive is 2.4%
   waist-heavy in the fixed-in-time equivalent.
@@ -12634,41 +12616,40 @@ what bears on a view-factor drive model:
   public drive history for the rise-through-the-peak error of item 12, as a check.
 - Mode 1 from a diagnostic window is compensated by the same window opposite (their
   reference to Young et al. 2020), as the default hohlraum models it.
-- Not used: the capsule-quality fit and the fill-tube results (outside the scope). The
+- The capsule-quality fit and the fill-tube results are not used (outside the scope). The
   paper states that integrated simulations predict neither the coupling nor the shape,
   and that the flux asymmetry is inferred from in-flight and stagnation images, not
   measured: none of its drive numbers is a measurement of the drive.
 
 ## Drive histories: sliver steps and the albedo of a phase (2026-11-18) *measured*
 
-**Sliver steps through a burnthrough.** A quasi-static `drive_history` of a hohlraum
-with two thin gold windows (`BurnthroughAlbedo`, `WallLossAlbedo` wall, `wall_history`
-and `wall_release` on, `transition = 0.05`, 11k elements: a Float32, iterative model)
-stopped in a scratch study with "iterative radiosity solve (radiosity) did not converge
-in 400 iterations" at 0.1 ns steps; the same run at 0.2 ns steps, or with two more
-beams, converged. Cause: `transition` planned a step ending 7.8e-6 ns short of one of
-`times`, and that remainder was taken as a separate step. The wall cooled slightly as
-the windows began to burn through, so the wall elements were in `wall_release`'s
-re-emitting branch, whose implicit part puts `C Δ^(b−1) φ(T)/H` (b − 1 = −0.38) into the
-albedo: at Δ = 7.8e-6 ns the factor `Δ^(b−1)` is 87 and the wall albedo was −27 on 7,310
-elements. The unpreconditioned restarted GMRES of a large model does not solve that
-system: on the failing step's albedos and source it did not converge in 3,000
-iterations either, while the same albedo pattern scaled to Δ = 1e-4, 1e-3, 1e-2 and
-0.1 ns (albedo minima −9.6, −3.4, −0.85, 0) converged in 80, 22, 11 and 9 iterations.
-Raising the cap would not help. The fix is in the planner: a planned step that would
-leave less than `min_step` (1e-3 ns) before the next of `times` runs to it instead (the
-transition then advances by at most a `min_step`'s worth beyond the tolerance, inside
-the 1.5× check). With it the study's run completes (108 steps, shortest 4.7e-3 ns,
-lowest albedo of any converged step −0.057). Public mock-up (`test/burnthrough.jl`,
-"burnthrough steps leave no sliver"): a 760-element hohlraum with a 1 µm gold window
-2 mm across, NIF quads, a pulse falling from 6 to 2 TW per quad between 0.6 and 0.8 ns
-while the window burns through (0.44 ns onward), an iterative model, and a goal 5e-6 ns
-past an inserted step: before the fix every such goal on a cooling step failed (13 of
-13), after it all complete, with the lowest albedo −1.4. Given as times, the sliver's
+**Sliver steps through a burnthrough.** A quasi-static `drive_history` of a hohlraum with
+two thin gold windows (`BurnthroughAlbedo`, `WallLossAlbedo` wall, `wall_history` and
+`wall_release` on, `transition = 0.05`, 11k elements: a Float32, iterative model) stopped in
+a scratch study with "iterative radiosity solve (radiosity) did not converge in 400
+iterations" at 0.1 ns steps; the same run at 0.2 ns steps, or with two more beams,
+converged. The cause was that `transition` planned a step ending 7.8e-6 ns short of one of
+`times`, and that remainder was taken as a separate step. The wall cooled slightly as the
+windows began to burn through, so the wall elements were in `wall_release`'s re-emitting
+branch, whose implicit part puts `C Δ^(b−1) φ(T)/H` (b − 1 = −0.38) into the albedo: at Δ =
+7.8e-6 ns the factor `Δ^(b−1)` is 87 and the wall albedo was −27 on 7,310 elements. The
+unpreconditioned restarted GMRES of a large model does not solve that system: on the failing
+step's albedos and source it did not converge in 3,000 iterations either, while the same
+albedo pattern scaled to Δ = 1e-4, 1e-3, 1e-2 and 0.1 ns (albedo minima −9.6, −3.4, −0.85,
+0) converged in 80, 22, 11 and 9 iterations. Raising the cap would not help. The fix is in
+the planner: a planned step that would leave less than `min_step` (1e-3 ns) before the next
+of `times` runs to it instead (the transition then advances by at most a `min_step`'s worth
+beyond the tolerance, inside the 1.5× check). With it the study's run completes (108 steps,
+shortest 4.7e-3 ns, lowest albedo of any converged step −0.057). Public mock-up
+(`test/burnthrough.jl`, "burnthrough steps leave no sliver"): a 760-element hohlraum with a
+1 µm gold window 2 mm across, NIF quads, a pulse falling from 6 to 2 TW per quad between 0.6
+and 0.8 ns while the window burns through (0.44 ns onward), an iterative model, and a goal
+5e-6 ns past an inserted step: before the fix every such goal on a cooling step failed (13
+of 13), after it all complete, with the lowest albedo −1.4. Given as times, the sliver's
 albedo is −33, and on a direct (LU) model the gray solve then succeeds but the M-band's
 thermalized group solve (an unpreconditioned GMRES as well) does not converge. Histories
-without `transition` are unchanged (the N221204 example's CSV byte-identical), and with
-it, only where a planned step ended within `min_step` of a goal.
+without `transition` are unchanged (the N221204 example's CSV byte-identical), and with it,
+only where a planned step ended within `min_step` of a goal.
 
 **The wall albedo of a phase.** A linear scenario at one time of a pulse (a "phase":
 the picket, the trough, the peak) needs albedos. Three sources disagree: a standalone
@@ -12677,7 +12658,7 @@ temperature at the time since the pulse start, i.e. as if the wall had been at t
 temperature since t = 0, without re-emission; a `Scenario` without `albedo` evaluates it
 at the material's `reference_temperature` (250 eV) at `time`; `drive_history` follows
 the temperature history of each element (`wall_history`) and its re-emission
-(`wall_release`), and is the answer of the model itself. Public mock-up: the
+(`wall_release`), and is the answer of the model itself. The public mock-up is the
 diagnostic-windows tutorial's NIF-like hohlraum without windows (10.1 × 5.75 mm, 3.1 mm
 entrance holes, 1,908 elements), 48 quads pointed as there, its pulse (picket 1.2 TW per
 quad to 1.0 ns, trough 0.3 TW to 4.5 ns, second step 1.0 TW 5.0–6.0 ns, peak 9.5 TW 7.5–9.5
@@ -12695,15 +12676,15 @@ P4/P0 (%) at the four times: history 0.044, 0.155, 0.103, 0.164; standalone 0.08
 element, frozen, reproduce the history at the beams of the history (drive 1.0000, P2/P0 and
 P4/P0 to the digits shown). In the trough the standalone albedo is the lower one (the
 history's wall re-emits what it stored in the picket); everywhere else it is higher
-(a wall heated in a low foot holds less energy than one at today's temperature since
+(a wall heated in a low foot stores less energy than one at today's temperature since
 t = 0, so it loses more). For the change a pointing perturbation makes (the inner cones
 0.2 mm farther from the waist, the perturbed history the truth), the frozen per-element
 albedos give ΔP2/P0 −1.086, −0.693, −0.891, −0.661 against the history's −1.099,
 −0.699, −0.896, −0.664 percentage points (within 1.2%: the response of the albedos
 themselves to the new drive is what a frozen state leaves out), the wall mean within 0.6%,
 the standalone solve 13–29% off (low but in the trough, 16% high there) and the scenario
-default 11–37% low. Choice: a phase
-scenario takes the history's per-element albedos at the phase time (`history_state`),
+default 11–37% low. The choice made is that a phase
+scenario uses the history's per-element albedos at the phase time (`history_state`),
 interpolated between steps; the wall mean as one constant (`mean = :wall`) is within
 0.5 percentage points of P2/P0 (largest at the picket, where the wall albedo varies
 most, 0.647–0.682 over the wall) and 0.7% of the drive. Thin-foil windows need no
@@ -12726,7 +12707,7 @@ fitted to Olson et al.'s burnthrough measurements (SAND2007-7414C), an independe
 set. Confidence: **H** primary text, **H-img** read from a figure, **L** derived here.
 
 ### What the 7.5 ns measures **H**
-- The windows: 2.5–3.6 µm of gold (2.5 µm on the two-window ignition shot in the
+- The windows are 2.5–3.6 µm of gold (2.5 µm on the two-window ignition shot in the
   Letter; Haines et al., Phys. Plasmas 33, 112712 (2026), Sec. VII, give "≈ 3 µm" for
   the same shot) backed by 35 µm of EPON at 1.185 g/cm³ (4.15 mg/cm², about the gold's
   4.83 mg/cm² at 2.5 µm). The backing was chosen to hold the membrane in place.
@@ -12734,17 +12715,16 @@ set. Confidence: **H** primary text, **H-img** read from a figure, **L** derived
   of a background-subtracted difference signal; it is near zero to about 7 ns.
 
 ### The account
-1. **Holding the gold dense does not delay its front.** In mass coordinates the
-   diffusion flux depends on density only through κ(ρ)e(ρ) ∝ ρ^0.06 (Hammer & Rosen's
-   fits), so a static front heats m ∝ ρ^−0.03 (*L*). The 1-D foil of
-   `examples/tamped_foil.jl` (Hammer & Rosen gold, flux-limited diffusion, the backing as
-   a radiatively inert ideal gas of its areal mass) on Nova's drive: transmission onset
-   (1%) of the backed foil 0.03–0.07 ns *earlier* than the bare one, its rear gold at
-   0.8–1.1 g/cm³ against 0.30–0.35 bare (the backing holds it near the 1 g/cm³ the Letter
-   assumes). Against Nova's measured half-signal times the 1-D onset is 0.04–0.23 ns late
-   (bare), `HeatFront` 0.09–0.23 ns early. Converged: doubling the zones or halving the
-   step moves the onset and the emergence by ≤ 0.01 ns; the backing's γ (1.4–3) by
-   ≤ 0.005 ns.
+1. **Holding the gold dense does not delay its front.** In mass coordinates the diffusion
+   flux depends on density only through κ(ρ)e(ρ) ∝ ρ^0.06 (Hammer & Rosen's fits), so a
+   static front heats m ∝ ρ^−0.03 (*L*). The 1-D foil of `examples/tamped_foil.jl` (Hammer &
+   Rosen gold, flux-limited diffusion, the backing as a radiatively inert ideal gas of its
+   areal mass) on Nova's drive: transmission onset (1%) of the backed foil 0.03–0.07 ns
+   *earlier* than the bare one, its rear gold at 0.8–1.1 g/cm³ against 0.30–0.35 bare (the
+   backing holds it near the 1 g/cm³ the Letter assumes). Against Nova's measured
+   half-signal times the 1-D onset is 0.04–0.23 ns late (bare), `HeatFront` 0.09–0.23 ns
+   early. The result is converged: doubling the zones or halving the step moves the onset
+   and the emergence by ≤ 0.01 ns; the backing's γ (1.4–3) by ≤ 0.005 ns.
 2. **The leading edge is the backing's burnthrough.** Cold epoxy of 4.15 mg/cm² is opaque
    below ~2 keV (τ ≈ 10 at 1 keV). The flux the gold transmits burns it through at the
    measured low-Z rate ṁ = A (F/σ(200 eV)⁴)^(3/4); A = 4.8 mg/cm²/ns for an epoxy
@@ -12856,7 +12836,7 @@ S₂ w": the product that reproduces Briareus's a₂.) The Letter's −0.9% impl
 0.313. **Once the sign and the axis are matched, Briareus and eq. 3 agree: +0.92 to
 +1.04% against 0.9% (2–16% apart, α 0.80–0.88).** A sphere's S₂ overstates the
 cylinder's by 13–14% (eq. 3 with the sphere's S₂ and Briareus's w is 1.07–1.20%); an
-open hole (f = 1) gives the same ratios (the response is linear in f: a₂ 3.99–4.52%).
+open hole (f = 1) gives the same ratios (the response is linear in f; a₂ 3.99–4.52%).
 Scaled to 2 µm (f = 0.286) the mock-up's δ₂ is 2.5%, the roadmap's figure on the
 study's pointing.
 
@@ -12898,16 +12878,16 @@ and 2023 reread today from OSTI 1773252 and 1971298), **L** ours.
 | Izumi et al., PoP 28, 022706 (2021) | the outer picket fluence averaged over the wall, over the first ns (Sec. III, defining the FoM); the picket as the initial ~1 ns (Sec. II) | **H** |
 
 - **Fixed area, with one exception.** Callahan's and Ralph's areas are the phase plates'
-  nominal spots, fixed for a pointing family; their ratio between two designs is the
-  ratio of the outer picket energies. Izumi 2021 counts its cone- and quad-split shots
-  as a 27% lower overlapped outer-cone fluence on the wall at the same energy (Sec. III B, Fig. 8a: tip −120 ± 30 µm), i.e. a larger
-  footprint, and reduces it to 20 ± 3% for the best P2 fit (Sec. III A, Fig. 5b). The
-  same paper argues for an average over the azimuthal structure: the 50° spots are 24%
-  more intense (smaller spots), but by the time the bubble clips the inner beams it has
-  converged 2–3× and the inner quads overlap around the azimuth, so an average
-  intensity is the appropriate measure (Sec. III B, **H**). So the published quantity holds the energy over a
-  fixed area and treats a split of the quads as a change of area; it does not resolve
-  spikes.
+  nominal spots, fixed for a pointing family; their ratio between two designs is the ratio
+  of the outer picket energies. Izumi 2021 counts its cone- and quad-split shots as a 27%
+  lower overlapped outer-cone fluence on the wall at the same energy (Sec. III B and Fig.
+  8a, with the tip at −120 ± 30 µm), i.e. a larger footprint, and reduces it to 20 ± 3% for
+  the best P2 fit (Sec. III A, Fig. 5b). The same paper argues for an average over the
+  azimuthal structure: the 50° spots are 24% more intense (smaller spots), but by the time
+  the bubble clips the inner beams it has converged 2–3× and the inner quads overlap around
+  the azimuth, so an average intensity is the appropriate measure (Sec. III B, **H**). So
+  the published quantity holds the energy over a fixed area and treats a split of the quads
+  as a change of area; it does not resolve spikes.
 - **In Briareus terms** (`picket_irradiance(...; measure = :average)`, **L** for each
   choice): the outer beams' power *absorbed on the named parts* (the wall), over a fixed
   `area`. Light clipped on the entrance holes' outside, landing on the capsule or the LEH
@@ -12920,13 +12900,13 @@ and 2023 reread today from OSTI 1773252 and 1971298), **L** ours.
   `area` is Callahan's 53 mm², so that the irradiance × the picket's length (ns) is his E/A
   in kJ/mm²; a ratio to a reference does not depend on it. On the N221204 mock pointing (h
   0.1 map) the 43.04 kJ of outer picket absorbed on the wall give 0.812 kJ/mm² over 53 mm²
-  (Callahan's Table I design: 60 kJ, 1.13 kJ/mm²), against F̄ 0.602 kJ/mm².
-- `picket_ceiling(...; measure = :average)` holds it against a reference (`:picket_average`),
-  in any phase whose powers the evaluation or the keywords give (picket, trough,
-  second step). It is linear in the powers and moves with the pointing only through
-  clipping and what lands off the wall: at fixed powers it is flat until the outer spots
-  reach the entrance holes (the 1-parameter test: flat over the 50° cone's z 4.6–5.4 mm,
-  −1% at 5.8, −7% at 6.0, −18% at 6.2 on the 0.45 mm test hohlraum).
+  (60 kJ and 1.13 kJ/mm² in Callahan's Table I design), against F̄ 0.602 kJ/mm².
+- `picket_ceiling(...; measure = :average)` holds it against a reference
+  (`:picket_average`), in any phase whose powers the evaluation or the keywords give
+  (picket, trough, second step). It is linear in the powers and moves with the pointing only
+  through clipping and the power deposited off the wall: at fixed powers it is flat until
+  the outer spots reach the entrance holes (the 1-parameter test: flat over the 50° cone's z
+  4.6–5.4 mm, −1% at 5.8, −7% at 6.0, −18% at 6.2 on the 0.45 mm test hohlraum).
 
 ### 2. The exponents and the size of a 10% change
 
@@ -12976,21 +12956,20 @@ and 2023 reread today from OSTI 1773252 and 1971298), **L** ours.
   elements with their distance from the nearest inner centerline,
   `picket_hot_elements`.
 - **The corridor's form.** Mean outer irradiance ∫w I dA/∫w dA over the named parts, w the
-  union over inner beams (with power) of a quintic smoothstep in the 3-D distance from
-  the element centroid to the beam's centerline (aim, direction): 1 within
-  `corridor − edge/2`, 0 beyond `corridor + edge/2`. Chosen over membership fixed at the
-  reference because the inner beams move with the design (by a sizable fraction of the
-  radius in a re-pointing) and the quantity is meant to follow them; the smooth edge
-  keeps it C² in their aims (a hard 1.3 mm membership jumps as centroids cross it).
-  Elements beyond every edge are skipped exactly (the step is flat there). Defaults:
-  `corridor = 1.3` mm, the study's choice (an engineering default, not published: Izumi
-  2021's 1.3 mm is the distance from the wall to the inner beams' outer edge at the
-  bubble's z, Sec. III B, a different quantity), `edge = 0.3` mm (wider than an element of
-  a 0.2 mm map; on the 0.45 mm test hohlraum the 0.3 mm edge reads 0.7% below
-  the hard 1.3 mm mean, 0.1 mm 0.13%). Checks (`test/picket_fluence.jl`): against the
-  hard mean by hand where no centroid lies on the edge (1e-12), the weight against the
-  smoothstep union by hand, gradients against central differences, a one-parameter run
-  ending at the bisection root.
+  union over inner beams (with power) of a quintic smoothstep in the 3-D distance from the
+  element centroid to the beam's centerline (aim, direction): 1 within `corridor − edge/2`,
+  0 beyond `corridor + edge/2`. Chosen over membership fixed at the reference because the
+  inner beams move with the design (by a sizable fraction of the radius in a re-pointing)
+  and the quantity is meant to follow them; the smooth edge keeps it C² in their aims (a
+  hard 1.3 mm membership jumps as centroids cross it). Elements beyond every edge are
+  skipped exactly (the step is flat there). Defaults: `corridor = 1.3` mm, the study's
+  choice (an engineering default, not published: Izumi 2021's 1.3 mm is the distance from
+  the wall to the inner beams' outer edge at the bubble's z, Sec. III B, a different
+  quantity), `edge = 0.3` mm (wider than an element of a 0.2 mm map; on the 0.45 mm test
+  hohlraum the 0.3 mm edge gives a mean 0.7% below the hard 1.3 mm mean, and 0.1 mm a mean
+  0.13% below). Checks (`test/picket_fluence.jl`): against the hard mean by hand where no
+  centroid lies on the edge (1e-12), the weight against the smoothstep union by hand,
+  gradients against central differences, a one-parameter run ending at the bisection root.
 
 ### 4. Published against energy-weighted on public cases
 
@@ -13018,12 +12997,12 @@ map. "Uneven": per-quad log-normal picket scales of the outer quads (seed 1), me
 - **Uneven powers part the two most.** At the same outer energy, per-quad scales of rms
   0.1/0.2/0.3/0.5 (log) raise F̄ by 1.2/5.0/11.9/36% on N221204 and 6.6/46% (rms
   0.2/0.5) on the tutorial: holding F̄ at the reference with uniform outer powers would
-  cost 1.1/4.8/10.6/27% of the outer picket energy (tutorial: 6.2/32%). The scratch
+  cost 1.1/4.8/10.6/27% of the outer picket energy (6.2/32% in the tutorial). The scratch
   study's finding (picket drive lost under an F̄ ceiling with per-bundle picket scales)
   is of this kind. Dropping a bundle and restoring its outer energy on the
   others raises F̄ 3.7% (N221204) and 5.3% (tutorial) at the same published value.
 - **Spot crowding** (splits, unsplit quads, one cone on the other's ring) moves F̄ by
-  −5 to +19% and the published quantity by < 0.6%: only F̄ sees overlap, which is the
+  −5 to +19% and the published quantity by < 0.6%: only F̄ responds to overlap, which is the
   one effect Izumi 2021 measured on the bubble (the split shot).
 - **z shifts** move neither (≤ 0.2%) until the spots clip on the holes (z +0.5: the
   published quantity −2.8%, the energy that leaves the wall; F̄ +1%). They move the
@@ -13082,40 +13061,42 @@ table: unsplit 6.19 ns against the linked 6.00, s 0.225 6.19 against 6.15.
 repository) held the capsule's drive shape at several times of one pulse (picket,
 trough, second step, rise, and the peak before and after the wall's windows burn
 through) with one set of aims and a power scale per quad and phase. On the API of the
-day it needed four constructions by hand: (1) a copy of every beam per scaled phase
-under the same name, so that a per-beam `GroupPointing` gives the copies one aim; (2) a
-`PowerScales` whose `by` counted its calls (it receives no index) to key a scale on
-(quad, phase); (3) a main `Scenario` without radiation that only carried the
-parameters (its coarse deposition of every copy computed and discarded at each
-evaluation), with the real per-phase scenarios (their own wall albedos and windows,
-so their own deposition operators and radiation models) evaluated inside the
-objective; and (4) a `WeakKeyDict` keyed on the evaluation's internal flux slot behind
-a lock, so that the objective and every constraint shared one evaluation per phase
-while gradient chunks ran concurrently. The box on the scales (each beam at or below
-the laser's limit in every phase), the per-phase reports and the staging between
-parameterizations were by hand too.
+day it needed four constructions by hand:
+1. a copy of every beam per scaled phase under the same name, so that a per-beam
+   `GroupPointing` gives the copies one aim;
+2. a `PowerScales` whose `by` counted its calls (it does not receive an index) to key a
+   scale on (quad, phase);
+3. a main `Scenario` without radiation that only carried the parameters, with the real
+   per-phase scenarios (with separate wall albedos and windows, so separate deposition
+   operators and radiation models) evaluated inside the objective; the coarse deposition
+   of every copy in the main scenario was computed and discarded at each evaluation;
+4. a `WeakKeyDict` keyed on the evaluation's internal flux slot behind a lock, so that
+   the objective and every constraint shared one evaluation per phase while gradient
+   chunks ran concurrently.
 
-**Design.** A `PhasedScenario` holds a `Scenario` per `Phase` (a separate target or a
-ready scenario, with separate Scenario options) and the phases' beam powers (a number, one
-per beam, a function of the beam, or pulses at the phase's time), all on one pointing
-parameterization (any of `GroupPointing`, `FramePointing`, `HeldParameters`, relative
-or not), whose parameters set the aims of every phase. Its parameterization
-(`PhasedPointing`) appends a power scale per (group key, phase) for the phases not
-fixed; `by` keys the groups as `PowerScales` does, so one key for several quads ties
-their scales (a pulse shape: one multiplier per phase). `evaluate` returns a `PerPhase`
-of evaluations (indexed by phase name), computed once per parameter vector, which
-`optimize_pointing` passes to the objective and to every constraint: the shared
-evaluation needs no cache and no lock, and each gradient chunk runs a separate evaluation.
-`in_phase(phase, c)` binds any constraint or objective of one evaluation to a phase,
-its name prefixed by the phase in the reports (`picket.mode_gate[l = 2]`), an exact
-ceiling keeping its exact value. `bounds(param; power_max)` caps each scale at the
-least `power_max / P` over its group's beams in its phase (`power_max` a number or a
-function of the beam) and refuses a fixed phase above the limit. `remake(scenario;
-pointing, by, scaled)` stages (per quad, then per beam, then tied scales) on the same
-operators, and `parameters(param, beams)` reads a result's per-phase beams into the
-next parameterization (scales as the mean of each group's power ratios).
+The box on the scales (each beam at or below the laser's limit in every phase), the
+per-phase reports and the staging between parameterizations were by hand too.
 
-Options considered. (a) A wrapper parameterization alone (copies hidden inside an
+**Design.** A `PhasedScenario` holds a `Scenario` per `Phase` (a separate target or a ready
+scenario, with separate Scenario options) and the phases' beam powers (a number, one per
+beam, a function of the beam, or pulses at the phase's time), all on one pointing
+parameterization (any of `GroupPointing`, `FramePointing`, `HeldParameters`, relative or
+not), whose parameters set the aims of every phase. Its parameterization (`PhasedPointing`)
+appends a power scale per (group key, phase) for the phases not fixed; `by` keys the groups
+as `PowerScales` does, so one key for several quads ties their scales (a pulse shape, with
+one multiplier per phase). `evaluate` returns a `PerPhase` of evaluations (indexed by phase
+name), computed once per parameter vector, which `optimize_pointing` passes to the objective
+and to every constraint: the shared evaluation needs neither a cache nor a lock, and each
+gradient chunk runs a separate evaluation. `in_phase(phase, c)` binds any constraint or
+objective of one evaluation to a phase, its name prefixed by the phase in the reports
+(`picket.mode_gate[l = 2]`), an exact ceiling keeping its exact value. `bounds(param;
+power_max)` caps each scale at the least `power_max / P` over its group's beams in its phase
+(`power_max` a number or a function of the beam) and refuses a fixed phase above the limit.
+`remake(scenario; pointing, by, scaled)` stages (per quad, then per beam, then tied scales)
+on the same operators, and `parameters(param, beams)` reads a result's per-phase beams into
+the next parameterization (scales as the mean of each group's power ratios).
+
+Options considered. (a) Only a wrapper parameterization (copies hidden inside an
 `apply`) keeps `Scenario` unchanged but leaves the main scenario's discarded
 deposition and the cache; (b) a lazily evaluated `PerPhase` (each phase deposited on
 first use) saves a phase that no term reads, at the cost of a lock per phase and
@@ -13126,17 +13107,17 @@ and `ev[:picket]` read alike. The phase's `time` is also the built scenario's ti
 (materials' albedos and the laser–plasma model at that time); a ready scenario keeps
 the ones it holds. A phase can also be a `remake` of one shared scenario with the phase's
 albedos and time (`history_state` gives them from a drive history), so one target,
-view-factor matrix and deposition operator serve every phase.
+view-factor matrix and deposition operator are used for every phase.
 
 **Checks** (`test/phased.jl`, public mock-up: the 48 NIF quads in a 10.1 mm hohlraum
 at h = 1.2 mm, a picket at albedo 0.6 (0.1/0.4 TW per inner/outer quad), a step from
 pulses at 2.5 ns at 0.8, and a peak at 2 TW fixed at 0.85).
-- One phase at the powers of the pointing, unscaled, is the plain `Scenario`,
-  bitwise: the evaluation, and a constrained run of the same objective (identical `x`,
+- One phase at the powers of the pointing, unscaled, is exactly the plain `Scenario` in
+  the evaluation and in a constrained run of the same objective (identical `x`,
   value, evaluation count and constraint values).
 - Against the duplicate-beam construction at the same parameters (aims per quad,
-  scales per quad and phase): deposition and flux coefficients of every phase equal
-  bitwise (relative difference 0.0, here a sum of two equal ports for each quad's
+  scales per quad and phase): deposition and flux coefficients of every phase are
+  identical (relative difference 0.0, here a sum of two equal ports for each quad's
   azimuth is exact; the test allows 1e-12), and the gradient of a mode departure equal
   to 1e-10 relative.
 - The gradient of an objective over all three phases against central differences
@@ -13161,7 +13142,7 @@ machine). A constrained run on the phased API from that stage, the study's limit
 written as `in_phase` constraints, ran under a 180 s limit: 51 evaluations, the
 objective down by 0.12%, the limits' rows reported per phase.
 
-Existing paths: bitwise unchanged (the optimizer's internal functions take the
+Existing paths are unchanged (the optimizer's internal functions take the
 abstract scenario type and an untyped evaluation; no arithmetic moved).
 
 ## Re-pointing tools: the inner budget, the smallest shift, a pulse-shape budget (2026-11-18) *measured*
@@ -13230,11 +13211,11 @@ every run far from its limits. The comparison the study needs (its hour-long run
 a rule) did not fit an acquisition.
 
 *Decision:* the default stays (every inner run capped at `iterations`; constrained and
-unconstrained results bitwise unchanged). No candidate was better on every case:
+unconstrained results are unchanged). No candidate was better on every case:
 grow10, the best on evaluations, cost drive on the stage with power scales and broke a
 budget-capped polish. Documented instead (`optimize_pointing`): the cap sets how long a
 run works with each set of multipliers; on problems with hundreds of parameters, slow
-evaluations and a start far from the limits, a cap of about 100 serves better (the
+evaluations and a start far from the limits, a cap of about 100 works better (the
 study's finding).
 A rule that scales the first caps with progress and keeps the penalty schedule sound
 on capped runs, measured on the study converged, is left open.
@@ -13245,7 +13226,7 @@ default from the scenario's start; with gates as constraints, `optimize_pointing
 finds the least re-pointing that meets them (the per-entrance-hole study of a
 multi-phase re-pointing study used `mean(sum(abs2, b.aim - ref.aim))`, the unit-weight
 case). The weights are read once from the reference beams (a per-beam or per-cone
-`weight` function), so the objective holds no callable on the hot path; it is generic
+`weight` function), so the objective contains no callable on the hot path; it is generic
 in the number type and inferred and JET-clean on Float64 and the optimizer's duals. Its
 rms (the square root at unit weights) is `PointingSummary.shift_rms`. Checked
 (`test/pointing_summary.jl`): the value against `Σ w x² / Σ w` for shifts `x` set by
@@ -13281,7 +13262,7 @@ measure. Method, chosen for determinism and exactness where the sizes allow:
   (`Random`'s default generators may change between versions). Exact k-means in several
   dimensions is NP-hard, and the study's sizes (about two dozen quads per cone, four
   phases, three shapes per cone) are beyond enumeration (S(24, 3) ≈ 4.7e10), so this is
-  the path the study takes; `exact` in the result says which held.
+  the path the study takes; `exact` in the result records which held.
 
 Checked (`test/pulse_shapes.jl`) against an independent exhaustive search over all kⁿ
 assignments (7 keys into 3 groups in 4 phases, 8 into 2 in 2, 9 into 3 in 3, 8 into 4 in
@@ -13292,7 +13273,7 @@ means in closed form. `shape_pulses` writes the shapes out: each class's base pu
 times the shape's multiplier, interpolated linearly between the phase times and held
 outside them, tabulated at the base pulse's points and the phase times (the table is the
 multiplier applied at those points; the exact product of two linear pieces is
-quadratic). A peak run at the laser's limit carries no multiplier: `peak = t` ramps the
+quadratic). A peak run at the laser's limit has no multiplier: `peak = t` ramps the
 multiplier linearly from the last phase's value to 1 between the last phase time and
 `t` and leaves the pulse unscaled after it, an assumption of the tool (the phases
 sample the pulse at their times only), not a fitted quantity. The result goes to
@@ -13315,7 +13296,7 @@ transition of `BurnthroughAlbedo` stays (Nova's `width`, the constant gray `f`),
 docstring carries a caution, and a 1-D-informed transition is opt-in. Implemented:
 `DiffusionTransmission` and `diffusion_transmission` (`src/target.jl`), tests in
 `test/burnthrough.jl` ("diffusion foil transmission") and `test/history_state.jl`.
-Existing results are bitwise unchanged (a new transmission type; the default is untouched).
+Existing results are unchanged (a new transmission type; the default is untouched).
 
 ### The law (*derived*, no fitted parameter)
 - Steady planar diffusion through a foil whose Rosseland opacity varies as T^(−α) across
@@ -13394,7 +13375,7 @@ diffusion:
 | 8.6 | 269 | 262 | 6.23 / 4.49 / 3.50 | 2.16 / 1.54 / 1.20 | 0.59 / 0.42 / 0.33 | +1.10 / +0.79 / +0.61 |
 | 9.0 | 173 | 233 | 3.90 / 2.40 / 1.86 | 2.15 / 1.30 / 1.00 | 0.59 / 0.36 / 0.28 | +1.10 / +0.67 / +0.51 |
 
-Window loss over the pulse: 39.0 / 32.1 / 25.3 kJ. The option takes the windows' peak
+The window loss over the pulse is 39.0 / 32.1 / 25.3 kJ. The option takes the windows' peak
 δ₂ from 2.2 to 1.4% and δ₄ from 0.6 to 0.4%; the eq. 3 estimate (0.9%) lies between
 the default's a₂ (+1.1%) and the option's (+0.73%). Before the windows burn through,
 the three runs are the hohlraum without windows to 0.00%. With `wall_history = true`
@@ -13405,21 +13386,22 @@ since the pulse start (a brighter foil early in the peak). Not changed here (his
 code); noted for the roadmap.
 
 ### history_state
-Works unchanged: it reads each step's `transmission`, which `solve` computes from the
-model. Tested: a drive history with a `DiffusionTransmission` window, `keep_albedo`, and
-`history_state` at the last step gives each window element the option's fraction at the
-flux temperature of that step (to the solve's tolerance), below the gray value there.
+`history_state` works unchanged: it reads each step's `transmission`, which `solve` computes
+from the model. Tested: a drive history with a `DiffusionTransmission` window,
+`keep_albedo`, and `history_state` at the last step gives each window element the option's
+fraction at the flux temperature of that step (to the solve's tolerance), below the gray
+value there.
 
 ## Mode gates in physical units (2026-11-19) *measured*
 
 Roadmap item 36 (the gates sub-bullet). Mode gates set from the pointing-noise floor
-(`√(2l+1) × rms_mode` of `mode_uncertainty` at 50 µm rms per quad) state what pointing
-error alone produces: a lower bound for a gate. Laser delivery and the hohlraum plasma
-move the shape from shot to shot by more (§ Drive asymmetry inferred from post-shot
-capsule simulations: Haines 2026: no yield effect for a fixed P2/P0 of −0.01 to +0.015
-on one design, nominal repeats spanning 0.046, the modelers' repeat uncertainty 0.005),
-and the user's judgment (2026-11-18) is that a study's tolerances can be relaxed within
-that uncertainty without a loss of performance. Measured here: what a relaxed gate buys.
+(`√(2l+1) × rms_mode` of `mode_uncertainty` at 50 µm rms per quad) state what pointing error
+by itself produces: a lower bound for a gate. Laser delivery and the hohlraum plasma move
+the shape from shot to shot by more (§ Drive asymmetry inferred from post-shot capsule
+simulations: Haines 2026: no yield effect for a fixed P2/P0 of −0.01 to +0.015 on one
+design, nominal repeats spanning 0.046, the modelers' repeat uncertainty 0.005), and the
+user's judgment (2026-11-18) is that a study's tolerances can be relaxed within that
+uncertainty without a loss of performance. This section measures what a relaxed gate buys.
 
 **Unit.** A gate bounds `mode_departure`, `δₗ = √((2l+1) Σₘ (c_lm/c_00 − r_lm/r_00)²)`
 against the 48-quad shape; for an axisymmetric difference it is `|Δ(aₗ/a₀)|` in the
@@ -13507,15 +13489,15 @@ it; the stored energy it re-emits under a falling drive (`wall_release`) is the 
 element's scaled by α/α_before (1 − s f; with an explicit `after`, its blend). The heat
 front, the transmission, a standalone `solve` (no history: `before` at the time since
 the pulse start, as documented) and `wall_history = false` are unchanged; `history_state`
-reads the history's recorded albedos and transmissions and needs no change.
+reads the history's recorded albedos and transmissions and does not need a change.
 
 Decision (the release scaling): (a) the wall's emission × α/α_before, chosen: the foil's
 radiosity is then (1 − s f) of the wall element's, the same factor as its albedo, and an
-intact foil is the wall exactly; (b) unscaled (a burned-through foil would re-emit all
-of its stored energy inward while transmitting s f of its flux); (c) no release once the
+intact foil is the wall exactly; (b) unscaled (a burned-through foil would re-emit all of
+its stored energy inward while transmitting s f of its flux); (c) no release once the
 transition starts (a step in the foil's emission at burnthrough). The choice matters only
-where a burned-through window sees a falling drive (after the laser turns off): on the
-mock-up below, the rows at 8.6–9.0 ns, where it acts together with the change of
+where a burned-through window is exposed to a falling drive (after the laser turns off): on
+the mock-up below, the rows at 8.6–9.0 ns, where it acts together with the change of
 `before` itself (the two were not separated).
 
 Tests (`test/burnthrough.jl`, "intact foil follows the wall's history"): a small
@@ -13560,7 +13542,7 @@ hohlraum with wall in place of the windows (%), default transmission / `Diffusio
 - With `wall_history = false` (the earlier section's table, and every history in the
   diagnostic-windows tutorial) nothing changes.
 
-Unchanged elsewhere: histories without thin-foil windows are bitwise unchanged
+Nothing changes elsewhere: histories without thin-foil windows are unchanged
 (`examples/n221204.jl`, which has no `BurnthroughAlbedo`, at 0.8/0.4, `full`, `table`: CSV
 identical to main's, `cmp`); the diagnostic-windows tutorial runs its histories with
 `wall_history = false`, so its numbers and assertions are unchanged (run as a script against
@@ -13618,9 +13600,9 @@ One Jacobian of the objective and the constraints, a gradient's cost, after the 
 box. The multipliers of the iteration stay in `state.λ` for `from`. Chosen over a change
 to the iteration because the iteration is ALGENCAN's and its update is exact for inner
 runs that end stationary; what departs is the inner value tolerance, a default (below).
-Designs, values, evaluation counts and constraint values are bitwise unchanged: all 27 runs
+Designs, values, evaluation counts and constraint values are unchanged: all 27 runs
 of `test/constraints.jl` (its version before this change, every call logged) and the
-tutorial's run within limits (`x` compared bitwise).
+tutorial's run within limits (`x` compared with `==`).
 
 **The tutorial's run within limits** (ceiling and pointing-floor gates; 1,079
 evaluations, drive 0.962575 of the 48 quads, both before and after). Normalized
@@ -13664,7 +13646,7 @@ not remove it. `stationarity` now shows it on every result.
 cap, within `feasibility`.
 
 On the tutorial's run within limits (8 threads, budget 3,000 evaluations; another run
-shared the machine, so evaluation counts rather than times):
+shared the machine, so evaluation counts are given in place of times):
 
 | `_AL_F_RELTOL` | evaluations | end | drive / 48 quads | `stationarity` | reported λ (ceiling, l = 1–4) | iteration's λ |
 |---|---|---|---|---|---|---|
@@ -13712,7 +13694,7 @@ hand-built quantities.
 - *Gates*: `mode_gate(...; fraction)` scales a `mode_uncertainty` floor; with `floor`,
   the gate per degree is `max(gates[l], fraction × floor[l])` (the floor as a lower bound
   of physical gates, § Mode gates in physical units). `fraction` without a floor is an
-  error rather than a scale of physical gates, so that it means one thing.
+  error, so that `fraction` has one meaning; it is never a scale of physical gates.
 - *Shifted target*: `mode_gate(...; shift = l => Δ)` (or `(l, m) => Δ`) measures the
   departure from the reference's coefficients with `c_lm → c_lm + Δ c_00/√(2l+1)`, the
   reference's model and time still checked; `shift_modes` gives the coefficients for an
@@ -13724,7 +13706,7 @@ hand-built quantities.
   shape, so the shift has no place there.
 - *Keep-outs over phases*: `clearance_floor` evaluated on a `PerPhase` returns per beam
   the least clearance over the phases. The phases share the aims; a keep-out at a
-  `peak_fraction` gives each phase the same clearance (the value is bitwise that of one
+  `peak_fraction` gives each phase the same clearance (the value is exactly that of one
   phase), one at an absolute `intensity` widens with the power, and the brightest
   phase then binds.
 - *Power scales*: `power_scales(ps, ev | beams | x)` reads each (key, phase) scale as a
@@ -13733,7 +13715,7 @@ hand-built quantities.
   `phase_powers` and `power_scale_table` for reports. A scaled phase on the powers of
   the pointing has nothing to divide by: an error, the scales then come from `x`.
 - *History phases*: `remake(scenario; history, time)` and `Phase(...; history, time)`
-  are `history_state` followed by `remake(...; time, albedo)`, bitwise, for a phase
+  are exactly `history_state` followed by `remake(...; time, albedo)`, for a phase
   and its reference alike.
 - *Summary*: `pointing_summary(...; gates, floor)`; a `mode_gate` passed as the gate
   reports the value of that gate (the departure from a shifted target where it has one), and
@@ -13746,7 +13728,7 @@ hand-built quantities.
   same h; `:corridor` is an area mean over a band. `:peak` stays refused: it follows one
   element (8% between 0.2 and 0.45 mm elements, § Constrained re-pointing) and its
   smooth stand-in is scaled by the reference mesh's peak-to-norm ratio.
-  `irradiance_ceiling` holds the peak alone and keeps its refusal. With `lpi = true`
+  `irradiance_ceiling` holds only the peak and keeps its refusal. With `lpi = true`
   the reference's model and time are checked on another target (the same target's path
   is unchanged: it has never checked the model; extending the check there would make
   existing calls throw and is left to the user).
@@ -13781,7 +13763,7 @@ existing result changes.
 
 `optimize_pointing(...; inner_reltol = 1e-10)` exposes the relative value tolerance
 that ends a constrained run's inner runs (formerly the internal `_AL_F_RELTOL`; phase 1
-uses it too; 0 turns it off). Default runs are bitwise unchanged: the closed forms of
+uses it too; 0 turns it off). Default runs are unchanged: the closed forms of
 `test/constraints.jl`, "multipliers from the converged active set", give the same
 design with the keyword given as 1e-10 (tested). The measurement behind it is
 § "Multipliers from the converged active set": on the dropped-bundle tutorial's run
@@ -13817,7 +13799,7 @@ strictly convex problem meets. Confidence: exact closed forms; one start.
 search can take dozens, and an inner run of the multi-phase study spent hundreds of
 evaluations on 1e-4 of the objective while limits stayed violated (§ "Re-pointing
 tools: the inner budget, the smallest shift, a pulse-shape budget"). The opt-in
-keyword `inner_evaluations` (default `nothing`: no cap, results bitwise unchanged) ends an
+keyword `inner_evaluations` (by default `nothing`, so no cap and unchanged results) ends an
 inner run at that many evaluations, at its best design, as the iteration cap ends one:
 the outer loop updates the multipliers and the penalty, and a capped run never counts
 as converged. Phase 1 is not capped (it has no multipliers to update); the
@@ -13846,7 +13828,7 @@ and the default stays none.
 | case | cap | evaluations | outer | end | design error | longest inner run |
 |---|---|---|---|---|---|---|
 | inner cones' `c` +50% | none | 162 | 7 | converged | 7.0e-5 | 43 |
-| | 50 | 162 | 7 | converged (bitwise unchanged: no run reaches it) | 7.0e-5 | 43 |
+| | 50 | 162 | 7 | converged (unchanged; no run reaches it) | 7.0e-5 | 43 |
 | | 20 | 97 | 7 | converged | 7.0e-5 | 20 |
 | | 10 | 75 | 8 | converged | 4.8e-4 | 10 |
 | | 5 | 500 | 100 | `outer` reached | 0.34 | 5 |
@@ -13862,7 +13844,7 @@ L-BFGS-B iterations take that many), so the run cannot converge whatever `outer`
 
 `test/constraints.jl` checks on the closed form that each inner run stays within the
 cap (the callback's evaluations per outer iteration), that the capped run converges to
-the KKT point, and that a cap above every inner run of the default run leaves it bitwise
+the KKT point, and that a cap above every inner run of the default run leaves it
 unchanged. Not run: the multi-phase study itself under a cap (its runs take hours; scratch).
 
 ### 3. A warning for a scenario on a history-dependent wall without albedos
@@ -13878,25 +13860,25 @@ understates P2/P0's change under a pointing perturbation by 11–37%. The constr
 now warns once (one `@warn` per scenario built, naming the component, the reference
 temperature and `time`, and pointing to `history_state` and `remake(scenario; history,
 time)`). `albedo = :reference` marks the reference temperature as intended: the same
-scenario (moment responses bitwise identical, tested), no warning; `remake` takes it too.
+scenario (moment responses identical, tested), no warning; `remake` takes it too.
 Chosen over a refusal (the user's option of 2026-11-18): the reference temperature is
 a legitimate fixed-time model (a peak scenario, a test), and a warning keeps existing
-scripts running. Not warned: a scenario without a response (deposition only), one
+scripts running. No warning is given for a scenario without a response (deposition only), one
 with explicit albedos, a `remake` (the scenario it copies warned at construction), and
 `GapClosure`/`LipClosure` closed albedos (`drive_history` does not follow those
 through a wall history either).
 
-Reach: the scenarios in `src/`, `test/`, `docs/literate/`, `examples/` and
-`BriareusGUI/` that the warning would hit were found by searching for every file that
-both builds a `Scenario` (or a `Phase` from a target) and uses a wall-loss albedo, a
-`BurnthroughAlbedo` or a preset built on one (`nif_gold`, `uranium`, `nif_uranium`,
-`du_wall_loss`): `test/history_state.jl` (a scenario before `remake` with a state),
-`test/large_models.jl` (a scenario on the large path) and `test/phased_study.jl` (the
-shared scenario whose phases take the history's albedos) mean the reference temperature
-and now pass `albedo = :reference`; the diagnostic-windows tutorial's scenarios already
-pass a solution's albedos; the GUI builds its materials from constant albedos and the
-precompile workload builds no scenario on its wall-loss target. A full run of the
-dropped-bundle tutorial as a script shows no warning.
+To find the reach of the warning, every file in `src/`, `test/`, `docs/literate/`,
+`examples/` and `BriareusGUI/` was searched that both builds a `Scenario` (or a `Phase`
+from a target) and uses a wall-loss albedo, a `BurnthroughAlbedo` or a preset built on
+one (`nif_gold`, `uranium`, `nif_uranium`, `du_wall_loss`). Three tests use the reference
+temperature by design and now pass `albedo = :reference`: `test/history_state.jl` (a
+scenario before `remake` with a state), `test/large_models.jl` (a scenario on the large
+path) and `test/phased_study.jl` (the shared scenario whose phases take the history's
+albedos). The scenarios of the diagnostic-windows tutorial already pass the albedos of a
+solution. The GUI builds its materials from constant albedos, and the precompile
+workload does not build a scenario on its wall-loss target. A full run of the
+dropped-bundle tutorial as a script gives no warning.
 
 ### 4. The laser–plasma model check of `picket_ceiling` on the reference target
 
@@ -13916,7 +13898,7 @@ passes; a call that mixed models now throws (the user's decision of 2026-11-19).
 ### 5. A note in the result display for an exact ceiling's multiplier
 
 An exact ceiling (`irradiance_ceiling`, `picket_ceiling` with `exact = true`) reports
-the exact peak in its row while the multiplier fit sees its smooth stand-in at the
+the exact peak in its row while the multiplier fit uses its smooth stand-in at the
 working limit (§ "Multipliers from the converged active set"): the row can read
 `:satisfied` with a positive multiplier (1.2% inside the limit under one CI rounding,
 the case of `test/constraints.jl`'s dropped-bundle testset). The `PointingResult`
@@ -13930,7 +13912,7 @@ unchanged. Display only.
 from one per class up to `shapes`, whose best split between the classes fits the
 per-key multipliers with an rms in log multiplier at or below `tolerance` (`shapes`
 when none does); `counts` lists the best rms at each number tried. Without `tolerance`
-the grouping is the fixed count as before (bitwise unchanged: the same groupings per class,
+the grouping is the fixed count as before (unchanged, with the same groupings per class and
 the same splits). Each class's best grouping per count is computed once for the
 largest count already, so the search adds only the splits of the smaller counts.
 Checked in `test/pulse_shapes.jl` against exhaustive enumeration of every assignment
@@ -13941,7 +13923,7 @@ public): the NIF User Guide, section 4.8, "Laser Performance Operations Model"
 (https://nifuserguide.llnl.gov/home/4-laser-system/48-laser-performance-operations-model,
 read 2026-11-19), states that the laser performance model predicts total energies
 "within 2–3 percent" and provides "beam-to-beam energy balance better than 5 percent
-for full system shots" (the page names no statistic for the balance: rms or extreme).
+for full system shots" (the page does not state whether the balance is rms or extreme).
 A relative error ε is ε in the natural log to first order, so tolerances of 0.02–0.05
 span those figures: shapes whose multipliers differ by less than the laser delivers
 distinctly need not be separate pulses. The tolerance is the study's choice.
@@ -13950,7 +13932,7 @@ onto a per-shape rms is an engineering reading.
 
 ### 7. Laser delivery in the noise floor
 
-`mode_gate`'s floor from `mode_uncertainty` counts pointing errors alone by default (50
+`mode_gate`'s floor from `mode_uncertainty` counts only pointing errors by default (50
 µm rms per pointing unit, NIF's specification); `mode_uncertainty` also takes `power`,
 an independent relative rms per pointing unit. The public balance figure of § 6
 ("better than 5 percent" beam to beam) puts a number on what the floor leaves out, the
@@ -13974,8 +13956,8 @@ The pointing unit here is a quad: 5% rms per beam over four independent beams is
 per quad (the sum's relative rms falls as 1/√4), between the 2% and 3% rows; 5% per
 quad is the figure read as the balance within one quad. The power term adds in quadrature,
 mostly at l = 1 and 2: at 3% per quad the floor rises by 40% at l = 1 and 21% at
-l = 2, at 5% by 92% and 51%; l = 4 moves by at most 18%. No default changes: the
-floor stays pointing alone, and the `mode_gate` docstring, where it presents the floor
+l = 2, at 5% by 92% and 51%; l = 4 moves by at most 18%. No default changes; the
+floor stays pointing-only, and the `mode_gate` docstring, where it presents the floor
 as a lower bound, points here for what the delivery figure adds (`power` in
 `mode_uncertainty`). Confidence: the propagation is linear and exact for the model's
 sensitivities (`mode_uncertainty`); the balance figure's statistic is not stated.
@@ -13984,7 +13966,7 @@ sensitivities (`mode_uncertainty`); the balance figure's statistic is not stated
 
 The user's decisions of 2026-11-19 on defaults listed as open in roadmap items 17, 34, 35
 and 36 ("Agreed with all recs"), one change each, in the order made. Each subsection
-gives the before and after numbers on the cases that move and says which do not.
+gives the before and after numbers on the cases that move and states which do not.
 
 ### 1. `Conversion()`'s default efficiency 0.9
 
@@ -14009,7 +13991,7 @@ leh_radius = 1.55, capsule_radius = 0.9)`, h 0.8 / capsule_h 0.3) with a wall of
 | capsule Tr (eV) | 258.3648 | 270.4136 | (0.9/0.75)^¼ × 258.3648, difference 0 eV in Float64 |
 
 `test/energetics.jl` checks that the default equals `gold()`'s conversion and that a wall
-on `Conversion()` solves bitwise as one on the number 0.9.
+on `Conversion()` solves exactly as one on the number 0.9.
 
 ### 2. `subset` keeps a `GroupPointing`'s groups
 
@@ -14021,18 +14003,18 @@ on the public API"). Now every default subset keeps the groups: a group that kee
 beam keeps its key, so the subset's parameter names are those of the full pointing, with
 its fields, mirroring, `relative`, `unit` and sphere (one function, `_subset_param`,
 where there were two). A pointing grouped by `:group` gets the same groups in the same
-order as before, bitwise.
+order as before, exactly.
 
 What moves (every case found): a pointing grouped otherwise and subset without a
-parameterization. In `test/pointing_summary.jl` the per-quad pointing (`by = :quad`,
-`:z` and `:phi`, unmirrored, relative) of 44 kept quads runs one iteration on 88
-parameters instead of 8 (one pair per quad, not per cone); the test compares two
-summaries of the same result and passes. In `test/basics.jl` (`by = :quad`, `:power`)
-and `BriareusGUI/test/test_halfraum.jl` the subset is evaluated on given beams, so its
-parameterization does not enter. The tutorials pass a parameterization to every
-`subset` they optimize on, and `examples/n221204.jl` builds no subset: neither can move.
-`test/parameterizations.jl` checks the default against a `GroupPointing` built by hand
-on the kept beams by quad (names and beams equal).
+parameterization. In `test/pointing_summary.jl` the per-quad pointing (`by = :quad`, `:z`
+and `:phi`, unmirrored, relative) of 44 kept quads runs one iteration on 88 parameters
+instead of 8 (one pair per quad, not per cone); the test compares two summaries of the same
+result and passes. In `test/basics.jl` (`by = :quad`, `:power`) and
+`BriareusGUI/test/test_halfraum.jl` the subset is evaluated on given beams, so its
+parameterization does not enter. The tutorials pass a parameterization to every `subset`
+they optimize on, and `examples/n221204.jl` does not build a subset: neither can move.
+`test/parameterizations.jl` checks the default against a `GroupPointing` built by hand on
+the kept beams by quad (names and beams equal).
 
 ### 3. A smooth minimum over the rim in `ApertureKeepOut` (*engineering*)
 
@@ -14052,7 +14034,7 @@ aim"). It is now a smooth minimum, `ApertureKeepOut(...; softness = 1e-4)` (mm):
   continuously;
 - it never exceeds the exact minimum (the sum holds the interval of the exact minimum at
   weight 1), lies below it by at most λ log(number of intervals counted), and is the
-  exact minimum for `softness = 0`, which reproduces the former clearance bitwise
+  exact minimum for `softness = 0`, which reproduces the former clearance exactly
   on the tutorial's 48 quads and the 480 random ones below.
 
 W: the distance dips between two samples by at most 0.51 µm below the nearer one on
@@ -14117,7 +14099,7 @@ tapered cut for optimization") and reports the design under the cut of the scena
 `smooth_cut = false` optimizes the profile of the scenario as before.
 
 - *Reuse.* The taper keeps the profile's support, so the operator's footprint, its
-  points, normals, visibility masks, work plan and envelope ratios serve both
+  points, normals, visibility masks, work plan and envelope ratios are shared by both
   (`_operator_beam` sizes the footprint from the envelope, not the taper; the screens
   `_vr_beyond` test the support): the tapered operator is the scenario's with only its
   profile replaced, and the tapered scenario shares the view factors, the responses
@@ -14134,8 +14116,8 @@ tapered cut for optimization") and reports the design under the cut of the scena
   elements by at most 7e-5 of the wall's peak, so under the hard cut the same design is
   within 1.07e-3 of the limit at worst. Rather than continuing the run under the hard cut
   (where the jumps the taper removes return), the rows are computed under the hard cut,
-  and a row over its limit by more than `feasibility` reads `:violated` with the outcome
-  `:infeasible`: the report says so plainly. On the case below the hard cut's peak came
+  and a row over its limit by more than `feasibility` shows `:violated` with the outcome
+  `:infeasible`: the report states so plainly. On the case below the hard cut's peak came
   out 6e-5 of the limit *below* the tapered one.
 
 Measured (*measured*; 8 threads, another run may have shared the machine): the
@@ -14154,29 +14136,29 @@ designs); the tapered run took 14% fewer evaluations and ends with every limit a
 and no parameter at a bound. The tapered and hard-cut objectives at the tapered run's
 design differ by 1.2e-5.
 
-Existing results: no test, tutorial, example or GUI default optimizes a scenario on
+As for existing results, no test, tutorial, example or GUI default optimizes a scenario on
 `VisRadProfile` with its hard cut (the tutorials and the GUI use the f-cone model by
-default; `examples/n221204.jl` optimizes nothing), so none moves; every other scenario
-takes the code path it took, bitwise unchanged (`tapered_value` `NaN`). The GUI's optimizer
-moves when its VisRad beam model is chosen. `test/constraints.jl` checks the default
-run against the same run on a scenario built with `taper = 1` (bitwise identical: design,
-beams, evaluations, multipliers), the value and rows against the hard-cut evaluation,
-and a `PhasedScenario`.
+default; `examples/n221204.jl` optimizes nothing), so none moves; every other scenario takes
+the code path it took, with unchanged results (`tapered_value` `NaN`). The GUI's optimizer
+moves when its VisRad beam model is chosen. `test/constraints.jl` checks the default run
+against the same run on a scenario built with `taper = 1` (identical in design, beams,
+evaluations and multipliers), the value and rows against the hard-cut evaluation, and a
+`PhasedScenario`.
 
 ### 5. Phase 1 on by default
 
 `optimize_pointing(...; phase1 = true)` is the default (`relaxation` stays off): a
-constrained run whose start violates a constraint first minimizes the infeasibility
-alone and starts its main run from the first design within the limits, or ends with a
+constrained run whose start violates a constraint first minimizes only the
+infeasibility and starts its main run from the first design within the limits, or ends with a
 verdict ("Constrained re-pointing", "A verdict on conflicting constraints"). A start
 that meets every constraint, a restart with `from` and an unconstrained run are
-bitwise unchanged; `phase1 = false` is the former path.
+unchanged; `phase1 = false` is the former path.
 
 Measured on every constrained run of `test/constraints.jl` and `test/phased.jl`
 (*measured*; each run logged at the step-4 tree, where phase 1 was off, and with the
 default on; 8 threads). Runs whose start meets the constraints, runs that set `phase1`
-or `relaxation` themselves, and runs stopped at their first evaluation are the same,
-bitwise (22 of 39 runs). The others:
+or `relaxation` themselves, and runs stopped at their first evaluation are
+identical (22 of 39 runs). The others:
 
 | case | evaluations, off → on | objective, off → on | outcome, off → on |
 |---|---|---|---|
@@ -14194,28 +14176,28 @@ bitwise (22 of 39 runs). The others:
 | phased: three phases, gates and a ceiling | 474 → 470 | −1.0000071 → −0.9997388 | interior |
 | the same, 10 evaluations | 10 → 10 | −1.0000073 → −0.9997394 | evaluations |
 
-- Closed forms: the KKT point is reached either way (the designs agree within the
+- On the closed forms, the KKT point is reached either way (the designs agree within the
   runs' 1e-8 feasibility); phase 1 costs −23% to +54% of the evaluations. Runs cut short
   by an iteration or evaluation budget end elsewhere, as any change of path does.
 - Drive objectives on a flat family of designs end at another member: the dropped-bundle
   case at 3.2e-4 less drive in 7 fewer evaluations, the phased case at 2.7e-4 less, both
   within every limit.
-- Verdicts: the conflicting cap is found in 6 evaluations instead of 23. The keep-out case
-  of held power scales starts with a clearance violation (5.5e-3 of its scale) that no
-  parameter of that parameterization moves (the aims are held): phase 1 stops at the
-  start, a local minimum of the infeasibility, with the verdict `:infeasible` after one
-  evaluation, where the augmented Lagrangian spent 204 to end at `:infeasible_box` with
-  the same violation.
+- In the verdicts, the conflicting cap is found in 6 evaluations instead of 23. The keep-out
+  case of held power scales starts with a clearance violation (5.5e-3 of its scale) that no
+  parameter of that parameterization moves (the aims are held): phase 1 stops at the start,
+  a local minimum of the infeasibility, with the verdict `:infeasible` after one evaluation,
+  where the augmented Lagrangian spent 204 to end at `:infeasible_box` with the same
+  violation.
 
-Tests re-derived: `test/constraints.jl`'s augmented-Lagrangian-only comparison passes
+Tests were re-derived: `test/constraints.jl`'s augmented-Lagrangian-only comparison passes
 `phase1 = false` (it is the reference for phase 1's evaluation count), and its checks of
 `res.phase1 === nothing` now read phase 1 from the result; every other assertion holds
 on both paths. The tutorials' constrained runs are in "6." below.
 
 ### 6. The tutorials on the new defaults; the capped polish stays
 
-The user's decision: the dropped-bundle tutorial's per-beam polish stays capped at 120
-evaluations (a converged one costs minutes of the docs build); its text says what the
+The user decided that the dropped-bundle tutorial's per-beam polish stays capped at 120
+evaluations (a converged one costs minutes of the docs build); its text states what the
 cap leaves and that a design to hand off runs to convergence. No code change.
 
 Both tutorials run as scripts at the step-4 tree (phase 1 off) and at the final tree (8
@@ -14230,11 +14212,11 @@ dropped-bundle tutorial's constrained runs (drive as a fraction of the 48 quads'
 | least re-pointing at 0.5% per degree | 636, 63 µm rms | 508 (12), 63 µm rms, 0.105 mm at most, drive 0.9594 of the 48 quads' |
 
 Phase 1 moves the first run to another member of the flat family at 0.06% less drive,
-one that happens to clear the end caps by 2 µm (the text no longer says the run reaches
-into them; it says the margin is unheld and gives the phase-1-off result). With step
-3's smooth keep-out the penalty re-pointing's cap review reads 8 µm where the text had
+one that happens to clear the end caps by 2 µm (the text no longer states that the run reaches
+into them; it states that the margin is unheld and gives the phase-1-off result). With step
+3's smooth keep-out the cap review of the penalty re-pointing gives 8 µm where the text had
 9 µm. The diagnostic-windows tutorial has no constrained run; its pair re-pointing
-under the aperture keep-out's penalty reads 0.105–0.142 mm rms, largest 0.26 mm, where
+under the aperture keep-out's penalty is 0.105–0.142 mm rms, largest 0.26 mm, where
 the text had 0.11–0.15 mm and 0.29 mm, with l = 1–3 still restored to 0.02%; the other
 numbers its text quotes are unchanged.
 
@@ -14282,7 +14264,7 @@ row gives a single run and the best of three where both were taken. Since fix 5 
 
 The "fixed" column is fixes 1–9 below, measured together on 2026-11-20 (fix 7 does
 not enter case B), except the keep-out's row, fixes 1–4 (fix 5's number is in the
-sentence above). The first four rows with fixes 1–4 alone: 12.3, 162, 168, and 24.6
+sentence above). The first four rows with only fixes 1–4: 12.3, 162, 168, and 24.6
 and 25.6 ms at 8 threads; with fixes 1–4 and 6: 5.9, 112, 117, and 18.7 and 18.5 ms;
 with fixes 1–4, 6 and 8 (before fix 5): 3.1, 69, 71, and 14.0 and 12.0 ms.
 
@@ -14300,11 +14282,11 @@ quadrature changed in those days).
 
 - b5173bc (2026-10-27, `VisRadProfile` takes the VisRad profile law in place of the
   tabulated fit): a VisRad-profile deposition costs 5.6 times as much (case B's 46 quads, one
-  thread: 3.8 to 22.5 ms on Float64, 5.4 to 27.0 ms on Dual{12}). By design: the law
+  thread: 3.8 to 22.5 ms on Float64, 5.4 to 27.0 ms on Dual{12}). By design, the law
   takes three non-integer powers per point, and every point of the operator was
   evaluated on Float64 and screened by the full law on duals.
 - ed46747 (2026-11-03, the rim of the hole itself, refined): the aperture keep-out 3.6 times
-  (0.1 to 0.6 ms for 46 quads; gradient 2.7 to 10 ms). By design: the exact rim and a
+  (0.1 to 0.6 ms for 46 quads; gradient 2.7 to 10 ms). By design, the exact rim and a
   golden-section search instead of 96 samples.
 - 29bb958 (2026-11-19, a smooth minimum over the rim): the keep-out a further 2.4–2.9
   times (gradient 10 to 28 ms, allocations 0.4 to 28 MB): every interval within 3 µm
@@ -14318,25 +14300,25 @@ quadrature changed in those days).
 **The fixes** (2026-11-19, each measured on one thread unless stated):
 
 1. `clearance_floor` over a `PhasedScenario`'s phases computes the keep-out once for
-   phases whose beams it sees alike (same aims and spots; for an `ApertureKeepOut` the
-   same envelope radius), not once per phase: bitwise unchanged.
+   phases whose beams are alike (same aims and spots; for an `ApertureKeepOut` the
+   same envelope radius), not once per phase; results are unchanged.
 2. `ApertureKeepOut` on a dual beam runs its samples and golden sections on the
    beam's values and evaluates in duals only the points that enter the result:
-   66.5 to 38.8 µs per beam (Float64: 23.4 to 21.2), bit for bit in values and partials
+   66.5 to 38.8 µs per beam (Float64: 23.4 to 21.2), identical in values and partials
    on 5,760 beam cases (quads and beams in two hohlraums, aims moved up to 0.4 mm,
    some defocused, softness 1e-4 and 0).
-3. `deposit` skips beams at exactly zero power (value and partials; a picket measure's
-   other cones): bitwise unchanged (48 quads with the inner cones at zero, f-cone profile:
+3. `deposit` skips beams at exactly zero power (value and partials; a picket measure's other
+   cones), with results unchanged (48 quads with the inner cones at zero, f-cone profile:
    9.6 to 4.4 ms on Float64, 19.1 to 8.5 ms on Dual{12}).
 4. VisRad's deposition skips the points that a bound without powers puts beyond the
    cut-off (`_vr_far`: α ≥ min(sq, gauss), sq ≥ (max(|u|, |v|)/ΔL)^10 and gauss ≥ q^(n₀/2)
    for q ≥ 1): on 12 cases (48 quads and 192 beams at h = 0.2, hard cut and taper,
    moved and defocused aims) 714 to 370 ms on Float64 and 863 to 495 ms on Dual{12},
-   bitwise unchanged (elements and per-beam totals, values and partials, against 0.3.0 on
+   with results unchanged (elements and per-beam totals, values and partials, against 0.3.0 on
    those cases). No skipped point has a nonzero intensity (every point of the 48
    quads' operator checked, and a grid across and along four spots in
    `test/basics.jl`). The screen first sat behind a `@noinline` barrier, which kept the
-   depositions bitwise unchanged.
+   depositions unchanged.
 5. (2026-11-20) `ApertureKeepOut` finds each sample interval's minimum exactly from the
    distance's slopes at the samples, without a window of refined intervals, and takes a
    dual beam's partials by the chain rule from the clearance's sensitivities to the focus
@@ -14351,7 +14333,7 @@ quadrature changed in those days).
    thread, the two measured in one session). Result change, Float64 depositions only:
    10,905 element entries differ, by at most 1.24e-13 of the value of that element (3.7e-16
    of the largest element), per-beam totals by at most 3.3e-16; the Dual{12}
-   depositions, values and partials, are bitwise unchanged. Against the tolerances of
+   depositions, values and partials, are unchanged. Against the tolerances of
    delivered power (2–5%) and the drive's modes (tenths of a percent), 1e-11 of the
    smallest. Case B's objective prints the same 15 digits and its six-iteration run
    takes the same 8 evaluations to the same value; the dropped-bundle tutorial, run as
@@ -14368,14 +14350,14 @@ quadrature changed in those days).
    (`test/picket_fluence.jl`: every measure, overlapping group sets, with and without
    backscatter, to 1e-12). On the multi-phase study (scratch runs: six phases, 552
    parameters, the three picket ceilings on `:average`, plain and tapered cut) the
-   Dual{12} depositions and every term's violations, values and partials, are bitwise
+   Dual{12} depositions and every term's violations, values and partials, are
    unchanged; on Float64 the loop with the kept sums compiles the law differently and the
    depositions move by at most 5.9e-16 of the value of an element, the terms' violations
    by 6.8e-14 of their scale. A constrained run of 20 evaluations takes 53.4 s without
-   and 40.5 s with (8 threads), the same 20 evaluations, and lands 6.6e-8 (mm, or scale
+   and 40.5 s with (8 threads), the same 20 evaluations, and ends 6.6e-8 (mm, or scale
    units) away, its objective 4.7e-7 relative (the round-off moves the line searches).
    The optimizer's augmented-Lagrangian gradient falls from 2.39 to 1.87 s at 8 threads
-   (the objective's alone 1.57 s): the constraints from 0.52 to 0.19 of the objective.
+   (1.57 s for the objective only): the constraints from 0.52 to 0.19 of the objective.
 8. Cheaper screens and coordinates in VisRad's deposition (2026-11-20). (a) `_vr_far`
    adds to its test of the smaller term a bound on the weighted sum itself, α ≥ f r^10 +
    (1 − f) q^k (q^(1/4))^j (r ≥ 1, q ≥ 1, n₀/2 ≥ k + j/4), with multiplications and two
@@ -14392,7 +14374,7 @@ quadrature changed in those days).
    fix 4, Float64 depositions move by at most 1.6e-13 of the value of an element
    (3.8e-16 of the largest), Dual{12} values and partials by at most 1.5e-15 of the
    largest element's, per-beam totals by 2.2e-16 and their partials by 1.2e-15 of the
-   beam's power; the f-cone model is bitwise unchanged. Case B's objective prints the same 15
+   beam's power; the f-cone model is unchanged. Case B's objective prints the same 15
    digits and its six-iteration run takes the same 8 evaluations to the same value; the
    dropped-bundle tutorial prints the same output and `examples/n221204.jl` at 0.8/0.4
    writes a byte-identical CSV (both on the f-cone model). Timings (one thread unless
@@ -14409,22 +14391,22 @@ quadrature changed in those days).
    Building VisRad's frames once per beam instead of per work unit showed no difference
    beyond the machine's noise (about 10%) and allocated 8% more per gradient: not
    landed.
-9. An evaluation computes its moment and Y_lm products once (2026-11-20): `flux_moments`
-   (on the cached degrees, axis and center), `mean_flux` through it, and `flux_ylm`
-   read the scenario's response product with the deposition from the evaluation after
-   the first read, instead of each forming it again (a dual matrix product, about
-   0.4 ms per read per dual pass on the multi-phase study, where a phase's gate, drive
-   floor, drive ceiling and the objective read the same products: 16 products a pass
-   before, at most two a phase after). Bitwise unchanged (the same product, read as a copy).
-   On the study the optimizer's augmented-Lagrangian gradient allocates 2.14 GB instead
-   of 2.34 GB; its time at 8 threads moved within the machine's noise that session (1.17
-   to 1.69 s before, 1.51 to 1.62 s after, alternating, another job on the second slot).
+9. An evaluation computes its moment and Y_lm products once (2026-11-20): `flux_moments` (on
+   the cached degrees, axis and center), `mean_flux` through it, and `flux_ylm` read the
+   scenario's response product with the deposition from the evaluation after the first read,
+   instead of each forming it again (a dual matrix product, about 0.4 ms per read per dual
+   pass on the multi-phase study, where a phase's gate, drive floor, drive ceiling and the
+   objective read the same products: 16 products a pass before, at most two a phase after).
+   Results are unchanged (the same product, read as a copy). On the study the optimizer's
+   augmented-Lagrangian gradient allocates 2.14 GB instead of 2.34 GB; its time at 8 threads
+   moved within the machine's noise that session (1.17 to 1.69 s before, 1.51 to 1.62 s
+   after, alternating, another job on the second slot).
 10. Phases on one mesh deposit in one pass (2026-11-20). A `PhasedScenario` keeps, per
    phase, the first phase whose deposition operator has the same points, weights,
    normals, visibility, destinations, ports and profile (the same operator, or one built
    alike on a target that differs in its materials; compared once at construction), and
    `evaluate` deposits together the phases of one such class whose effective beams
-   differ in power alone (an exact test on aims, focus, spots and ports, values and
+   differ only in power (an exact test on aims, focus, spots and ports, values and
    partials) and whose laser–plasma models deposit no light themselves: each point is
    evaluated once, for the beam at unit power, and added to every phase times that
    phase's beam power, into its elements, back sides and kept group sets (fix 7). A
@@ -14436,7 +14418,7 @@ quadrature changed in those days).
    at most 2.2e-13 of the value of an element (6.4e-16 of the largest), per-beam totals by
    8.5e-16, back sides by 3.1e-16, the kept group sets by 4.6e-16, every term's
    violations by at most 3.2e-13 of its scale and the objective by 4.5e-16. A constrained
-   run of 20 evaluations takes the same 20 evaluations and lands 5.9e-8 mm away (1.6e-8
+   run of 20 evaluations takes the same 20 evaluations and ends 5.9e-8 mm away (1.6e-8
    mm rms in the aims, 5.9e-8 in the scales), its objective 4.2e-7 relative. Timings,
    the former path being the same build with the grouping switched off, alternated in one
    session (another job held the second lock slot): at 8 threads a dual pass's
@@ -14446,7 +14428,7 @@ quadrature changed in those days).
    evaluation 138 to 52 ms (Float64: 81 to 27 ms), the objective's gradient 7.11 to
    2.65 s and the augmented Lagrangian's 7.85 to 3.29 s.
 11. The f-cone model's point coordinates taken once (2026-11-20), as fix 8 (d) does for
-   VisRad's: a point's (s, u₀, v₀) in the beam frame are computed on values, serve the
+   VisRad's: a point's (s, u₀, v₀) in the beam frame are computed on values, are used by the
    screens, and a dual beam's are built from them with the partials of the origin's
    coordinates, which every point shares (`_cone_coords`). Results change at rounding:
    on the f-cone model's six cases of fix 4's set (48 quads and 192 beams at h = 0.2,
@@ -14463,52 +14445,51 @@ quadrature changed in those days).
    tutorial's long runs under rounding (2026-11-20)", where both trees' runs are among
    the 13 starts); every assertion holds. The beam-errors tutorial's tuning (200
    iterations) ends nearer its optimum (P₂/P₀ +0.000% against −0.023%, the l = 1
-   budget 0.236% against 0.233%): its text now reads 0.23–0.24%. The
+   budget 0.236% against 0.233%): its text now states 0.23–0.24%. The
    diagnostic-windows tutorial's pair re-pointing ends elsewhere on its flat family, 134
    and 98 µm rms in z and along the wall, the largest move 0.267 mm (before 141, 93 and
-   0.247 mm), l = 1–3 still restored to 0.02%: its text now reads 0.25–0.27 mm; its
+   0.247 mm), l = 1–3 still restored to 0.02%: its text now states 0.25–0.27 mm; its
    power trim converges in 106 iterations instead of 111, its printed cone factors moving
    by at most 0.01 (none quoted in the text), and the pulse table's entries by at most
    0.01 (within the text's ranges). The backlighter-sweep tutorial prints the same output.
 
 Together, on case B the optimizer's evaluation costs 0.21 of 0.3.0's on one thread (56
-against 273 ms) and 0.18–0.19 at 8 threads (9.0–9.2 against 47.6–50.6 ms), 0.24–0.29
-of v0.1.0's, and about the 2026-10-22 tree's on one thread (1.04; 0.5 at 8 threads), all
-nine fixes measured together on 2026-11-20 (case A: 160 ms on one thread, 22–23 ms at 8).
-Fixes 1–4 alone (0.52–0.62 of 0.3.0's) left every result bitwise that of 0.3.0; fixes
-6–8, 10 and 11 change depositions at the rounding level only, and fix 9 nothing. The keep-out's
-gradient, 6 times v0.1.0's after fixes 1–4 (the refined rim and the window), is 0.53 of
-it after fix 5. On a multi-phase study's evaluation (scratch runs: six phases, 552
-parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient fell from
-7.9 to 3.6 s (0.45) with fixes 1–4, and the constraints from 0.98 to 0.40 of the
-objective's gradient: before the fixes the keep-out over the six phases and the three
-picket ceilings' depositions each cost about a quarter of the gradient. Fix 6 then
-takes the objective's gradient from 2.83 to 1.62 s and the augmented Lagrangian's from
-3.80 to 2.44 s (the two measured in one session; another run may have shared the
-machine, whose second lock slot is open to other jobs), fix 7 the latter to 1.87 s and
-fix 8 the two to 0.88 and 1.32 s; with all nine, on one thread, 7.1 and 7.7 s. The six
-phases' depositions were then more than half of a dual pass (56% before fix 9), on two
-meshes (three phases each, the same operator points), the law evaluated six times where
-two would do: fix 10 evaluates it twice, and takes the two gradients to 0.37 and 0.42 of
-fix 9's on one thread (2.65 and 3.29 s) and to 0.38 and 0.47 at 8 threads (0.46–0.49 and
-0.74 s; fix 10 does not enter cases A and B, one scenario each). The gradient's chunks run threaded on the
-phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
-at 16, fast and slow cores).
+against 273 ms) and 0.18–0.19 at 8 threads (9.0–9.2 against 47.6–50.6 ms), 0.24–0.29 of
+v0.1.0's, and about the 2026-10-22 tree's on one thread (1.04; 0.5 at 8 threads), all nine
+fixes measured together on 2026-11-20 (case A: 160 ms on one thread, 22–23 ms at 8). Fixes
+1–4 by themselves (0.52–0.62 of 0.3.0's) left every result identical to that of 0.3.0; fixes
+6–8, 10 and 11 change depositions at the rounding level only, and fix 9 nothing. The
+keep-out's gradient, 6 times v0.1.0's after fixes 1–4 (the refined rim and the window), is
+0.53 of it after fix 5. On a multi-phase study's evaluation (scratch runs: six phases, 552
+parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient fell from 7.9 to
+3.6 s (0.45) with fixes 1–4, and the constraints from 0.98 to 0.40 of the objective's
+gradient: before the fixes the keep-out over the six phases and the three picket ceilings'
+depositions each cost about a quarter of the gradient. Fix 6 then takes the objective's
+gradient from 2.83 to 1.62 s and the augmented Lagrangian's from 3.80 to 2.44 s (the two
+measured in one session; another run may have shared the machine, whose second lock slot is
+open to other jobs), fix 7 takes the augmented Lagrangian's to 1.87 s, and fix 8 takes the
+two to 0.88 and 1.32 s; with all nine, on one thread, 7.1 and 7.7 s. The six phases'
+depositions were then more than half of a dual pass (56% before fix 9), on two meshes (three
+phases each, the same operator points), the law evaluated six times where two would do: fix
+10 evaluates it twice, and takes the two gradients to 0.37 and 0.42 of fix 9's on one thread
+(2.65 and 3.29 s) and to 0.38 and 0.47 at 8 threads (0.46–0.49 and 0.74 s; fix 10 does not
+enter cases A and B, one scenario each). The gradient's chunks run threaded on the phased
+path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2 at 16, fast and slow cores).
 
 **The end state, on a quiet machine** (2026-11-20, on the tree at the end of that day's
-work, whose commits after fix 11 do not enter an evaluation; the timings of fixes 6–11
-above were taken while another job held the machine's second slot). The multi-phase
-study's gradients (552 parameters, the same scratch harness, best of several): on one
-thread the objective's 30.3 s (0.3.0) to 2.29 s and the augmented Lagrangian's 49.7 to
-4.98 s; at 8 threads 0.58 s and 0.78 s, the latter against 7.9 s on 0.3.0. The harness
-builds the augmented Lagrangian outside `optimize_pointing`, so its three picket
-ceilings still deposit (15 ms each per dual pass on one thread, the whole of the
-constraints' cost there beside the keep-out's 4.5 ms): inside a run fix 7 removes them,
-and the run's gradient is nearer the objective's. One dual pass of `evaluate` is 47 ms
-on one thread and 11 ms at 8. A study script's penalty re-pointing with VisRad's
-profile (scratch runs, 30 iterations at 8 threads, v0.1.0 beside the end state in one
-session): 0.123 to 0.036 s per evaluation at 92 parameters and 0.478 to 0.145 s at 368
-(0.3.0, measured the day before: 0.148 and 0.711).
+work, whose commits after fix 11 do not enter an evaluation; the timings of fixes 6–11 above
+were taken while another job held the machine's second slot). The multi-phase study's
+gradients (552 parameters, the same scratch harness, best of several): on one thread the
+objective's 30.3 s (0.3.0) to 2.29 s and the augmented Lagrangian's 49.7 to 4.98 s; at 8
+threads 0.58 s and 0.78 s, the augmented Lagrangian's against 7.9 s on 0.3.0. The harness
+builds the augmented Lagrangian outside `optimize_pointing`, so its three picket ceilings
+still deposit (15 ms each per dual pass on one thread, the whole of the constraints' cost
+there beside the keep-out's 4.5 ms): inside a run fix 7 removes them, and the run's gradient
+is nearer the objective's. One dual pass of `evaluate` is 47 ms on one thread and 11 ms at
+8. A study script's penalty re-pointing with VisRad's profile (scratch runs, 30 iterations
+at 8 threads, v0.1.0 beside the end state in one session): 0.123 to 0.036 s per evaluation
+at 92 parameters and 0.478 to 0.145 s at 368 (0.148 and 0.711 for 0.3.0, measured the day
+before).
 
 **By design, not changed.** Phase 1 (on by default in constrained runs since 2026-11-19)
 adds separate evaluations before the main run, not cost per evaluation; each lowering of
@@ -14517,7 +14498,7 @@ Jacobian at the end of a constrained run (as much as one gradient, whatever the 
 of constraints); the optimizer's tapered VisRad cut (`smooth_cut`) costs as much as the
 hard cut per deposition (within 15%). A picket ceiling outside `optimize_pointing`, or
 one given the picket's powers by `pulses` or `power`, deposits the outer cones once per
-evaluation (fix 7 serves the powers of the beams inside a run): a hand-written sum of
+evaluation (fix 7 supplies the powers of the beams inside a run): a hand-written sum of
 `ev.deposition.per_beam` over the outer beams costs nothing but measures another
 quantity (it counts the light on the capsule and the entrance holes' outside).
 
@@ -14555,11 +14536,10 @@ gradient, and the terms of the smooth minimum evaluated in the gradient's duals.
   in the beam's number type. *Engineering* constants.
 - *Partials by the chain rule.* On a dual beam whose values are Float64 the terms are
   evaluated in 5-partial duals of the keep-out, seeded on the focus (three) and the
-  envelope's semi-axes, the only quantities of the beam the distance reads, and the
-  result's partials are those sensitivities times the beam frame's partials: the cost
-  no longer grows with the gradient's chunk. Nested duals evaluate the terms in the
-  number type of the beam. The clearance of a dual beam has, bitwise, the value of the
-  Float64 beam.
+  envelope's semi-axes, the only quantities of the beam the distance reads, and the result's
+  partials are those sensitivities times the beam frame's partials: the cost no longer grows
+  with the gradient's chunk. Nested duals evaluate the terms in the number type of the beam.
+  The clearance of a dual beam has exactly the value of the clearance of the Float64 beam.
 - The envelope radius (a root search) is computed once per distinct spot and power in
   a call.
 
@@ -14627,7 +14607,7 @@ the beam-errors tutorial's printed numbers agree with its text. The diagnostic-w
 tutorial's pair re-pointing under the keep-out's penalty (an unconstrained run of up to
 200 iterations on a flat family of designs) ends elsewhere in that family, at 0.093–0.141 mm rms and 0.247 mm at most where the former
 tree ends at 0.105–0.142 mm and 0.257 mm, with l = 1–3 within 0.02% either way; its text
-now reads 0.09–0.14 mm and 0.25 mm. The repository's constrained runs with an aperture
+now states 0.09–0.14 mm and 0.25 mm. The repository's constrained runs with an aperture
 keep-out floor (`test/phased.jl`) hold it far below the designs' clearance; their tests
 pass, plain and with bounds checks.
 
@@ -14642,8 +14622,8 @@ long constrained runs determine.
 The tutorial's runs repeated from 13 starts: the start of the tutorial on two trees (the tree
 before the f-cone model's shared coordinates and the tree with them, whose depositions
 differ at 1e-15), and starts moved by 10⁻¹² or 10⁻⁹ mm in a random direction (seeds 1–5,
-on both trees). On one tree and one start the runs are the same at 4 and 8 threads,
-bitwise (every printed digit and evaluation count): the threading is deterministic,
+on both trees). On one tree and one start the runs are identical at 4 and 8 threads
+(every printed digit and evaluation count): the threading is deterministic,
 and a CPU that rounds differently (CI's) moves a run as a start moved by 10⁻¹² mm does.
 
 **What is determined** (ranges over the 13 starts):
@@ -14660,7 +14640,7 @@ and a CPU that rounds differently (CI's) moves a run as a start moved by 10⁻¹
 stand-in, the area-weighted 64-norm, not the peak over the elements: the exact ceiling
 compares the peak with the limit and lowers the stand-in's working limit only once a run
 has converged on the stand-in (`irradiance_ceiling(...; exact = true)`). Stopped after
-120 evaluations, the polish's peak lands anywhere in a 5% band about the ceiling, and on
+120 evaluations, the polish's peak ends anywhere in a 5% band about the ceiling, and on
 3 of the 13 starts above the 1% the assert allowed. The other limits the polish works
 on are held well inside 0.01.
 
@@ -14703,8 +14683,8 @@ rms of `mode_departure` under the errors (the long Monte Carlo check of
 samples), and `mode_gate(...; fraction)` takes one multiple per degree as well as one
 number, for a floor given as the gates or as `floor`. Chosen over a function
 (`mode_floor(u)`): the floor is a quantity of the result, read where the result is, and
-a field adds no name. `shift` already takes several modes, and `floor` a vector.
-Bitwise unchanged: the floor is the same expression as before, and a vector of multiples
+a field does not add a name. `shift` already takes several modes, and `floor` a vector.
+Results are unchanged: the floor is the same expression as before, and a vector of multiples
 the same product as the script's. In the script the floor of each reference and its
 gates (`mode_gate(reference, GATES .* floor)`) became `u.floor` and
 `mode_gate(reference, u; fraction = GATES)`: the 16 gate rows and the 24 gate limits
@@ -14712,24 +14692,23 @@ agree to 17 digits.
 
 ### 2. The beam-weighted regularization of the power scales
 
-The script's objective held the early phases' power scales near a uniform start,
-`Σ_j n_j (s_j/s0_j − 1)² / Σ_j n_j`, each scale weighted by the number of beams it
-governs, which it counted by reading the internal field `ps.param.by`.
-`power_scale_objective(ps; reference, weight)` is that term: the scales of
-`power_scales` (so generic in the number type and differentiable), `reference` one
-scale, a vector in the order of the keys or a function `(key, phase) -> s0`, and per
-scale the summed `weight` of its beams (default 1 each: the mean over beams and scaled
-phases). Chosen over a public accessor of the counts: it sits beside `shift_objective`
-(the mean squared aim shift, also a mean over beams), composes as a term of an
-objective function of the `PerPhase` evaluation as every other term does, and keeps the
-grouping internal; the counts alone serve no other use in the script. A plain
+The script's objective held the early phases' power scales near a uniform start, `Σ_j n_j
+(s_j/s0_j − 1)² / Σ_j n_j`, each scale weighted by the number of beams it governs, which it
+counted by reading the internal field `ps.param.by`. `power_scale_objective(ps; reference,
+weight)` is that term: the scales of `power_scales` (so generic in the number type and
+differentiable), `reference` one scale, a vector in the order of the keys or a function
+`(key, phase) -> s0`, and per scale the summed `weight` of its beams (default 1 each: the
+mean over beams and scaled phases). It was chosen over a public accessor of the counts: it
+is placed beside `shift_objective` (the mean squared aim shift, also a mean over beams),
+composes as a term of an objective function of the `PerPhase` evaluation as every other term
+does, and keeps the grouping internal; the script uses the counts for nothing else. A plain
 `Scenario` with `PowerScales` has no phase powers to read its scales against from an
 evaluation (its scales are parameters), so the term is for phased scenarios only.
-`test/phased_study.jl` checks it against the hand count (16 inner and 32 outer quads
-per scale of a cone), a per-beam weight and the closed-form gradient
-`2 W_j (s_j/s0_j − 1)/s0_j / Σ W`. In the script the objective's three lines of counts
-and reference scales became `power_scale_objective(ps; reference = (key, phase) ->
-S0[phase])`: the start's objective agrees to 17 digits.
+`test/phased_study.jl` checks it against the hand count (16 inner and 32 outer quads per
+scale of a cone), a per-beam weight and the closed-form gradient `2 W_j (s_j/s0_j − 1)/s0_j
+/ Σ W`. In the script the objective's three lines of counts and reference scales became
+`power_scale_objective(ps; reference = (key, phase) -> S0[phase])`: the start's objective
+agrees to 17 digits.
 
 ### 3. A phased scenario at another deposition resolution
 
@@ -14761,17 +14740,17 @@ included (8 threads; another run may have shared the machine).
 ### 4. The departure per degree split by order
 
 The script reported each degree's departure split into its `m = 0` and `m ≠ 0` parts
-(`√((2l+1) Σ_{m ∈ M} (c_lm/c_00 − r_lm/r_00)²)`), from `flux_ylm`'s exact facet
-integrals. `mode_departure(...; m = :zero | :nonzero)` gives the parts, the split and
-the names of `mode_rms`'s `m` (`:all`, the default, is the departure as before,
-bitwise), and `PointingSummary` records them as `departure_zero` and `departure_nonzero`
-whenever it has a `drive_reference`. The zonal part depends on the coefficients' polar
-axis (the hohlraum axis for `flux_ylm`). `test/pointing_summary.jl` checks the zonal
-part against `√(2l+1) |Δ(c_l0/c_00)|` by hand, the parts' squares against the whole,
-and two single-mode changes against their closed forms. In the script the report's
-hand-written sum over orders became `mode_departure(e, r; m = :zero)` and `m =
-:nonzero`: its four split columns agree at their printed digits in every phase, at the
-start and at the finished design of § 3's check (where they are not zero).
+(`√((2l+1) Σ_{m ∈ M} (c_lm/c_00 − r_lm/r_00)²)`), from `flux_ylm`'s exact facet integrals.
+`mode_departure(...; m = :zero | :nonzero)` gives the parts, the split and the names of
+`mode_rms`'s `m` (`:all`, the default, is exactly the departure as before), and
+`PointingSummary` records them as `departure_zero` and `departure_nonzero` whenever it has a
+`drive_reference`. The zonal part depends on the coefficients' polar axis (the hohlraum axis
+for `flux_ylm`). `test/pointing_summary.jl` checks the zonal part against
+`√(2l+1) |Δ(c_l0/c_00)|` by hand, the parts' squares against the whole, and two single-mode
+changes against their closed forms. In the script the report's hand-written sum over orders
+became `mode_departure(e, r; m = :zero)` and `m = :nonzero`: its four split columns agree at
+their printed digits in every phase, at the start and at the finished design of § 3's check
+(where they are not zero).
 
 ### 5. Quads moved past given shifts
 
@@ -14827,7 +14806,7 @@ largest violation is at most the last iterate's (0.0252364 either way; outer ite
 program started on its cap (8 evaluations) returns a design within the cap where the
 last iterate exceeds it. Every other constrained run of `test/constraints.jl`,
 `test/phased.jl`, `test/picket_fluence.jl` and `test/pointing_summary.jl` (54 runs
-logged at c40cb98 and after) is bitwise unchanged, design and evaluation count: they end
+logged at c40cb98 and after) is unchanged in design and evaluation count: they end
 within their limits, or at a verdict whose design is the least violating.
 
 ### 2. Inner runs ended by their cap
@@ -14888,7 +14867,7 @@ run's `evaluations`, time limit and callback. Phase 1 is no longer capped by
 `iterations`; it now ends at a verdict, within the limits, or stopped by the budget, the
 time limit or the callback, which ends the whole run at its design of least violation
 (§ 1), so the main run never starts from a phase 1 short of both. `phase1.reason` names
-the end (`:feasible`, `:converged`, `:stalled`, or the stop), and the display says when
+the end (`:feasible`, `:converged`, `:stalled`, or the stop), and the display shows when
 a stop came before a verdict.
 
 Closed form (the 120 TW cap against the drive floor, `feasibility = 1e-8`; scratch
@@ -14897,7 +14876,7 @@ evaluations without a verdict and the augmented Lagrangian reached `:infeasible_
 after 12 outer iterations (61 evaluations); now phase 1 gives the verdict in 20, the
 evaluations and the design of the default `iterations` exactly (violations 0.0237667 and
 0.0252364 of their scales, as the main run's). Runs whose phase 1 ended within its
-iteration cap are bitwise unchanged (every constrained run of the four test files above).
+iteration cap are unchanged (every constrained run of the four test files above).
 `test/constraints.jl` checks the verdict at `iterations = 3` and the stop at a budget of
 5 evaluations, with its line in the display.
 
@@ -14916,7 +14895,7 @@ falling linear pieces, 2.08 TW). On the multi-phase study a scale of the last sc
 phase carried a cone's pulse past its laser limit between that phase and the peak
 (scratch runs).
 
-Layers considered: a clip in `scaled_pulse` or the table writer (changes the pulse's
+The layers considered were a clip in `scaled_pulse` or the table writer (changes the pulse's
 energy, so the delivered drive is no longer the optimized one: rejected); a check that
 reports (kept: `scaled_pulse(...; power_max)` and `shape_pulses(...; power_max)` throw
 an `ArgumentError` naming the time, the power and the excess); and the design's limits.
@@ -14932,8 +14911,8 @@ The written pulse (`scaled_pulse`) is tabulated at the base pulse's points and t
 times and is linear between them, so its maximum lies at a point. At a point τ between
 the phases at tᵢ and tᵢ₊₁ the multiplier is `(1 − w) mᵢ + w mᵢ₊₁`, `w = (τ − tᵢ)/(tᵢ₊₁ −
 tᵢ)`, so the condition `base(τ) ((1 − w) mᵢ + w mᵢ₊₁) ≤ L` is linear in two neighboring
-scales; before the first phase it bounds m₁ alone, and after the last mₙ alone (on the
-`peak` ramp `(1 − w) mₙ + w ≤ L/base(τ)`; the pulse from `peak` on carries no scale).
+scales; before the first phase it bounds only m₁, and after the last only mₙ (on the
+`peak` ramp `(1 − w) mₙ + w ≤ L/base(τ)`; the pulse from `peak` on has no scale).
 Between two phases the line `(1 − w) mᵢ + w mᵢ₊₁` must lie below every point
 `(w, L/base(τ))`, which holds if and only if it lies below the vertices of their lower
 convex hull: those points carry the whole condition.
@@ -14951,7 +14930,7 @@ the feasible polygon that a design trading one scale against its neighbor needs.
 
 Options weighed:
 
-- *A tighter box alone*: the exact caps on one scale (the sample times, the pulse before
+- *Only a tighter box*: the exact caps on one scale (the sample times, the pulse before
   the first phase, the ramp or the hold after the last) are necessary, not sufficient,
   for a pulse that rises between two phases away from both; making them sufficient puts
   back the exclusion. Kept as the box part.
@@ -14970,9 +14949,9 @@ Options weighed:
 named `:pulse`, a component per hull vertex and per key, the value the written power at
 the point (TW) against `power_max`, labeled by key and time; it takes the scales from the
 evaluation through `power_scales` (generic in the number type; a case in
-`test/inference.jl`). `bounds(...; pulses, times, peak)` now holds the conditions on one
-scale alone, and on each interval the cap that follows with the neighboring scale at its
-least value in the box (both exact: they exclude no design within the limit). Without
+`test/inference.jl`). `bounds(...; pulses, times, peak)` now holds the conditions on a single
+scale, and on each interval the cap that follows with the neighboring scale at its
+least value in the box (both exact, since they exclude no design within the limit). Without
 `pulses` the box is unchanged. The augmented Lagrangian holds the coupled components to
 within the run's `feasibility` (1e-3 of the limit by default); a ceiling at
 `(1 − feasibility) L` leaves the written pulse within `L`.
@@ -15015,7 +14994,7 @@ before the rise below what the design needs, and every run under it ended infeas
 - The same with phase 1 (the default) and `iterations = 100`: the verdict in a few
   hundred evaluations, as the former run reached only with a cap ten times larger.
 - The converging variant continued from its converged design: the same design and
-  evaluation count as on the base tree, bitwise (11 outer iterations; the 9 capped
+  evaluation count as on the base tree, exactly (11 outer iterations; the 9 capped
   inner runs ended within the limits, where the usual penalty test applies), within
   0.01 mm rms of the design it started from.
 
@@ -15039,7 +15018,7 @@ pointing tolerance), everything else as in §§ 1–3:
   `test/picket_fluence.jl` and `test/pointing_summary.jl`: two move, the one-parameter
   keep-out run (the same design and value in 99 evaluations instead of 75) and the
   held-scales verdict (the same design, its violation 0.111 in the new unit instead of
-  0.0055); every other run is bitwise unchanged (`test/phased.jl`'s floors lie far below the
+  0.0055); every other run is unchanged (`test/phased.jl`'s floors lie far below the
   designs' clearance), and two assertions on the scale itself fail, as expected.
 
 Decision: the default stays 1 mm (nothing in the notes argues for it, and nothing
@@ -15060,13 +15039,12 @@ stand-in (`irradiance_ceiling(...; exact = true)`), so a run stopped earlier nev
 corrects for the stand-in's offset from the peak. Since § 1, a run that ends above its
 limits returns its iterate of least violation measured on those exact rows.
 
-Not built: lowering the working limit at every outer iteration from the exact value at
-the iterate. The lowering only ratchets (a peak below the limit leaves the working
-limit, § "Constrained re-pointing: an irradiance ceiling and mode gates", exact peak,
-to avoid cycling where the peak moves between elements), and the stand-in-to-peak
-ratio of an early, unconverged iterate is not the converged design's, so early rounds
-would hold the converged design below the limit by the difference, a drive cost that
-later rounds cannot return.
+Lowering the working limit at every outer iteration from the exact value at the iterate was
+not built. The lowering only ratchets (a peak below the limit leaves the working limit, §
+"Constrained re-pointing: an irradiance ceiling and mode gates", exact peak, to avoid
+cycling where the peak moves between elements), and the stand-in-to-peak ratio of an early,
+unconverged iterate is not the converged design's, so early rounds would hold the converged
+design below the limit by the difference, a drive cost that later rounds cannot return.
 
 ### 8. The dropped-bundle tutorial's polish under § 1
 
@@ -15087,7 +15065,7 @@ with the f-cone model's shared coordinates (8 threads):
 Before § 1 the same starts ended 0.966–1.020 of the ceiling with gates up to 0.2%
 over; now every returned design meets every limit, the peak at 0.93–0.995, and where
 the last iterate exceeded a gate the run gives up the polish's drive gain for a design
-within the limits. The tutorial's text now says so, and the tutorial asserts the peak
+within the limits. The tutorial's text now states so, and the tutorial asserts the peak
 again, at most 1% over the ceiling (its largest over the six starts 0.995). The
 start of the tutorial prints the former output to every digit (its last iterate met the
 limits).

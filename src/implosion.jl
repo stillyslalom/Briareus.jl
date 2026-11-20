@@ -1,29 +1,30 @@
-# Implosion metrics: the drive's mode 1 as a hot-spot velocity, the piston model's
-# yield factors, P2/P4 swing metrics over a drive history, and the mode uncertainty
-# carried to a velocity covariance, a velocity inverse and a velocity penalty.
-# Sources and confidence: reference/research-notes.md, "Implosion metrics".
+# Implosion metrics. The mode 1 of the drive is converted to a hot-spot velocity, yield
+# factors come from the piston model, P2/P4 swing metrics are taken over a drive history,
+# and the mode uncertainty is carried to a velocity covariance, a velocity inverse and a
+# velocity penalty.
+# Sources and confidence are in reference/research-notes.md, "Implosion metrics".
 
 """
     HOTSPOT_VELOCITY_PER_PERCENT = 100.0
 
-Hot-spot velocity (km/s, burn-off) per percent of capsule flux mode 1 (`a₁/a₀`, the
-norm of the `l = 1` vector, `mode_amplitude(c, 1)`), applied over the rise and peak.
-An engineering default, not a facility criterion: Young et al., Phys. Plasmas 27,
-082702 (2020) (N170601: 0.44% → 37.6 km/s in 3D HYDRA, 44.7 km/s from view factors
-and their Green's function), MacGowan et al., HEDP 40, 100944 (2021) (~100 km/s per
-%), and Kritcher et al. 2024 (N230729: ~0.7% → 70–75 km/s burn-off). It is platform
-specific and linear only below about 0.75% (Young; Spears et al. 2014 find 120 km/s at
-2%, saturated).
+Hot-spot velocity (km/s, burn-off) per percent of capsule flux mode 1 (`a₁/a₀`, the norm
+of the `l = 1` vector, `mode_amplitude(c, 1)`), applied over the rise and peak. It is an
+engineering default, not set by any facility criterion. Young et al., Phys. Plasmas 27,
+082702 (2020) find 37.6 km/s for 0.44% on N170601 in 3D HYDRA, and 44.7 km/s from view
+factors and their Green's function. MacGowan et al., HEDP 40, 100944 (2021) give
+~100 km/s per %, and Kritcher et al. 2024 give 70–75 km/s burn-off for ~0.7% on N230729.
+The value is platform specific and linear only below about 0.75% (Young); Spears et al.
+2014 find 120 km/s at 2%, saturated.
 """
 const HOTSPOT_VELOCITY_PER_PERCENT = 100.0
 
 """
     mode1_vector(c) -> SVector{3}
 
-The flux's mode-1 vector from real spherical-harmonic coefficients `c` (`mode_index`
-order, e.g. `flux_ylm`): `√3 (c₁₁, c₁,₋₁, c₁₀)/c₀₀` along (x, y, z), pointing toward
-the high-flux side. Its norm is `mode_amplitude(c, 1)`, the fractional amplitude `ε` of
-a dipole drive `1 + ε cos γ` (not a percentage). Generic in the number type.
+The mode-1 vector of the flux from real spherical-harmonic coefficients `c` (`mode_index`
+order, e.g. `flux_ylm`). It is `√3 (c₁₁, c₁,₋₁, c₁₀)/c₀₀` along (x, y, z) and points
+toward the high-flux side. Its norm is `mode_amplitude(c, 1)`, the fractional amplitude
+`ε` of a dipole drive `1 + ε cos γ` (not a percentage). It is generic in the number type.
 """
 function mode1_vector(c::AbstractVector)
     length(c) >= 4 || throw(ArgumentError("mode 1 needs the coefficients through l = 1"))
@@ -36,23 +37,24 @@ end
     hotspot_velocity(ev::Evaluation; ...)
     hotspot_velocity(history; kernel = nothing, window = nothing, per_percent, amplification)
 
-Hot-spot velocity (km/s, chamber x, y, z) that the capsule flux's mode 1 drives: the
+Hot-spot velocity (km/s, chamber x, y, z) that mode 1 of the capsule flux drives: the
 hot spot moves away from the high-flux side (Casey et al., PRL 126, 025002, 2021), at
 `per_percent` km/s per percent of `mode1_vector` (an engineering default, see
 `HOTSPOT_VELOCITY_PER_PERCENT`). `amplification` multiplies the burn-off velocity, e.g.
-by `burn_amplification` to compare with a burn-on nToF measurement. Generic in the number type (usable in objectives).
+by `burn_amplification` to compare with a burn-on nToF measurement. The function is
+generic in the number type (usable in objectives).
 
 From a `drive_history` result (run with `ylm = true`; without it only the z component,
 from the Legendre moments), the velocity is the convolution of Young et al. (Phys.
-Plasmas 27, 082702, 2020, Eq. 9), `v = −∫ G₁(t) · 100 p₁(t) dt`, with `G₁` in km/s per
-% per ns: `kernel` (a `ResponseKernel` or any function of time). The default is
-`flat_kernel(window...; total = per_percent)`, a flat weight over `window` (default:
+Plasmas 27, 082702, 2020, Eq. 9), `v = −∫ G₁(t) · 100 p₁(t) dt`, with `G₁` (km/s per %
+per ns) given by `kernel` (a `ResponseKernel` or any function of time). The default is
+`flat_kernel(window...; total = per_percent)`, a flat weight over `window` (by default
 the whole history) that gives `per_percent` for a constant 1%; Young's published
 kernels are negative in the foot and dominated by the rise and peak, so pass `window`
 as the rise and peak, or a custom kernel. The mode 1 is taken as linear between
-the history's steps and integrated exactly against a tabulated kernel (two-point Gauss
-on each interval between their breakpoints; a function kernel gets 16 pieces per
-interval); the kernel's weight outside the history's span is dropped.
+the steps of the history and integrated exactly against a tabulated kernel (two-point
+Gauss on each interval between their breakpoints; a function kernel is split into 16
+pieces per interval); the kernel weight outside the span of the history is dropped.
 """
 function hotspot_velocity(c::AbstractVector; per_percent::Real = HOTSPOT_VELOCITY_PER_PERCENT,
                           amplification::Real = 1.0)
@@ -86,11 +88,11 @@ end
     ResponseKernel(times, values)
 
 A response (Green's) function of time, piecewise linear through the table and zero
-outside it; callable, `k(t)`. A time may repeat once to make a step. Units are the
+outside it, callable as `k(t)`. A time may repeat once to make a step. Units are the
 observable per percent of drive mode per ns (km/s per % per ns for the hot-spot
 velocity, Young et al. 2020; µm per % per ns for a hot-spot P2 kernel, Masse et al.
-2019). Briareus ships no published kernel: those are platform specific and printed only
-as figures.
+2019). Briareus does not include the published kernels: they are platform specific and
+appear only as figures.
 """
 struct ResponseKernel
     t::Vector{Float64}
@@ -108,9 +110,9 @@ end
     flat_kernel(t0, t1; total = HOTSPOT_VELOCITY_PER_PERCENT) -> ResponseKernel
 
 A constant kernel on `[t0, t1]` whose integral is `total`: a constant 1% mode over the
-window gives `total`. The placeholder for Young's mode-1 Green's function (*derived*:
-it keeps the published static sensitivity and puts all weight on the window, which
-should be the rise and peak).
+window gives `total`. It is a placeholder for Young's mode-1 Green's function and is
+*derived*. The published static sensitivity is kept, and all weight is put on the window,
+which should be the rise and peak.
 """
 function flat_kernel(t0::Real, t1::Real; total::Real = HOTSPOT_VELOCITY_PER_PERCENT)
     t1 > t0 || throw(ArgumentError("the kernel window must have t1 > t0"))
@@ -121,16 +123,18 @@ end
 _breakpoints(::Any) = Float64[]
 _breakpoints(k::ResponseKernel) = k.t
 
-# ∫ K(t) y(t) dt over `span`, y piecewise linear through (t, columns of Y) and K a kernel:
-# two-point Gauss on each interval between the merged breakpoints (exact for a
-# tabulated kernel; a function kernel gets 16 pieces per interval). Y is a vector or a matrix (one integral per row).
+# ∫ K(t) y(t) dt over `span`, with y piecewise linear through (t, columns of Y) and K a
+# kernel. Two-point Gauss is used on each interval between the merged breakpoints. This
+# is exact for a tabulated kernel, and a function kernel is split into 16 pieces per
+# interval. Y is
+# a vector or a matrix (one integral per row).
 function _kernel_integral(t, Y, K, span)
     a, b = span
     pts = sort!(unique!(vcat(a, b, filter(x -> a < x < b, vcat(t, _breakpoints(K))))))
     y(τ) = Y isa AbstractVector ? _interp(t, Y, τ) : [_interp(t, view(Y, i, :), τ) for i in axes(Y, 1)]
     out = zero(y(a))
     g = 1 / (2sqrt(3))
-    n = K isa ResponseKernel ? 1 : 16        # a smooth function: 16 pieces per interval
+    n = K isa ResponseKernel ? 1 : 16        # 16 pieces per interval for a smooth function
     for k in 1:length(pts)-1, j in 1:n
         lo, hi = pts[k] + (j - 1) * (pts[k+1] - pts[k]) / n, pts[k] + j * (pts[k+1] - pts[k]) / n
         hi > lo || continue
@@ -145,28 +149,30 @@ end
 """
     yield_factor(f; a = 3.3) -> Real
 
-No-α yield relative to 1D for a mode-1 (piston) asymmetry `f = v_HS/v_imp`:
-`(1 − f²)ᵃ` (Hurricane et al., Phys. Plasmas 27, 062704, 2020, Eq. 20), with `a` the
-temperature exponent of ⟨σv⟩ (3.3 for 4–7 keV; `reactivity_exponent`). Generic.
+No-α yield relative to 1D for a mode-1 (piston) asymmetry `f = v_HS/v_imp`: `(1 − f²)ᵃ`
+(Hurricane et al., Phys. Plasmas 27, 062704, 2020, Eq. 20), with `a` the temperature
+exponent of ⟨σv⟩ (3.3 for 4–7 keV; `reactivity_exponent`). It is generic in the number
+type.
 """
 yield_factor(f; a::Real = 3.3) = max(1 - f^2, zero(f))^a
 
 """
     alpha_factor(f, chi; a = 3.3, q = a - 1) -> Real
 
-The α-heating part of the yield degradation, `Y_amp,3D/Y_amp,1D = exp(−q χ^1.2 f²)`,
-with `χ` the 1D generalized Lawson parameter (`Y_amp ≈ exp(χ^1.2)`). `q = a − 1` is
-Hurricane et al. 2020 (Eq. 21 and the tolerance Eq. 26, from which their Table I comes);
-Casey et al., PRE 108, L053203 (2023), Eq. 5, has `q = 1.2(a − 1)`. Generic.
+The α-heating part of the yield degradation, `Y_amp,3D/Y_amp,1D = exp(−q χ^1.2 f²)`, with
+`χ` the 1D generalized Lawson parameter (`Y_amp ≈ exp(χ^1.2)`). `q = a − 1` is Hurricane
+et al. 2020 (Eq. 21 and the tolerance Eq. 26, from which their Table I comes); Casey et
+al., PRE 108, L053203 (2023), Eq. 5, has `q = 1.2(a − 1)`. It is generic in the number
+type.
 """
 alpha_factor(f, chi; a::Real = 3.3, q::Real = a - 1) = exp(-q * chi^1.2 * f^2)
 
 """
     rke_fraction(f; c = 0.66) -> Real
 
-Residual kinetic energy over the shell's implosion kinetic energy, `RKE/KE = c f²`
-(Hurricane et al. 2020, Eq. 23: `f = v_HS/v_imp = √(RKE/(c KE))`; c ≈ 0.66 in NIF-like
-simulations, 1 for incompressible pistons).
+Residual kinetic energy over the implosion kinetic energy of the shell, `RKE/KE = c f²`,
+from Hurricane et al. 2020, Eq. 23, where `f = v_HS/v_imp = √(RKE/(c KE))`. The constant
+c is ≈ 0.66 in NIF-like simulations and 1 for incompressible pistons.
 """
 rke_fraction(f; c::Real = 0.66) = c * f^2
 
@@ -174,7 +180,7 @@ rke_fraction(f; c::Real = 0.66) = c * f^2
     reactivity_exponent(T) -> Float64
 
 The exponent `a` of `⟨σv⟩ ∝ Tᵃ` at ion temperature `T` (keV): `6 − 1.5 ln T` (Casey et
-al., PRE 108, L053203, 2023). 3.3 at 6 keV, Hurricane's 4–7 keV value.
+al., PRE 108, L053203, 2023). It is 3.3 at 6 keV, the value Hurricane uses for 4–7 keV.
 """
 reactivity_exponent(T::Real) = 6 - 1.5 * log(T)
 
@@ -188,14 +194,14 @@ to 2D HYDRA simulations perturbed about N210808:
 - `0.324 ln(Y_amp + 2.239) + 0.653` for `1 ≤ Y_amp ≤ 40`;
 - `13.105 ln(Y_amp + 1585.225) − 95.539` for `80 ≤ Y_amp ≤ 500`, where a significant
   part of the burn is in the expanding dense fuel (burn fraction above ~6%). These are
-  the coefficients of the fit drawn in the paper's Fig. 6; Eq. 4 prints them rounded
+  the coefficients of the fit drawn in Fig. 6 of the paper; Eq. 4 gives them rounded
   to 13, 1585 and −95, which moves the result by −0.24 (the logarithm is ~7.4), e.g. 1.43
   instead of 1.67 at `Y_amp = 80`.
 The two regimes do not join (the low branch is 2.08 at 80) and the paper fits nothing
 between 40 and 80, so that range is refused, as is anything outside the fits.
 
-The paper's Table IV lists the inverse, `1/Vhs_amp^burn`, for NIF shots (N210808:
-`Y_amp` 27.6 → 0.570, i.e. 1.75). Burn-on/burn-off ratios in Kritcher et al. 2024
+Table IV of the paper lists the inverse, `1/Vhs_amp^burn`, for NIF shots; for N210808,
+`Y_amp` 27.6 gives 0.570, i.e. 1.75. Burn-on/burn-off ratios in Kritcher et al. 2024
 (Table II, 1.27–1.39 at comparable yields) are lower: treat it as an upper estimate.
 """
 function burn_amplification(Yamp::Real)
@@ -210,20 +216,20 @@ end
 
 Factor by which the stagnated hot-spot shape changes the burn-off hot-spot speed driven
 by a mode-1 flux asymmetry, `Vhs_amp^shape` (speed over the speed without a flux P2),
-as a function of the equatorial neutron-image shape `P2` (`P2/P0` of the hot spot, a
-fraction: −0.2 is 20% oblate), from Nora et al., Phys. Plasmas 30, 092705 (2023):
+as a function of the equatorial neutron-image shape `P2` (`P2/P0` of the hot spot as a
+fraction, so −0.2 is 20% oblate), from Nora et al., Phys. Plasmas 30, 092705 (2023):
 - `shape_amplification(P2)`: Eq. 2, a fit to their 2D database (mode 1 along the
   pole, ~1% flux mode 1, time-dependent flux P2): `1.31 P2 + 0.71` below 0.35,
   `−0.65 P2 + 1.4` above. It is 0.71 for a round hot spot: the 2D points sit shifted
-  from the 3D ones (the paper's Fig. 5), and a time-integrated P2 swing does not order
+  from the 3D ones (Fig. 5 of the paper), and a time-integrated P2 swing does not order
   them well. Use it for trends.
 - `shape_amplification(P2, theta)`: their Table I (3D HYDRA, constant asymmetries),
   bilinear in `P2` (−0.5656 to 0.6448, clamped outside) and the polar angle `theta`
   (degrees from the north pole) of the mode-1 flux asymmetry, folded onto 0–90° by the
-  equatorial symmetry. 0.8–1.2 for |P2| < 0.4 at most angles; mode 1 along the pole of an
-  oblate hot spot is suppressed (0.05 at P2 = −0.57, a toroidal hot spot).
-The paper's Table IV lists `1/Vhs_amp^shape` per shot; its equatorial rows follow Table I
-(N130530: 0.965), the polar ones could not be reproduced from the published angles.
+  equatorial symmetry. The factor is 0.8–1.2 for |P2| < 0.4 at most angles; mode 1 along
+  the pole of an oblate hot spot is suppressed (0.05 at P2 = −0.57, a toroidal hot spot).
+Table IV of the paper lists `1/Vhs_amp^shape` per shot. Its equatorial rows follow Table I
+(0.965 for N130530); its polar rows could not be reproduced from the published angles.
 """
 function shape_amplification(P2::Real)
     return P2 < 0.35 ? 1.31 * P2 + 0.71 : -0.65 * P2 + 1.4
@@ -257,17 +263,17 @@ end
     implosion_metrics(ev::Evaluation; per_percent, amplification, kwargs...)
     implosion_metrics(history; kernel, window, per_percent, amplification, kwargs...)
 
-The piston model's metrics for a hot-spot velocity `v` (km/s, a 3-vector; or computed
+The piston-model metrics for a hot-spot velocity `v` (km/s, a 3-vector; or computed
 with `hotspot_velocity` from an evaluation or a drive history). Returns `(; velocity,
 speed, f, rke_fraction, rke, yield_factor, alpha_factor, total)`:
 - `f = |v|/vimp`, the shell asymmetry `(ρR_max − ρR_min)/(ρR_max + ρR_min)` (Hurricane
-  et al. 2020, Eq. 23); `vimp` defaults to Hurricane's Table I value, 380 km/s (an
-  engineering default: use the design's implosion velocity);
+  et al. 2020, Eq. 23); `vimp` defaults to Hurricane's Table I value, 380 km/s, an
+  engineering default to be replaced by the implosion velocity of the design;
 - `rke_fraction = c f²` (`rke_fraction`), and `rke` in the units of `ke` when given;
 - `yield_factor`, the no-α yield over 1D, `(1 − f²)ᵃ`;
 - `alpha_factor`, with `chi` (the 1D generalized Lawson parameter) given, otherwise 1;
 - `total = yield_factor × alpha_factor`.
-Generic in the number type.
+The function is generic in the number type.
 """
 function implosion_metrics(v::AbstractVector; vimp::Real = 380.0, a::Real = 3.3, c::Real = 0.66,
                            chi = nothing, q::Real = a - 1, ke = nothing)
@@ -297,9 +303,10 @@ end
 """
     mode1_tolerance(loss; vimp = 380, a = 3.3, chi = 0.0, q = a - 1) -> NamedTuple
 
-The largest mode-1 asymmetry that keeps the yield loss `1 − (1 − f²)ᵃ exp(−q χ^1.2 f²)`
-(Hurricane et al. 2020, Eq. 26) at `loss`: `(; f, velocity)`, the shell asymmetry and
-the hot-spot speed (km/s) at `vimp`. The inverse of `implosion_metrics`'s `total`.
+The largest mode-1 asymmetry for which the yield loss `1 − (1 − f²)ᵃ exp(−q χ^1.2 f²)`
+(Hurricane et al. 2020, Eq. 26) equals `loss`. It returns `(; f, velocity)`, the shell
+asymmetry and the hot-spot speed (km/s) at `vimp`. It is the inverse of
+`implosion_metrics`'s `total`.
 """
 function mode1_tolerance(loss::Real; vimp::Real = 380.0, a::Real = 3.3, chi::Real = 0.0,
                          q::Real = a - 1)
@@ -318,22 +325,24 @@ end
     swing_metrics(history; l = 2, window = nothing, picket = nothing, limit = 0.075,
                   kernels = (;)) -> NamedTuple
 
-Time metrics of the capsule flux's `aₗ/a₀` over a `drive_history` result (taken as
+Time metrics of `aₗ/a₀` of the capsule flux over a `drive_history` result (taken as
 linear between its steps). Returns `(; mean, max, min, swing, deviation, picket_mean,
 picket_max, picket_ok, response)`:
-- over `window` (default: the whole history): the time average `mean`, the extremes and
+- over `window` (by default the whole history): the time average `mean`, the extremes and
   `swing = max − min`, and `deviation`, the time average of `|aₗ/a₀ − mean|`;
-- over `picket` (default: the first 2 ns of the history), the time average and the
-  largest `|aₗ/a₀|`; `picket_ok` compares the average with `limit`, Milovich et al.'s
-  (Phys. Plasmas 23, 032701, 2016) 7.5% early-time P2/P0 for under 10% margin loss
-  (whether their limit is on the average or the peak is not stated: *derived*);
+- over `picket` (by default the first 2 ns of the history), the time average and the
+  largest `|aₗ/a₀|`. `picket_ok` is true when the magnitude of the average is at most
+  `limit`. The default `limit` is the 7.5% early-time P2/P0 of Milovich et al. (Phys.
+  Plasmas 23, 032701, 2016) for under 10% margin loss. It is *derived*, since the paper
+  does not state whether the limit is on the average or the peak;
 - `response`: for each `name => kernel` in `kernels` (`ResponseKernel`s or functions,
-  per % per ns), `∫ K(t) · 100 aₗ/a₀ dt` in the kernel's units, e.g. a hot-spot or ρR
+  per % per ns), `∫ K(t) · 100 aₗ/a₀ dt` in the units of the kernel, e.g. a hot-spot or ρR
   P2 Green's function (Masse et al., Phys. Plasmas 26, 2019). Without kernels it is an
   empty NamedTuple: the flux history alone does not give a hot-spot shape. Masse's
   hot-spot kernel changes sign before about 4.5 ns while the ρR one does not, so a
-  time-integrated flux P2 determines neither, and Briareus reports no µm by default.
-All fractions (not percent).
+  time-integrated flux P2 determines neither, and by default Briareus does not report a
+  value in µm.
+All values are fractions (not percent).
 """
 function swing_metrics(h::NamedTuple; l::Integer = 2, window = nothing, picket = nothing,
                        limit::Real = 0.075, kernels = (;))
@@ -373,7 +382,7 @@ end
                          a = 3.3, chi = nothing, q = a - 1, kwargs...) -> NamedTuple
     velocity_uncertainty(u; ...)
 
-The beam errors of `mode_uncertainty` (its keywords: `pointing`, `power`,
+The beam errors of `mode_uncertainty` (through its keywords `pointing`, `power`,
 `group_pointing`, `group_power`, `groups`, `positioning`), or its result `u`, carried to
 the hot-spot velocity at `per_percent` km/s per % of mode 1 (`hotspot_velocity`).
 Returns `(; velocity, covariance, sigma, rms, rms_by, speed_rms, yield_factor,
@@ -385,7 +394,7 @@ expected_yield, total, expected_total)`:
   expectation over the errors, from the Gaussian closed form of `E[exp(−a f²)]`
   (`(1 − f²)ᵃ ≈ exp(−a f²)`, within 1% at f = 0.25); `total` and `expected_total`
   include the α factor (`chi` given) the same way, `exp(−(a + q χ^1.2) f²)`.
-Linear in the errors, like `mode_uncertainty`.
+The result is linear in the errors, like `mode_uncertainty`.
 """
 function velocity_uncertainty(s::Scenario, beams::AbstractVector{<:Beam};
                               per_percent::Real = HOTSPOT_VELOCITY_PER_PERCENT,
@@ -430,8 +439,8 @@ end
     ntof_covariance(v; speed = 14, theta = 13, phi = 29) -> Matrix
 
 Covariance (km²/s²) of an nToF hot-spot velocity measurement `v` (km/s): rms `speed` in
-magnitude and `theta`, `phi` degrees in direction (NIF: ±14 km/s, 13°, 29°; Young et al.
-2020), along the local radial, polar and azimuthal directions of `v`.
+magnitude and `theta`, `phi` degrees in direction (±14 km/s, 13° and 29° at NIF; Young et
+al. 2020), along the local radial, polar and azimuthal directions of `v`.
 """
 function ntof_covariance(v; speed::Real = 14.0, theta::Real = 13.0, phi::Real = 29.0)
     u = SVector{3,Float64}(v...)
@@ -451,27 +460,29 @@ end
                  per_percent, amplification = 1, thickness = 0.002,
                  thickness_per_percent = 110, kwargs...) -> NamedTuple
 
-The most probable beam errors behind a measured hot-spot velocity `v` (km/s, chamber
-x, y, z): [`infer_errors`](@ref) on the mode-1 components, with the measurement mapped to them
-through `hotspot_velocity` (`per_percent`, `amplification`; divide out a burn
-amplification here) and its covariance `sigma` (3 × 3, km²/s², or one rms number; default
-`ntof_covariance(v)`). The priors are [`infer_errors`](@ref)'s keywords.
+The most probable beam errors behind a measured hot-spot velocity `v` (km/s, chamber x, y,
+z), computed by [`infer_errors`](@ref) on the mode-1 components. The measurement is mapped
+to these components through `hotspot_velocity` with `per_percent` and `amplification`, and
+`amplification` divides out a burn amplification. Its covariance `sigma` is a 3 × 3 matrix
+(km²/s²) or one rms number, by default `ntof_covariance(v)`. The priors are
+[`infer_errors`](@ref)'s keywords.
 
 A capsule-thickness mode 1 competes with the drive (Casey et al., PRL 126, 025002,
 2021): the hot spot moves toward the thicker side, at `thickness_per_percent` km/s per %
-of the shell thickness (110 simulated, 140 ± 30 measured), so the opposite sign of a
-flux mode 1 on that side. It enters as a nuisance error, a vector `t` (fractions of the
-thickness, toward the thicker side) with rms `thickness` per axis (default 0.2%, about
-0.15 µm metrology on a 78 µm shell: *derived*; 0 leaves it out), and is inferred with
-the beam errors.
+of the shell thickness (110 simulated, 140 ± 30 measured), which is the opposite sign
+of a flux mode 1 on that side. It enters as a nuisance error, a vector `t` (fractions of the
+thickness, toward the thicker side) with rms `thickness` per axis, and is inferred with
+the beam errors. The default 0.2% corresponds to about 0.15 µm metrology on a 78 µm shell
+(*derived*), and `thickness = 0` leaves the error out.
 
-Returns [`infer_errors`](@ref)'s fields, with `measured`, `predicted` and `residual` still in
-the mode-1 components, plus `thickness` (the inferred `t`) and `velocity = (; measured,
-nominal, predicted, residual, chi2, chi2_prior)` in km/s: `predicted` is the nominal plus
-the inferred errors' and thickness's velocity; `chi2` is MacGowan's ``χ^2_ν`` of the nominal
-(the forward prediction) against the measurement, `(v − v₀)ᵀ Σₘ⁻¹ (v − v₀)/3` (Casey et
-al. 2023), and `chi2_prior` the same with the errors' prior spread added to `Σₘ`
-(about 1 when the measurement lies within the spread the priors allow).
+Returns [`infer_errors`](@ref)'s fields, with `measured`, `predicted` and `residual` still
+in the mode-1 components, plus `thickness` (the inferred `t`) and
+`velocity = (; measured, nominal, predicted, residual, chi2, chi2_prior)` in km/s.
+`predicted` is the nominal plus the velocity of the inferred errors and thickness. `chi2`
+is MacGowan's ``χ^2_ν`` of the nominal (the forward prediction) against the measurement,
+`(v − v₀)ᵀ Σₘ⁻¹ (v − v₀)/3` (Casey et al. 2023), and `chi2_prior` is the same with the
+prior spread of the errors added to `Σₘ`; it is about 1 when the measurement lies within
+the spread the priors allow.
 """
 function infer_velocity_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::AbstractVector{<:Real};
                                sigma = ntof_covariance(v), per_percent::Real = HOTSPOT_VELOCITY_PER_PERCENT,
@@ -489,7 +500,7 @@ function infer_velocity_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::Ab
     v0 = M * c[2:4]
     Δc = Mi * (Vector{Float64}(v) - v0)
     Σc = Mi * Σv * transpose(Mi)
-    # thickness: v = 100 k_t A t (toward the thicker side), as mode-1 columns
+    # The thickness gives v = 100 k_t A t (toward the thicker side), as mode-1 columns.
     nuisance = thickness > 0 ?
         (; columns = Mi * (100 * thickness_per_percent * amplification * Matrix(1.0I, 3, 3)),
            variances = fill(Float64(thickness)^2, 3), names = ["thickness.x", "thickness.y", "thickness.z"],
@@ -498,7 +509,8 @@ function infer_velocity_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::Ab
     r = _infer_errors(s, beams, comps, Δc, (Σc + transpose(Σc)) / 2; nuisance, kwargs...)
     t = thickness > 0 ? SVector{3}(r.x[end-2:end]) : zero(Vec3)
     predicted = v0 + M * r.predicted
-    # the prior predictive spread of the velocity: the errors' (and thickness's) plus Σₘ
+    # The prior predictive spread of the velocity is that of the errors (and thickness) plus
+    # Σₘ.
     Sv = M * (r.J * (r.prior_sigma .^ 2 .* transpose(r.J))) * transpose(M) + Σv
     d = Vector{Float64}(v) - v0
     velocity = (; measured = SVector{3,Float64}(v...), nominal = SVector{3}(v0),
@@ -511,13 +523,14 @@ end
     VelocityPenalty(; scale = 10, weight = 1, per_percent, amplification = 1,
                     uncertainty = nothing)
 
-An objective term on the hot-spot velocity of an evaluation's capsule flux
-(`hotspot_velocity`): `weight × |v|²/scale²` (`scale` in km/s), the mode 1 weighted by
-its velocity sensitivity rather than equally with the other modes. Callable on an
-`Evaluation`; add it to an objective, e.g.
+An objective term on the hot-spot velocity of the capsule flux of an evaluation
+(`hotspot_velocity`), equal to `weight × |v|²/scale²` (`scale` in km/s). Mode 1 is thus
+weighted by its velocity sensitivity; in an asymmetry objective it has the same weight
+as the other modes. It is callable on an
+`Evaluation` and is added to an objective, e.g.
 `obj = let J = asymmetry_objective(; modes = (2 => 1.0, 4 => 1.0)), P = VelocityPenalty(); ev -> J(ev) + P(ev) end`.
 With `uncertainty` (`mode_uncertainty`'s error keywords, as for the objectives) it adds
-the errors' expected `|δv|²`. Generic in the number type (ForwardDiff).
+the expected `|δv|²` of the errors. It is generic in the number type (ForwardDiff).
 """
 struct VelocityPenalty{E}
     scale::Float64
@@ -549,16 +562,17 @@ end
     young2020_green() -> NamedTuple
     young2020_kernel() -> ResponseKernel
 
-The mode-1 Green's function of NIF shot N170827 (km/s of final hot-spot velocity per %
-of flux mode 1 per ns) from 59 2D capsule-only HYDRA impulse runs: Young et al., Phys.
-Plasmas 27, 082702 (2020), Fig. 5, digitized twice (`data/young2020_fig5.csv`,
-sources and reading errors in its header). `young2020_green()` has columns `t` (ns,
-0.25–7.875 every 0.125), `panel_b` and `panel_d` (`NaN` where another stroke hides the
-curve); `young2020_kernel()` is their mean (either where one is missing) as a
-`ResponseKernel` for `hotspot_velocity(history; kernel)`. Negative in the foot,
-dominated by the rise and peak; its integral is ~117 km/s per % (the constant-mode-1
-sensitivity on this platform, against `HOTSPOT_VELOCITY_PER_PERCENT`'s 100). Platform
-specific: N170601 is almost identical, N180128 weights the rise more.
+The mode-1 Green's function of NIF shot N170827 (km/s of final hot-spot velocity per % of
+flux mode 1 per ns) from 59 2D capsule-only HYDRA impulse runs in Young et al., Phys.
+Plasmas 27, 082702 (2020), Fig. 5, digitized twice (`data/young2020_fig5.csv`, sources and
+reading errors in its header). `young2020_green()` has columns `t` (ns, 0.25–7.875 every
+0.125), `panel_b` and `panel_d` (`NaN` where the curve is hidden under another stroke);
+`young2020_kernel()` is their mean, or either one where the other is missing, as a
+`ResponseKernel` for `hotspot_velocity(history; kernel)`. The kernel is negative in the
+foot and dominated by the rise and peak. Its integral is ~117 km/s per %, the
+constant-mode-1 sensitivity on this platform, against 100 for
+`HOTSPOT_VELOCITY_PER_PERCENT`. The kernel is platform specific: that of N170601 is almost
+identical, and that of N180128 puts more weight on the rise.
 """
 young2020_green() = _data_table("young2020_fig5.csv")
 
@@ -574,10 +588,11 @@ end
     young2020_pulses() -> NamedTuple
 
 The requested laser power per beam of NIF shot N170827 (TW), `(; inner, outer)` as
-`PulseShape`s (inner: 23.5° and 30°, outer: 44.5° and 50°): Young et al., Phys. Plasmas
-27, 082702 (2020), Fig. 2e, digitized (`data/young2020_fig2e.csv`, 0.25–7.75 ns every
-0.125, reading error ~0.03 TW). Use with `with_pulses(beams, pulses, t; by = b ->
-startswith(String(b.group), "inner") ? :inner : :outer)`.
+`PulseShape`s (inner for 23.5° and 30°, outer for 44.5° and 50°), from Young et al., Phys.
+Plasmas 27, 082702 (2020), Fig. 2e, digitized (`data/young2020_fig2e.csv`, 0.25–7.75 ns
+every 0.125, reading error ~0.03 TW). The pulses are passed to
+`with_pulses(beams, pulses, t; by)` with
+`by = b -> startswith(String(b.group), "inner") ? :inner : :outer`.
 """
 function young2020_pulses()
     d = _data_table("young2020_fig2e.csv")
@@ -589,11 +604,11 @@ end
     young2020_dropped_quads() -> NamedTuple
 
 Flux mode 1 (%, the norm of the l = 1 vector) on the capsule of N170827 with one quad
-dropped from each cone, requested pulses, in the LLNL static view-factor model (radii
-at 85%, albedos 0.8/0.3): Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 10a,
-digitized (`data/young2020_fig10a.csv`, sources in its header). Columns `t` (ns,
-0.25–7.75 every 0.125), `inner23`, `inner30`, `outer44`, `outer50` (`NaN` where hidden).
-Fig. 10c's hot-spot velocities (km/s, read off the markers ±2) are in `velocity`
+dropped from each cone and the requested pulses, in the LLNL static view-factor model
+(radii at 85%, albedos 0.8/0.3), from Young et al., Phys. Plasmas 27, 082702 (2020),
+Fig. 10a, digitized (`data/young2020_fig10a.csv`, sources in its header). The columns are
+`t` (ns, 0.25–7.75 every 0.125), `inner23`, `inner30`, `outer44`, `outer50` (`NaN` where
+hidden). Fig. 10c's hot-spot velocities (km/s, read off the markers ±2) are in `velocity`
 (requested pulses) and `velocity_delivered`, in the same cone order.
 """
 function young2020_dropped_quads()

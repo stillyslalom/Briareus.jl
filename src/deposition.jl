@@ -1,7 +1,9 @@
-# Laser deposition: a differentiable quadrature operator and an energy-conserving ray trace.
+# This file computes laser deposition with a differentiable quadrature operator and with
+# an energy-conserving ray trace.
 
-# Run `f(i)` for `i in 1:n` on all threads, handing out indices one at a time in order
-# (dynamic load balancing; with heterogeneous cores a static split waits on the slowest).
+# Run `f(i)` for `i in 1:n` on all threads, handing out indices one at a time in order.
+# This balances the load dynamically; with heterogeneous cores, a static split would wait
+# on the slowest core.
 # Each `f(i)` must write only outputs owned by `i` for results to be deterministic.
 function _tforeach(f, n::Integer)
     nt = min(Threads.nthreads(), n)
@@ -20,17 +22,18 @@ function _tforeach(f, n::Integer)
     return nothing
 end
 
-# Each beam's points are sorted by destination (elements ascending, then back sides by
-# component). `deposit` splits the work into units that own their outputs: a block of
-# consecutive elements takes every beam's points in it (and is the only writer of those
-# elements), and each beam's back-side points are cut into pieces with their own partial
-# sums. Units are handed to threads dynamically, largest first; every output is summed
-# in a fixed order (an element over beams, then points, as a serial loop would), so the
-# result is bitwise independent of thread count and scheduling.
+# The points of each beam are sorted by destination, with elements ascending and then
+# back sides by component. `deposit` splits the work into units that own their outputs:
+# - A block of consecutive elements takes the points of every beam in it and is the only
+#   writer of those elements.
+# - The back-side points of each beam are cut into pieces with separate partial sums.
+# Units are handed to threads dynamically, largest first. Every output is summed in a
+# fixed order, as a serial loop would sum it: each element over beams, then over points.
+# The result is therefore identical for any thread count and scheduling.
 #
-# `tiles[bi][t]` bounds beam `bi`'s points `_TILE (t - 1) + 1 : _TILE t` (in their stored
-# order, by destination) by a ball, center and radius, so that a screen can skip a run of
-# points that all lie beyond a beam's cut-off (`_vr_far_ball`).
+# `tiles[bi][t]` bounds the points `_TILE (t - 1) + 1 : _TILE t` of beam `bi`, in their
+# stored order by destination, by a ball with a center and radius. A screen can then skip
+# a run of points that all lie beyond the cut-off of a beam (`_vr_far_ball`).
 struct _DepositPlan
     boff::Matrix{Int}                     # (nblock+1) × nb: first point of each element block; last row: first back-side point
     back::Vector{Tuple{Int,UnitRange{Int}}}  # back-side pieces (beam, points)
@@ -40,8 +43,9 @@ end
 
 const _TILE = 8
 
-# The balls of `_DepositPlan.tiles` for one beam's points: the bounding box's center and
-# the largest distance from it, grown by 1e-12 relative (a bound, not the least ball).
+# Returns the balls of `_DepositPlan.tiles` for the points of one beam. Each ball has the
+# center of the bounding box and the largest distance from it, grown by 1e-12 relative.
+# The ball is a bound and is not the least enclosing ball.
 function _point_tiles(P::Vector{Vec3})
     tiles = Vector{NTuple{4,Float64}}(undef, cld(length(P), _TILE))
     for t in eachindex(tiles)
@@ -64,62 +68,69 @@ end
                        profile = nothing)
 
 Precomputed laser-deposition quadrature. For each beam, every opaque triangle side that
-faces the beam and belongs to an element is sampled at `4^level` points, or more where
-the beam can land: a triangle within `reach` (mm) of the beam's footprint (2.5 spot
-semi-axes grown by the f-cone along the beam axis through the aim) is divided until its
-sub-triangles are no longer than `resolution` times the spot's smaller semi-axis, up to
-`4^maxlevel` points; with `shadow > 0`, such a triangle crossed by a shadow edge (its
-points see different cone directions) is divided `shadow` times more. `reach` is the aim
-motion the operator stays accurate for; beyond it, deposition is resolved only at
-`level`. The defaults conserve each beam's power to 1e-4 when nothing clips and to 2e-3
-when an entrance-hole lip clips several percent of it, on fine and coarse hohlraum
-meshes alike.
+faces the beam and belongs to an element is sampled at `4^level` points. More points are
+used where the beam can land:
 
-Unmodeled back sides (the outside of a hohlraum, whose power is the clipped `backside`
-loss) need only their total per component, and that is set by the open edges the light
-passes: an entrance-hole lip clipping 1e-4 of a beam puts the clipped light within
-~1/50 of a spot semi-axis of the rim. Back sides are sampled at one point per triangle
-away from the beam; within `reach`,
-- a triangle on an open edge (an edge that no other opaque triangle shares, such as an
-  entrance-hole rim) or touching one at a vertex gets a Gauss rule graded geometrically
-  toward it, from `resolution` down to `edge_resolution` spot semi-axes;
-- a triangle within one (larger) spot semi-axis of an open edge, where the shoulder of a
-  clipped spot lands, is divided down to `resolution`;
-- the rest are divided down to `backside_resolution`.
-On the NIF hohlraum, clipped power then matches ray traces (averaged over nspot
-241–361) to 1% from 1e-4 to 5% of a beam, 2.5% at 1e-6, and 0.6% up to 50%, and is
+- A triangle within `reach` (mm) of the beam footprint is divided until its sub-triangles
+  are no longer than `resolution` times the smaller semi-axis of the spot, up to
+  `4^maxlevel` points. The footprint is 2.5 spot semi-axes, grown by the f-cone along the
+  beam axis through the aim.
+- With `shadow > 0`, such a triangle is divided `shadow` times more where a shadow edge
+  crosses it, so that its points see different cone directions.
+
+`reach` is the aim motion over which the operator stays accurate. Beyond it, deposition is
+resolved only at `level`. The defaults conserve the power of each beam to 1e-4 when nothing
+clips and to 2e-3 when an entrance-hole lip clips several percent of it, on fine and coarse
+hohlraum meshes alike.
+
+Unmodeled back sides, such as the outside of a hohlraum, carry the clipped `backside`
+loss. Only their total per component is needed, and the open edges that the light passes
+determine it. When an entrance-hole lip clips 1e-4 of a beam, the clipped light falls
+within ~1/50 of a spot semi-axis of the rim. Back sides away from the beam are sampled at
+one point per triangle. Within `reach` they are sampled as follows:
+
+- A triangle on an open edge, or touching one at a vertex, gets a Gauss rule graded
+  geometrically toward the edge, from `resolution` down to `edge_resolution` spot
+  semi-axes. An open edge is an edge that no other opaque triangle shares, such as an
+  entrance-hole rim.
+- A triangle within one larger spot semi-axis of an open edge, where the shoulder of a
+  clipped spot is deposited, is divided down to `resolution`.
+- The rest are divided down to `backside_resolution`.
+
+On the NIF hohlraum, the clipped power then matches ray traces, averaged over nspot
+241–361, to 1% from 1e-4 to 5% of a beam, 2.5% at 1e-6, and 0.6% up to 50%. It is also
 smooth in the aim. Element values do not depend on these two keywords.
 
 Each point stores its area weight, the normal of the lit side and a bitmask of which of
 the `ncone` f-cone directions reach it from the lens without hitting another surface.
 These depend only on the target and the beam *directions*, so the operator stays valid
-as pointing, defocus, spot size, and power change — deposition is then a smooth
-function of those parameters (see `deposit`).
+as pointing, defocus, spot size and power change. Deposition is then a smooth function of
+those parameters (see `deposit`).
 
 The beam is the superposition of `ncone` collimated sub-beams, one per f-cone
 direction `dⱼ` (`cone_directions`), each carrying the best-focus profile. A point
 receives from each visible direction the focal profile where the ray along `dⱼ`
-through it crosses the best-focus plane, times that ray's incidence factor
+through it crosses the best-focus plane, times the incidence factor of that ray
 `|n·dⱼ|/(k·dⱼ)`. This is the geometric-optics convolution of the focal spot with the
-f-cone, sampled at the cone directions as the reference ray trace samples it, so the
-power on any surface that intercepts the whole beam is the beam power, at any
-distance from focus and any incidence; and shadows cast by objects near focus — a
-capsule at TCC, an LEH edge — are correlated with the part of the spot they block.
+f-cone, sampled at the cone directions as the reference ray trace samples it. The power
+on any surface that intercepts the whole beam is therefore the beam power, at any
+distance from focus and any incidence. Shadows cast by objects near focus, such as
+capsules at TCC and LEH edges, are correlated with the part of the spot that they block.
 
-`profile = VisRadProfile(...)` replaces this with VisRad's beam model, so that a
-design can be checked in VisRad and its deposition reproduced. The model is a
-super-Gaussian whose semi-axes and exponent grow away from focus and which blends
-toward a square, cut off at 10⁻³ of its local peak (or tapered to the cut, for
-optimization: `VisRadProfile(; taper)`). Points are then sampled along the
-beam axis only (`ncone` is ignored), and the beam axis through each point determines
-its shadowing. The two models agree near focus; away from it the f-cone convolution
-softens the edges, while VisRad's spot turns square and grows faster (on NIF hohlraum
-walls the f-cone model's peaks are 10% higher than VisRad's). Power on a surface that
-intercepts the whole beam is the beam's power in planes normal to the beam, and only
-approximately on tilted ones (per-plane normalization: 0.2% high at 40° incidence and
-2.2% at 78°, where VisRad's totals are exact).
+`profile = VisRadProfile(...)` replaces this with VisRad's beam model, so that a design
+can be checked in VisRad and its deposition reproduced. The model is a super-Gaussian
+whose semi-axes and exponent grow away from focus and which blends toward a square. It is
+cut off at 10⁻³ of its local peak, or tapered to the cut for optimization with
+`VisRadProfile(; taper)`. Points are then sampled only along the beam axis, `ncone` is
+ignored, and the beam axis through each point determines its shadowing. The two models
+agree near focus. Away from focus the f-cone convolution softens the edges, while
+VisRad's spot turns square and grows faster; on NIF hohlraum walls the peaks of the
+f-cone model are 10% higher than VisRad's. Power on a surface that intercepts the whole
+beam equals the beam power in planes normal to the beam and only approximately on tilted
+ones. This follows from the per-plane normalization, which is 0.2% high at 40° incidence
+and 2.2% at 78°, where VisRad's totals are exact.
 
-The beams' ports must not change after construction.
+The beam ports must not change after construction.
 """
 struct DepositionOperator
     target::Target
@@ -194,16 +205,16 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
     profile === nothing || (ncone = 1)               # VisRad's model: the beam axis only
     maxlv = max(maxlevel, level)
     nb = length(beams)
-    # sub-triangle quadratures in barycentric form, shared by all triangles
+    # Build the sub-triangle quadratures in barycentric form, shared by all triangles.
     rules = [_bary_quadrature(l) for l in 0:maxlv]
     ε = _ray_eps(t)
     geo = [_operator_beam(b, ncone, profile) for b in beams]
     flags, rimdist = _open_boundary(t)
     back = (; resolution, coarse = backside_resolution, edge = edge_resolution, flags, rimdist)
-    # Work units are (beam, triangle range): beams differ in cost and the triangles near
-    # a beam's footprint are refined, so units are small and handed out dynamically.
-    # Each unit's points are stored apart and joined in order: the result does not
-    # depend on scheduling.
+    # Work units are pairs of a beam and a triangle range. Beams differ in cost, and the
+    # triangles near the footprint of a beam are refined, so units are small and handed
+    # out dynamically. The points of each unit are stored apart and joined in order, so
+    # the result does not depend on scheduling.
     tris = findall(t.tri_opaque)
     nchunk = clamp(cld(length(tris), 256), 1, 16)
     ranges = [tris[(i-1)*length(tris)÷nchunk+1:i*length(tris)÷nchunk] for i in 1:nchunk]
@@ -238,16 +249,19 @@ end
 const _OperatorPoints = @NamedTuple{P::Vector{Vec3}, W::Vector{Float64}, N::Vector{Vec3},
                                     M::Vector{UInt16}, D::Vector{Int32}}
 
-# Beam quantities the operator's sampling depends on (Float64 values).
+# Returns the beam quantities, as Float64 values, that the sampling of the operator
+# depends on.
 function _operator_beam(b::Beam, ncone, profile)
     k = direction(b)
     ds, _ = cone_directions(b, ncone)
     sp = b.spot
     amin = ForwardDiff.value(min(sp.a, sp.b))
-    # footprint: 2.5 semi-axes grown by the f-cone. VisRad's profile is nonzero only where
-    # α < ln 1000: inside its ellipse q < ρ_d² (ρ_d = (ln 1000)^(1/n₀), as n ≥ n₀) or its
-    # square |u|, |v| < ΔL (ln 1000)^(1/M) < 1.22 ΔL (M ≥ 10), so within ρ_d a(z) ≤ ρ_d (a₀ +
-    # |z|/(√2 F)) or 1.22 √2 ΔL = 1.22 (ρ a₀ + √2 · 0.99605 |z|/(2F)) of the axis
+    # The footprint is 2.5 semi-axes grown by the f-cone. VisRad's profile is nonzero only
+    # where α < ln 1000. That region is inside its ellipse q < ρ_d², with
+    # ρ_d = (ln 1000)^(1/n₀) since n ≥ n₀, or inside its square
+    # |u|, |v| < ΔL (ln 1000)^(1/M) < 1.22 ΔL, since M ≥ 10. The profile is therefore
+    # nonzero only within ρ_d a(z) ≤ ρ_d (a₀ + |z|/(√2 F)) or within
+    # 1.22 √2 ΔL = 1.22 (ρ a₀ + √2 · 0.99605 |z|/(2F)) of the axis.
     amax = ForwardDiff.value(max(sp.a, sp.b))
     if profile === nothing
         r, cone = 2.5, 1 / (2b.fnumber)
@@ -262,12 +276,12 @@ function _operator_beam(b::Beam, ncone, profile)
     return (; k, ds, amin, extent, focus, cone)
 end
 
-# Lit quadrature points of one beam on the triangles `tris`.
+# Returns the lit quadrature points of one beam on the triangles `tris`.
 function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolution, reach, shadow,
                           back)
     (; k, ds, amin, extent, focus, cone) = g
     P, W, N, M, D = Vec3[], Float64[], Vec3[], UInt16[], Int32[]
-    # rays toward the lens, and the last leaf that blocked each
+    # Cache the rays toward the lens and the last leaf that blocked each one.
     cache = (; dirs = -ds, invs = [_safe_inv(-d) for d in ds], leaf = zeros(Int32, length(ds)))
     for tri in tris
         n = t.tri_normal[tri]
@@ -286,12 +300,13 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
         s = dot(d, k)
         near = norm(d - s * k) - rad <= extent + cone * abs(s) + reach
         if e <= 0
-            # unmodeled back side: only its total matters (see `_backside_points!`)
+            # On an unmodeled back side only the total matters (see `_backside_points!`).
             lv = 0
             if near
                 _backside_points!(P, W, N, M, D, t, tri, back, amin, side_n, target_id, ds, ε, cache) &&
                     continue
-                # within a spot semi-axis of an open edge: the shoulder of a clipped spot lands here
+                # The shoulder of a clipped spot is deposited within a spot semi-axis of an
+                # open edge, so those triangles get the finer resolution.
                 res = back.rimdist[tri] <= extent / 2.5 ? back.resolution : back.coarse
                 lv = clamp(ceil(Int, log2(L / (res * amin))), 0, maxlevel)
             end
@@ -299,7 +314,7 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
             lv = clamp(ceil(Int, log2(L / (resolution * amin))), level, maxlevel)
         end
         xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε, cache)
-        # a shadow edge crosses the triangle: resolve it more finely
+        # Resolve the triangle more finely when a shadow edge crosses it.
         if near && shadow > 0 && lv < maxlevel && any(!=(ms[1]), ms)
             lv = min(lv + shadow, maxlevel)
             xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε, cache)
@@ -312,10 +327,11 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
     return (; P, W, N, M, D)
 end
 
-# Quadrature points of a triangle and, for each, the bitmask of cone directions that
-# reach it unobstructed: those facing the lit side whose ray toward the lens hits
-# nothing (`any_hit`, asked of all points and directions as one packet; `cache` holds
-# the reversed directions and keeps each one's last blocking leaf across a work unit).
+# Returns the quadrature points of a triangle and, for each point, the bitmask of cone
+# directions that reach it unobstructed. These are the directions that face the lit side
+# and whose ray toward the lens hits nothing. `any_hit` is called for all points and
+# directions as one packet. `cache` holds the reversed directions and keeps the last
+# blocking leaf of each direction across a work unit.
 function _visible_directions(t::Target, bary, v0, e1, e2, side_n, ds, ε, cache)
     n = length(bary)
     xs = Vector{Vec3}(undef, n)
@@ -330,8 +346,9 @@ function _visible_directions(t::Target, bary, v0, e1, e2, side_n, ds, ε, cache)
     return xs, ms
 end
 
-# Cone directions that strike the side with normal `n` (d·n < 0, summed in a fixed order
-# so the answer for a direction in the plane does not depend on how `dot` is compiled).
+# Returns the cone directions that strike the side with normal `n`, where d·n < 0. The
+# product is summed in a fixed order, so the result for a direction in the plane does not
+# depend on how `dot` is compiled.
 function _facing_mask(ds, n)
     m = UInt16(0)
     for (j, d) in enumerate(ds)
@@ -340,9 +357,10 @@ function _facing_mask(ds, n)
     return m
 end
 
-# Open boundary of the opaque surfaces: triangle edges that no other opaque triangle
-# shares (an entrance hole's rim, a foil's edge), and the vertices on them. Per triangle,
-# bit j-1 flags edge j (vertex j to j+1; vertices v0, v0+e1, v0+e2) and bit j+2 vertex j.
+# Finds the open boundary of the opaque surfaces. It consists of the triangle edges that
+# no other opaque triangle shares, such as entrance-hole rims and foil edges, and the
+# vertices on them. Per triangle, bit j-1 flags edge j, from vertex j to vertex j+1, and
+# bit j+2 flags vertex j; the vertices are v0, v0+e1 and v0+e2.
 function _open_boundary(t::Target)
     tol = 1e-9 * max(t.scale, 1.0)
     key(v) = (round(Int, v[1] / tol), round(Int, v[2] / tol), round(Int, v[3] / tol))
@@ -372,7 +390,7 @@ function _open_boundary(t::Target)
         end
         flags[tri] = f
     end
-    # distance of each triangle from the open boundary (lower bound)
+    # Bound the distance of each triangle from the open boundary from below.
     segs = [(a, b) for ((a, b), n) in count if n == 1]
     pos(kk) = Vec3(kk[1] * tol, kk[2] * tol, kk[3] * tol)
     S = [(pos(a), pos(b)) for (a, b) in segs]
@@ -395,8 +413,9 @@ end
 
 const _GL2 = (0.5 - sqrt(3) / 6, 0.5 + sqrt(3) / 6)
 
-# Panel ends on [0, 1]: `n` equal panels, the first (`lo`) and/or last (`hi`) divided
-# geometrically (ratio `q`) toward that end down to width `wmin`.
+# Returns the panel ends on [0, 1] for `n` equal panels. With `lo` the first panel, and
+# with `hi` the last, is divided geometrically with ratio `q` toward its end, down to
+# width `wmin`.
 function _graded_cuts(n, lo, hi, wmin, q)
     n = max(n, lo && hi ? 2 : 1)
     cuts = Float64[]
@@ -415,18 +434,20 @@ function _graded_cuts(n, lo, hi, wmin, q)
     return cuts
 end
 
-# Back-side points of a triangle on the open boundary. The light a back side intercepts
-# at an open edge (an entrance-hole lip clipping a beam's tail) lies within a few
-# e-folding lengths of the tail of the edge: ~1/50 of a spot semi-axis at 1e-4 clipped,
-# far finer than spot-resolving sub-triangles, whose centroids then miss most of it
-# (they underestimated 1e-4 clipping by 10–60%). The triangle is mapped from the unit
-# square, collapsing onto one vertex C (u from C to the opposite edge, v across), with
-# the coordinates that reach open edges and vertices graded geometrically (ratio 1/2)
-# toward them, down to `edge` spot semi-axes, and two Gauss points per panel. A vertex
-# on the rim needs this as much as an edge: the triangles fanning out from it hold a
-# share ~λ/L of the rim's light (λ the tail length, L the edge). Panels are `resolution`
-# spot semi-axes across the triangle and `coarse` along an open edge. Returns false (no
-# points added) for a triangle off the open boundary.
+# Adds the back-side points of a triangle on the open boundary. At an open edge, such as
+# an entrance-hole lip that clips the tail of a beam, the light on a back side lies within
+# a few e-folding lengths of the tail of the edge. At 1e-4 clipped that is ~1/50 of a spot
+# semi-axis. This is far finer than spot-resolving sub-triangles, whose centroids then
+# miss most of the light; they underestimated 1e-4 clipping by 10–60%.
+#
+# The triangle is mapped from the unit square, collapsed onto one vertex C, with u from C
+# to the opposite edge and v across. The coordinates that reach open edges and vertices
+# are graded geometrically toward them with ratio 1/2, down to `edge` spot semi-axes, and
+# each panel has two Gauss points. A vertex on the rim needs this grading as much as an
+# edge, because the triangles that fan out from it hold a share ~λ/L of the light at the
+# rim, with λ the tail length and L the edge. Panels are `resolution` spot semi-axes
+# across the triangle and `coarse` along an open edge. Returns false, with no points
+# added, for a triangle off the open boundary.
 function _backside_points!(P, W, N, M, D, t::Target, tri, back, amin, side_n, target_id, ds, ε,
                            cache)
     f = back.flags[tri]
@@ -447,7 +468,8 @@ function _backside_points!(P, W, N, M, D, t::Target, tri, back, amin, side_n, ta
     Lu = max(norm(X[Pv] - X[C]), norm(X[Qv] - X[C]))
     Lv = norm(X[Qv] - X[Pv])
     h, halong, wmin = back.resolution * amin, back.coarse * amin, back.edge * amin
-    # two-point Gauss panels in u; in v, as many as the u panel's width across needs
+    # Use two-point Gauss panels in u, and in v as many panels as the width of the u panel
+    # needs.
     ucuts = _graded_cuts(ceil(Int, Lu / (vlo || vhi ? halong : h)), ulo, uhi, wmin / Lu, 0.5)
     hv = uhi ? halong : h
     bary = Tuple{Float64,Float64}[]
@@ -498,9 +520,12 @@ end
 """
     Deposition
 
-Absorbed laser power by element (`element`, TW), power striking the unmodeled back side
-of each component (`backside`, TW — e.g. the outside of a hohlraum, i.e. LEH clipping),
-and per-beam totals (`per_beam`, TW, power that landed on any opaque surface).
+The absorbed laser power, with fields:
+
+- `element` (TW), the power absorbed by each element;
+- `backside` (TW), the power on the unmodeled back side of each component, such as the
+  outside of a hohlraum, which receives the LEH clipping;
+- `per_beam` (TW), the total of each beam deposited on any opaque surface.
 """
 struct Deposition{T}
     element::Vector{T}
@@ -512,50 +537,56 @@ end
 """
     deposit(op, beams; absorption = nothing) -> Deposition
 
-Evaluate laser deposition for `beams` (same ports and order as at construction). The
-result is differentiable in every beam's `aim`, `power`, `defocus` and spot axes.
-Power that strikes no opaque surface (e.g. passes through a hohlraum and out the
-other LEH) is `delivered - sum(per_beam)`.
+Evaluates laser deposition for `beams`, with the same ports and order as at
+construction. The result is differentiable in the `aim`, `power`, `defocus` and spot axes
+of every beam. Power that does not strike an opaque surface, for instance power that
+passes through a hohlraum and out the other LEH, is `delivered - sum(per_beam)`.
 Threads share the work dynamically, and every sum is taken in a fixed order: the result
-is bitwise identical on any number of threads.
+is identical on any number of threads.
 
-By default every ray deposits all its power where it lands. `absorption = η⊥`
-(0 < η⊥ ≤ 1) keeps only the fraction
+By default all the power of every ray is deposited where the ray strikes. With
+`absorption = η⊥` (0 < η⊥ ≤ 1), only the fraction
 
     η_a(ψ) = 1 - (1 - η⊥)^(cos³ψ)
 
-of each ray, with ψ its angle of incidence (each f-cone direction's, or the beam axis's
-with a VisRad profile). This is inverse-bremsstrahlung absorption in a thin corona whose
-density falls exponentially with radius, η⊥ = 1 - exp(-8``ν_{ei}`` L/3c) being the
-absorption at normal incidence (``ν_{ei}`` the collision frequency at critical density, L
-the scale length): Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eq. 29, after
-Kruer's text. It is a model for hard-sphere direct-drive illumination, derived for that
-profile, not a measured or calibrated absorption: η⊥ has no default and is the user's
-estimate. It holds only for thin coronas (scale length L ≪ the critical radius ``r_c``):
-measured against ray tracing through a spherical exponential corona, an oblique ray's
-absorption approaches ``η_a`` only as ``L/r_c`` → 0 (at sin ψ = 0.9: 4% off at
-``L/r_c`` = 0.0025, 13% at 0.01, and 0.33 against ``η_a`` = 0.18 at 0.1), and rays that
-miss the critical sphere still absorb. On a 40-beam OMEGA PDD pointing with
-``L/r_c`` = 0.2, ``η_a`` on a hard sphere at ``r_c`` gives σ = 5.7% (l ≤ 30) where the
-corona gives 10.4% (research notes, "Corona model prototype: impact-parameter kernels vs
-3-D ray tracing"). Polar direct drive gets its equatorial drive from exactly those
+of each ray is kept, with ψ its angle of incidence. That angle is the angle of each
+f-cone direction, or of the beam axis with a VisRad profile.
+
+This is inverse-bremsstrahlung absorption in a thin corona whose density falls
+exponentially with radius. The absorption at normal incidence is
+η⊥ = 1 - exp(-8``ν_{ei}`` L/3c), with ``ν_{ei}`` the collision frequency at critical
+density and L the scale length (Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017),
+Eq. 29, after Kruer's text). It is a model for hard-sphere direct-drive illumination,
+derived for that profile, and it is neither measured nor calibrated. η⊥ therefore has no
+default and is the user's estimate.
+
+The model holds only for thin coronas, with scale length L ≪ the critical radius
+``r_c``. Against ray tracing through a spherical exponential corona, the absorption of an
+oblique ray approaches ``η_a`` only as ``L/r_c`` → 0. At sin ψ = 0.9 it is 4% off at
+``L/r_c`` = 0.0025 and 13% off at 0.01, and at 0.1 it is 0.33 against ``η_a`` = 0.18.
+Rays that miss the critical sphere also still absorb. On a 40-beam OMEGA PDD pointing
+with ``L/r_c`` = 0.2, ``η_a`` on a hard sphere at ``r_c`` gives σ = 5.7% (l ≤ 30), where
+the corona gives 10.4% (research notes, "Corona model prototype: impact-parameter kernels
+vs 3-D ray tracing"). Polar direct drive gets its equatorial drive from exactly those
 grazing rays.
-The unabsorbed light is dropped (no reflection is followed), so `element`, `backside`
-and `per_beam` are absorbed powers and `delivered - sum(per_beam)` includes it. `η⊥` may
-be a dual number (the result is differentiable in it too). `η⊥ = 1` is the default's
-model (``η_a ≡ 1``), equal to it to rounding; the default itself is unchanged by this
-option.
+
+The unabsorbed light is dropped, and no reflection is followed. `element`, `backside` and
+`per_beam` are therefore absorbed powers, and `delivered - sum(per_beam)` includes the
+unabsorbed light. `η⊥` may be a dual number, and the result is then differentiable in it
+too. `η⊥ = 1` gives the model of the default (``η_a ≡ 1``) and equals it to rounding;
+the default itself is unchanged by this option.
 """
 deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
         absorption::Union{Nothing,Real} = nothing) = _deposit(op, beams, nothing, absorption)
 
-# `deposit`, and with `split = (key, EG)` also each beam group's share per element in
-# the same pass: beam `bi`'s element powers (values) are added to column `key[bi]` of
-# `EG` (elements × groups; none for `key[bi] == 0`), in the order `deposit` sums them,
-# so each column is exactly `deposit` of that group's beams alone (the others at zero
-# power add exact zeros), with the same `absorption`. With `split` a `_GroupSplit`, the
-# same in the deposition's number type for sets of groups. The deposition itself is
-# bitwise identical to that of `deposit`.
+# Computes `deposit`, and with `split = (key, EG)` also the share of each beam group per
+# element in the same pass. The element powers of beam `bi`, as values, are added to
+# column `key[bi]` of `EG`, an elements × groups matrix, in the order `deposit` sums them.
+# Beams with `key[bi] == 0` are not added. Each column is therefore exactly `deposit` of
+# only the beams of that group, with the same `absorption`, since the beams at zero power
+# add exact zeros. With `split` a `_GroupSplit`, the same holds for sets of groups in the
+# number type of the deposition. The deposition itself is identical to that of
+# `deposit`.
 function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
                   absorption::Union{Nothing,Real} = nothing)
     length(beams) == length(op.ports) || throw(DimensionMismatch("beam count changed"))
@@ -577,11 +608,11 @@ function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
     PB = zeros(T, nb, nblock)     # per-beam power by element block
     LB = zeros(T, nc, nback)      # back-side power by piece
     SB = zeros(T, nback)          # piece totals
-    # a beam at exactly zero power (value and partials: a picket measure's other cone)
-    # deposits exact zeros, and is skipped
+    # A beam at exactly zero power, in value and partials, deposits exact zeros and is
+    # skipped. The other cone of a picket measure is such a beam.
     live = Bool[b.power !== zero(b.power) for b in beams]
     _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption, split, live)
-    # partial sums reduced in a fixed order
+    # Reduce the partial sums in a fixed order.
     per_beam = T[sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]   # typed: 1.10 infers Any here
     L = zeros(T, nc)
     for (u, (bi, _)) in enumerate(plan.back)
@@ -591,17 +622,19 @@ function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
     return Deposition(E, L, per_beam, convert(T, sum(b.power for b in beams)))
 end
 
-# Element type of a deposition: the beams' (`T`), promoted with a dual `absorption`'s.
+# Returns the element type of a deposition, which is the beam type `T` promoted with the
+# type of a dual `absorption`.
 _with_eltype(T, ::Nothing) = T
 _with_eltype(T, η) = promote_type(T, typeof(η))
 
-# The power a ray at incidence cos ψ = `c` absorbs, per unit of incident flux along it:
-# `c` (all of it), or `η_a(ψ) c` with `η_a` of MN17 Eq. 29 (see `deposit`). `nothing`
-# leaves the expressions it enters as they were without the option (bitwise).
+# Returns the power absorbed by a ray at incidence cos ψ = `c`, per unit of incident flux
+# along it. It is `c` for full absorption, or `η_a(ψ) c` with `η_a` of MN17 Eq. 29 (see
+# `deposit`). With `nothing`, the expressions that use it are exactly as they are without
+# the option.
 _absorbed(::Nothing, c) = c
 _absorbed(η, c) = (1 - (1 - η)^(c^3)) * c
 
-# Function barrier for the threaded loop over `op.plan`'s work units.
+# This function is the barrier for the threaded loop over the work units of `op.plan`.
 function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens, slopes,
                          η = nothing, split = nothing, live = nothing)
     plan = op.plan
@@ -609,7 +642,8 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
     _tforeach(length(plan.order)) do k
         u = plan.order[k]
         if u <= nblock
-            # an element block: every point lands on an element (E is never indexed < 0)
+            # In an element block every point is on an element, so E is never indexed
+            # below zero.
             for bi in axes(plan.boff, 2)
                 r = plan.boff[u, bi]:plan.boff[u+1, bi]-1
                 (isempty(r) || live !== nothing && !live[bi]) && continue
@@ -627,12 +661,13 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
     end
 end
 
-# A deposition's element powers kept by sets of beam groups, in the deposition's number
-# type, for `evaluate` (`Scenario`'s split): `element[j]` sums the beams whose group is
-# in `sets[j]` (sorted, unique), those of `cols[bi]` holding beam `bi`. Each set's
-# element powers are summed in the order `deposit` sums them, so `element[j]` is `deposit`
-# of that set's beams with the others at zero power, bitwise (the zero-power beams
-# are skipped); the deposition itself is unchanged.
+# Holds the element powers of a deposition by sets of beam groups, in the number type of
+# the deposition, for the split of a `Scenario` in `evaluate`. `element[j]` sums the beams
+# whose group is in `sets[j]`, which is sorted and unique, and the sets in `cols[bi]` hold
+# beam `bi`. The element powers of each set are summed in the order `deposit` sums them.
+# `element[j]` therefore equals exactly `deposit` of the beams of that set with the others
+# at zero power, since the zero-power beams are skipped. The deposition itself is
+# unchanged.
 struct _GroupSplit{T}
     sets::Vector{Vector{Symbol}}
     cols::Vector{Vector{Int}}
@@ -644,19 +679,21 @@ function _GroupSplit(sets::Vector{Vector{Symbol}}, beams::AbstractVector{<:Beam}
     return _GroupSplit{T}(sets, cols, [zeros(T, ne) for _ in sets])
 end
 
-# A beam-group set as `_GroupSplit` keys it.
+# Returns a beam-group set in the form that `_GroupSplit` uses as a key.
 _group_set(gs) = sort!(unique!(collect(Symbol, gs)))
 
-# `deposit` of several sets of beams on one operator, the sets differing in the beams'
-# powers alone (beam by beam the same aim, focus, spot and port: the phases of a
-# `PhasedScenario` on one mesh, `_deposit_groups`), with set k's group sets kept in
-# `splits[k]` (a `_GroupSplit` with no sets keeps none). A beam's deposition is its power
-# times that of the beam at unit power (the profile's shape, cut-off and screens do not
-# read the power), so each point's intensity is evaluated once, at unit power, and every
-# set adds it times the power of its beam: set k's deposition is `deposit(op, sets[k])` to
-# rounding (the power enters as a last factor instead of through the profile's peak). A
-# beam at exactly zero power in a set (value and partials) adds nothing to that set, as
-# `deposit` skips it.
+# Computes `deposit` of several sets of beams on one operator. The sets differ only in
+# the beam powers; beam by beam they share the aim, focus, spot and port. The phases of a
+# `PhasedScenario` on one mesh are such sets (`_deposit_groups`). The group sets of set k
+# are kept in `splits[k]`, and a `_GroupSplit` with no sets keeps none.
+#
+# The deposition of a beam is its power times that of the beam at unit power, because the
+# shape, cut-off and screens of the profile do not depend on the power. The intensity of
+# each point is therefore evaluated once, at unit power, and every set adds it times the
+# power of its beam. The deposition of set k then equals `deposit(op, sets[k])` to
+# rounding, since the power enters as a last factor and not through the profile peak. A
+# beam at exactly zero power in a set, in value and partials, adds nothing to that set,
+# as `deposit` skips it.
 function _deposit_sets(op::DepositionOperator, sets::Vector{Vector{Beam{T}}},
                        splits::Vector{_GroupSplit{T}}) where {T}
     b1 = first(sets)
@@ -696,9 +733,9 @@ function _deposit_sets(op::DepositionOperator, sets::Vector{Vector{Beam{T}}},
     return out
 end
 
-# Function barrier for `_deposit_sets`' threaded loop over `op.plan`'s work units: each
-# unit writes only its elements of every set (and their group sets), or only its back-side
-# piece.
+# This function is the barrier for the threaded loop of `_deposit_sets` over the work
+# units of `op.plan`. Each unit writes only its elements of every set and of their group
+# sets, or only its back-side piece.
 function _deposit_sets_units!(E::Vector{Vector{T}}, PB::Matrix{T}, LB::Vector{Matrix{T}}, SB::Vector{T},
                               op::DepositionOperator, frames, screens, slopes, P::Vector{Vector{T}},
                               splits::Vector{_GroupSplit{T}}, live::Vector{Vector{Int}}) where {T}
@@ -727,9 +764,10 @@ function _deposit_sets_units!(E::Vector{Vector{T}}, PB::Matrix{T}, LB::Vector{Ma
     end
 end
 
-# An element block's points of beam `bi` (all on elements) at unit power, into the
-# element powers of every set `ks` that gives the beam power (times that power), and
-# into those of the set's group sets that hold the beam; returns the unit-power sum.
+# Deposits the points of beam `bi` in an element block, all on elements, at unit power.
+# Each point is added, times the beam power of the set, to the element powers of every
+# set in `ks` that gives the beam power, and to those of the group sets of that set that
+# hold the beam. Returns the unit-power sum.
 function _deposit_points_sets!(E::Vector{Vector{T}}, splits::Vector{_GroupSplit{T}}, P::Vector{Vector{T}},
                                ks::Vector{Int}, op::DepositionOperator, bi, f::BeamFrame,
                                fv::BeamFrame{Float64}, slopes, r) where {T}
@@ -745,8 +783,8 @@ function _deposit_points_sets!(E::Vector{Vector{T}}, splits::Vector{_GroupSplit{
     end
 end
 
-# An element block's points of beam `bi` (all on elements), also into the element powers
-# of the group sets that hold it.
+# Deposits the points of beam `bi` in an element block, all on elements, and also adds
+# them to the element powers of the group sets that hold the beam.
 function _deposit_points_split!(E::AbstractVector{T}, s::_GroupSplit{T}, op::DepositionOperator,
                                 bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r, η = nothing) where {T}
     cs = s.cols[bi]
@@ -760,7 +798,8 @@ function _deposit_points_split!(E::AbstractVector{T}, s::_GroupSplit{T}, op::Dep
     end
 end
 
-# An element block's points of beam `bi` (all on elements), also into its group's column.
+# Deposits the points of beam `bi` in an element block, all on elements, and also adds
+# them to the column of its group.
 function _deposit_points_split!(E::AbstractVector{T}, (key, EG), op::DepositionOperator,
                                 bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r, η = nothing) where {T}
     g = key[bi]
@@ -770,7 +809,8 @@ function _deposit_points_split!(E::AbstractVector{T}, (key, EG), op::DepositionO
     end
 end
 
-# Transverse slopes of the cone directions in the beam frame (fixed by the port).
+# Returns the transverse slopes of the cone directions in the beam frame, which the port
+# fixes.
 function _cone_slopes(ds, f::BeamFrame)
     κ = [dot(d, f.k) for d in ds]
     α = [dot(d, f.e1) / dot(d, f.k) for d in ds]
@@ -778,14 +818,15 @@ function _cone_slopes(ds, f::BeamFrame)
     return (κ, α, β)
 end
 
-# Float64 frame for screening points and cone directions (`_beyond`, `_live_directions`).
+# Returns the Float64 frame used to screen points and cone directions (`_beyond`,
+# `_live_directions`).
 _screen_frame(f::BeamFrame{Float64}, b) = f
 _screen_frame(::BeamFrame, b) = BeamFrame(_value_beam(b))
 
-# Deposit beam `bi`'s points `r` into elements `Ec` and back sides `Lc`; returns their sum.
-# Most points of a beam lie off its spot: a bound on all cone directions at once skips
-# them, and for dual beams each remaining direction is screened on values. Skipped
-# points and directions would contribute exact zeros.
+# Deposits the points `r` of beam `bi` into the elements `Ec` and back sides `Lc` and
+# returns their sum. Most points of a beam lie off its spot, and a bound on all cone
+# directions at once skips them. For dual beams, each remaining direction is screened on
+# values. Skipped points and directions would contribute exact zeros.
 function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::DepositionOperator,
                           bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r, η = nothing) where {T}
     return _sum_points(op, bi, f, fv, slopes, r, T, η) do d, val
@@ -793,11 +834,12 @@ function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::Depo
     end
 end
 
-# The deposition loop: `sink(destination, power)` for every point of beam `bi` in `r`
-# that receives light (`destination` > 0 an element, < 0 a component's back side), and
-# the sum of those powers (of type `T`); `η` the `absorption` of `deposit`. A point's
-# coordinates in the beam frame are taken once, on values (for the screens), and a dual
-# beam's are built from them with the partials every point shares (`_cone_coords`).
+# Runs the deposition loop. It calls `sink(destination, power)` for every point of beam
+# `bi` in `r` that receives light (`destination` > 0 is an element, < 0 the back side of
+# a component) and returns the sum of those powers (of type `T`); `η` is the `absorption`
+# of `deposit`. The coordinates of a point in the beam frame are taken once, on values
+# (for the screens). Those of a dual beam are built from them with the partials that
+# every point shares (`_cone_coords`).
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
                              fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}, η = nothing) where {F,T}
     prof = op.profile
@@ -822,16 +864,18 @@ end
     return acc
 end
 
-# A point's (s, u₀, v₀) in a beam frame: along the beam from best focus and across it.
+# Returns the coordinates (s, u₀, v₀) of a point in a beam frame, with s measured along
+# the beam from best focus and u₀ and v₀ across it.
 @inline function _cone_coords(f::BeamFrame, x)
     d = x - f.focus
     return dot(d, f.k), dot(d, f.e1), dot(d, f.e2)
 end
 
-# The same in the frame `f` from those in its Float64 frame (`suv`, of the beam's values):
-# on duals the values with the partials of the origin's coordinates `o`
-# (`_origin_coords`), which every point shares (the frame's axes carry none), instead of
-# three dual dot products per point.
+# Returns the same coordinates in the frame `f` from those in its Float64 frame, `suv`,
+# which is built from the beam values. On duals the result takes those values with the
+# partials of the coordinates `o` of the origin (`_origin_coords`). Every point shares
+# these partials, because the axes of the frame carry none, so three dual dot products per
+# point are avoided.
 @inline _origin_coords(f::BeamFrame) = _cone_coords(f, zero(Vec3))
 @inline _cone_coords(f::BeamFrame{Float64}, o, x, suv) = suv
 @inline function _cone_coords(f::BeamFrame{ForwardDiff.Dual{G,Float64,N}}, o, x, suv) where {G,N}
@@ -841,10 +885,11 @@ end
 end
 @inline _cone_coords(f::BeamFrame, o, x, suv) = _cone_coords(f, x)
 
-# Whether every cone direction's ray through `x` (or through the point at coordinates
-# `(s, u₀, v₀)`, `_cone_coords`) crosses the focal plane outside the profile's cutoff:
-# the crossing (u₀ - sαⱼ, v₀ - sβⱼ) is at least |u₀| - |s| max|α| and |v₀| - |s| max|β|
-# off axis (with a relative allowance for rounding).
+# Checks whether the ray of every cone direction through `x` crosses the focal plane
+# outside the profile cutoff. The point can also be given by its coordinates
+# `(s, u₀, v₀)` (`_cone_coords`). The crossing (u₀ - sαⱼ, v₀ - sβⱼ) is at least
+# |u₀| - |s| max|α| and |v₀| - |s| max|β| off axis, with a relative allowance for
+# rounding.
 @inline _beyond(f::BeamFrame{Float64}, αmax, βmax, x) = _beyond(f, αmax, βmax, _cone_coords(f, x))
 @inline function _beyond(f::BeamFrame{Float64}, αmax, βmax, (s, u0, v0)::NTuple{3,Float64})
     s = abs(s)
@@ -854,11 +899,11 @@ end
     return _outside(f.core) && (!f.has_halo || _outside(f.halo))
 end
 
-# The visible directions `m` whose ray through a point (its coordinates `(s, u₀, v₀)`)
-# crosses the focal plane inside the profile's cutoff, from the beam's values: the others
-# contribute exact zeros (value and partials), so dual arithmetic is spent only on the
-# ~1/6 of point-direction pairs under the spot. (A Float64 beam is not screened:
-# `_cone_intensity` tests the cutoff itself.)
+# Returns the visible directions `m` whose ray through a point, given by its coordinates
+# `(s, u₀, v₀)`, crosses the focal plane inside the profile cutoff. The test uses the beam
+# values. The other directions contribute exact zeros in value and partials, so dual
+# arithmetic is spent only on the ~1/6 of point-direction pairs under the spot. A Float64
+# beam is not screened, because `_cone_intensity` tests the cutoff itself.
 @inline function _live_directions(f::BeamFrame, α, β, m::UInt16, (s, u0, v0))
     live = UInt16(0)
     for j in eachindex(α)
@@ -871,15 +916,20 @@ end
     return live
 end
 
-# VisRad's profile: each stored point sees the beam axis (the operator's one direction)
-# and absorbs the profile at its distance from focus times |n·k|. Points outside
-# the envelope (on values) contribute exact zeros: every beam skips a run of `_TILE`
-# points whose ball a bound without logarithms puts beyond the cut-off, then each point
-# the bound puts there (`_vr_far`: on case B of the research notes 99% of the points
-# beyond the cut, and 90% of the points left lit); the law evaluates the rest, and is
-# exactly zero, value and partials, at those beyond its cut (screening them on values
-# first costs more than the few it would skip). A point's coordinates are taken once, on
-# values; a dual beam's carry the partials every point shares (`_vr_coords(f, x, uvs)`).
+# Deposits a beam with VisRad's profile. Each stored point sees the beam axis, the one
+# direction of the operator, and absorbs the profile at its distance from focus times
+# |n·k|. Points outside the envelope, tested on values, contribute exact zeros. The
+# points are screened in three steps:
+# - Each run of `_TILE` points of a beam is skipped when a bound without logarithms puts
+#   its ball beyond the cut-off.
+# - Each remaining point is skipped when the same bound puts it beyond the cut-off
+#   (`_vr_far`). The figures for this bound on case B of the research notes are 99% of
+#   the points beyond the cut and 90% of the points left lit.
+# - The profile law is evaluated for the rest and is exactly zero, in value and partials,
+#   at the points beyond its cut. Screening those points on values first would cost more
+#   than the few evaluations it would skip.
+# The coordinates of a point are taken once, on values. Those of a dual beam carry the
+# partials that every point shares (`_vr_coords(f, x, uvs)`).
 function _sum_points_visrad(sink::F, op::DepositionOperator, bi, f::_VRFrame, fv::_VRFrame{Float64},
                             r, ::Type{T}, η = nothing) where {F,T}
     P, W, Nr, D = op.pts[bi], op.w[bi], op.normal[bi], op.dest[bi]
@@ -905,15 +955,16 @@ _deposit_beam!(Ec, Lc, op::DepositionOperator, bi, f::BeamFrame) =
     _deposit_points!(Ec, Lc, op, bi, f, _screen_frame(f, nothing), _cone_slopes(op.dirs[bi], f),
                      eachindex(op.w[bi]))
 
-# Absorbed power per unit area at `x` (lit-side normal `n`): the mean over the visible
-# cone directions dⱼ of the best-focus profile where the ray along dⱼ through `x`
-# crosses the focal plane, times the ray's incidence factor |n·dⱼ|/(k·dⱼ). Each
-# direction's sub-beam is a bundle of parallel rays, so the visibility mask that
-# selects it is exactly consistent with where its light goes, and power is conserved
-# at shadow edges. (Giving each sub-beam a share of the f-cone spread would smooth the
-# footprint but break that consistency: 0.6% of a beam clipped by an LEH edge is lost.)
-# With `η` (the `absorption` of `deposit`), each direction's incidence factor carries
-# its absorbed fraction η_a. `(s, u₀, v₀)`: the point's coordinates (`_cone_coords`).
+# Returns the absorbed power per unit area at `x`, with lit-side normal `n`. It is the mean
+# over the visible cone directions dⱼ of the best-focus profile where the ray along dⱼ
+# through `x` crosses the focal plane, times the incidence factor |n·dⱼ|/(k·dⱼ) of the
+# ray. The sub-beam of each direction is a bundle of parallel rays. The visibility mask
+# that selects it is therefore exactly consistent with where its light goes, and power is
+# conserved at shadow edges. Giving each sub-beam a share of the f-cone spread would smooth
+# the footprint but break that consistency, and 0.6% of a beam clipped by an LEH edge
+# would be lost. With `η`, the `absorption` of `deposit`, the incidence factor of each
+# direction includes its absorbed fraction η_a. `(s, u₀, v₀)` are the coordinates of the
+# point (`_cone_coords`).
 @inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, (s, u0, v0), n, η = nothing)
     acc = zero(_absorbed(η, f.core.power_norm * s))
     for j in eachindex(ds)
@@ -930,14 +981,14 @@ end
 """
     laser_flux(dep, target) -> Vector
 
-Absorbed laser intensity per element (TW/mm²; multiply by 1e14 for W/cm²).
+Returns the absorbed laser intensity per element (TW/mm²; multiply by 1e14 for W/cm²).
 """
 laser_flux(d::Deposition, t::Target) = d.element ./ t.elem_area
 
 """
     component_power(dep, target; by = :part) -> Dict{Symbol,Float64}
 
-Absorbed laser power (TW) per part, plus back-side (outside) losses keyed as
+Returns the absorbed laser power (TW) per part, plus back-side (outside) losses keyed as
 `Symbol(name, "_outside")` and `:missed` for power that strikes nothing. The pieces of
 a part split for computation (`curved_components`) are summed into the part; `by =
 :component` keys by component instead. The two agree on targets of unsplit parts.
@@ -963,12 +1014,12 @@ end
 """
     raytrace_deposition(target, beams; nspot = 41, ncone = 13, extent = nothing) -> Deposition
 
-Reference deposition by geometric ray tracing. Each spot component (core, and halo if
-present) is sampled with an `nspot × nspot` grid of best-focus points spanning
-`±extent` 1/e semi-axes (default: out to 1e-12 of the component's peak), each
-launched along `ncone` f-cone directions and weighted by the focal intensity. Rays
-travel straight (no refraction) to the first opaque surface. Power is conserved
-exactly; defocus is exact within the sampling. Not differentiable.
+Computes the reference deposition by geometric ray tracing. Each spot component (core, and
+halo if present) is sampled with an `nspot × nspot` grid of best-focus points spanning
+`±extent` 1/e semi-axes (by default out to 1e-12 of the component peak), each launched along
+`ncone` f-cone directions and weighted by the focal intensity. Rays travel straight (no
+refraction) to the first opaque surface. Power is conserved exactly, and defocus is exact
+within the sampling. The result is not differentiable.
 """
 function raytrace_deposition(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
                              ncone::Integer = 13, extent = nothing)
@@ -985,8 +1036,9 @@ end
 """
     raytrace_component_power(target, beams; nspot = 41, ncone = 13, extent = nothing) -> Matrix
 
-Power (TW) each beam (rows) deposits on each component (columns, both sides), by the
-reference ray trace — exact power accounting independent of mesh resolution.
+Returns the power (TW) that each beam (rows) deposits on each component (columns, both
+sides), from the reference ray trace. The power accounting is exact and independent of
+mesh resolution.
 """
 function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
                                   ncone::Integer = 13, extent = nothing)
@@ -1005,7 +1057,7 @@ function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspo
 end
 
 # Each spot component (core, halo) is sampled on a separate nspot × nspot grid spanning
-# `extent` 1/e radii (default: out to where the component falls to 1e-12 of its peak).
+# `extent` 1/e radii, by default out to where the component falls to 1e-12 of its peak.
 function _raytrace_beam!(E, L, t::Target, b::Beam, nspot, ncone, extent)
     val = ForwardDiff.value
     sp = b.spot

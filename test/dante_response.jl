@@ -41,7 +41,8 @@ using Briareus: _rubery_dante, _response, _DANTE_GRID, _planck_shape, _channel_m
         @test ch[3].mirror == (:SiO2, 3.5)
         @test ch[3].grid == 0.088
         @test ch[16].solid_angle == 1.77e-6
-        # duplicated hardware (Rubery: 1/8 differ by the grid, 10/14 identical)
+        # Some channels duplicate hardware. In Rubery, channels 1 and 8 differ by the grid,
+        # and channels 10 and 14 are identical.
         @test ch[8].R ≈ 0.088 .* ch[1].R
         @test ch[10].R == ch[14].R
         # channel 2: 0.97 TW/sr per volt for power flat over 2–4 keV (Rubery 2023 §II.D)
@@ -100,7 +101,7 @@ using Briareus: _rubery_dante, _response, _DANTE_GRID, _planck_shape, _channel_m
         B = [c.kind === :aperture ? 0.0 : SIGMA_SB * T0^4 for c in t.components[t.elem_comp]]
         z = zeros(n)
         sol = RadiationSolution(m, z, z, B, z, z, z, z, 0.0)
-        # every element at T0: each group carries its Planck fraction of B
+        # With every element at T0, each group carries its Planck fraction of B.
         Eg = spectral_edges(n = 60)
         Bg = B .* planck_fractions(T0, Eg)'
         Z = zeros(size(Bg))
@@ -112,13 +113,13 @@ using Briareus: _rubery_dante, _response, _DANTE_GRID, _planck_shape, _channel_m
         rs = dante(dante1(), s; unfold = :smooth)
         @test rs.Tr_unfold ≈ r.Tr * planck_fraction(T0, 50.0, 20_000.0)^0.25 rtol = 2e-3
         @test !haskey(dante(dante1(), s; unfold = nothing), :unfold)
-        # Dante 2 from its definition reads what the bare view at its port with Dante 1's
-        # channels (no fields of their own) reads, bitwise
+        # Dante 2 from its definition records the same values as the bare view at its port
+        # with the Dante 1 channels, which have no separate fields.
         bare = DanteView(64, 350; through = :leh_top, channels = Briareus._with_field.(dante1_channels(), nothing))
         r2, rb = dante(dante2(), s), dante(bare, s)
         @test all(k -> isequal(r2[k], rb[k]), (:intensity, :Tr, :channels, :Tr_unfold)) && all(>(0), r2.channels)
-        # Sentinel on the polar DIM: down the axis through the upper hole, onto the capsule
-        # and out of the lower hole (same radius)
+        # Sentinel on the polar DIM looks down the axis through the upper hole, onto the
+        # capsule and out of the lower hole, which has the same radius.
         sp = dante(sentinel(), sol)
         @test sentinel().through === :leh_top
         @test sentinel().direction[3] ≈ 1

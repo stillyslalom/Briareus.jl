@@ -1,9 +1,9 @@
-# N221204-class time-dependent benchmark: capsule flux P2/P0(t) of a HYBRID-E hohlraum
-# with CBET, a moving wall, closing entrance holes and inner-beam bubble absorption, each
-# piece added in turn, against the HYDRA curve of Kritcher et al., PRE 109, 025204 (2024)
-# Fig. 10. Inputs: reference/litreview/n221204_benchmark.md §5; results: research notes,
-# "N221204 time-dependent benchmark (2026-10-23)" and "Wall material, conversion and
-# capsule energetics (2026-10-24)".
+# This N221204-class time-dependent benchmark compares the capsule flux P2/P0(t) of a
+# HYBRID-E hohlraum with the HYDRA curve of Kritcher et al., PRE 109, 025204 (2024) Fig. 10.
+# CBET, a moving wall, closing entrance holes and inner-beam bubble absorption are added in
+# turn. The inputs are in reference/litreview/n221204_benchmark.md §5, and the results are
+# in the research notes sections "N221204 time-dependent benchmark (2026-10-23)" and "Wall
+# material, conversion and capsule energetics (2026-10-24)".
 #
 #   julia --project=. -t auto examples/n221204.jl [h capsule_h [runs [transfer [table [shot]]]]]
 #
@@ -23,36 +23,39 @@
 # `<shot>_<transfer>_<h>_<capsule_h>[_<options>].csv` (P2/P0, P4/P0 and
 # capsule Tr per run) to the current directory.
 #
-# Energetics (research notes, "Wall material, conversion and capsule energetics
-# (2026-10-24)", "Energetics defaults and the capsule share (2026-10-25)" and "Capsule
-# absorption, conversion and the ablating-wall release (2026-10-25)"): the Au-lined DU
-# wall of a NIF drive history (`nif_uranium()`: `du_wall_loss()` and the rising
-# `nif_conversion()`), the loss of each wall element from its temperature history with
-# re-emission under a falling drive (`drive_history`'s defaults), the capsule absorbing
-# at the effective radius of its ablation front with HYDRA's ablator albedo
-# (`CapsuleAlbedo`, below), HYDRA's laser degradation and, on N221204 and its proxies,
-# the measured backscatter. Options, as `key=value` arguments anywhere on the line:
+# The energetics follow the research notes sections "Wall material, conversion and capsule
+# energetics (2026-10-24)", "Energetics defaults and the capsule share (2026-10-25)" and
+# "Capsule absorption, conversion and the ablating-wall release (2026-10-25)". The wall is
+# the Au-lined DU wall of a NIF drive history (`nif_uranium()`, with `du_wall_loss()` and
+# the rising `nif_conversion()`). The loss of each wall element follows its temperature
+# history, with re-emission under a falling drive (the defaults of `drive_history`). The
+# capsule absorbs at the effective radius of its ablation front with the HYDRA ablator
+# albedo (`CapsuleAlbedo`, below). The HYDRA laser degradation applies, and on N221204 and
+# its proxies so does the measured backscatter. The options are `key=value` arguments
+# anywhere on the line:
 # - `capsule=model|mesh`: `CapsuleAlbedo` with albedo `capsule_albedo` absorbing at the
-#   effective radius (default), or the capsule mesh itself shrinking along the schedule
-#   on the keyframes (the flux on the shrinking sphere; the static runs keep R₀);
-#   `capsule_albedo=young|<number>`: α_c, Young 2020's quasi-1D HYDRA ablator albedo on
-#   a time map to the shot's bang (default; published, not fitted) or a constant;
-#   `capsule_outside=<a>`: `CapsuleAlbedo`'s `outside_absorptance`, the absorptance of
-#   the blow-off outside the front (default 0: unpublished);
-# - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13%), default
-#   0.11, the middle of the range.
+#   effective radius (default), or the capsule mesh itself shrinking along the schedule on
+#   the keyframes, with the flux on the shrinking sphere; the static runs use R₀.
+#   `capsule_albedo=young|<number>`: α_c, either the quasi-1D HYDRA ablator albedo of Young
+#   2020 on a time map to the bang of the shot (default; published and not fitted) or a
+#   constant. `capsule_outside=<a>`: the `outside_absorptance` of `CapsuleAlbedo`, the
+#   absorptance of the blow-off outside the front (default 0, since the value is
+#   unpublished);
+# - `degrade=<fraction>`: the HYDRA laser degradation, 9–13% in PRE 109 App. 3; the default
+#   0.11 is the middle of the range.
 # Sensitivities of the P2 swing (research notes, "The P2 swing: capsule radius,
 # backscatter and the collision (2026-10-25)"):
-# - `backscatter=measured|history|uniform|off`: the measured inner-cone SBS/SRS energies
-#   on shapes of our own (default), the same energies on N210808's measured per-cone SBS
-#   time histories (`history`, Kemp 2026 Fig. 2), or a uniform 48 kJ power cut on every
-#   beam, the treatment PRE 109's HYDRA used (with `measured` or `history`, the full model
-#   is also run with the uniform cut, for Fig. 10); `sbs_energy=<kJ>` (default 42);
-# - `refraction=<f>`, `refraction_shift=<ns>`: a sensitivity, the inner power lost at the
+# - `backscatter=measured|history|uniform|off`: the measured inner-cone SBS/SRS energies on
+#   shapes defined in this example (default), the same energies on the measured per-cone SBS
+#   time histories of N210808 (`history`, Kemp 2026 Fig. 2), or a uniform 48 kJ power cut on
+#   every beam, the treatment the HYDRA runs of PRE 109 used. With `measured` or `history`,
+#   the full model is also run with the uniform cut for Fig. 10. `sbs_energy=<kJ>`
+#   (default 42);
+# - `refraction=<f>`, `refraction_shift=<ns>`: a sensitivity to the inner power lost at the
 #   late-time on-axis density spike (Kemp 2026 §III C; research notes, "Inner-cone SBS time
 #   histories and the late-time refraction (2026-10-25)");
-# - `bubble_energy=<E>` (default 1.1), `collision=<ns>` (default 6.09): the bubble's
-#   picket fluence and the ablator–wall collision time.
+# - `bubble_energy=<E>` (default 1.1), `collision=<ns>` (default 6.09): the picket fluence
+#   of the bubble and the ablator–wall collision time.
 # Further options (research notes, "N221204 late-time drive (2026-10-24)"):
 # - `lips=prescribed|computed`: the lips close along the prescribed ramp (default) or by
 #   the computed `LipClosure`; `lag=<ns>`: the power through a first-order lag, a
@@ -60,20 +63,20 @@
 #   (2026-10-24)");
 # - `unfold=on`: Dante 1's spectrum, channel voltages and their unfold at 5–8.5 ns in the
 #   full model (research notes, "Dante channel responses and the unfold (2026-10-24)");
-# - `metrics=on`: the steps run on to bang time and the full model prints ROADMAP "Implosion metrics and UQ"'s
-#   implosion metrics (hot-spot velocity, flux P2 over the drive window, the drive at
-#   bang) over the window from the rise to bang (research notes, "Zylstra 2022 LEH pair,
-#   time-dependent (2026-10-25)");
-# - `alpha_m=<a>`: the M-band group albedo α_M (default 0.55, calibrated) of the full
-#   model's M-band and of the thermal-spot `unfold` case.
-# Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
-# App. 3's N221204 split (wall 54.1%, LEH 25.2%, gas 4.5%, capsule 16.2%), and its
-# synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
-# 313 eV (research notes, "Spectral radiosity, M-band and a synthetic Dante"). The full
-# model also prints its capsule M-band (> 1.8 keV) P2/P0 at every step, from the per-cone
-# post-CBET, post-bubble deposition (`drive_history`'s default M-band), against
-# Dewald 2020's +0.15 at 6 ns on the Mo sphere (a check; research notes, "Per-cone M-band
-# in the drive history (2026-10-27)").
+# - `metrics=on`: the steps run on to bang time, and the full model prints the implosion
+#   metrics of the ROADMAP item "Implosion metrics and UQ" (hot-spot velocity, flux P2 over
+#   the drive window, the drive at bang) over the window from the rise to bang (research
+#   notes, "Zylstra 2022 LEH pair, time-dependent (2026-10-25)");
+# - `alpha_m=<a>`: the M-band group albedo α_M (default 0.55, calibrated) of the M-band of
+#   the full model and of the thermal-spot `unfold` case.
+# Every run prints its time-integrated energy budget (`energy_budget`) against the N221204
+# split of PRE 109 App. 3 (wall 54.1%, LEH 25.2%, gas 4.5%, capsule 16.2%). It also prints
+# its synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the
+# measured 313 eV (research notes, "Spectral radiosity, M-band and a synthetic Dante"). The
+# full model also prints its capsule M-band (> 1.8 keV) P2/P0 at every step, from the
+# per-cone post-CBET, post-bubble deposition (the default M-band of `drive_history`). That
+# value is checked against the +0.15 of Dewald 2020 at 6 ns on the Mo sphere (research
+# notes, "Per-cone M-band in the drive history (2026-10-27)").
 
 using Briareus, Printf, DelimitedFiles
 
@@ -92,27 +95,30 @@ end
 h = parse(Float64, get(pos, 1, "0.28"))
 capsule_h = parse(Float64, get(pos, 2, "0.16"))
 which = get(pos, 3, "all")
-transfer = get(pos, 4, pair ? "joint" : "calibrated")   # the pair: the joint multi-shot fit (below)
+transfer = get(pos, 4, pair ? "joint" : "calibrated")   # for the pair, the joint multi-shot fit (below)
 transfer in ("calibrated", "fig9b", "joint", "iraum") ||
     error("transfer calibrated, fig9b, joint or iraum, not $transfer")
 
-# Geometry (mm; n221204_benchmark.md §1, PRE 109 Fig. 1a): 11.24 × 6.4 mm Au-lined DU
-# hohlraum, 3.1 mm LEHs, 1.135 mm capsule. Unpublished, so repository defaults: square
-# corners, no diagnostic windows. The wall is `nif_uranium()`: the Au-lined DU loss with
-# the rising conversion of its gold liner.
-# The capsule: a sphere absorbing at its ablation front's radius R(t) inside the fixed
-# R₀ mesh (`CapsuleAlbedo`'s `radius`). HYDRA's front for N221204 is unpublished; at 6 ns
-# it lies between 0.84 R₀ (no ablator left outside the ablator–fuel interface,
-# 0.906 × 1.050/1.135) and 0.906 R₀ (the shell keeping its relative thickness). The
-# schedule (research notes, "Capsule absorption, conversion and the ablating-wall release
-# (2026-10-25)"): the HYDRA radius history of N221204 (Kritcher et al., PoP 31, 070502
-# (2024) Fig. 1, `kritcher2024_radius()`, the ablator–fuel interface or fuel center of
-# mass scaled to its start) applied to the whole capsule, on the time axis of the shot: the
-# upper bound on the front, with the published timing (held until the first shock breaks
-# out, ~3.6 ns; minimum at bang). Zylstra's pair: K24's thinner N210808 capsule (their
-# design) on the same drive, its time axis scaled so that its minimum (9.18 ns) falls at
-# the shot's bang time (`ScaledRadius`, derived, *L*). (`schedule=young`, Young 2020's
-# N170827 front, removed 2026-10-26: it lies below the lower bound.)
+# The geometry in mm (n221204_benchmark.md §1, PRE 109 Fig. 1a) is an 11.24 × 6.4 mm
+# Au-lined DU hohlraum with 3.1 mm LEHs and a 1.135 mm capsule. The corners and windows are
+# unpublished, so the repository defaults apply: square corners and no diagnostic windows.
+# The wall is `nif_uranium()`, the Au-lined DU loss with the rising conversion of its gold
+# liner.
+# The capsule is a sphere that absorbs at the radius R(t) of its ablation front inside the
+# fixed R₀ mesh (the `radius` of `CapsuleAlbedo`). The HYDRA front for N221204 is
+# unpublished. At 6 ns it lies between 0.84 R₀, with no ablator left outside the
+# ablator–fuel interface (0.906 × 1.050/1.135), and 0.906 R₀, with the shell keeping its
+# relative thickness. The schedule is described in the research notes, "Capsule absorption,
+# conversion and the ablating-wall release (2026-10-25)". It is the HYDRA radius history of
+# N221204 (Kritcher et al., PoP 31, 070502 (2024) Fig. 1, `kritcher2024_radius()`), the
+# ablator–fuel interface or fuel center of mass scaled to its start. The history is applied
+# to the whole capsule on the time axis of the shot. It is the upper bound on the front,
+# with the published timing: held until the first shock breaks out at ~3.6 ns, with the
+# minimum at bang. For the pair of Zylstra, the thinner N210808 capsule of K24
+# (their design) is used on the same drive, with its time axis scaled so that its minimum
+# (9.18 ns) falls at the bang time of the shot (`ScaledRadius`, derived, *L*). The
+# `schedule=young` option, the N170827 front of Young 2020, was removed on 2026-10-26
+# because it lies below the lower bound.
 zy = zylstra2022_fig2()
 bang = pair ? getfield(zy.bang, Symbol(shot)) : 9.53
 capsule_schedule = if pair
@@ -120,15 +126,17 @@ capsule_schedule = if pair
 else
     kritcher2024_radius(:n221204)
 end
-# The albedo α_c (`capsule_albedo`): Young 2020's quasi-1D HYDRA ablator albedo of the
-# LLNL dynamic view-factor model for N170827 (Fig. 3a top, `young2020_albedos()`: 0.01–0.16
-# to 6 ns, 0.30 at 7, 0.40 from 7.5 ns), its time axis mapped piecewise linearly so that
-# the model's 5.75 ns falls at 6.0 ns and its 7.75 ns at bang time (default; published,
-# not fitted), or a constant. `capsule_outside`: the absorptance of the blow-off outside the
-# front (`CapsuleAlbedo`'s `outside_absorptance`), default 0. `capsule=mesh`: the schedule
-# shrinks the capsule mesh itself on the keyframes (`moving_hohlraum`'s `capsule_shrink`;
-# the flux is evaluated on the shrinking sphere) and the albedo is α_c alone; `capsule=model` keeps
-# the mesh at R₀ and absorbs at the effective radius (`CapsuleAlbedo`'s `radius`).
+# The albedo α_c (`capsule_albedo`) is either a constant or, by default, the quasi-1D HYDRA
+# ablator albedo of the LLNL dynamic view-factor model of Young 2020 for N170827 (Fig. 3a
+# top, `young2020_albedos()`), which is published and not fitted. That albedo is 0.01–0.16
+# up to 6 ns, 0.30 at 7 ns and 0.40 from 7.5 ns. Its time axis is mapped piecewise linearly
+# so that 5.75 ns of the model falls at 6.0 ns and 7.75 ns at bang time. `capsule_outside`
+# sets the absorptance of the blow-off outside the front (the `outside_absorptance` of
+# `CapsuleAlbedo`), default 0. With `capsule=mesh`, the schedule shrinks the capsule mesh
+# itself on the keyframes (the `capsule_shrink` of `moving_hohlraum`, with the flux
+# evaluated on the shrinking sphere), and the albedo is only α_c. With `capsule=model`, the
+# mesh stays at R₀ and the capsule absorbs at the effective radius (the `radius` of
+# `CapsuleAlbedo`).
 ymap(τ) = τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75)
 ya = young2020_albedos()
 capsule_alpha = get(opt, "capsule_albedo", "young") == "young" ? TabulatedAlbedo(ymap.(ya.t), ya.capsule) :
@@ -148,15 +156,15 @@ geometry = (length = 11.24, leh_radius, capsule_radius, h, capsule_h,
             wall = nif_uranium(), capsule)
 R0 = 3.2
 
-# Laser: 192 beams at the mock HYBRID-E pointing; Δλ 2.75 Å (1ω) on the inner
-# cones, 0.917 Å at 3ω (the 23.5°/30° and 44.5°/50° splits are unpublished: none).
-# `shot` (7th argument) `n220919` or `n210808` runs a proxy of the two other shots of
-# Fig. 10 (*L*): Δλ 2.5 or 1.8 Å on the same mock pointing, CBET calibration and
-# hohlraum; N220919 on N221204's pulse (the same pulse with re-tuned foot powers,
-# K24), N210808 with the rise 0.2 ns earlier and the peak ending 0.45 ns earlier (P24
-# Fig. 1, read by eye). Zylstra's pair: Δλ 1.25 Å (N191118) and 1.8 Å (N210601) (Zylstra
-# 2022), on the same mock pointing (N191118's outer beams sat farther from the midplane
-# for its larger LEH; unpublished, *L*).
+# The laser is 192 beams at the mock HYBRID-E pointing, with Δλ 2.75 Å (1ω) on the inner
+# cones, 0.917 Å at 3ω. The 23.5°/30° and 44.5°/50° splits are unpublished, so none is
+# applied. With `shot` (7th argument) `n220919` or `n210808`, the script runs a proxy of one
+# of the two other shots of Fig. 10 (*L*), with Δλ 2.5 or 1.8 Å on the same mock pointing,
+# CBET calibration and hohlraum. N220919 uses the pulse of N221204, which is the same pulse
+# with re-tuned foot powers (K24). N210808 has the rise 0.2 ns earlier and the peak ending
+# 0.45 ns earlier (P24 Fig. 1, read by eye). The pair of Zylstra 2022 has Δλ 1.25 Å
+# (N191118) and 1.8 Å (N210601) on the same mock pointing. The outer beams of N191118 were
+# farther from the midplane for its larger LEH, which is unpublished (*L*).
 dλ = Dict("n221204" => 2.75, "n220919" => 2.5, "n210808" => 1.8, "n191118" => 1.25, "n210601" => 1.8)[shot]
 beams = [remake(b; dlambda = b.group in (:inner23, :inner30) ? dλ / 3 : 0.0)
          for b in hybride_mock_pointing(nif_beams())]
@@ -168,9 +176,9 @@ shot == "n210808" && (pt = [t >= 8.0 ? t - 0.45 : t >= 5.0 ? t - 0.2 : t for t i
 outer = [0, 2, 50, 50, 25, 26, 60, 65, 150, 270, 296, 294, 250, 110, 40, 0, 0, 0]
 inner = [0, 2, 4, 4, 4.5, 5, 7, 9, 25, 90, 146, 146, 146, 146, 146, 146, 140, 0]
 total = Float64.(outer .+ inner)
-# N221204 and N220919: the total power as delivered, read from the vector paths of Pak et
-# al., PRE 109, 025203 (2024) Fig. 1 (`n221204_pulse()`, 2.051 MJ), split by DN24's cone
-# fraction above (the split is published only there).
+# For N221204 and N220919, the total power as delivered is taken from the vector paths of
+# Pak et al., PRE 109, 025203 (2024) Fig. 1 (`n221204_pulse()`, 2.051 MJ). It is split by
+# the cone fraction of DN24 above, the only publication of the split.
 measured = n221204_pulse()
 if shot in ("n221204", "n220919")
     oi, ii = PulseShape(pt, Float64.(outer)), PulseShape(pt, Float64.(inner))
@@ -197,12 +205,12 @@ elseif pair
     @printf("%s: rise %.2f ns, half-power fall %.2f ns (N221204 %.2f, %.2f); bang %.2f ns\n",
             shot, knots_s[2], knots_s[3], knots_r[2], knots_r[3], bang)
 end
-# `lag=<ns>`: a sensitivity estimate of energy stored in the hohlraum plasma (gas and
-# gold blow-off) and given back as x-rays: the delivered power (total and inner) is
-# replaced by its first-order lag of that time constant, so the stored energy is
-# P·lag (energy conserved, though the tail past the last step is not solved; CBET,
-# backscatter and the deposition see the lagged power too). *L*, a sensitivity, not a
-# calibrated model; research notes, "Computed LEH closure (2026-10-24)".
+# `lag=<ns>`: a sensitivity estimate of energy stored in the hohlraum plasma (gas and gold
+# blow-off) and given back as x-rays. The delivered power, total and inner, is replaced by
+# its first-order lag of that time constant, so the stored energy is P·lag. Energy is
+# conserved, though the tail past the last step is not solved, and CBET, backscatter and the
+# deposition also use the lagged power. This is a sensitivity (*L*); it is not a calibrated
+# model (research notes, "Computed LEH closure (2026-10-24)").
 lag = parse(Float64, get(opt, "lag", "0"))
 if lag > 0
     tl = collect(0.0:0.005:pt[end] + 5lag)
@@ -241,14 +249,16 @@ f_srs = 6.0 / ∫(τ -> srs_shape(τ) * inner_power(τ))
 bs_fraction = PulseShape(collect(fine), [f_sbs * sbs_shape(τ) + f_srs * srs_shape(τ) for τ in fine])
 # `backscatter=history`: the measured per-cone SBS time histories of N210808 (Kemp et al.,
 # PoP 33, 082705 (2026) Fig. 2, `kemp2026_sbs()`; research notes, "Inner-cone SBS time
-# histories and the late-time refraction (2026-10-25)"): all backscattered SBS power of a
-# 23° and of a 30° quad, 2.8 and 0.9 kJ per quad, starting as the inner power reaches
-# peak, peaking at 5.3 and 5.75 ns and gone by 6.6–6.9 ns. On the shot's time axis: shifted
-# by the time the shot's inner power reaches half its peak, less N210808's 4.74 ns on the
-# paper's axis (*L*: the shut-off follows the hydrodynamics, timed here by the rise);
-# scaled to `sbs_energy` with N210808's 23°:30° split (3.1:1, *L* for N221204, whose
-# per-cone split is unpublished). Each cone's fraction is its SBS power over its share of
-# the delivered inner power (eight quads per cone, equal quad powers). SRS as above.
+# histories and the late-time refraction (2026-10-25)"). They give all backscattered SBS
+# power of a 23° and of a 30° quad, 2.8 and 0.9 kJ per quad, starting as the inner power
+# reaches peak, peaking at 5.3 and 5.75 ns and gone by 6.6–6.9 ns. On the time axis of the
+# shot, the histories are shifted by the time at which the inner power of the shot reaches
+# half its peak, less the 4.74 ns of N210808 on the axis of the paper. This is *L*, since
+# the shut-off follows the hydrodynamics and is timed by the rise in this script. The
+# histories are scaled to `sbs_energy` with the 23°:30° split of N210808 (3.1:1), which is
+# *L* for N221204, whose per-cone split is unpublished. The fraction of each cone is its SBS
+# power over its share of the delivered inner power, with eight quads per cone and equal
+# quad powers. SRS is handled as above.
 k26 = kemp2026_sbs()
 function half_rise(t, P)
     k = findfirst(>=(maximum(P) / 2), P)
@@ -262,13 +272,14 @@ history_fraction(g) = PulseShape(collect(fine), [inner_power(τ) > 0 ?
     min(1.0, sbs_scale * sbs_cone[g](τ) / (inner_power(τ) / 16)) + f_srs * srs_shape(τ) : 0.0 for τ in fine])
 degrade = parse(Float64, get(opt, "degrade", "0.11"))
 # `backscatter=measured|history|uniform|off`: the measured SBS and SRS on the inner cones
-# with the shapes above (default, the physics: modeled backscatter is per cone and time
-# dependent; none for Zylstra's pair), the same energies on the published per-cone SBS
-# histories (`history`, above), or a uniform 48 kJ power cut, the same fraction of every
-# beam's power: one simple treatment, the one PRE 109's HYDRA used (backscatter "as part
-# of an effective total laser power multiplier", §II), so the setting that matches
-# Fig. 10. With `measured` or `history` the full model is run a second time with the
-# uniform cut, and Fig. 10 is compared with that run.
+# with the shapes above, the same energies on the published per-cone SBS histories
+# (`history`, above), or a uniform 48 kJ power cut, the same fraction of the power of every
+# beam. The default follows the physics, since modeled backscatter is per cone and time
+# dependent; the pair of Zylstra has none. The uniform cut is one simple treatment, the one
+# the HYDRA runs of PRE 109 used (backscatter "as part of an effective total laser power
+# multiplier", §II), and so the setting that matches Fig. 10. With `measured` or `history`
+# the full model is run a second time with the uniform cut, and Fig. 10 is compared with
+# that run.
 bs_mode = get(opt, "backscatter", pair ? "off" : "measured")
 bs_mode in ("measured", "history", "uniform", "off") ||
     error("backscatter=measured, history, uniform or off, not $bs_mode")
@@ -278,18 +289,19 @@ history_cut = Backscatter(:inner23 => history_fraction(:inner23), :inner30 => hi
 uniform_cut = Backscatter((g => (sbs_energy + 6.0) / sum(pulse_energy(pulses[b.group]) for b in beams)
                            for g in (:inner23, :inner30, :outer44, :outer50))...)
 degradation = degrade > 0 ? Any[Backscatter((g => degrade for g in (:inner23, :inner30, :outer44, :outer50))...)] : Any[]
-# `refraction=<f>` (default 0), a sensitivity: the inner power lost at the on-axis density
-# spike between capsule and LEH that refracts the inner beams into the gold bubble and
-# absorbs them (Kemp 2026 §III C): a fraction f of the 30° power at the spike's peak,
-# following the spike's density on axis in the paper's MSH simulation of N210808 (Fig. 6a
-# inset: n_e/n_c 0.01 to 6.0 ns, 0.02 at 6.5, 0.08 at 6.75, 0.15 at 7.0, 0.14 at 7.75; held
-# after that, *L*),
-# the 23° cone the same 0.25 ns later (its SBS ends 0.25 ns after the 30°'s), on the
-# shot's axis as `history`; `refraction_shift=<ns>` moves it (−1: the paper's hypothesis
-# that the spike forms ~1 ns before the hydrodynamics predicts). The paper's only number:
-# without the 7 ns spike, twice the 30° power reaches the ablator (AAC 2025, OSTI
-# 3388898), so f = 0.5 there. The light is booked as lost (an upper bound on its effect
-# on the wall drive: part of it is absorbed in the bubble and converts there). *L*.
+# `refraction=<f>` (default 0) is a sensitivity to the inner power lost at the on-axis
+# density spike between capsule and LEH, which refracts the inner beams into the gold bubble
+# where they are absorbed (Kemp 2026 §III C). A fraction f of the 30° power is lost at the
+# peak of the spike. The loss follows the density of the spike on axis in the MSH simulation
+# of N210808 in the paper (Fig. 6a inset), with n_e/n_c 0.01 up to 6.0 ns, 0.02 at 6.5, 0.08
+# at 6.75, 0.15 at 7.0 and 0.14 at 7.75, held after that (*L*). The 23° cone follows the
+# same curve 0.25 ns later, since its SBS ends 0.25 ns after that of the 30° cone, on the
+# axis of the shot as for `history`. `refraction_shift=<ns>` moves the curve; −1 is the
+# hypothesis of the paper that the spike forms ~1 ns before the hydrodynamics predicts. The
+# only number in the paper is that without the 7 ns spike, twice the 30° power reaches the
+# ablator (AAC 2025, OSTI 3388898), so f = 0.5 at the spike. The light is booked as lost, an
+# upper bound on its effect on the wall drive, since part of it is absorbed in the bubble
+# and converted there (*L*).
 refraction = parse(Float64, get(opt, "refraction", "0"))
 refraction_shift = parse(Float64, get(opt, "refraction_shift", "0"))
 spike = PulseShape([0.0, 6.0, 6.5, 6.75, 7.0, 7.75, 20.0], [0.0, 0.0, 0.01, 0.07, 0.14, 0.13, 0.13] ./ 0.14)
@@ -339,30 +351,30 @@ calibrated = n221204_cbet(leh_z = geometry.length / 2)
 cbet_delay = shot == "n210808" ? -0.2 :
              pair ? pulse_rise((pt, total)) - pulse_rise((n221204_pulse().t, n221204_pulse().power)) : 0.0
 joint = hybride_cbet(leh_z = geometry.length / 2, delay = cbet_delay)
-# `iraum`: the same joint fit with the null held at I-Raum's ≤ 0.5 Å, NC24's 1–1.55 Å
-# being the Δλ of round hot spots rather than the null (`hybride_cbet_iraum()`; research
-# notes, "Joint multi-shot CBET calibration: the null")
+# `iraum`: the same joint fit with the null held at the ≤ 0.5 Å of I-Raum, since the 1–1.55
+# Å of NC24 is the Δλ of round hot spots, which differs from the null
+# (`hybride_cbet_iraum()`; research notes, "Joint multi-shot CBET calibration: the null")
 iraum = hybride_cbet_iraum(leh_z = geometry.length / 2, delay = cbet_delay)
 cbet = transfer == "fig9b" ? fig9b : transfer == "joint" ? joint : transfer == "iraum" ? iraum : calibrated
 
 # Hohlraum dynamics, calibrated against published data other
 # than Fig. 10 (research notes, "Hohlraum dynamics calibrated to published data
 # (2026-10-24)"):
-# - wall: `WallMotion`'s defaults (fitted to the LLNL dynamic view-factor radius of Young
-#   2020) from 0.8 ns after the outer turn-on (0.4 ns), stopping 0.38 mm in, the HYBRID-E
-#   HYDRA waist edge at 6 ns (PRE 109 Fig. 1a, `pre109_fig1a_wall()`);
-# - LEH lips: closing to 0.857 r₀ along the smoothstep fitted to Young 2020's LEH radius
-#   (closure −0.90 ns, width 7.85 ns), shifted 0.8 ns later for N221204's later peak
-#   (peak reached at ~5.4 ns against ~4.6);
-# - bubble: `BubbleAbsorption`'s defaults (Izumi 2021 Figs. 8a and 10a) with an outer
-#   picket fluence 1.1× the HDC basecamp's: 1.5× the energy (~40 against ~26 kJ in the
-#   first ns after the turn-on, DN24 Fig. 1 and Izumi 2021 Fig. 3a read by eye) spread
-#   over split outer quads (−27% fluence on Izumi's split shots); the tip, 1.97 mm in at
-#   6 ns, against 1.85 ± 0.1 for N210808 in PRE 109 Fig. 1a (N221204's is hidden under
-#   its rays, ≥ 1.55). The collision time scales with HYBRID-E's capsule–wall gap
-#   (3.2 − 1.135 mm): t_c 6.09 ns.
-# (`late_lips`, the 2026-10-23 lip closure at 5.0 ns, and with it the `dynamics`
-# argument, removed 2026-10-26.)
+# - wall: the defaults of `WallMotion`, fitted to the LLNL dynamic view-factor radius of
+#   Young 2020, from 0.8 ns after the outer turn-on (0.4 ns), stopping 0.38 mm in at the
+#   HYBRID-E HYDRA waist edge at 6 ns (PRE 109 Fig. 1a, `pre109_fig1a_wall()`);
+# - LEH lips: closing to 0.857 r₀ along the smoothstep fitted to the LEH radius of Young
+#   2020 (closure −0.90 ns, width 7.85 ns), shifted 0.8 ns later for the later peak of
+#   N221204, which is reached at ~5.4 ns against ~4.6 ns;
+# - bubble: the defaults of `BubbleAbsorption` (Izumi 2021 Figs. 8a and 10a) with an outer
+#   picket fluence 1.1× that of the HDC basecamp. The energy is 1.5× higher, ~40 against ~26
+#   kJ in the first ns after the turn-on (DN24 Fig. 1 and Izumi 2021 Fig. 3a, read by eye),
+#   spread over split outer quads, which lowered the fluence by 27% on the split shots of
+#   Izumi. The tip is 1.97 mm in at 6 ns, against 1.85 ± 0.1 for N210808 in PRE 109 Fig. 1a;
+#   the tip of N221204 is hidden under its rays at ≥ 1.55. The collision time scales with
+#   the capsule–wall gap of HYBRID-E (3.2 − 1.135 mm), giving t_c = 6.09 ns.
+# The `late_lips` option, the 2026-10-23 lip closure at 5.0 ns, was removed on 2026-10-26
+# together with the `dynamics` argument.
 turn_on = 0.4
 motion = WallMotion(start = turn_on + 0.8, saturation = 0.38)
 lip, r_open = GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857
@@ -372,11 +384,11 @@ lip, r_open = GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo())
 bkw = haskey(opt, "collision") ? (; collision = parse(Float64, opt["collision"])) : (;)
 bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius,
                           picket_ratio = parse(Float64, get(opt, "bubble_energy", "1.1")), bkw...)
-# `lips=computed`: the lips' closure computed instead of prescribed (`LipClosure`, its
-# speed, depth and hold fitted to Chen 2020's measured LEH radii, `chen2020_leh()`): free
-# expansion at the gold sound speed of the lip in the foot, held 0.24 mm inside the rim
-# while the beams pass, free again as the power falls; the lip reaches down to 0.6 r₀
-# (research notes, "Computed LEH closure (2026-10-24)").
+# `lips=computed`: the closure of the lips is computed instead of prescribed (`LipClosure`,
+# with its speed, depth and hold fitted to the measured LEH radii of Chen 2020,
+# `chen2020_leh()`). The lip expands freely at the gold sound speed in the foot, is held
+# 0.24 mm inside the rim while the beams pass, and expands freely again as the power falls.
+# It reaches down to 0.6 r₀ (research notes, "Computed LEH closure (2026-10-24)").
 get(opt, "lips", "prescribed") == "computed" && (lip = :computed; r_open = 0.6)
 geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
 @printf("dynamics: wall %.2f mm in at 6 ns, %.2f at 9 ns; bubble t_c %.2f ns, tip %.2f mm at 6 ns\n",
@@ -389,20 +401,21 @@ geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
 tstep = parse(Float64, get(opt, "dt", "0.25"))
 times = get(pos, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] :
         sort(unique([collect(0.5:tstep:9.25); 9.35; 0.5:0.25:9.25]))
-# `metrics=on`: the drive window runs on to bang time (N221204 9.53 ns, K24E Table I; the
-# pair's from Zylstra Fig. 2), the full model records every Y_lm, and ROADMAP "Implosion metrics and UQ"'s
-# implosion metrics are printed over the window from the rise to bang (below).
+# `metrics=on`: the drive window runs on to bang time (9.53 ns for N221204 from K24E Table
+# I, and the times of the pair from Zylstra Fig. 2). The full model records every Y_lm, and
+# the implosion metrics of the ROADMAP item "Implosion metrics and UQ" are printed over the
+# window from the rise to bang (below).
 metrics = get(opt, "metrics", "off") == "on"
 metrics && (times = sort(unique([times; filter(>(times[end]), [9.45, bang]); bang])))
 keyframes = range(turn_on, 9.0, 11)
 
 p2(r) = r.moments[3, :] ./ r.moments[1, :]
 p4(r) = r.moments[5, :] ./ r.moments[1, :]
-# Synthetic Dante 1 (port P143-274: θ 143.25°, φ 274°, 36.75° to the axis; its 60 mm field at TCC taking in
-# the lower LEH and the whole target; `dante1()`): the
-# brightness temperature of the power per steradian it sees, over the LEH's initial
-# area (Dante's convention) and over its open area (the closing lips' open fraction: the
-# temperature behind the hole), recorded at every step of every run.
+# Synthetic Dante 1 (`dante1()`) is on port P143-274, at θ 143.25° and φ 274°, 36.75° to the
+# axis, and its 60 mm field at TCC takes in the lower LEH and the whole target. Every step
+# of every run records the brightness temperature of the power per steradian it sees, both
+# over the initial area of the LEH (the Dante convention) and over its open area. The open
+# area uses the open fraction of the closing lips and gives the temperature behind the hole.
 d1 = dante1()
 dante_tr(sol) = (d = dante(d1, sol); (d.Tr, d.Tr_open))
 # `unfold=on`: in the full model, at the times below, also the spectrum Dante 1 sees
@@ -469,11 +482,12 @@ end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
 which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
 # Every run records the capsule M-band (> 1.8 keV) at every step from the per-cone
-# post-CBET, post-bubble deposition (`drive_history`'s default `mband = MBandSplit()`:
-# `nif_mband()`, Dewald's per-cone conversions on the gold liner of the DU wall), two
-# groups split at 1.8 keV with the M-band group albedo α_M 0.55 thermalized (the > 1.8 keV
-# flux of a two-group solve is that of the 42-group one: the soft groups keep the gray
-# albedo); `alpha_m` replaces α_M in the full model.
+# post-CBET, post-bubble deposition. This is the default `mband = MBandSplit()` of
+# `drive_history`, which uses `nif_mband()`, the per-cone conversions of Dewald on the gold
+# liner of the DU wall. The two groups are split at 1.8 keV, with the M-band group albedo
+# α_M 0.55 thermalized. The > 1.8 keV flux of a two-group solve equals that of the 42-group
+# solve, because the soft groups take the gray albedo. `alpha_m` replaces α_M in the full
+# model.
 mband_kw = haskey(opt, "alpha_m") ? (; mband = MBandSplit(; albedo = alpha_m)) : (;)
 run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = full_lpi, record = dante_rec,
                                      ylm = metrics, mband_kw...))
@@ -497,7 +511,8 @@ if hasproperty(fig10, Symbol(shot))     # no HYDRA curve for Zylstra's pair
         println(rpad(@sprintf("%.1f", t), 7), join([rpad(@sprintf("%+.3f", p2(r)[k]), 22) for (_, r) in runs]),
                 @sprintf("%+.3f ± %.3f", ref[i], uref[i]))
     end
-    # swing shape: minimum after 4.5 ns, the upward zero crossing after it, the value at 8 ns
+    # The swing shape is the minimum after 4.5 ns, the upward zero crossing after it, and
+    # the value at 8 ns.
     function swing(t, p)
         s = findall(k -> 4.5 <= t[k] <= 8.95 && isfinite(p[k]), eachindex(t))
         km = s[argmin(p[s])]
@@ -547,16 +562,17 @@ for (n, r) in runs
             join([@sprintf("%.2f ns %.3f", t, rl[k]) for t in (2.0, 4.5, 5.5, 8.0, 8.5, 9.0)
                   for k in (findfirst(≈(t), times),) if k !== nothing], ", "))
 end
-# Implosion metrics (`metrics=on`; ROADMAP "Implosion metrics and UQ", research notes "Implosion metrics"), over
-# the drive window from the start of the rise (`pulse_rise`) to bang time, against the
-# measured N221204 hot spot (P24 Fig. 2, K24 Table II): velocity 36 ± 6 km/s toward
-# (θ, φ) = (151°, 54°), P2 0.3 ± 0.1 µm. The velocity is the flat-kernel default
-# (100 km/s per % of mode 1, burn-off); the mock pointing is up-down and azimuthally
-# symmetric and the hohlraum has no windows, so its mode 1 is the mesh's and the beams'
-# residual. The flux P2 is compared as a time average with Fig. 10's (HYDRA), and as a
-# hot-spot P2 shift from it at the −9.2 µm per % of flux P2 over 4.5–6.5 ns transfer of
-# the research notes ("Callahan 2018 and Izumi 2018", a sensitivity from another
-# platform, *L*); Briareus ships no hot-spot P2 kernel.
+# The implosion metrics (`metrics=on`; ROADMAP item "Implosion metrics and UQ", research
+# notes "Implosion metrics") are computed over the drive window from the start of the rise
+# (`pulse_rise`) to bang time. They are compared with the measured N221204 hot spot (P24
+# Fig. 2, K24 Table II), with velocity 36 ± 6 km/s toward (θ, φ) = (151°, 54°) and P2 0.3 ±
+# 0.1 µm. The velocity uses the flat-kernel default (100 km/s per % of mode 1, burn-off).
+# The mock pointing is up-down and azimuthally symmetric and the hohlraum has no windows, so
+# its mode 1 is the residual of the mesh and the beams. The flux P2 is compared as a time
+# average with that of Fig. 10 (HYDRA). It is also converted to a hot-spot P2 shift with the
+# transfer of −9.2 µm per % of flux P2 over 4.5–6.5 ns from the research notes ("Callahan
+# 2018 and Izumi 2018", a sensitivity from another platform, *L*). Briareus does not ship a
+# hot-spot P2 kernel.
 if metrics
     rise = pulse_rise((pt, total))
     println("\nimplosion metrics, drive window $(round(rise, digits = 2))–$(bang) ns (rise to bang)")
@@ -617,11 +633,12 @@ if !isempty(unfolds)
     end
 end
 
-# Energy budget over the solved times (0.5–9.35 ns), against PRE 109 App. 3's HYDRA
-# split of N221204's incident laser energy: wall 54.1% (Au lining 4.4, DU 49.7), LEH
-# 25.2%, He gas 4.5% (not modeled here: the bubble's absorbed light is conducted to
-# the wall, so compare the wall with wall + gas, 58.6%), capsule 16.2%. Fractions of
-# the coupled energy (after backscatter and degradation) and of the delivered.
+# The energy budget over the solved times (0.5–9.35 ns) is compared with the HYDRA split of
+# the incident laser energy of N221204 in PRE 109 App. 3: wall 54.1% (Au lining 4.4, DU
+# 49.7), LEH 25.2%, He gas 4.5% and capsule 16.2%. The gas is not modeled in this script;
+# the light absorbed in the bubble is conducted to the wall, so the wall is compared with
+# wall + gas, 58.6%. The fractions are given of the coupled energy, after backscatter and
+# degradation, and of the delivered energy.
 println("\nenergy budget (kJ; % of coupled / of delivered)")
 surfaces(b) = [n for n in keys(b.heating) if n !== :capsule]
 for (n, r) in runs
@@ -638,8 +655,9 @@ for (n, r) in runs
     @printf("    mean conversion %.3f\n", sum(values(b.source)) / sum(values(b.laser)))
 end
 
-# CBET and bubble diagnostics: post-transfer cone fraction (PRE 109 Fig. 9b: 0.65 at
-# 5.6 ns, 0.55 at 7 ns, 0.52 at 8 ns) and the inner power the bubble takes.
+# The CBET and bubble diagnostics are the post-transfer cone fraction, which is 0.65 at 5.6
+# ns, 0.55 at 7 ns and 0.52 at 8 ns in PRE 109 Fig. 9b, and the inner power the bubble
+# takes.
 println("\nt (ns)  CF in  CF post-CBET  bubble x (mm)  inner23/30 absorbed  ridge g")
 isin(b) = b.group in (:inner23, :inner30)
 for t in (2.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 8.0, 8.5)

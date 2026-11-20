@@ -4,7 +4,7 @@ using Briareus, LinearAlgebra, Test
 
 @testset "sombrero" begin
     kw = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 0.6, capsule_h = 0.3)
-    # off by default: the same target at every element
+    # The sombrero is off by default, giving the same target at every element.
     t0 = hohlraum(; kw...)
     for s in (nothing, false)
         ts = hohlraum(; kw..., sombrero = s)
@@ -31,8 +31,8 @@ using Briareus, LinearAlgebra, Test
         @test all(isapprox.(extrema(ρ), (4.0, 9.2); rtol = 1e-14))
     end
 
-    # outside the cavity: the shields and the hohlraum do not see each other, so the
-    # closed enclosure, its balancing and its solution are those without them
+    # Outside the cavity the shields and the hohlraum do not see each other, so the
+    # closed enclosure, the balancing and the solution are the same as without them.
     m0, m = RadiationModel(t0), RadiationModel(t)
     sh = n0+1:nelements(t)
     @test all(iszero, m.F[sh, :]) && all(iszero, m.F[:, sh])
@@ -50,9 +50,9 @@ using Briareus, LinearAlgebra, Test
     @test_throws ArgumentError hohlraum(; kw..., sombrero = Sombrero(inner_radius = 1.5, offset = -0.5))
     @test_throws ArgumentError hohlraum(; kw..., sombrero = Sombrero(offset = 6.0))
 
-    # it blocks beams: beams from ports on the shield's side, aimed at the top shield, land
-    # on its front from 30° and on its waist side (the back-side loss) from 120°; operator
-    # and ray trace agree
+    # The sombrero blocks beams. Beams from ports on the side of the shield, aimed at the
+    # top shield, are deposited on its front from 30° and on its waist side (the back-side
+    # loss) from 120°. The operator and the ray trace agree.
     spot = SuperGaussianSpot(0.3; order = 4.0)
     top = component_index(t, :sombrero_top)
     for (θ, front) in ((30, true), (120, false))
@@ -65,9 +65,9 @@ using Briareus, LinearAlgebra, Test
         @test (front ? sum(r.element[elements(t, :sombrero_top)]) : r.backside[top]) ≈ 1 rtol = 1e-6
     end
 
-    # clearance: shields are hardware like any other surface. Cone-averaged drive
-    # pointing clears them (core 1e-4 envelope, no wings: > 1.5 mm worst case); a beam
-    # aimed past the hole's edge onto the shield fails
+    # For clearance, shields are hardware like any other surface. Cone-averaged drive
+    # pointing clears them by > 1.5 mm in the worst case, with the core 1e-4 envelope and no
+    # wings. A beam aimed past the edge of the hole onto the shield fails.
     qs = nif_quads()
     rz = Dict(:inner23 => (1.09, 3.09), :inner30 => (0.6, 3.63), :outer44 => (0.0, 5.2), :outer50 => (0.0, 5.01))
     qs = [(b = qs[findfirst(b -> b.group === g, qs)]; φ = port_angles(b)[2]; (r0, z0) = rz[g];

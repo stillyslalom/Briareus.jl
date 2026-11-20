@@ -1,16 +1,19 @@
-# Retuning a drive: per-group power histories that hold a drive quantity through time
-# (a capsule's spherical-harmonic shape and level, a face's x-ray flux, a foil's laser
-# irradiance), to a reference shot's or uniform at a prescribed level, under power
-# limits, e.g. after dropping a bundle. Plus the pulse tables they come from.
+# This file retunes a drive. A retune computes per-group power histories that hold a
+# drive quantity through time under power limits, for example after a bundle is dropped.
+# The quantity is the spherical-harmonic shape and level of the drive on a capsule, the
+# x-ray flux on a face, or the laser irradiance on a foil. It is held at the value of a
+# reference shot, or uniform at a prescribed level. The file also reads and writes the
+# pulse tables of the histories.
 
 """
     cone_fraction_pulses(beams, times, total, fraction; inner = (:inner23, :inner30))
         -> Dict{Symbol,PulseShape}
 
 Per-group pulses (power per beam, TW) from a total laser power history `total` (TW, at
-`times` ns) and a cone fraction history `fraction` (inner-cone share of the total), the
-way NIF pulses are specified: the inner groups' beams share `fraction × total` equally,
-the other groups' beams the rest. Keyed by each beam's `group`, for `with_pulses`.
+`times` ns) and a cone fraction history `fraction` (the inner-cone share of the total),
+in the way NIF pulses are specified. The beams of the inner groups share
+`fraction × total` equally, and the beams of the other groups share the rest. The pulses
+are keyed by the `group` of each beam, for `with_pulses`.
 """
 function cone_fraction_pulses(beams::AbstractVector{<:Beam}, times, total, fraction;
                               inner = (:inner23, :inner30))
@@ -31,9 +34,9 @@ end
 """
     write_pulse_table(path, pulses) -> path
 
-Pulses (power per beam, TW, against time, ns) per group, quad or beam as CSV: a
-`time_ns` column and one column per key, on the union of the pulses' times. Read back
-with [`read_pulse_table`](@ref).
+Write pulses (power per beam, TW, against time, ns) per group, quad or beam as CSV. The
+table has a `time_ns` column and one column per key, on the union of the times of the
+pulses. [`read_pulse_table`](@ref) reads the table back.
 """
 function write_pulse_table(path::AbstractString, pulses::AbstractDict)
     ks = sort(collect(keys(pulses)); by = string)
@@ -51,8 +54,8 @@ end
     read_pulse_table(path) -> Dict{Symbol,PulseShape}
 
 Pulses per group, quad or beam from a CSV table in the layout of
-[`write_pulse_table`](@ref): a `time_ns` column and one column per key (power per beam,
-TW). Read a reference shot's measured or requested powers this way.
+[`write_pulse_table`](@ref), with a `time_ns` column and one column per key (power per
+beam, TW). The measured or requested powers of a reference shot are read this way.
 """
 function read_pulse_table(path::AbstractString)
     header, rows = read_csv(path)
@@ -66,12 +69,13 @@ end
 """
     RetuneQuantity
 
-What [`retune_drive`](@ref) holds through time: a vector `y` of the drive, linear in the
-beam groups' powers at fixed albedos, with a level `L = μ'y` and a shape `y/L`. The kinds
-are [`CapsuleModes`](@ref) (a capsule's x-ray flux, by its real spherical-harmonic
-coefficients), [`FaceFlux`](@ref) (the x-ray flux on each element of a face, e.g. a
-package's face in a halfraum) and [`FoilIrradiance`](@ref) (the absorbed laser irradiance
-on a foil's spot, without a radiation model).
+The quantity that [`retune_drive`](@ref) holds through time. It is a vector `y` of the
+drive, linear in the powers of the beam groups at fixed albedos, with a level `L = μ'y`
+and a shape `y/L`. The kinds are [`CapsuleModes`](@ref) (the x-ray flux on a capsule, by
+its real spherical-harmonic coefficients), [`FaceFlux`](@ref) (the x-ray flux on each
+element of a face, such as the face of a package in a halfraum) and
+[`FoilIrradiance`](@ref) (the absorbed laser irradiance on the spot of a foil, without a
+radiation model).
 """
 abstract type RetuneQuantity end
 
@@ -79,13 +83,14 @@ abstract type RetuneQuantity end
     CapsuleModes(model; observe = :capsule, modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
                  components = ())
 
-A capsule's drive for [`retune_drive`](@ref): the real spherical-harmonic coefficients
-`c_lm` of the incident x-ray flux on `observe` in the radiation model `model`
-(`ylm_weights` about the observed elements' center, `mode_index` order), with level
-`c_00`. The shape terms weight each degree `l => w` of `modes` over its `2l + 1`
-coefficients and each `(l, m) => w` of `components` alone (e.g. the `l = 1, m = ±1`
-drift of a dropped bundle). The reference is a [`drive_history`](@ref) run with
-`ylm = true` (through the highest degree weighted) and `keep_albedo = true`.
+The drive of a capsule for [`retune_drive`](@ref). The quantity is the real
+spherical-harmonic coefficients `c_lm` of the incident x-ray flux on `observe` in the
+radiation model `model` (`ylm_weights` about the center of the observed elements, in
+`mode_index` order), with level `c_00`. The shape terms weight each degree `l => w` of
+`modes` over its `2l + 1` coefficients, and each `(l, m) => w` of `components`
+separately, for example the `l = 1, m = ±1` drift of a dropped bundle. The reference is
+a [`drive_history`](@ref) run with `ylm = true` (through the highest degree weighted) and
+`keep_albedo = true`.
 """
 struct CapsuleModes{R<:RadiationModel} <: RetuneQuantity
     model::R
@@ -101,15 +106,15 @@ CapsuleModes(model::RadiationModel; observe = :capsule, modes = (1 => 1.0, 2 => 
 """
     FaceFlux(model, face; uniformity = 1.0)
 
-A face's x-ray drive for [`retune_drive`](@ref): the incident flux `H_e` (TW/mm²) on
-each element of `face` (a part or component name, or a tuple of them) in the radiation
-model `model`, with level the area mean `H̄ = Σ A_e H_e / Σ A_e`. The shape terms are
-`uniformity × Σ_e (A_e/ΣA) (H_e/H̄ - ŝ_e)²` (times `(H̄/L_t)²`, see `retune_drive`): for the
-uniform target (`ŝ = 1`) the square of the face's RMS nonuniformity,
-`rms_nonuniformity(H, A)`. Meant for a flat face (a package's face in a halfraum, an
-opacity sample), whose flux has no modes to restore. The reference is a
-[`drive_history`](@ref) run with `observe = face`, `observed_flux = true` and
-`keep_albedo = true`.
+The x-ray drive of a face for [`retune_drive`](@ref). The quantity is the incident flux
+`H_e` (TW/mm²) on each element of `face` (a part or component name, or a tuple of them)
+in the radiation model `model`, and the level is the area mean
+`H̄ = Σ A_e H_e / Σ A_e`. The shape terms are `uniformity × Σ_e (A_e/ΣA) (H_e/H̄ - ŝ_e)²`,
+times `(H̄/L_t)²` (see `retune_drive`). For the uniform target (`ŝ = 1`) this is the
+square of the RMS nonuniformity of the face, `rms_nonuniformity(H, A)`. The quantity is
+meant for a flat face, such as the face of a package in a halfraum or an opacity sample,
+whose flux has no modes to restore. The reference is a [`drive_history`](@ref) run with
+`observe = face`, `observed_flux = true` and `keep_albedo = true`.
 """
 struct FaceFlux{R<:RadiationModel} <: RetuneQuantity
     model::R
@@ -121,17 +126,18 @@ FaceFlux(model::RadiationModel, face; uniformity::Real = 1.0) = FaceFlux(model, 
 """
     FoilIrradiance(foil; center = nothing, radius = Inf, side = 1, uniformity = 1.0)
 
-A foil's laser drive for [`retune_drive`](@ref) (a backlighter): the absorbed laser
-irradiance `I_e = P_e/A_e` (TW/mm²) of each element of the part or component `foil` on
-side `side` (1 front, -1 back) whose centroid lies within `radius` (mm) of `center`
-(default: the area centroid of the foil's elements on that side), with level the mean
-`Σ P_e / Σ A_e` and shape terms as [`FaceFlux`](@ref)'s. These are the uniformity and
-intensity terms of [`irradiance_objective`](@ref) (its spill has no counterpart here:
-the pointing is fixed). No radiation model takes part: the deposition is linear in the
-powers. The reference is `(; time, deposition)`, the reference shot's absorbed laser
-`Deposition` at each time (e.g. `[deposit(op, with_pulses(beams, pulses, τ)) for τ in
-times]`, every color it fires included); with `target = :uniform` and a `level`,
-`(; time)` alone.
+The laser drive of a foil, such as a backlighter, for [`retune_drive`](@ref). The
+quantity is the absorbed laser irradiance `I_e = P_e/A_e` (TW/mm²) of each element of
+the part or component `foil` on side `side` (1 front, -1 back) whose centroid lies
+within `radius` (mm) of `center`. By default `center` is the area centroid of the foil
+elements on that side. The level is the mean `Σ P_e / Σ A_e`, and the shape terms are
+those of [`FaceFlux`](@ref). These are the uniformity and intensity terms of
+[`irradiance_objective`](@ref). Its spill term has no counterpart here, since the
+pointing is fixed. No radiation model is used, since the deposition is linear in the
+powers. The reference is `(; time, deposition)`, the absorbed laser `Deposition` of the
+reference shot at each time, with every color that it fires (e.g.
+`[deposit(op, with_pulses(beams, pulses, τ)) for τ in times]`). With
+`target = :uniform` and a `level`, the reference is only `(; time)`.
 """
 struct FoilIrradiance <: RetuneQuantity
     foil::Symbol
@@ -144,8 +150,9 @@ FoilIrradiance(foil::Symbol; center = nothing, radius::Real = Inf, side::Integer
     FoilIrradiance(foil, center === nothing ? nothing : Vec3(center...), Float64(radius), Int(side),
                    Float64(uniformity))
 
-# `y = X[es, :] ./ A`: a foil spot's irradiance from per-element absorbed powers, the
-# response of `FoilIrradiance` (to the 3ω light and to each unconverted color alike).
+# `y = X[es, :] ./ A` is the irradiance of a foil spot from per-element absorbed powers.
+# It is the response of `FoilIrradiance`, to the 3ω light and to each unconverted color
+# alike.
 struct _SpotRows
     es::Vector{Int}
     A::Vector{Float64}
@@ -153,11 +160,12 @@ end
 Base.:*(s::_SpotRows, X::AbstractMatrix) = X[s.es, :] ./ s.A
 Base.:*(s::_SpotRows, x::AbstractVector) = x[s.es] ./ s.A
 
-# Per quantity: the target, the length `ny` of `y`, the level functional `μ`, the shape
-# rows (index, weight), the uniform shape, the reference's `y` (`ny × nt`, or nothing
-# when the target does not need it), the area weights of the RMS (nothing: none), and
-# `response(τ, k, colors)`, a Dict of the responses (`:omega3` and each unconverted
-# color's) from per-element absorbed power to `y` at reference step `k`.
+# Returns, per quantity, the target, the length `ny` of `y`, the level functional `μ`, the
+# shape rows (index, weight) and the uniform shape. It also returns the `y` of the
+# reference (`ny × nt`, or nothing when the target does not need it), the area weights of
+# the RMS (nothing when there are none), and `response(τ, k, colors)`. That function
+# returns a Dict of the responses from per-element absorbed power to `y` at reference
+# step `k`, under `:omega3` and the name of each unconverted color.
 function _retune_setup(q::CapsuleModes, ref, need_ref::Bool)
     m = q.model
     t = m.target
@@ -235,10 +243,10 @@ end
 _need_albedo(ref) = get(ref, :albedo, nothing) === nothing &&
     throw(ArgumentError("the reference history needs keep_albedo = true"))
 
-# The x-ray responses of `obs` (weighted by `W`, or per element) at reference step `k`,
-# about its converged albedos; with unconverted colors, one per color as well, each
-# color's conversion independent of intensity (as the 3ω response requires), so the
-# secant's powers do not enter.
+# Returns the x-ray responses of `obs` (weighted by `W`, or per element) at reference step
+# `k`, about its converged albedos. With unconverted colors there is also one response per
+# color. The conversion of each color is independent of intensity, as the 3ω response
+# requires, so the powers of the secant do not enter.
 function _xray_response(m, obs, ref, W)
     ne = nelements(m.target)
     kw(k) = W === nothing ? (; albedo = ref.albedo[k]) : (; albedo = ref.albedo[k], weights = W)
@@ -256,79 +264,88 @@ end
                  unconverted = nothing, prepulse = nothing, colors = nif_unconverted(),
                  unconverted_kw = (;)) -> NamedTuple
 
-Power histories for `beams` (grouped `by` `:group`, `:quad`, `:beam` or a function
-`beam -> key`; one power per beam of a group at each time) that hold a drive `quantity`
-through the times of `reference`, e.g. after dropping a bundle: a capsule's modes
-([`CapsuleModes`](@ref)), a face's x-ray flux ([`FaceFlux`](@ref)) or a foil's laser
-irradiance ([`FoilIrradiance`](@ref)), whose docstrings list what `reference` must hold.
-`op` is the deposition operator of `beams` (e.g. the reference's restricted to the beams
-that remain, `op[keep]`), whose pointing holds through the pulse.
+Power histories for `beams` that hold a drive `quantity` through the times of
+`reference`, for example after a bundle is dropped. Beams are grouped `by` `:group`,
+`:quad`, `:beam` or a function `beam -> key`, with one power per beam of a group at each
+time. The quantity is the modes of a capsule ([`CapsuleModes`](@ref)), the x-ray flux on
+a face ([`FaceFlux`](@ref)) or the laser irradiance on a foil
+([`FoilIrradiance`](@ref)); their docstrings list what `reference` must contain. `op`
+is the deposition operator of `beams`, for example that of the reference restricted to
+the remaining beams, `op[keep]`. Its pointing is fixed through the pulse.
 
-**Target.** The quantity's vector `y` (a capsule's `c_lm`, a face's `H_e`, a foil's `I_e`)
-has a level `L = μ'y` (`c_00`; the area mean) and a shape `y/L`. At each time the
-target is a shape `ŝ` and a level `L_t`:
+**Target.** The vector `y` of the quantity (the `c_lm` of a capsule, the `H_e` of a
+face, the `I_e` of a foil) has a level `L = μ'y` (`c_00`, or the area mean) and a shape
+`y/L`. At each time the target is a shape `ŝ` and a level `L_t`. The shape is set by
+`target`:
 
-- `target = :reference` (the default): the reference's shape, `ŝ = y_ref/L_ref`, all of
-  it: a capsule's modes, a face's or a foil's flux distribution (so its RMS
-  nonuniformity and peak-to-mean ratio as well);
-- `target = :uniform`: a uniform drive (`c_lm = 0` for `l ≥ 1`; a flat flux), i.e. the
-  least nonuniformity that the powers allow;
+- `target = :reference` (the default): the full shape of the reference,
+  `ŝ = y_ref/L_ref`. This is the modes of a capsule, or the flux distribution of a face
+  or a foil, and so also its RMS nonuniformity and peak-to-mean ratio;
+- `target = :uniform`: a uniform drive (`c_lm = 0` for `l ≥ 1`, or a flat flux), which
+  is the least nonuniformity that the powers allow.
 
-and `L_t` is `level` (TW/mm²; a number or a function of time in ns) when given, else the
-reference's `L_ref`. `target = :uniform, level = I₀` thus gives a foil's most uniform
-irradiance at the mean `I₀`.
+`L_t` is `level` (TW/mm², a number or a function of time in ns) when given, and
+otherwise the level `L_ref` of the reference. `target = :uniform, level = I₀` thus gives
+the most uniform irradiance of a foil at the mean `I₀`.
 
-**Solve.** At each reference time `y` is linear in the groups' powers `P`: `y = M P + y₀`,
-for the x-ray quantities with the albedos fixed at the reference's converged ones
-(`flux_response(...; albedo)`), `y₀` the prepulse's part (below). The powers minimize
+**Solve.** At each reference time `y` is linear in the powers `P` of the groups,
+`y = M P + y₀`, where `y₀` is the part of the prepulse (below). For the x-ray quantities
+the albedos are fixed at the converged albedos of the reference
+(`flux_response(...; albedo)`). The powers minimize
 
     Σ_i w_i ((y_i - ŝ_i L)/L_t)² + smooth Σ_g ((P_g - P_g,prev)/P_scale)²
         + stay Σ_g ((P_g - P_g,nominal)/P_scale)²
 
-at the level `L = L_t`, with the quantity's weights `w_i` (its modes and components for
-a capsule; `uniformity × A_e/ΣA` for a face or a foil, whose first sum is then the
-square of its RMS departure from `ŝ`), within the bounds `limits` (TW per beam):
-`nothing` (from 0, unbounded above), a `Dict` key => `(lo, hi)` (missing keys:
-`(0, Inf)`), or a function `(key, t) -> (lo, hi)`, e.g. a quad's power capability, or
-`(0, 0)` for a dropped quad. `smooth` ties each step's powers to the previous step's,
-and `stay` to `nominal` powers (a `Dict` key => `PulseShape`, or a function
-`(key, t) -> P`, e.g. the reference shot's): among the many power sets that restore the
-drive it selects the one closest to them, instead of one that runs many quads to their
-limits. This is a box-bounded linear least-squares problem per time, the level held
-by a penalty row whose target is shifted until the solution's level is `L_t` (the
-secant method on that level, piecewise linear in the shift: one step while the active
-bounds hold). A penalty alone would pull the level down by about the square of the
-nonuniformity (`L/L_t ≈ 1/(1 + RMS²)`), a percent at an RMS of 10%. Where the bounds
-cannot reach `L_t` the level is the nearest they allow, and `drive` reports it.
+at the level `L = L_t`, with the weights `w_i` of the quantity. For a capsule they are
+its modes and components. For a face or a foil they are `uniformity × A_e/ΣA`, and the
+first sum is then the square of the RMS departure from `ŝ`. The powers lie within the
+bounds `limits` (TW per beam), which are `nothing` (from 0, unbounded above), a `Dict`
+key => `(lo, hi)` (with `(0, Inf)` for missing keys), or a function
+`(key, t) -> (lo, hi)`. Examples are the power capability of a quad, or `(0, 0)` for a
+dropped quad. `smooth` ties the powers of each step to those of the previous step, and
+`stay` ties them to `nominal` powers, such as those of the reference shot. `nominal` is
+a `Dict` key => `PulseShape` or a function `(key, t) -> P`. Among the many power sets
+that restore the drive, `stay` selects the one closest to the nominal powers, instead of
+one that runs many quads to their limits. The problem is a box-bounded linear
+least-squares problem per time. The level is held by a penalty row whose target is
+shifted until the level of the solution is `L_t`, by the secant method on that level.
+The level is piecewise linear in the shift, so one step suffices while the active bounds
+are unchanged. A penalty without the shift would pull the level down by about the square
+of the nonuniformity (`L/L_t ≈ 1/(1 + RMS²)`), a percent at an RMS of 10%. Where the
+bounds cannot reach `L_t`, the level is the nearest they allow, and `drive` reports it.
 
-**Unconverted light.** A reference run with unconverted (1ω, 2ω) light takes that
-history's `unconverted`, `prepulse`, `colors` and `unconverted_kw` here (see
-[`drive_history`](@ref)), so that the retune solves with the same per-color sources:
-`y = (R₃ E + Σ_c R_c E_c(t)) P + Σ_c R_c Q_c p_c(t)`, with `R₃` and `R_c` the 3ω and
-per-color responses (`flux_response(...; unconverted)` for the x-ray quantities; for a
-foil, each color's absorbed power adds to the irradiance), `E` each group's 3ω absorbed
-power at 1 TW per beam, `E_c(t)` its color-`c` absorbed power at 1 TW per beam times each
-beam's fraction `r_c(t)` (the sum, over its beams on each fraction schedule, of
-[`unconverted_deposition`](@ref) of those beams at that fraction), and `p_c(t)` the
-color's prepulse, fixed powers deposited by `Q_c`. The fractions and prepulses are keyed
-by `by`, as the retuned groups, and a color's fraction may also be a vector with one
-entry per beam of `beams`: the beams of a retuned group may carry different fractions
-(e.g. 1ω on some beams of a quad only). The prepulse is not retuned: it shifts the
-target of the least squares. As for the 3ω response, the conversions must not depend on
-intensity. A reference history with unconverted light and no `unconverted` here is an
-error.
+**Unconverted light.** For a reference run with unconverted (1ω, 2ω) light, the
+`unconverted`, `prepulse`, `colors` and `unconverted_kw` of that history are passed here
+(see [`drive_history`](@ref)), so that the retune uses the same per-color sources:
+
+    y = (R₃ E + Σ_c R_c E_c(t)) P + Σ_c R_c Q_c p_c(t).
+
+`R₃` and `R_c` are the 3ω and per-color responses, from
+`flux_response(...; unconverted)` for the x-ray quantities; for a foil, the absorbed
+power of each color adds to the irradiance. `E` is the 3ω absorbed power of each group
+at 1 TW per beam. `E_c(t)` is its absorbed power in color `c` at 1 TW per beam, times the
+fraction `r_c(t)` of each beam. It is the sum, over the beams of the group on each
+fraction schedule, of [`unconverted_deposition`](@ref) of those beams at that fraction.
+`p_c(t)` is the prepulse of the color, fixed powers deposited by `Q_c`. The fractions and
+prepulses are keyed by `by`, as the retuned groups are. The fraction of a color may also
+be a vector with one entry per beam of `beams`, so the beams of a retuned group may have
+different fractions (e.g. 1ω only on some beams of a quad). The prepulse is not
+retuned, and it shifts the target of the least squares. As for the 3ω response, the
+conversions must not depend on intensity. A reference history with unconverted light
+and no `unconverted` here is an error.
 
 Returns `(; time, keys, power, pulses, shape, target_shape, level, drive, rms, peak,
-residual)`: the per-beam powers (`length(keys) × nt`), the same as `PulseShape`s for
-`with_pulses` (`by` the same key), the predicted shape `y/L` and the target `ŝ`
-(`ny × nt`), the predicted level `L` (TW/mm²) and `L/L_t`, for a face or a foil the
-predicted RMS nonuniformity and peak-to-mean ratio `max(y)/L` (`nothing` for a capsule),
-and the weighted residual norm per time. A time whose limits fix every power (`lo == hi`,
-e.g. `(0, 0)` where the reference fires no 3ω light: a prepulse alone, or a gap between
-pulses) is not solved: its powers are the limits, its target level may be zero, and its
-residual is `NaN`. For the x-ray quantities the prediction is
-linear about the reference's albedos: confirm with a `drive_history` of the pulses,
-where the albedos follow the new drive.
+residual)`. These are the per-beam powers (`length(keys) × nt`), the same powers as
+`PulseShape`s for `with_pulses` (with `by` the same key), the predicted shape `y/L` and
+the target `ŝ` (`ny × nt`), and the predicted level `L` (TW/mm²) and `L/L_t`. For a face
+or a foil they include the predicted RMS nonuniformity and peak-to-mean ratio
+`max(y)/L` (`nothing` for a capsule), and finally the weighted residual norm per time. A
+time whose limits fix every power (`lo == hi`) is not solved. An example is `(0, 0)`
+where the reference has no 3ω light, as with only a prepulse or in a gap between
+pulses. The powers at such a time are the limits, the target level may be zero, and the
+residual is `NaN`. For the x-ray quantities the prediction is linear about the albedos
+of the reference, and a `drive_history` of the pulses, where the albedos follow the new
+drive, confirms it.
 """
 Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), op::DepositionOperator,
                       beams::AbstractVector{<:Beam}, @nospecialize(ref); target::Symbol = :reference,
@@ -341,7 +358,7 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
     stay > 0 && nominal === nothing && throw(ArgumentError("stay needs nominal powers"))
     level isa Real && !(level > 0) && throw(ArgumentError("the level must be positive"))
     nom(k, τ) = nominal isa AbstractDict ? nominal[k](τ) : nominal(k, τ)
-    # the unconverted light, as the reference history's (`nothing`: none)
+    # the unconverted light, as in the reference history (`nothing` without it)
     ul = unconverted === nothing ? nothing : _UnconvertedLight(unconverted, prepulse, by, colors, unconverted_kw)
     if unconverted === nothing
         (prepulse === nothing && isempty(unconverted_kw)) ||
@@ -350,7 +367,7 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
             throw(ArgumentError("the reference history has unconverted light: pass its `unconverted` " *
                                 "(and `prepulse`, `colors`, `unconverted_kw`)"))
     end
-    # the drive of the reference: for its shape, or for its level when none is prescribed
+    # the drive of the reference, used for its shape, or for its level when none is prescribed
     need_ref = target === :reference || level === nothing
     st = q isa FoilIrradiance ? _retune_setup(q, ref, need_ref, op.target) : _retune_setup(q, ref, need_ref)
     t = st.target
@@ -358,12 +375,13 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
     key = _beam_key(by)
     ks = unique(key.(beams))
     ng = length(ks)
-    # each group's deposition at 1 TW per beam: the pointing holds through the pulse
+    # deposition of each group at 1 TW per beam (the pointing is fixed through the pulse)
     E = reduce(hcat, [deposit(op, [remake(b; power = key(b) == k ? 1.0 : 0.0) for b in beams]).element
                       for k in ks])
-    # with unconverted light, each color's absorbed power per group at 1 TW per beam
+    # With unconverted light, the absorbed power of each color per group at 1 TW per beam
     # (`Eu`), and per set of beams on one prepulse schedule at 1 TW per beam (`Q`, with
-    # the schedules `qs`); the beams' setup powers carry it, as in `drive_history`
+    # the schedules `qs`). The setup powers of the beams carry the light, as in
+    # `drive_history`.
     ne = nelements(t)
     ucolors = ul === nothing ? UnconvertedColor[] : ul.colors
     unit_light(bs) = unconverted_deposition(t, [remake(b; power = 1.0) for b in bs];
@@ -372,9 +390,10 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
     Eu = Dict{Symbol,Matrix{Float64}}()
     Q = Dict{Symbol,Matrix{Float64}}()
     qs = Any[]
-    # the groups' beams on each fraction schedule (`subs`: group index, fraction per
-    # color, beam indices; one per group when the fractions hold for every beam), with
-    # each one's absorbed power per color in the columns of `Eu`
+    # The beams of the groups on each fraction schedule are in `subs`, as (group index,
+    # fraction per color, beam indices), with one entry per group when the fractions
+    # apply to every beam. The absorbed power per color of each entry is in the columns
+    # of `Eu`.
     subs = Tuple{Int,Any,Vector{Int}}[]
     if ul !== nothing
         fr = _fractions_of(ul.ratio, Symbol[c.name for c in ul.colors], key, beams)
@@ -409,7 +428,7 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
     nr = length(st.rows) + 1 + (stay > 0 ? ng : 0) + (smooth > 0 ? ng : 0)
     prev = nothing
     for (k, τ) in enumerate(ref.time)
-        # y at powers P: y = M P (+ y0, the prepulse's)
+        # y at powers P is y = M P, plus y0 from the prepulse
         R = st.response(τ, k, ucolors)
         M = R[:omega3] * E                                       # ny × ng
         y0 = nothing
@@ -434,8 +453,8 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
         all(lo .<= hi) || throw(ArgumentError("empty power limits at $τ ns"))
         Lt = level === nothing ? dot(μ, view(st.yref, :, k)) : level isa Real ? Float64(level) : Float64(level(τ))
         if lo == hi
-            # the limits fix every power (e.g. none where the reference fires none): nothing
-            # to solve, and the target may be empty
+            # The limits fix every power, for example at zero where the reference fires
+            # no light. There is nothing to solve, and the target may be empty.
             y = y0 === nothing ? M * lo : M * lo .+ y0
             power[:, k] = lo
             target_shape[:, k] .= target === :reference ? st.yref[:, k] ./ dot(μ, view(st.yref, :, k)) : st.uniform
@@ -475,7 +494,7 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
         end
         if smooth > 0
             if prev === nothing
-                A = A[1:r, :]                                    # no previous step to tie to
+                A = A[1:r, :]                                    # no smoothing rows without a previous step
                 b = b[1:r]
             else
                 scale = max(maximum(abs, prev), eps())
@@ -505,11 +524,12 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
             rms, peak, residual)
 end
 
-# argmin |A P - b|² for lo ≤ P ≤ hi at the level `LM'P + L0 = Lt` where the bounds allow:
-# row `r` of `A, b` is the level's penalty, `(LM'P + L0 - T)/Lt`, whose target `T` the
-# secant method shifts until the solution's level is `Lt` (the level is piecewise linear
-# and nondecreasing in `T`, so a step is exact while the active bounds hold). Stops where
-# the bounds hold the level. `b[r]` is left at the unshifted target, for the residual.
+# Returns argmin |A P - b|² for lo ≤ P ≤ hi at the level `LM'P + L0 = Lt` where the bounds
+# allow. Row `r` of `A, b` is the penalty of the level, `(LM'P + L0 - T)/Lt`. The secant
+# method shifts its target `T` until the level of the solution is `Lt`. The level is
+# piecewise linear and nondecreasing in `T`, so a step is exact while the active bounds
+# are unchanged. The iteration stops where the bounds fix the level. `b[r]` is left at the
+# unshifted target, for the residual.
 function _level_lsq(A, b, r, Lt, L0, LM, lo, hi, x0)
     T, Tp, Lp = Lt, NaN, NaN
     P = x0
@@ -519,10 +539,11 @@ function _level_lsq(A, b, r, Lt, L0, LM, lo, hi, x0)
         L = dot(LM, P) + L0
         abs(L - Lt) <= 1e-12 * Lt && break
         if isnan(Tp)
-            Tn = T + (Lt - L)                       # the first shift: the deficit
+            Tn = T + (Lt - L)                       # the first shift is the deficit
         else
-            # the level moves by at most the shift; a flatter secant is the bounds' (a
-            # slope under 1e-6: they hold the level), kept from extrapolating far past it
+            # The level moves by at most the shift. A flatter secant comes from the bounds,
+            # and a slope under 1e-6 means that they fix the level. Such a secant is kept
+            # from extrapolating far past the shift.
             s = (L - Lp) / (T - Tp)
             s < 1e-6 && break
             Tn = T + (Lt - L) / clamp(s, 0.05, 1.0)
@@ -533,7 +554,7 @@ function _level_lsq(A, b, r, Lt, L0, LM, lo, hi, x0)
     return P
 end
 
-# argmin |A x - b|² for lo ≤ x ≤ hi (small, dense): L-BFGS-B on the quadratic.
+# Returns argmin |A x - b|² for lo ≤ x ≤ hi (small, dense) by L-BFGS-B on the quadratic.
 function _bounded_lsq(A, b, lo, hi, x0)
     AtA, Atb = A' * A, A' * b
     f(x) = dot(x, AtA * x) - 2dot(Atb, x)
@@ -544,12 +565,13 @@ function _bounded_lsq(A, b, lo, hi, x0)
     return _polish_lsq(A, b, lo, hi, Optim.minimizer(res))
 end
 
-# Active-set Gauss–Newton steps from a bounded least-squares point `x`: on the free
-# variables (off their bounds, or at one with the gradient pointing inward), the
-# least-norm correction of the residual, cut where it meets the box (the variable that
-# meets it is held there at the next step), taken while it lowers the residual.
-# L-BFGS-B stops at a projected gradient near 1e-6 of the gradient's scale on the
-# retune's rank-deficient problems; the steps take it to rounding.
+# Takes active-set Gauss–Newton steps from a bounded least-squares point `x`. Each step
+# is the least-norm correction of the residual on the free variables, which are those off
+# their bounds or at a bound with the gradient pointing inward. The step is cut where it
+# meets the box, and the variable that meets the box is held there at the next step.
+# Steps are taken while they lower the residual. On the rank-deficient problems of the
+# retune, L-BFGS-B stops at a projected gradient near 1e-6 of the gradient scale, and the
+# steps reduce it to rounding.
 function _polish_lsq(A, b, lo, hi, x)
     x = clamp.(x, lo, hi)
     for _ in 1:(2length(x) + 5)
@@ -563,7 +585,7 @@ function _polish_lsq(A, b, lo, hi, x)
         while !isempty(F)
             δ = pinv(A[:, F]) * r
             all(isfinite, δ) || return x
-            # variables at a bound that the step would leave the box from are held
+            # variables at a bound from which the step would leave the box are held
             stuck = [(δ[j] > 0 && x[i] >= hi[i]) || (δ[j] < 0 && x[i] <= lo[i]) for (j, i) in enumerate(F)]
             any(stuck) || break
             F = F[.!stuck]

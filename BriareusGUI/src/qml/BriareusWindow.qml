@@ -32,8 +32,8 @@ ApplicationWindow {
     y: Screen.virtualY + Math.max(0, Math.round((availH - height) / 2))
     minimumWidth: Math.min(1100, availW)
     minimumHeight: Math.min(680, availH)
-    // a denser text than the style's 14 px, as in an Office ribbon: the controls in "common"
-    // follow it with their own tighter padding
+    // A denser text than the 14 px of the style, as in an Office ribbon. The controls in
+    // "common" follow it with a tighter padding.
     font.pixelSize: 13
     visible: true
     readonly property bool smallScreen: availW < 1800 || availH < 1100
@@ -50,7 +50,7 @@ ApplicationWindow {
     function focusCanvas(hovered) {
         if (hovered && !canvas.activeFocus) canvas.forceActiveFocus(Qt.MouseFocusReason)
     }
-    // Select an analysis: its settings in Properties, its results below.
+    // Selecting an analysis shows its settings in Properties and its results below.
     function showTask(key) {
         Julia.br_select("task:" + key)
         results.show(key)
@@ -85,7 +85,8 @@ ApplicationWindow {
         else if (key === "help") { helpTopics.openAt("start.keys"); openPopup = helpTopics }
         else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
         else if (key.startsWith("rowmenu:")) {
-            // the model tree's row menu for a node id (a beam row, a frame, an analysis)
+            // the row menu of the model tree for a node id, such as a beam row, a frame or
+            // an analysis
             const id = key.substring(8)
             tree.openMenu(id, id.split(":")[0], "")
             openPopup = tree.rowMenu
@@ -110,8 +111,8 @@ ApplicationWindow {
         interval: 500
         onTriggered: {
             const path = app.popupGrabPath
-            // the popup alone (the window's root item cannot be grabbed), the Help window's
-            // content, or the toolbar
+            // only the popup (the root item of the window cannot be grabbed), the content
+            // of the Help window, or the toolbar
             const item = openPopup === helpTopics ? helpTopics.contentItem
                        : openPopup ? openPopup.contentItem.parent : win.header
             item.grabToImage(function (img) { img.saveToFile(path) })
@@ -129,8 +130,8 @@ ApplicationWindow {
         else if (["beams", "group", "quad", "beam"].indexOf(app.selKind) >= 0) results.show("beams")
     }
 
-    // as dense as the toolbar: the style gives the bar a toolbar's height and each title
-    // a button's
+    // The menu bar is as dense as the toolbar, since the style gives the bar the height of
+    // a toolbar and each title the height of a button.
     menuBar: MenuBar {
         topPadding: 0
         bottomPadding: 0
@@ -214,7 +215,7 @@ ApplicationWindow {
             Action { text: "Deselect"; enabled: app.selKind !== ""; onTriggered: Julia.br_select("") }
         }
         AutoMenu {
-            // what a target is built from: parts, windows, assemblies and frames
+            // what a target is built from, namely parts, windows, assemblies and frames
             title: "&Insert"
             Action { text: "Sphere"; onTriggered: Julia.br_add_part("sphere") }
             Action { text: "Disk"; onTriggered: Julia.br_add_part("disk") }
@@ -341,7 +342,7 @@ ApplicationWindow {
                 text: "X-ray image along the view"
                 checkable: true
                 checked: app.driveView === "image"
-                // unchecked: back to the view shown before
+                // when unchecked, go back to the view shown before
                 onTriggered: checked ? Julia.br_xray_image() : Julia.br_close_image()
             }
             Action { text: "TaLIS (NIF)…"; enabled: app.facility === "nif"; onTriggered: win.showTask("talis") }
@@ -548,8 +549,8 @@ ApplicationWindow {
             else Julia.br_tl_export(url)
         }
     }
-    // session files: the whole design (target, beams, settings) and the CAD files it reads
-    // (.briar, a zip), or the design alone as TOML with the CAD files by path
+    // Session files hold the whole design (target, beams, settings) and the CAD files it
+    // reads (.briar, a zip), or only the design as TOML with the CAD files by path.
     FileDialog {
         id: sessionDialog
         property string mode: "open"
@@ -598,7 +599,8 @@ ApplicationWindow {
         nameFilters: ["STL mesh (*.stl)", "All files (*)"]
         onAccepted: Julia.br_export_stl(selectedFile.toString())
     }
-    // VisRad workspaces: import a design; export its beams into a copy of the imported one
+    // VisRad workspaces import a design, and the export writes its beams into a copy of the
+    // imported one.
     FileDialog {
         id: vrwDialog
         property string mode: "import"
@@ -622,8 +624,8 @@ ApplicationWindow {
     Dialog {
         id: retuneDialog
         title: "Retune to a reference drive"
-        // what the retune holds: capsule, face or foil (the level's units), the first the
-        // design offers unless several are chosen between
+        // What the retune holds, capsule, face or foil, sets the units of the level. It is
+        // the first the design offers unless there are several to choose between.
         readonly property int choice: app.retuneOn.length > 1 ? Math.max(retuneOn.currentIndex, 0) : 0
         readonly property string kind: app.retuneKinds.length > choice ? app.retuneKinds[choice] : ""
         anchors.centerIn: parent
@@ -680,7 +682,7 @@ ApplicationWindow {
                 Item { width: 1 }
                 Label { text: "Stay near the reference" }
                 TextField { id: retuneStay; text: "0"; Layout.preferredWidth: 100
-                            tip: "Weight on staying near the reference powers (0: none; try 1e-4)" }
+                            tip: "Weight on staying near the reference powers; 0 for none, try 1e-4" }
                 Item { width: 1 }
                 Label { text: "Holds"; visible: retuneOn.visible }
                 ComboBox {

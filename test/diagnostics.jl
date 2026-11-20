@@ -1,7 +1,8 @@
-# Diagnostic definitions: the built-in Dante 1 against the hardware table it replaced
-# (bitwise), extends and shadowing on a search path, measured CSV curves against the
-# models they tabulate, the schema checks, the configuration file and a registered kind.
-# Design: reference/diagnostics-design.md.
+# This file tests diagnostic definitions. The built-in Dante 1 is checked against the
+# hardware table it replaced and must be identical to it. The file also covers extends and
+# shadowing on a search path, measured CSV curves against the models they tabulate, the
+# schema checks, the configuration file and a registered kind. The design is in
+# reference/diagnostics-design.md.
 
 using Briareus, Test
 using Briareus: _DANTE_GRID, _XRD_FIT
@@ -46,7 +47,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
                         end; name)
 
 @testset "diagnostic definitions" begin
-    @testset "built-in Dante 1, bitwise" begin
+    @testset "built-in Dante 1 is identical to the old table" begin
         new, old = dante1_responses(), old_dante1()
         @test [c.number for c in new] == 1:18
         @test all(new[i].R == old[i].R for i in 1:18)
@@ -60,8 +61,8 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         # the 12 mm field of the multilayer channel (Rubery 2022), the others the view's
         @test [c.field_of_view for c in v.channels] == [n == 2 ? 12.0 : nothing for n in 1:18]
         @test dante1(pixels = 50).pixels == 50
-        # Dante 2 from its definition (line of sight, the hole), with Dante 1's channels
-        # (assumed) without their own fields: the bare view it replaced
+        # Dante 2 from its definition (line of sight, the hole), with the Dante 1 channels
+        # (assumed) without their per-channel fields, equals the bare view it replaced.
         d2, ref = dante2(), DanteView(64, 350; through = :leh_top)
         @test all(f -> isequal(getfield(d2, f), getfield(ref, f)),
                   (:theta, :phi, :direction, :through, :pixels, :area, :field_of_view, :center))
@@ -116,14 +117,14 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             defs = diagnostics(; paths = [builtin, a])
             @test !defs["group_dante1"].public
             @test length(defs["group_dante1"].chain) == 3
-            # the instrument a definition is a configuration of: stated, inherited through
-            # extends, or (without the key) the definition name
+            # The instrument of a definition is stated, inherited through extends, or, when
+            # the key is absent, the definition name.
             @test diagnostic_instrument(defs["nif_dante1_2012"]) == "NIF Dante 1" &&
                   diagnostic_instrument(defs["nif_dante1"]) == "NIF Dante 1" &&
                   diagnostic_instrument(defs["group_dante1"]) == "NIF Dante 1"
             @test diagnostic_instrument(DiagnosticDefinition("x", "A name", :xray_power, "", String[], true,
                                                              Dict{String,Any}())) == "A name"
-            # (the upper SXI extends the lower one and states a separate one)
+            # The upper SXI extends the lower one and states a separate instrument.
             @test diagnostic_instrument(defs["nif_sxi_lower"]) == "NIF SXI lower" &&
                   diagnostic_instrument(defs["nif_sxi_upper"]) == "NIF SXI upper"
             # a later definition of an id shadows an earlier one, with a warning naming both
@@ -131,8 +132,9 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             issues = check_diagnostics(; paths = [builtin, a, b])
             @test any(i -> i.level === :warning && occursin("shadows", i.message), issues)
             @test length(diagnostic("nif_dante1"; paths = [builtin, b]).channels) == 1
-            # group_dante1 now extends the one-channel nif_dante1: its partial channel 6
-            # lacks the values the built-in gave it, reported and not built
+            # group_dante1 now extends the one-channel nif_dante1. Its partial channel 6
+            # lacks the values the built-in gave it, so the channel is reported and not
+            # built.
             @test any(i -> basename(i.file) == "campaign.toml" && startswith(i.key, "channel[6].") &&
                       i.level === :missing, issues)
             @test_throws ArgumentError diagnostic("group_dante1"; paths = [builtin, a, b])
@@ -173,8 +175,8 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
                 response_csv = "ch19.csv"
                 """)
             d = diagnostics(; paths = [diagnostic_paths()[1], a])["group_dante1"]
-            # the table, its CSV copied beside it under another name, reads back to the
-            # same definition and builds the same channels
+            # The table, with its CSV copied beside it under another name, is read back to
+            # the same definition and builds the same channels.
             t = diagnostic_table(d; csv = f -> (cp(f, joinpath(b, "copy.csv")); "copy.csv"))
             @test !haskey(t, "extends") && t["kind"] == "xray_power" && t["public"] == false
             @test t["channel"][end]["response_csv"] == "copy.csv"
@@ -239,10 +241,11 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
                    ("nif_gleh2.toml", "filters"); ("nif_inflight_radiography.toml", "line_of_sight.phi_deg");
                    ("nif_inflight_radiography.toml", "filters");
                    [("omega_dante.toml", "channel[$n].solid_angle_sr") for n in 1:18]])
-        # each channel's half-maximum midpoint (the modeled filters, grid, mirror and XRD)
-        # against the energy the source tabulates (Kemp 2020: peak sensitivity from the
-        # calibrated responses; Fournier 2010, May 2015: band centers; Rubery 2023):
-        # an independent check of the transcriptions and the models, nothing fitted
+        # The half-maximum midpoint of each channel, from the modeled filters, grid, mirror
+        # and XRD, is checked against the energy the source tabulates. Kemp 2020 gives the
+        # peak sensitivity from the calibrated responses, Fournier 2010 and May 2015 give
+        # band centers, and Rubery 2023 is the fourth source. This is an independent check
+        # of the transcriptions and the models; nothing is fitted.
         mid(c) = (k = argmax(c.R); i = findprev(<(c.R[k] / 2), c.R, k); j = findnext(<(c.R[k] / 2), c.R, k);
                   (c.E[i+1] + c.E[j-1]) / 2)
         ids = ["nif_dante1_2009", "nif_dante1_2012", "nif_dante1_N170924", "nif_dante1_N180129",
@@ -251,9 +254,9 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         @test length(r) == 108
         @test all(x -> abs(x - 1) < 0.2, r)
         @test count(x -> abs(x - 1) <= 0.05, r) >= 95             # 97 of 108 (2026-10-29)
-        # the values that are not public, supplied: Omega's solid angles (its C and Be
-        # mirrors build), Sentinel's line of sight and cathodes (nominal energies from the
-        # responses' peaks)
+        # The values that are not public are supplied: the solid angles of the Omega Dante,
+        # whose C and Be mirrors then build, and the line of sight and cathodes of Sentinel,
+        # with nominal energies from the peaks of the responses.
         mktempdir() do dir
             put(dir, "o.toml", "schema = 1\nid = \"o\"\nextends = \"omega_dante\"\n" *
                 join("[[channel]]\nnumber = $n\nsolid_angle_sr = 1e-6\n" for n in 1:18))
@@ -300,8 +303,9 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
     end
 
     @testset "named ports" begin
-        # the NIF table (User Guide 2024-09, Table 5-1): 110 ports, each name within 1° of
-        # its angles (a transcription check: names round or truncate the angles)
+        # The NIF table (User Guide 2024-09, Table 5-1) has 110 ports, and each name is
+        # within 1° of its angles. This checks the transcription, since the names round or
+        # truncate the angles.
         P = NIF_DIAGNOSTIC_PORTS
         named(r) = parse.(Float64, split(r[1][2:end], "-"))
         @test length(P) == 110 && allunique(first.(P))
@@ -312,8 +316,8 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         @test port_angles(:nif, "Q31B") == port_angles(:nif, nif_port("Q31B"))   # quads as before
         @test_throws KeyError port_angles(:nif, "P1-2")
         @test port_frame(:nif, "P143-274").R[:, 3] ≈ port_vector(143.25, 274.0) rtol = 1e-12
-        # the built-ins name their ports: Dante 1 moves to the table's 143.25° (from the
-        # papers' 143°), the rest keep their angles
+        # The built-in definitions name their ports. Dante 1 moves from the 143° of the
+        # papers to the 143.25° of the table, and the angles of the rest are unchanged.
         builtin = diagnostic_paths()[1:1]
         ang(id) = (v = diagnostic(id; paths = builtin); (v.theta, v.phi))
         @test all(id -> ang(id) == (143.25, 274.0),

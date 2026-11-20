@@ -5,7 +5,8 @@
 # 2026-10-24 from the vector graphics of the accepted manuscript (LLNL-JRNL-812268, p. 15):
 # axes from the tick marks (4.5-6.5 ns, 1.2-2.4 mm), each marker at the center of its
 # bounding box (exact to ~0.003 mm; the four times of each shot are drawn offset by up to
-# 0.04 ns for legibility, kept as drawn). Marker coding from the text, not a legend:
+# 0.04 ns for legibility, kept as drawn). The marker coding is taken from the text instead
+# of a legend:
 # black = 0.3 mg/cc, red = 0.15 mg/cc; large dots = the 1.18x capsule (inside radius 1.18x,
 # outer 1.064 against 0.908 mm); triangles = 1.5x picket power (N171212); squares =
 # quad and cone splitting, outer picket fluence -27% (N180117, black; N180917, red,

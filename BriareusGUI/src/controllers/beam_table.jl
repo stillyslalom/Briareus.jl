@@ -1,16 +1,17 @@
-# The beam table: a facility preset or an imported beam table, its beams gathered in
-# groups (VisRad's clusters: the cone by default, or any named set such as
-# "backlighter"), edited per group, quad, beam or any set of beams. Edits go through
-# `GroupPointing` with only the edited field, so a group edit sets that field on every
-# member and leaves the others as they were. NIF quads can be split into their four
+# The beam table holds a facility preset or an imported beam table. Its beams are gathered
+# in groups, the clusters of VisRad, which are the cones by default or any named set such as
+# "backlighter". The beams are edited per group, quad or beam, or as any set of beams. Edits
+# go through `GroupPointing` with only the edited field, so a group edit sets that field on
+# every member and leaves the others as they were. NIF quads can be split into their four
 # beams and merged back.
 
 """
 Beam presets:
 
 - `:nif_quads` — the 48 NIF indirect-drive quads (`nif_quads`, 8 TW each), pointed at
-  the illustrative cone (r, z) aims of `examples/nif_hohlraum.jl` (an example, not a
-  shot pointing: research notes, "Example NIF cone pointing: unsourced (2026-10-27)");
+  the illustrative cone (r, z) aims of `examples/nif_hohlraum.jl`, which are an example
+  and not a shot pointing (research notes, "Example NIF cone pointing: unsourced
+  (2026-10-27)");
 - `:nif_beams` — all 192 NIF beams (`nif_beams`, 2 TW each), same cone pointing;
 - `:omega_hohlraum` — the 40 OMEGA hohlraum beams (cones 1–3, `omega_beams`, 0.5 TW),
   aimed at the centers of the entrance holes (TCC without a hohlraum);
@@ -65,13 +66,14 @@ const BEAM_FIELDS = (:z, :r, :phi, :defocus, :power)
 const NIF_CONE_POINTING = Dict(:inner23 => (-1.09, 3.09), :inner30 => (-0.60, 3.63),
                                :outer44 => (0.0, 5.20), :outer50 => (0.0, 5.01))
 
-# NIF cone pointing (r, z; mm) for the frustraum starter at TCC (`starter_parts(:frustraum)`):
-# an engineering default derived from NIF_CONE_POINTING, not a published pointing
-# (research notes, "Frustraum cone pointing: derived"; examples/frustraum_pointing.jl).
-# Each cone's spot centroid sits at the cylinder pointing's fractional height on the wall
-# where the entrance hole allows it, its aim at the cylinder aim's axial distance from
-# the hole; the inner cones and the 44.5° cone stop where their clearance from the hole's
-# rim falls to the cylinder pointing's smallest (0.066 mm).
+# NIF cone pointing (r, z; mm) for the frustraum starter at TCC
+# (`starter_parts(:frustraum)`). It is an engineering default derived from
+# NIF_CONE_POINTING; no published pointing exists for it (research notes, "Frustraum cone
+# pointing: derived"; examples/frustraum_pointing.jl). The spot centroid of each cone lies
+# at the fractional wall height of the cylinder pointing where the entrance hole allows it,
+# with its aim at the axial distance of the cylinder aim from the hole. The inner cones and
+# the 44.5° cone stop where their clearance from the rim of the hole falls to the smallest
+# clearance of the cylinder pointing (0.066 mm).
 const FRUSTRAUM_CONE_POINTING = Dict(:inner23 => (-1.09, 4.16), :inner30 => (-1.16, 4.70),
                                      :outer44 => (-0.25, 6.27), :outer50 => (-0.06, 6.08))
 
@@ -95,10 +97,10 @@ current by [`follow_frames!`](@ref)) and `unconverted` (per beam, whether its
 unconverted 1ω and 2ω light takes part in the calculations: design state, saved and
 undone, that the drive reads with its ratios; see [`set_participation!`](@ref)).
 
-Every beam keeps `aim ≈ to_chamber(frames[aim_frame], aim_local)` (to round-off; exactly
-after a frame moved, when [`follow_frames!`](@ref) sets the aims from the local
-coordinates): every write of the beams goes through one path, which re-expresses the
-aims that changed in their frames, so a later move of a frame carries them along.
+Every beam keeps `aim ≈ to_chamber(frames[aim_frame], aim_local)`, within round-off, and
+exactly after a frame moved, when [`follow_frames!`](@ref) sets the aims from the local
+coordinates. Every write of the beams goes through one path, which re-expresses the aims
+that changed in their frames, so a later move of a frame carries them along.
 """
 struct BeamTable
     beams::Observable{Vector{Beam{Float64}}}
@@ -196,7 +198,7 @@ enabled.
   a hohlraum part carries its beams. The NIF beams keep the offsets of the example cone
   pointing (`NIF_CONE_POINTING`, set for the 10.1 mm default) from the default
   hohlraum part's entrance holes at TCC, the OMEGA beams aim at the holes' centers. For
-  the default hohlraum part at TCC the aims are bitwise those of the cone pointing. In
+  the default hohlraum part at TCC the aims are identical to those of the cone pointing. In
   the holes of a frustraum part the NIF beams keep instead the offsets of the frustraum
   pointing (`FRUSTRAUM_CONE_POINTING`, derived for the frustraum starter: each cone's
   spot at the cylinder pointing's fractional wall height where the hole allows it) from
@@ -210,7 +212,7 @@ enabled.
   without one.
 
 The aims in the entrance holes' frames are an engineering default for illustrative
-designs, not a facility's pointing.
+designs; no facility uses this pointing.
 """
 function preset_pointing(preset::Symbol; target = nothing)
     if preset in HOHLRAUM_PRESETS
@@ -312,8 +314,8 @@ function _hole_profile(target, f::Symbol)
     return :cylinder
 end
 
-# The aim `a`, an offset from the reference frame `ref`, carried to frame `F`; `a` itself
-# when `F` is the reference (the default hohlraum at TCC: bitwise).
+# The aim `a`, an offset from the reference frame `ref`, carried to frame `F`; exactly `a`
+# when `F` is the reference, as for the default hohlraum at TCC.
 _reaim(a, F::Frame, ref::Frame) = F == ref ? Vec3(a) : Vec3(to_chamber(F, to_frame(ref, a)))
 
 # Point each cone at (r, z) with top/bottom mirroring, each quad's beams at one point
@@ -354,11 +356,11 @@ end
 """
     beams_label(bt::BeamTable) -> String
 
-What the table holds, for the model tree's Beams node and the summaries: a preset's
-label ([`PRESET_LABELS`](@ref); a NIF preset whose quads were split or merged since
-reads as what it holds now, "NIF quads (48) as 192 beams"), or for imported or scripted
-beams the facility's with "(imported)" (plain "imported table" for the facility Other;
-the facility's label alone for an empty table).
+What the table holds, for the model tree's Beams node and the summaries: the label of a
+preset ([`PRESET_LABELS`](@ref)), or for imported or scripted beams the label of the
+facility with "(imported)". A NIF preset whose quads were split or merged since is
+labeled by what it holds now, "NIF quads (48) as 192 beams". The facility Other gives
+plain "imported table", and an empty table only the label of the facility.
 """
 function beams_label(bt::BeamTable)
     p, f = bt.preset[], bt.facility[]
@@ -419,11 +421,12 @@ function follow_frames!(bt::BeamTable, frames::AbstractDict; renames::AbstractDi
     changed = false
     for i in eachindex(bs)
         was = af[i]
-        # a renamed frame first: its old name may now be another part's (a role passed on)
+        # A renamed frame comes first, since its old name may now belong to another part
+        # (a role passed on).
         new = get(renames, was, was)
         new === was || (af[i] = new; changed = true)
         F = get(fr, af[i], nothing)
-        if F === nothing                       # the frame went away: the aim stays
+        if F === nothing                       # the frame went away, so the aim stays
             af[i], loc[i] = :tcc, Vec3(bs[i].aim)
             changed = true
         elseif get(old, was, nothing) != F
@@ -550,9 +553,9 @@ function _check_grouping(beams, by::Symbol)
     return nothing
 end
 
-# Each beam's share of its quad: one over the number of the table's beams that carry its
-# quad name (a NIF quad held as one beam: 1; one of its four beams: 1/4); 1 without a
-# quad name.
+# The share of each beam in its quad: one over the number of beams in the table that
+# carry its quad name, so 1 for a NIF quad held as one beam and 1/4 for one of its four
+# beams; 1 without a quad name.
 function _quad_shares(bs)
     n = Dict{String,Int}()
     for b in bs
@@ -663,7 +666,7 @@ end
 
 """
 Columns the beam table sorts by: `:row` (the table order), `:key` (the row's name,
-numbers within it in numeric order: Q31B before Q115B), `:count`, `:theta`, `:phi` (port
+numbers within it in numeric order, so Q31B before Q115B), `:count`, `:theta`, `:phi` (port
 angles), `:aim_frame` (the frame's name; mixed frames last), `:z`, `:r`, `:phi_offset`,
 `:defocus`, `:power` and `:enabled` (off, some on, on).
 """
@@ -1134,9 +1137,9 @@ rename_cluster!(bt::BeamTable, old, new) =
     split_quad!(bt::BeamTable, quad) -> Bool
 
 Replace a NIF quad that the table holds as one beam (`nif_quads`) by its four beams
-(`nif_beams`: their own ports and f/20.7 cones), each with the quad's aim, defocus,
+(`nif_beams`, with separate ports and f/20.7 cones), each with the quad's aim, defocus,
 detuning, spot and group, and a quarter of its power, so its beams deposit from their
-own ports and can be pointed apart (split quads). The quad's enabled flag and
+separate ports and can be pointed apart (split quads). The quad's enabled flag and
 unconverted-light participation carry over. Ports change, so the drive must be computed
 again. The quad stays the unit of pointing and power: its node and its row edit the
 four beams together ([`power_unit`](@ref)).

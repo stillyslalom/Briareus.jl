@@ -1,6 +1,7 @@
-// The bottom panel: the beam table and each analysis's results, one tab each (Time:
-// pulses, drive histories and the retune over time; Diagnostics: the synthetic
-// diagnostics a history records; Sweep: a placement sweep's steps).
+// The bottom panel shows the beam table and the results of each analysis, one tab each.
+// The Time tab shows pulses, drive histories and the retune over time, the Diagnostics tab
+// the synthetic diagnostics a history records, and the Sweep tab the steps of a placement
+// sweep.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -17,12 +18,13 @@ Pane {
     function redrawDiagnostics() { diagnosticsPanel.redraw() }
     function openDiagnosticPicker() { return diagnosticsPanel.openPicker() }
     function redrawSweep() { sweepPanel.redraw() }
-    // the height the current tab needs (the Time and Diagnostics tabs: their rows and the
-    // chart at its minimum; 0 for the others, which fit any height); the window grows the
-    // panel to it
+    // The height the current tab needs, which the window grows the panel to. The Time and
+    // Diagnostics tabs need their rows and the chart at its minimum height; the others need
+    // 0, since they fit any height.
     readonly property real fitHeight: tabs.currentIndex === keys.indexOf("time") ? tabs.height + timePanel.fitHeight
                                     : tabs.currentIndex === keys.indexOf("diagnostics") ? tabs.height + diagnosticsPanel.fitHeight : 0
-    // leaving NIF hides the TaLIS tab: show the drive rather than its stale page
+    // Leaving NIF hides the TaLIS tab, so the panel shows the drive instead of the stale
+    // TaLIS page.
     readonly property bool talisShown: app.facility === "nif"
     onTalisShownChanged: if (!talisShown && tabs.currentIndex === keys.indexOf("talis")) show("drive")
 
@@ -32,13 +34,13 @@ Pane {
         TabBar {
             id: tabs
             Layout.fillWidth: true
-            // the tabs' side padding, less when the panel is narrow, so that every tab shows
-            // its whole name rather than being scrolled out of sight (from the names' widths,
-            // which do not depend on the padding)
+            // The side padding of the tabs, less when the panel is narrow, so that every tab
+            // shows its whole name instead of being scrolled out of sight. It is computed
+            // from the widths of the names, which do not depend on the padding.
             readonly property var names: ["Beam table", "Drive", "Time", "Diagnostics", "Optimization", "Clearance", "Sweep", "TaLIS"]
             FontMetrics { id: tabFont; font: tabs.font }
             readonly property real pad: {
-                const shown = app.facility === "nif" ? names : names.slice(0, -1)   // (TaLIS: NIF beams)
+                const shown = app.facility === "nif" ? names : names.slice(0, -1)   // TaLIS needs NIF beams
                 const w = shown.reduce((s, t) => s + tabFont.advanceWidth(t), 0)
                 // less the spacing between tabs and a margin for the bar padding
                 const room = results.width - w - spacing * (shown.length - 1) - leftPadding - rightPadding - 24

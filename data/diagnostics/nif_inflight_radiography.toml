@@ -3,16 +3,16 @@
 # array of pinholes at 8x onto a gated MCP detector (Oertel 2006) of two strips, ≈ 90 ps
 # each. Rygg et al. (2014), LLNL-JRNL-646555, OSTI 1184746, text (as read from the PDF):
 # eight beams, 52 kJ, CE ≈ 1%, an emission ≈ 1 mm across and ≈ 2 ns long; 20–25 µm
-# pinholes; viewing holes 0.9 × 0.83 mm with HDC windows. The foil's standoff and the
-# windows are the target's, not this file's. The NIF foils' drive is a 1 ns picket 3 ns
-# before a 2–5 ns pulse (Barrios et al. 2013, Table 3; Rygg's Ref. 17), so the CE class
-# is the pre-pulsed one.
-# Not public, so absent, to be supplied by a file that extends this one
-# (check_diagnostics names them): the equatorial port (line_of_sight.phi_deg); the
-# pinhole's diameter (20–25 µm) and distance from the capsule (optic.diameter_um,
-# distance_mm); the filters; the MCP's detection efficiency (detector.efficiency_csv);
-# the backlighter's pulse (backlighter.pulse_ns, start_ns); the frame times
-# (recording.times_ns); the object-plane field (view.width_mm).
+# pinholes; viewing holes 0.9 × 0.83 mm with HDC windows. The standoff of the foil and the
+# windows belong to the target, and this file does not set them. The drive of the NIF
+# foils is a 1 ns picket 3 ns before a 2–5 ns pulse (Barrios et al. 2013, Table 3; Ref. 17
+# of Rygg), so the CE class is the pre-pulsed one.
+# The following values are not public and so are absent. A file that extends this one
+# supplies them, and check_diagnostics names them: the equatorial port
+# (line_of_sight.phi_deg); the pinhole's diameter (20–25 µm) and distance
+# from the capsule (optic.diameter_um, distance_mm); the filters; the MCP's detection
+# efficiency (detector.efficiency_csv); the backlighter's pulse (backlighter.pulse_ns,
+# start_ns); the frame times (recording.times_ns); the object-plane field (view.width_mm).
 
 schema = 1
 id = "nif_inflight_radiography"

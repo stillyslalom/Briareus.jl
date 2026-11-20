@@ -4,7 +4,7 @@ A synthetic diagnostic is described by a definition file: one TOML file per inst
 holding its line of sight, its hardware and its recording, each value with its source.
 The public definitions ship with the package (`data/diagnostics`); a user group keeps
 separate definitions, including details that are not public, in directories on a search
-path, and modifies a public definition by extending it rather than copying it.
+path, and modifies a public definition by extending it; the public file is not copied.
 [`diagnostic`](@ref) builds the instrument of a definition (for the soft x-ray power
 kind, a [`DanteView`](@ref) for [`dante`](@ref)); [`check_diagnostics`](@ref) reports
 every problem in the files on the search path, by file and key.
@@ -37,9 +37,9 @@ and the source keys `source`, `confidence` (H, M or L, as in the research notes)
 `note`, which every table may also carry. `instrument` names the instrument a
 definition is one configuration of: the Dante 1 channel sets of several years and shots
 all carry `instrument = "NIF Dante 1"`, and a file that extends one of them inherits it
-([`diagnostic_instrument`](@ref)). A list of diagnostics (the desktop application's
-Diagnostics tab) shows each instrument once, for the session's `facility`, and offers
-its definitions as configurations. Keys are checked: an unknown key or a value
+([`diagnostic_instrument`](@ref)). A list of diagnostics, such as the Diagnostics tab of
+the desktop application, shows each instrument once for the `facility` of the session
+and offers its definitions as configurations. Keys are checked: an unknown key or a value
 of the wrong type is an error naming the file and the key. Units are in the key names
 (`theta_deg`, `energy_eV`, `thickness_um`, `solid_angle_sr`).
 
@@ -47,10 +47,10 @@ The kind `xray_power` (Dante, Sentinel) takes:
 
 | Table | Keys |
 |---|---|
-| `[line_of_sight]` (required) | `port`, a NIF diagnostic port by name (`"P143-274"`, with `facility = "NIF"`; the angles of [`NIF_DIAGNOSTIC_PORTS`](@ref), the User Guide's Table 5-1), or `theta_deg` and `phi_deg`: the instrument's direction from TCC |
-| `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it the view looks through `through` alone), `center_part` or `center_mm` (the field's center, a part's centroid or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area), `area_part` (Tr over that part's visible projected area), `area_open = true` (Tr over the hole's open area at each time, from the model's entrance-hole closure) or `area_history_csv` (a measured area history: time in ns, area in mm²) |
+| `[line_of_sight]` (required) | `port`, a NIF diagnostic port by name (`"P143-274"`, with `facility = "NIF"`; the angles of [`NIF_DIAGNOSTIC_PORTS`](@ref), the User Guide's Table 5-1), or `theta_deg` and `phi_deg`: the direction of the instrument from TCC |
+| `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it, only the aperture `through` is viewed), `center_part` or `center_mm` (the field center, at the centroid of a part or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the initial area of the aperture), `area_part` (Tr over the visible projected area of that part), `area_open = true` (Tr over the open area of the hole at each time, from the entrance-hole closure of the model) or `area_history_csv` (a measured area history, time in ns and area in mm²) |
 | `[recording]` | `mode = "history"` |
-| `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the response's peak); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these; `field_of_view_mm` (a per-channel field, in place of the view field: Dante 1's multilayer channel, 12 mm) |
+| `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the peak of the response); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these; `field_of_view_mm` (a per-channel field in place of the view field, such as the 12 mm of Dante 1's multilayer channel) |
 | top level | `remove_channels` (numbers dropped from the definition extended) |
 
 The kind `xray_imager` (the SXI, G-LEH and gated imagers) builds an
@@ -60,34 +60,34 @@ The kind `xray_imager` (the SXI, G-LEH and gated imagers) builds an
 |---|---|
 | `[line_of_sight]` (required) | `port`, or `theta_deg` and `phi_deg` (as above) |
 | `[optic]` (required) | `kind = "pinhole"`, `diameter_um`, `distance_mm` (the pinhole from the object), `magnification`; `energy_eV` (the photon energy of the diffraction blur) |
-| top level | `filters` (required; as a channel's, an empty array for none), `mirror` (as a channel's) |
+| top level | `filters` (required; as for a channel, an empty array for none), `mirror` (as for a channel) |
 | `[detector]` (required) | `absorber` and `absorber_um` (the absorbing layer, e.g. Si 15 µm) or `efficiency_csv`; `kind`, `pixel_um`, `pixels` (across, down) |
-| `[view]` | `width_mm` (the object-plane field; default the detector's extent over the magnification), `pixels` (samples per side; default 256), `center_part` or `center_mm`, `up` (the image's up, a chamber direction) |
+| `[view]` | `width_mm` (the object-plane field; default the extent of the detector over the magnification), `pixels` (samples per side; default 256), `center_part` or `center_mm`, `up` (the up direction of the image, a chamber direction) |
 | `[recording]` | `mode = "integrated"` (default) or `"gated"` with `times_ns`, `gate_ns` (FWHM) and `gate_shape` (`"gaussian"` or `"square"`) |
 
-[`detected_radiance`](@ref) weighs each element's radiance by the imager's response
-over its spectrum, [`imager_image`](@ref) renders it on the object plane and blurs it
-by the pinhole, and [`imager_record`](@ref) integrates the images of a history over
-the recording's gates.
+[`detected_radiance`](@ref) weighs the radiance of each element by the response of the
+imager over its spectrum, [`imager_image`](@ref) renders it on the object plane and
+blurs it by the pinhole, and [`imager_record`](@ref) integrates the images of a history
+over the gates of the recording.
 
-The kind `radiography` (backlit radiographs: an area backlighter imaged through a
-pinhole, or a point projection) builds a [`Radiograph`](@ref) for
+The kind `radiography`, for backlit radiographs of an area backlighter imaged through a
+pinhole or by point projection, builds a [`Radiograph`](@ref) for
 [`radiograph`](@ref), which takes the target with its backlighter foil, the laser
-deposition on the foil and the object's parts with their materials. It takes:
+deposition on the foil and the parts of the object with their materials. It takes:
 
 | Table | Keys |
 |---|---|
 | `[line_of_sight]` (required) | `port`, or `theta_deg` and `phi_deg`: from the object toward the detector |
 | `[backlighter]` (required) | `line` (the He-α element, e.g. `"Ge"`) or `line_keV`; `pulse_ns` (the flat-top pulse) and `start_ns`; `foil_part` (default `backlighter`); `angular` (`"isotropic"` or `"lambertian"`); `prepulse` (the conversion-efficiency class); `ce` (in place of [`kshell_ce`](@ref)) |
-| `[optic]` (required) | `kind = "pinhole"` with `diameter_um`, `distance_mm` (from the object) and `magnification` (or the detector's `distance_mm`), or `kind = "projection"` |
-| top level | `filters` (required; as a channel's) |
+| `[optic]` (required) | `kind = "pinhole"` with `diameter_um`, `distance_mm` (from the object) and `magnification` (or the `distance_mm` of the detector), or `kind = "projection"` |
+| top level | `filters` (required; as for a channel) |
 | `[detector]` (required) | `distance_mm` (from the object), `absorber` and `absorber_um` or `efficiency_csv`; `kind`, `pixel_um`, `pixels` |
 | `[view]` | `width_mm` (the object-plane field), `pixels` (default 128), `center_part` or `center_mm`, `up` |
-| `[recording]` | as an imager's |
+| `[recording]` | as for an imager |
 
 The images are of detected photons per mm² of detector, with the open field (no
-object) and the transmission that a radiograph normalized by it measures; a gated
-radiograph's frames are the emission recorded through each gate.
+object) and the transmission that a radiograph normalized by it measures; the frames of
+a gated radiograph are the emission recorded through each gate.
 
 A field of view takes in every surface of the target facing the instrument, occluded by
 any part: a NIF Dante's is ±30 mm at TCC (the 2004 design), wider than any hohlraum, so
@@ -99,19 +99,19 @@ base.
 The response of a channel is the product of its parts ([`DanteResponse`](@ref)).
 Measured curves are CSV files with a header line and two columns, photon energy (eV)
 and value (a fraction, or V/GW for a sensitivity or a response), at a path relative to
-the definition file ([`TabulatedCurve`](@ref)); outside a table a factor holds its end
-values and a whole response is zero, and [`check_diagnostics`](@ref) warns when a table
-does not cover 50 eV – 20 keV.
+the definition file ([`TabulatedCurve`](@ref)); outside a table a factor keeps
+its end values and a whole response is zero, and [`check_diagnostics`](@ref) warns when
+a table does not cover 50 eV – 20 keV.
 
 ## Built-in definitions
 
-The package holds the public configurations that the literature documents (research
+The package contains the public configurations that the literature documents (research
 notes, "Dante-family hardware and geometry: what is public"), each read from the
-source's table and checked against the energies the source tabulates:
+table of its source and checked against the energies the source tabulates:
 
 | `id` | Instrument and configuration | Not public (reported as missing) |
 |---|---|---|
-| `nif_dante1` | NIF Dante 1, latest public configuration, viewing the whole target: a 60 mm field of view at TCC, the 2004 design's ±30 mm (Dewald et al. 2004), Tr over the lower entrance hole (extends `nif_dante1_2021`) | the collimators as fielded |
+| `nif_dante1` | NIF Dante 1, latest public configuration, viewing the whole target: a 60 mm field of view at TCC, ±30 mm as in the 2004 design (Dewald et al. 2004), Tr over the lower entrance hole (extends `nif_dante1_2021`) | the collimators as fielded |
 | `nif_dante1_2021` | from October 2021 (Rubery et al. 2023, Fig. 4), the same field and Tr's reference | — |
 | `nif_dante1_N180604`, `_N180129`, `_N170924` | single shots, 2017–18 (Kemp et al. 2020, Tables I–III) | — |
 | `nif_dante1_2012` | 2012–14 (May et al. 2015, Table IV) | — |
@@ -121,19 +121,19 @@ source's table and checked against the energies the source tabulates:
 | `omega_dante` | Omega Dante (Rubery et al. 2023, Fig. 13) | the solid angles (the standoff) |
 | `nif_sxi_lower` | NIF SXI lower, hard channel: 25 µm pinhole at 2×, Be 75 + Ti 50 µm, Si CCD (Schneider et al. 2010) | — |
 | `nif_sxi_upper` | NIF SXI upper, hard channel (extends `nif_sxi_lower`; Schneider et al. 2012, a draft) | — |
-| `nif_gleh2` | NIF G-LEH-2, gated, 1× (Chen et al. 2021, Table I) | the Ti filter, the sensor's absorbing layer, frame times and gate |
-| `nif_inflight_radiography` | NIF in-flight radiography: Ge He-α area backlighter, pinholes at 8×, two gated MCP strips of ≈ 90 ps (Rygg et al. 2014) | the equatorial port, the pinholes' diameter and distance, the filters, the detector's efficiency, the pulse, the frame times, the field |
+| `nif_gleh2` | NIF G-LEH-2, gated, 1× (Chen et al. 2021, Table I) | the Ti filter, the absorbing layer of the sensor, frame times and gate |
+| `nif_inflight_radiography` | NIF in-flight radiography: Ge He-α area backlighter, pinholes at 8×, two gated MCP strips of ≈ 90 ps (Rygg et al. 2014) | the equatorial port, the diameter and distance of the pinholes, the filters, the detector efficiency, the pulse, the frame times, the field |
 
 A user group completes one by extending it with the values it holds, e.g. Omega's
 solid angles, one `[[channel]]` table per channel with `number` and `solid_angle_sr`.
 
 ## Extending a definition
 
-A file with `extends = "<id>"` takes that definition and replaces what it gives:
-tables key by key, channels by `number` (a channel's listed keys replace the base
-channel's; a new number adds a channel), and `remove_channels` drops channels. A
-campaign that replaced Dante 1's channel 6 filter, removed channel 16 and added a
-calibrated channel is, in full:
+A file with `extends = "<id>"` takes that definition and replaces what it gives: tables
+per key, channels by `number` (the keys listed for a channel replace those of the base
+channel; a new number adds a channel), and `remove_channels` drops channels. A campaign
+that replaced Dante 1's channel 6 filter, removed channel 16 and added a calibrated
+channel is, in full:
 
 ```toml
 schema = 1
@@ -162,14 +162,15 @@ to be built (Dante 2's channels are not public, for example) are reported as
 
 ## Definitions in sessions
 
-A saved GUI session holds the definitions of the diagnostics it records, so that it
+A saved GUI session contains the definitions of the diagnostics it records, so that it
 records the same instruments on any computer. [`diagnostic_table`](@ref) writes a
-resolved definition as one standalone table (no `extends`; each CSV path mapped, e.g.
-to a copy stored beside it), [`diagnostic_definition`](@ref) reads such a table back,
-checked as a file on the search path is, and [`diagnostic_diff`](@ref) lists the keys
-in which two definitions differ, CSV files compared by content: on opening a session,
-a saved definition that differs from the search path's of the same `id` is reported
-with those keys, and the saved one is used unless the search path's is chosen.
+resolved definition as one standalone table, without `extends` and with each CSV path
+mapped, for example to a copy stored beside it. [`diagnostic_definition`](@ref) reads
+such a table back and checks it as a file on the search path is checked.
+[`diagnostic_diff`](@ref) lists the keys in which two definitions differ, with CSV files
+compared by content. When a session is opened, a saved definition that differs from the
+definition of the same `id` on the search path is reported with those keys, and the
+saved one is used unless the one on the search path is chosen.
 
 ## New kinds
 

@@ -1,5 +1,6 @@
-# The radiating cavity around a point: the elements of a target (an imported CAD
-# assembly, typically) that bound the free space the point is in.
+# This file finds the radiating cavity around a point, which is the set of elements of a
+# target, typically an imported CAD assembly, that bound the free space containing the
+# point.
 
 """
     Enclosure
@@ -9,26 +10,28 @@ Result of `enclosure`: the reduced `target`, and how it was cut from `source`.
 - `target`: the components of `source` cut to their kept patches (components left
   empty are dropped).
 - `index[i]`: the element of `source` that element `i` of `target` is.
-- `kept[e]`: whether element `e` of `source` passed the selection. A two-sided patch
-  keeps both sides when either passes, so `target` can hold sides with `kept` false.
-- `flux[e]`: the relative flux on element `e` of `source` that determined it (`NaN` for
-  elements beyond `radius`, which cast no rays); see `enclosure`.
-- `escape`: the fraction of the rays from the point that leave the bounding sphere
-  (or reach infinity): the solid-angle fraction of the openings seen from the point.
-- `open_area`: Σ over kept elements of area × fraction of the element's rays that
-  escape (mm²). By reciprocity this estimates the open area of the cavity (its
-  entrance holes, where no aperture or window closes them).
-- `leak_area`: the same sum over rays that end on dropped elements (mm²): radiation
-  that the kept set sends to surfaces that the reduced target no longer has.
-- `return_area`: what those surfaces would send back, Σ over kept elements of area ×
-  the mean over the element's rays of `albedo × flux` at the dropped element hit (mm²,
-  in units of the reference flux): the error of the cut, to compare with `open_area`
-  (what leaves through the openings) and the cavity's area.
+- `kept[e]`: whether element `e` of `source` passed the selection. Both sides of a
+  two-sided patch are kept when either passes, so `target` can contain sides with
+  `kept` false.
+- `flux[e]`: the relative flux on element `e` of `source` that determined the
+  selection (`NaN` for elements beyond `radius`, which cast no rays); see `enclosure`.
+- `escape`: the fraction of the rays from the point that leave the bounding sphere or
+  reach infinity, which is the solid-angle fraction of the openings seen from the point.
+- `open_area`: Σ over kept elements of area × the fraction of the rays of the element
+  that escape (mm²). By reciprocity this estimates the open area of the cavity, that
+  is, its entrance holes where no aperture or window closes them.
+- `leak_area`: the same sum over rays that end on dropped elements (mm²), which is the
+  radiation that the kept set sends to surfaces that the reduced target no longer has.
+- `return_area`: the radiation that those surfaces would send back, Σ over kept
+  elements of area × the mean over the rays of the element of `albedo × flux` at the
+  dropped element hit (mm², in units of the reference flux). It is the error of the
+  cut, to compare with `open_area`, which leaves through the openings, and with the area
+  of the cavity.
 - `back_area`: the sum over rays that end on one-sided surfaces seen from behind
-  (mm²), which absorb without radiating in the full target too.
+  (mm²), which also absorb without radiating in the full target.
 - `back`: the fraction of the rays from the point whose first hit was a one-sided
-  surface seen from behind (1 for a point inside the capsule; otherwise a sign of
-  wrongly oriented surfaces).
+  surface seen from behind. It is 1 for a point inside the capsule, and otherwise a sign
+  of wrongly oriented surfaces.
 - `rays`: the rays cast per element.
 """
 struct Enclosure
@@ -52,58 +55,59 @@ end
               points = 8, point_rays = 4096, radius = Inf, seed = 1) -> Enclosure
     enclosure(components, point; kwargs...)
 
-The elements of `target` that bound the free-space region containing `point` (mm), as a
-new `Target` (`enc.target`) with each component cut to those patches, with
-diagnostics (`Enclosure`; `show` prints elements and area kept per component). Imported
-CAD assemblies model a target as closed solids, with outer faces, end faces and
-mounting structure that cannot exchange radiation with the cavity, while view factors
-cost O(n²) in the elements. Only element sides that face the free space are found
-(fronts of one-sided surfaces, either side of two-sided ones), so CAD windings must be
-consistent first (`orient_mesh`, `visrad_target(...; orient = true)`).
+The elements of `target` that bound the free-space region containing `point` (mm). They
+are returned as a new `Target` (`enc.target`) with each component cut to those patches,
+with diagnostics (`Enclosure`; `show` prints the elements and area kept per component).
+Imported CAD assemblies model a target as closed solids, with outer faces, end faces
+and mounting structure that cannot exchange radiation with the cavity, while view
+factors cost O(n²) in the elements. Only element sides that face the free space are
+found, which are the fronts of one-sided surfaces and either side of two-sided ones.
+CAD windings must therefore be made consistent first (`orient_mesh`,
+`visrad_target(...; orient = true)`).
 
-The selection is the flux that an isotropic source at the point would put on each element,
-directly and after diffuse re-emission from the surfaces with the uniform albedo
-`albedo` (a geometric weight, not the materials'). Every element within `radius` of the
-point casts `rays` rays from random points on it in cosine-weighted directions,
-stratified in angle, against the target's facets (apertures are transparent, as
-everywhere), and the flux is gathered along them:
+The selection uses the flux that an isotropic source at the point would put on each
+element, directly and after diffuse re-emission from the surfaces with the uniform
+albedo `albedo`. This albedo is a geometric weight and does not come from the materials.
+Every element within `radius` of the point casts `rays` rays from random points on it,
+in cosine-weighted directions stratified in angle, against the facets of the target.
+Apertures are transparent, as everywhere. The flux is gathered along the rays:
 
-    Eⱼ = E⁰ⱼ + albedo × (mean of E over the element sides j's rays hit first),
+    Eⱼ = E⁰ⱼ + albedo × (mean of E over the element sides that the rays of j hit first).
 
-with rays that escape (leave the sphere of `radius` about the point, or hit nothing)
-or meet a one-sided surface from behind contributing nothing. `E⁰ⱼ` is the direct flux,
-cos θ/(4π d²) averaged over `points` random points on the element, zero where the line
-of sight to the point is blocked; lines of sight (and the rays from the point) pass
-through surfaces seen from behind, so the point may lie inside the capsule. The
-iteration (Gauss–Seidel in element order, to 10⁻⁶) starts from `E⁰`. Elements with
-`E ≥ threshold × E_ref` are kept, where `E_ref` is the mean flux on the element sides
-that `point_rays` rays from the point (a Fibonacci lattice) first hit: the scale of
-the cavity. `enc.flux` holds `E/E_ref`. On a NIF CAD workspace (155k elements) this takes
-about 3 s on 8 threads.
+Rays that escape, by leaving the sphere of `radius` about the point or hitting nothing,
+contribute nothing, and so do rays that meet a one-sided surface from behind. `E⁰ⱼ` is
+the direct flux, cos θ/(4π d²) averaged over `points` random points on the element, and
+zero where the line of sight to the point is blocked. Lines of sight, and the rays from
+the point, pass through surfaces seen from behind, so the point may lie inside the
+capsule. The iteration (Gauss–Seidel in element order, to 10⁻⁶) starts from `E⁰`.
+Elements with `E ≥ threshold × E_ref` are kept. `E_ref` is the mean flux on the element
+sides that `point_rays` rays from the point (a Fibonacci lattice) first hit, which sets
+the scale of the cavity. `enc.flux` contains `E/E_ref`. On a NIF CAD workspace (155k
+elements) the selection takes a few seconds on a desktop.
 
-Each element gathers through separate rays, which sample its whole view whatever its
-size or shape, so a small patch or a sliver deep in a recess or behind a shield is
-found through the surfaces around it, which see the cavity. Surfaces outside, such as
-outer walls and the far sides of mounts, get no flux at all. A surface that sees the
-cavity only through an opening, such as mounting structure beyond an entrance hole,
-gets about `albedo` × its view factor to the cavity, plus what its neighbors outside
-gather in turn, attenuated by `albedo` at each step, so structure outside does not
-carry itself in by seeing itself. The default threshold 0.05 drops a surface facing a
-hole of radius a from more than about 4a away on its axis; the rim of a hole in a thick
-wall spends about half its view on the cavity and is kept. `threshold = 0` keeps every
-element with any flux at all (whatever is connected to the cavity by lines of sight,
-however weakly), which `radius` bounds. The random numbers come from `seed` and the
-element index, so the result does not depend on the thread count; an element whose
-flux is within the sampling noise of the threshold can fall either way.
+Each element gathers through separate rays, which sample its whole view whatever its size or
+shape. A small patch or a sliver deep in a recess or behind a shield is therefore found
+through the surfaces around it, which have a view of the cavity. Surfaces outside, such as
+outer walls and the far sides of mounts, get no flux at all. A surface with a view of the
+cavity only through an opening, such as mounting structure beyond an entrance hole, gets
+about `albedo` × its view factor to the cavity. It also gets the flux that its neighbors
+outside gather in turn, attenuated by `albedo` at each step, so structure outside is not
+selected through its view of itself. The default threshold 0.05 drops a surface facing a
+hole of radius a from more than about 4a away on its axis. The rim of a hole in a thick wall
+has about half its view on the cavity and is kept. With `threshold = 0`, every element with
+any flux at all is kept, that is, everything connected to the cavity by lines of sight,
+however weakly, within the bound set by `radius`. The random numbers come from `seed` and
+the element index, so the result does not depend on the thread count. An element whose flux
+is within the sampling noise of the threshold can fall either way.
 
-Removing elements the cavity cannot see changes nothing in the radiosity of the rest;
-removing a surface seen through an opening turns the radiation it would have returned
-into an escape, which `return_area` estimates against `open_area` (lower `threshold`
-when it matters). Thin films that CAD models as solids, such as a capsule tent or an
-entrance-hole window, bound the free space like walls: with the point inside a tent the
-result is the tent's pocket around the capsule (`open_area` near zero). Leave such
-parts out of the target (they transmit x-rays at their thickness) or give a point on
-the side wanted.
+Removing elements outside the view of the cavity does not change the radiosity of the
+rest. Removing a surface seen through an opening turns the radiation that it would have
+returned into an escape, which `return_area` estimates against `open_area`; a lower
+`threshold` reduces it when it matters. Thin films that CAD models as solids, such as a
+capsule tent or an entrance-hole window, bound the free space like walls. With the
+point inside a tent, the result is the pocket of the tent around the capsule, with
+`open_area` near zero. Such parts should be left out of the target, since they transmit
+x-rays at their thickness, or the point should be placed on the side wanted.
 """
 function enclosure(t::Target, point = (0.0, 0.0, 0.0); threshold::Real = 0.05, albedo::Real = 0.9,
                    rays::Integer = 64, points::Integer = 8, point_rays::Integer = 4096,
@@ -153,7 +157,7 @@ end
 enclosure(cs::AbstractVector{<:Component}, point = (0.0, 0.0, 0.0); kwargs...) =
     enclosure(Target(collect(Component, cs)), point; kwargs...)
 
-# splitmix64: a counter-based stream per element, so samples do not depend on threads.
+# splitmix64 gives a counter-based stream per element, so samples do not depend on threads.
 @inline function _splitmix(s::UInt64)
     s += 0x9e3779b97f4a7c15
     z = s
@@ -173,8 +177,8 @@ end
     return b1, cross(n, b1)
 end
 
-# Parameter at which the ray o + s d (|d| = 1) leaves the sphere of radius R about p
-# (0 when it starts outside and moves away; Inf for an unbounded region).
+# Returns the parameter at which the ray o + s d (|d| = 1) leaves the sphere of radius R
+# about p, with 0 when it starts outside and moves away, and Inf for an unbounded region.
 @inline function _sphere_exit(o, d, p, R)
     isinf(R) && return Inf
     q = o - p
@@ -183,16 +187,17 @@ end
     return max(-b + sqrt(max(disc, 0.0)), 0.0)
 end
 
-# The element side a ray along d hits on triangle k: the front's element when it meets
-# the front, else the back's; -1 for an unmodeled (one-sided) back.
+# Returns the element side that a ray along d hits on triangle k. It is the element of
+# the front when the ray meets the front, or else that of the back, with -1 for an
+# unmodeled (one-sided) back.
 @inline function _side_hit(t::Target, k, d)
     e = dot(d, t.tri_normal[k]) < 0 ? t.tri_front[k] : t.tri_back[k]
     return e == 0 ? Int32(-1) : Int32(e)
 end
 
-# Diffuse rays and direct flux from every candidate element: column e of `hits`
-# (rays × elements) and E0[e] are written only by element e, in blocks handed out
-# dynamically (`_tforeach`).
+# Casts diffuse rays and computes the direct flux from every candidate element. Column e
+# of `hits` (rays × elements) and E0[e] are written only by element e, in blocks handed
+# out dynamically (`_tforeach`).
 function _cast_elements!(hits::Matrix{Int32}, E0::Vector{Float64}, t::Target, cand::Vector{Bool},
                          p::Vec3, R::Float64, ε::Float64, seed::UInt64, npts::Int)
     N = size(hits, 2)
@@ -205,8 +210,8 @@ function _cast_elements!(hits::Matrix{Int32}, E0::Vector{Float64}, t::Target, ca
     return hits
 end
 
-# A uniform random point on element e (a triangle by area, a point on it), the normal
-# of its radiating side there, and the advanced random state.
+# Returns a uniform random point on element e (a triangle chosen by area, then a point
+# on it), the normal of its radiating side there, and the advanced random state.
 @inline function _element_point(t::Target, e, side, tris, Atot, s)
     s, u0 = _uniform(s); s, u1 = _uniform(s); s, u2 = _uniform(s)
     j, acc = 0, u0 * Atot
@@ -256,9 +261,9 @@ function _cast_element!(hits, E0, t::Target, e::Int, p::Vec3, R::Float64, ε::Fl
     return nothing
 end
 
-# The first element side a ray from p along d (unit) meets within `left`, passing
-# through one-sided surfaces seen from behind (0: none), and whether the first surface
-# it met was one of those.
+# Returns the first element side that a ray from p along d (unit) meets within `left`,
+# passing through one-sided surfaces seen from behind (0 for none), and whether the first
+# surface that it met was one of those.
 function _first_side(t::Target, p::Vec3, d::Vec3, left::Float64, ε::Float64)
     o = p
     back = false
@@ -275,9 +280,9 @@ function _first_side(t::Target, p::Vec3, d::Vec3, left::Float64, ε::Float64)
     return Int32(0), back
 end
 
-# The element side each of n rays from the point (a Fibonacci lattice) first meets
-# (0: none within the sphere of radius R), the escaping fraction, and the fraction
-# whose first surface was seen from behind.
+# Returns the element side that each of n rays from the point (a Fibonacci lattice)
+# first meets (0 for none within the sphere of radius R), the escaping fraction, and the
+# fraction whose first surface was seen from behind.
 function _point_rays(t::Target, p::Vec3, R::Float64, ε::Float64, n::Integer)
     first = zeros(Int32, n)
     nback = 0
@@ -293,9 +298,10 @@ function _point_rays(t::Target, p::Vec3, R::Float64, ε::Float64, n::Integer)
     return first, count(==(0), first) / n, nback / n
 end
 
-# Gather the flux E = E0 + albedo × (mean of E over each element's ray hits), by
+# Gathers the flux E = E0 + albedo × (mean of E over the ray hits of each element), by
 # Gauss–Seidel sweeps in element order from E0 (monotone from below) to a relative
-# change of 1e-6; with `positive`, also until no element turns positive.
+# change of 1e-6. With `positive`, the sweeps also continue until no element turns
+# positive.
 function _gather_flux(hits::Matrix{Int32}, E0::Vector{Float64}, albedo::Float64, positive::Bool;
                       tol = 1e-6, maxiter::Integer = 100_000)
     k, N = size(hits)
@@ -320,8 +326,8 @@ function _gather_flux(hits::Matrix{Int32}, E0::Vector{Float64}, albedo::Float64,
     return E
 end
 
-# The components of t cut to the patches with a kept element (both sides of a two-sided
-# patch), and the source element of each element of the result.
+# Returns the components of t cut to the patches with a kept element (both sides of a
+# two-sided patch), and the source element of each element of the result.
 function _cut_target(t::Target, kept)
     comps = Component[]
     off = 0
@@ -348,7 +354,8 @@ function _cut_target(t::Target, kept)
     return Target(comps; t.visibility), findall(keep_elem)
 end
 
-# The mesh made of the patches p with keep[p], in order, sharing vertices as before.
+# Returns the mesh made of the patches p with keep[p], in order, sharing vertices as
+# before.
 function _select_patches(m::Mesh, keep)
     out = Mesh()
     vmap = zeros(Int, length(m.vertices))
@@ -395,13 +402,13 @@ Base.show(io::IO, enc::Enclosure) =
                remesh = nothing, coarsen = nothing, fit = remesh !== nothing, material = gold(),
                two_sided = false, visibility = :sampled, closed = false, enclosure_kw = (;)) -> Target
 
-A radiation-ready target from CAD meshes in one call: what the
+A radiation-ready target from CAD meshes in one call. It does what the
 [Radiation in an imported CAD hohlraum](@ref) tutorial does by hand, and what
-`visrad_target` does with the CAD a VisRad workspace bundles. `parts` holds
+`visrad_target` does with the CAD that a VisRad workspace bundles. `parts` contains
 `name => mesh` pairs, the CAD parts (as `read_stl_solids` returns them), and
-`Component`s, taken as they are (primitives, apertures, parts prepared by hand): those
-take part in the cavity selection but are not oriented, remeshed or fitted. The
-target's components keep the order of `parts`.
+`Component`s, taken as they are, such as primitives, apertures and parts prepared by
+hand. The components take part in the cavity selection but are not oriented, remeshed
+or fitted. The components of the target follow the order of `parts`.
 
 Each CAD part becomes a component of `material` radiating from its front (from both
 sides when `two_sided`), through these steps:
@@ -412,44 +419,46 @@ sides when `two_sided`), through these steps:
    elements that bound the free space around it, among the facets of all the parts as
    oriented (`enclosure_kw` are its keywords). The selection needs consistent windings.
 3. `remesh` (mm) divides the kept facets into compact, near-planar elements of about
-   that size ([`remesh_mesh`](@ref)); `coarsen` (mm) instead merges whole facets into
-   elements ([`coarsen_mesh`](@ref)). Give at most one. Only the kept facets are
-   divided, which is much cheaper when most of an assembly lies outside the cavity.
-   With `inside`, the selection is then repeated on the elements: an element straddling
-   the edge of the lit region averages its flux over its area.
-4. `fit` (by default on when `remesh` is given; or a named tuple of keywords of
-   [`curved_components`](@ref) and [`fit_surfaces`](@ref), such as `minfraction = 0`
-   to fit even the curved faces of under 10⁻³ of a part's area, which stay flat by
-   default) splits each remeshed part into its cylinders, cones, spheres and the rest,
-   fitted on the kept CAD facets, whose vertices lie on the true surfaces, so the
-   radiation model integrates over the curved walls. The split is computational: the
-   pieces, `<part>/cyl1`, …, `<part>/rest` (a part that is one surface keeps its name),
-   record their part, and `elements`, `Scenario(...; observe)`, the keep-outs, the
-   clearance and TaLIS checks and the reports (`energy_balance`, `component_power`,
-   `write_results`, `report`) take and show the parts (see [`parts`](@ref)).
-   `fit = false` keeps flat elements.
+   that size ([`remesh_mesh`](@ref)), and `coarsen` (mm) instead merges whole facets
+   into elements ([`coarsen_mesh`](@ref)). At most one of them may be given. Only the
+   kept facets are divided, which is much cheaper when most of an assembly lies outside
+   the cavity. With `inside`, the selection is then repeated on the elements, and an
+   element that straddles the edge of the lit region averages its flux over its area.
+4. `fit` splits each remeshed part into its cylinders, cones, spheres and the rest. It
+   is on by default when `remesh` is given, and it may also be a named tuple of keywords
+   of [`curved_components`](@ref) and [`fit_surfaces`](@ref). An example is
+   `minfraction = 0`, which also fits the curved faces of under 10⁻³ of the part area
+   that stay flat by default. The fit uses the kept CAD facets, whose vertices lie on the
+   true surfaces, so the radiation model integrates over the curved walls. The split is
+   computational. The pieces, `<part>/cyl1`, …, `<part>/rest`, record their part, and a
+   part that is one surface is not renamed. `elements`, `Scenario(...; observe)`, the
+   keep-outs, the clearance and TaLIS checks and the reports (`energy_balance`,
+   `component_power`, `write_results`, `report`) take and show the parts (see
+   [`parts`](@ref)). `fit = false` keeps flat elements.
 
-The target's view factors default to `visibility = :sampled` (see `view_factors`): CAD
-cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, whose
-visibility a single centroid ray sets to all or nothing.
+The view factors of the target default to `visibility = :sampled` (see
+`view_factors`). CAD cavities have rims, such as entrance-hole bores and gaps, that
+partly shadow element pairs, and a single centroid ray would set their visibility to all
+or nothing.
 
 `closed = true` declares the target a closed enclosure, so `RadiationModel` balances its
-view factors (`enforce_closure!`): pass it when apertures (`aperture` components among
-the `parts`) cover every opening of the cavity kept ([`open_fraction`](@ref) shows where
-facets leak). On a remeshed, fitted CAD cavity with 0.1 mm bores and a 20 µm waist gap
-closed by apertures, balancing brings the LEH and gap loss from 0.7–0.8% above a
-continuum Monte Carlo to within 0.2%, and the capsule drive within 0.06% (raw: up to
-0.16%), and moves its a₂/a₀ by under 0.08 pp, toward the reference at 0.5 mm (research
-notes, "Closure on bored, windowed and CAD cavities"). The default is `false` (raw view
-factors): a cavity selected from CAD is open wherever no aperture was given.
+view factors (`enforce_closure!`). It applies when apertures (`aperture` components
+among the `parts`) cover every opening of the kept cavity, and
+[`open_fraction`](@ref) shows where facets leak. On a remeshed, fitted CAD cavity with
+0.1 mm bores and a 20 µm waist gap closed by apertures, balancing brings the LEH and gap
+loss from 0.7–0.8% above a continuum Monte Carlo to within 0.2%. It brings the capsule
+drive within 0.06%, against up to 0.16% raw, and moves its a₂/a₀ by under 0.08 pp,
+toward the reference at 0.5 mm (research notes, "Closure on bored, windowed and CAD
+cavities"). The default is `false`, with raw view factors, since a cavity selected from
+CAD is open wherever no aperture was given.
 
 `material`, `two_sided`, `remesh` and `coarsen` take one value for every CAD part, a
-function of the part's name (a `Symbol`), or a dictionary keyed by name (`Symbol` or
-`String`). A part missing from a `remesh` or `coarsen` dictionary keeps its facets, one
-missing from a `two_sided` dictionary is one-sided, and one missing from a `material`
-dictionary is an error. For example, `remesh = n -> n === :capsule ? 0.15 : 0.5`
-remeshes a capsule finer than the walls. For the account of what the cavity selection
-drops, call `enclosure` on the target built without `inside`.
+function of the part name (a `Symbol`), or a dictionary keyed by name (`Symbol` or
+`String`). The facets of a part missing from a `remesh` or `coarsen` dictionary are kept. A
+part missing from a `two_sided` dictionary is one-sided, and one missing from a
+`material` dictionary is an error. For example, `remesh = n -> n === :capsule ? 0.15 :
+0.5` remeshes a capsule finer than the walls. An account of what the cavity selection
+drops comes from `enclosure` on the target built without `inside`.
 """
 function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside = nothing,
                     remesh = nothing, coarsen = nothing, fit = nothing, material = gold(),
@@ -458,7 +467,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
     fit isa Union{Nothing,Bool,NamedTuple} ||
         throw(ArgumentError("`fit` must be true, false or a named tuple of curved_components keywords"))
     comps = Component[]
-    cad = Bool[]                         # per component: a CAD part
+    cad = Bool[]                         # per component, whether it is a CAD part
     for p in parts
         if p isa Component
             push!(comps, p)
@@ -480,7 +489,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
         enc = enclosure(comps, inside; enclosure_kw...)
         comps, cad = enc.target.components, cad[_survivors(enc)]
     end
-    facets = [c.mesh for c in comps]     # the CAD facets kept: the reference for the fits
+    facets = [c.mesh for c in comps]     # the kept CAD facets, the reference for the fits
     redone = falses(length(comps))       # the parts divided into new elements
     if remesh !== nothing || coarsen !== nothing
         comps = copy(comps)
@@ -507,11 +516,13 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
                                 [comps[i]] for i in eachindex(comps)); init = Component[]); closed, visibility)
 end
 
-# A per-part setting: one value, a function of the part's name, or a dictionary by name.
+# Returns a per-part setting from one value, a function of the part name, or a dictionary
+# by name.
 _part_value(x::AbstractDict, name::Symbol, default) =
     haskey(x, name) ? x[name] : get(x, String(name), default)
 _part_value(x::Function, name::Symbol, default) = x(name)
 _part_value(x, name::Symbol, default) = x
 
-# The components of `enc.source` that `enc.target` keeps (those with a kept element), in order.
+# Returns the components of `enc.source` that `enc.target` keeps (those with a kept
+# element), in order.
 _survivors(enc::Enclosure) = sort!(unique(enc.source.elem_comp[enc.index]))

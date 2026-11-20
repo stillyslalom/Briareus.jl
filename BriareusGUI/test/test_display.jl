@@ -1,6 +1,6 @@
-# Participation and visibility: the beam matrix (1ω, 2ω, 3ω light in the calculations and
-# drawn), component display modes, the cutaway's exact clipping, their session state,
-# and the unconverted-light drive (no GL).
+# This file tests participation and visibility: the beam matrix (1ω, 2ω and 3ω light in
+# the calculations and drawn), component display modes, the exact clipping of the cutaway,
+# their session state, and the unconverted-light drive (no GL).
 
 using LinearAlgebra: norm, cross, dot
 
@@ -22,12 +22,12 @@ _tris_area(ts) = sum((_area(t...) for t in ts); init = 0.0)
     # a 300° sector centered at 10° keeps 160° to 220°: ½ (tan 40° + tan 20°)
     set_cut!(v; azimuth = 10, width = 300)
     @test kept(v) ≈ (tand(40) + tand(20)) / 2 rtol = 1e-12
-    # bounded along its axis: a half about y (azimuth from +z toward +x: 90° is +x)
-    # removes x > 0 within |y| < 0.5, a 1 × 1 square
+    # A cut bounded along its axis, a half about y, removes x > 0 within |y| < 0.5, a
+    # 1 × 1 square. The azimuth runs from +z toward +x, so 90° is +x.
     set_cut!(v; axis = :y, azimuth = 90, width = 180, range = (-0.5, 0.5))
     @test kept(v) ≈ 3 rtol = 1e-12
     set_cut!(v; axis = :z, range = (-Inf, Inf))
-    # a plane: x + y > √2/2 removes the corner triangle of legs 2 − √2/2
+    # The plane x + y > √2/2 removes the corner triangle of legs 2 − √2/2.
     set_cut_plane!(v; normal = (1, 1, 0), point = (0, 0, 0))
     @test v.cut_kind[] === :plane
     @test kept(v) ≈ 2 rtol = 1e-12
@@ -58,7 +58,8 @@ end
 @testset "arbitrary cut planes (no GL)" begin
     V(x...) = Briareus.Vec3(x...)
     v = ViewState(cut_components = (:hohlraum_wall,))
-    # a normal typed as port angles: the polar angle from +z, the azimuth from +x toward +y
+    # A normal typed as port angles takes the polar angle from +z and the azimuth from +x
+    # toward +y.
     set_cut_plane!(v; angles = (60, 135), point = (0.5, 0.0, -1.0), offset = 0.25)
     @test all(isapprox.(v.cut_normal[], (sind(60) * cosd(135), sind(60) * sind(135), cosd(60)); atol = 1e-15))
     @test all(isapprox.(cut_angles(v), (60, 135); rtol = 1e-12))
@@ -84,7 +85,8 @@ end
     @test dot(n0, n40) ≈ cosd(40) rtol = 1e-12
     @test abs(dot(n40, d)) < 1e-15 && isapprox(dot(cross(n0, n40), d), sind(40); rtol = 1e-12)
     @test abs(dot(n40, o) - cut_region(v).c) < 1e-12
-    # (a line along +y at rotation 0: the normal is ẑ × ŷ = −x̂; along z it falls back to ŷ × ẑ)
+    # For a line along +y at rotation 0 the normal is ẑ × ŷ = −x̂, and along z it falls
+    # back to ŷ × ẑ.
     set_cut_line!(v; direction = (0, 2, 0), origin = (0, 0, 0), rotation = 0)
     @test all(isapprox.(v.cut_normal[], (-1, 0, 0); atol = 1e-15))
     set_cut_line!(v; direction = (0, 0, 1))
@@ -100,9 +102,10 @@ end
     @test v.cut_line[] == (0.0, 0.0, 0.0)
     @test_throws ArgumentError set_cut_line!(v; rotation = 10)
 
-    # a plane through a flat part: a disk at c tilted to (60°, 30°). The plane takes the
-    # disk's centroid and normal; across the plate [-1, 1]² at the disk's height it cuts
-    # the chord n₁x + n₂y = n₁c₁ + n₂c₂, which (n₂/n₁ = tan 30°, crossing y = ±1) is 2/cos 30°
+    # A plane through a flat part, a disk at c tilted to (60°, 30°), takes the centroid and
+    # normal of the disk. Across the plate [-1, 1]² at the height of the disk it cuts the
+    # chord n₁x + n₂y = n₁c₁ + n₂c₂. With n₂/n₁ = tan 30° and the chord crossing y = ±1, the
+    # chord length is 2/cos 30°.
     sess = DesignSession(resolution = :coarse)
     c = V(0.3, -0.2, 3.0)
     add_part!(sess.target, :disk; name = :tilted, x = c[1], y = c[2], z = c[3], theta = 60, phi = 30, r1 = 0.4)
@@ -134,7 +137,8 @@ end
 @testset "display modes and the beam matrix (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     v, bt = sess.view, sess.beams
-    # display modes: per component and for several at once; opaque is the default
+    # Display modes are set per component and for several at once, and opaque is the
+    # default.
     @test display_mode(v, :hohlraum_wall) === :opaque
     set_display!(v, [:hohlraum_wall, :hohlraum_cap_top], :transparent)
     set_display!(v, :capsule, :wireframe)
@@ -187,7 +191,7 @@ end
     @test length(u.vertices) == 32 && length(u.faces) == 32 && length(u.outlines) == 16
 end
 
-@testset "participation, not visibility, sets the drive (no GL)" begin
+@testset "participation sets the drive and visibility does not (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     bt, v = sess.beams, sess.view
     b = bt.beams[][1]
@@ -203,7 +207,7 @@ end
     shield(res) = (cp = component_power(res.evaluation.deposition, t); get(cp, :shield, 0.0) + get(cp, :shield_outside, 0.0))
     @test res0.unconverted === nothing && shield(res0) < 1e-9
 
-    # a hidden beam still deposits bitwise as when drawn
+    # A hidden beam still deposits exactly as when it is drawn.
     set_beams_drawn!(v, [b.name], 3, false)
     @test sess.drive.result[] === res0 && res0.evaluation.deposition.per_beam[1] > 0
     set_beams_drawn!(v, [b.name], 3, true)
@@ -238,7 +242,8 @@ end
     set_beams_drawn!(v, [b.name], 1, true)
     set_beams_drawn!(v, [b.name], 1, false)
     @test sess.drive.result[] === res1
-    # out of the calculations again: bitwise the 3ω drive alone
+    # Out of the calculations again, the drive is identical to the drive of the 3ω light
+    # only.
     set_participation!(bt, [1], 1, false)
     @test sess.drive.result[].evaluation.deposition.element == res0.evaluation.deposition.element
 

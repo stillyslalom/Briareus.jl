@@ -43,16 +43,16 @@ closed_design(ts) = (cs = Controllers._closed_cavities(ts); !isempty(cs) && all(
     include("test_hohlraum.jl")         # the hohlraum part, its pieces and frames, starters (no GL)
     include("test_halfraum.jl")         # open ends, the flat observed face, the halfraum starters (no GL)
     include("test_profiles.jl")         # frustraums and section lists, the frustraum starter (no GL)
-    include("test_assemblies.jl")       # the model tree: assemblies, its commands, sessions (no GL)
+    include("test_assemblies.jl")       # model-tree assemblies, their commands, sessions (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
     include("test_regressions.jl")      # the survey's fixes: Run, renames, undo, the default cut, flat faces (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)
     include("test_time_unconverted.jl") # drive histories and retunes with 1ω, 2ω light (no GL)
-    include("test_diagnostics.jl")      # diagnostic definitions: list, folders, sessions (no GL)
+    include("test_diagnostics.jl")      # diagnostic definitions, their list, folders and sessions (no GL)
     include("test_units.jl")            # quads as units, facilities, instruments, pulse shapes, the history export (no GL)
     include("test_app.jl")              # the `briareus` command: shortcuts, script, splash (no GL)
     include("test_canvas.jl")           # 3D and map canvases (offscreen GL)
-    include("test_triad.jl")            # the placement triad: its edits, its handles (offscreen GL)
+    include("test_triad.jl")            # the edits and handles of the placement triad (offscreen GL)
 end
 
 if get(ENV, "BRIAREUSGUI_QT_TESTS", "") == "true"

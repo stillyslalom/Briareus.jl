@@ -1,27 +1,26 @@
 # # Freeing a bundle for radiography
 #
 # A radiograph of an imploding capsule needs a backlighter, and on NIF the
-# backlighter's lasers come out of the drive. Freeing one bundle (two quads of four
+# backlighter lasers come out of the drive. Freeing one bundle (two quads of four
 # beams, one quad in each hemisphere, sharing an amplifier chain) leaves 46 quads to
-# drive the hohlraum, and the capsule sees the asymmetry of the missing ports. On a
-# layered DT ignition shot there is little margin for it. A mode-1 asymmetry of the
-# drive, a flux difference between opposite sides of the capsule, pushes the hot spot
-# sideways at about 100 km/s for each percent of mode-1 flux (MacGowan et al., High
-# Energy Density Physics 40, 100944, 2021), and the drive itself is the scarcest
-# resource of the shot.
+# drive the hohlraum, and the missing ports leave an asymmetry in the capsule drive. On a
+# layered DT ignition shot there is little margin for it. A mode-1 asymmetry of the drive,
+# a flux difference between opposite sides of the capsule, pushes the hot spot sideways at
+# about 100 km/s for each percent of mode-1 flux (MacGowan et al., High Energy Density
+# Physics 40, 100944, 2021), and the drive itself is the scarcest resource of the shot.
 #
 # Which bundle can be freed is set first by the radiograph: its quads must reach a
-# backlighter foil placed across the target from the detector, perpendicular to the
-# line of sight, without their light touching the hohlraum or its entrance-hole
-# shields on the way, and the foil's x rays must reach the detector unobstructed.
-# This tutorial finds the bundles that can serve each of two equatorial lines of sight, ranks them by
-# the symmetry they cost, and compares three ways to win that symmetry back: freeing
-# the bundle's symmetric partner as well, rebalancing the powers of the remaining
-# quads, and re-pointing them within the clearance the entrance holes allow. It introduces three-dimensional mode analysis with real
-# spherical harmonics, the symmetry of the NIF ports, scenarios on a subset of the
-# beams, the influence matrix, optimization with automatic-differentiation gradients
-# and under constraints, beam-clearance checks, and a re-pointing study in two stages,
-# from quads to their beams.
+# backlighter foil placed across the target from the detector, perpendicular to the line
+# of sight, without their light touching the hohlraum or its entrance-hole shields on the
+# way, and the x rays from the foil must reach the detector unobstructed. This tutorial
+# finds the bundles that can serve each of two equatorial lines of sight, ranks them by
+# the symmetry they cost, and compares three ways to win that symmetry back: freeing the
+# symmetric partner of the bundle as well, rebalancing the powers of the remaining quads,
+# and re-pointing them within the clearance the entrance holes allow. It introduces
+# three-dimensional mode analysis with real spherical harmonics, the symmetry of the NIF
+# ports, scenarios on a subset of the beams, the influence matrix, optimization with
+# automatic-differentiation gradients and under constraints, beam-clearance checks, and a
+# re-pointing study in two stages, from quads to their beams.
 
 using Briareus
 using CairoMakie
@@ -62,7 +61,8 @@ include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figu
 # hohlraum axis near the entrance-hole planes, at ``z = \pm 5.01`` mm (50° cone) and
 # ``\pm 5.20`` mm (44.5°); the inner quads at ``z = \pm 3.63`` mm (30°) and
 # ``\pm 3.09`` mm (23.5°), displaced 0.60 and 1.09 mm from the axis away from their own
-# port, across the hohlraum. This pointing is an illustrative example, not a shot's.
+# port, across the hohlraum. This pointing is an illustrative example and was not
+# fielded on any shot.
 
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   wall = gold(albedo = 0.85, conversion = 0.8))
@@ -76,16 +76,16 @@ end
 quads = aimed.(nif_quads(power = 8.0))
 
 # A [`Scenario`](@ref) holds what does not change while beams are re-aimed and their
-# powers adjusted: the target, the deposition operator for these ports, the view
-# factors, the linear response of the capsule's incident flux to the power each element
-# absorbs, and the mode weights of the capsule. Its parameterization here gives each
-# quad a separate power.
+# powers adjusted: the target, the deposition operator for these ports, the view factors,
+# the linear response of the incident flux on the capsule to the power each element
+# absorbs, and the mode weights of the capsule. Its parameterization here gives each quad
+# a separate power.
 #
 # The deposition operator is sampled more coarsely than its defaults, to keep the
-# optimizations below quick: points no farther apart than 0.6 of the spot's smaller
-# semi-axis (rather than 0.3), refined only within 0.5 mm of each beam's footprint
-# (rather than 2 mm; no aim moves by more than 0.3 mm here), and one point per
-# triangle elsewhere. That cuts the operator to a fifth of its points and changes the
+# optimizations below quick. Its points lie at most 0.6 of the smaller spot semi-axis
+# apart (the default is 0.3) and are refined only within 0.5 mm of the footprint of each
+# beam (the default is 2 mm; no aim moves by more than 0.3 mm here); elsewhere each
+# triangle gets one point. That cuts the operator to a fifth of its points and changes the
 # modes below in the fourth digit.
 
 scenario = Scenario(target, GroupPointing(quads; by = :quad, fields = (:power,));
@@ -122,7 +122,7 @@ end
 # multiplies ``Y_{lm}`` by ``(-1)^m``, and one about ``x`` multiplies it by ``(-1)^{l+m}``
 # for ``m \ge 0`` and by ``(-1)^{l+m+1}`` for ``m < 0``. A drive with the symmetry of the
 # ports can therefore contain only even ``m``, with ``l`` even for the cosine harmonics
-# and ``l`` odd for the sine harmonics. Every coefficient the rule forbids is zero to
+# and ``l`` odd for the sine harmonics. Every coefficient the rule forbids is zero within
 # round-off:
 
 allowed(l, m) = iseven(m) && (m >= 0 ? iseven(l) : isodd(l))
@@ -133,7 +133,7 @@ for l in 1:4, m in -l:l
 end
 
 # The cosine ``l = 2, m = 2`` and sine ``l = 3, m = -2`` harmonics are allowed by the
-# ports' symmetry, and the ports excite them weakly.
+# symmetry of the ports, and the ports excite them weakly.
 
 # ## Which bundles can drive the backlighter
 #
@@ -142,7 +142,7 @@ end
 # places a 2 mm square foil on the far side of the target, a distance ``d`` (the
 # standoff) from its center, facing the detector across the capsule; the radiography
 # beams strike its face toward the target, so the x rays they generate cross the
-# capsule to the detector. The foil's size and standoff here are generic engineering
+# capsule to the detector. The size and standoff of the foil here are generic engineering
 # values: real backlighter dimensions are shot-specific. The radiograph looks through a
 # pair of 3 mm windows in the hohlraum wall, one on each side of the capsule along the
 # line of sight.
@@ -153,9 +153,9 @@ end
 # reaches 9.2 mm from the axis, 0.62 mm inside the entrance-hole plane (see
 # [`Sombrero`](@ref)), so it stands across much of the space between the ports and a
 # foil near the waist. The shields lie outside the cavity and do not change its
-# radiation, and the windows' cost to the drive is the subject of the
+# radiation, and the cost of the windows to the drive is the subject of the
 # [Diagnostic windows in the hohlraum wall](@ref) tutorial, so the scenario above
-# keeps the closed hohlraum without them; the scene is for the geometry only.
+# uses the closed hohlraum without them; the scene is for the geometry only.
 
 shielded = Dict(φ => hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                               wall = gold(albedo = 0.85, conversion = 0.8), sombrero = true,
@@ -166,11 +166,11 @@ shielded = Dict(φ => hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55,
 scene(φ_los, d; hohl = shielded[φ_los]) =
     Target([hohl.components..., backlighter_foil((90.0, φ_los); standoff = d)])
 
-# A quad can drive the foil if it strikes the foil's face at less than 70° from its
+# A quad can drive the foil if it strikes the foil face at less than 70° from its
 # normal, the LMF limit for laser capture on a target surface, and if its beam, aimed
 # at the foil center, clears the hardware on the way: the hohlraum and capsule, and
 # the shields. The clearance is judged as a shot review judges it, on the worst case:
-# [`clearance`](@ref) grows each beam's envelope (its contour at 1% of the peak,
+# [`clearance`](@ref) grows the envelope of each beam (its contour at 1% of the peak,
 # spread by the f-cone) by 50 µm of pointing error and 25 µm of target positioning,
 # adds ±1 mm of focus error, and reports the smallest distance to each piece of
 # hardware. That distance is exact; only the power on the hardware, not used here,
@@ -198,7 +198,7 @@ function min_standoff(φ_los, k; lo = 8.0, hi = 30.0, tol = 0.05)
     return hi
 end
 
-# A closed form bounds the bisection from below. A quad's axis runs from the foil
+# A closed form bounds the bisection from below. The axis of a quad runs from the foil
 # center ``-d\,\hat n`` back toward its port ``\hat p``, crossing the shield plane of
 # the same hemisphere, ``|z| = z_s`` (4.427 mm), a distance ``s = z_s/|p_z|`` along
 # ``\hat p``. It passes outside the rim, ``\rho = 9.2`` mm, once
@@ -209,7 +209,7 @@ end
 #   + \sqrt{\rho^2 - s^2\left(|\hat p_\perp|^2 - (\hat n\cdot\hat p_\perp)^2\right)},
 # ```
 #
-# taken here as the larger of the bundle's two quads. The beam's envelope and the
+# taken here as the larger over the two quads of the bundle. The beam envelope and the
 # error set add to it.
 
 z_shield = 10.1 / 2 - Sombrero().offset
@@ -243,52 +243,52 @@ for φ_los in (78.0, 348.0)
     end
 end
 
-# Each line of sight can be served by six bundles. Without the shields, a foil 12 mm
-# from the center would let all six clear the hohlraum, and at 8 mm the hohlraum
-# would leave only bundle 46 for 90-78 and bundle 11 for 90-348, whose quads pass
-# above and below it at steep incidence. The shields rule out both designs: at 8 and
-# 12 mm every candidate quad's beam lands on a shield (a worst-case clearance near
-# −1 mm is the whole envelope on it), the upper quad's on the upper shield and the
-# lower quad's on the lower. Bundles 46 and 11 are still the first to clear, at a
-# standoff of 13.2 mm; the other candidates need 14.5–16.3 mm. Each worst-case
-# standoff lies 1.6–1.9 mm beyond the closed-form one at which the bundle's axes
-# graze the rim: the envelope's half-width and the errors, stretched by the shallow
-# angle at which the beams cross the shield's plane (40° for the 50° cone).
+# Each line of sight can be served by six bundles. Without the shields, a foil 12 mm from
+# the center would let all six clear the hohlraum, and at 8 mm the hohlraum would leave
+# only bundle 46 for 90-78 and bundle 11 for 90-348, whose quads pass above and below it
+# at steep incidence. The shields rule out both designs: at 8 and 12 mm the beam of every
+# candidate quad reaches a shield (a worst-case clearance near −1 mm is the whole
+# envelope on it), the beam of the upper quad on the upper shield and that of the lower
+# quad on the lower. Bundles 46 and 11 are still the first to clear, at a standoff of
+# 13.2 mm; the other candidates need 14.5–16.3 mm. Each worst-case standoff lies
+# 1.6–1.9 mm beyond the closed-form one at which the axes of the bundle graze the rim. The
+# difference is the half-width of the envelope plus the errors, stretched by the shallow
+# angle at which the beams cross the shield plane (40° for the 50° cone).
 #
-# The beams are half of it; the x rays must also reach the detector, and the same
-# hardware may stand between the foil and the detector. [`line_of_sight`](@ref)
-# traces a bundle of rays from every sample point of the foil's emitting face through
-# every sample point of the capsule's projected disk, on to the detector, and reports
-# any that hardware stops: all the x-ray paths from the foil through the capsule
-# toward any detector in their cone, more than one imager accepts. Here, with the
-# foil at the standoff that bundle 11 needs, rounded up to a millimeter:
+# The beams are half of it; the x rays must also reach the detector, and the same hardware
+# may stand between the foil and the detector. [`line_of_sight`](@ref) traces a bundle of
+# rays from every sample point of the emitting face of the foil through every sample point
+# of the projected disk of the capsule, on to the detector, and reports any that hardware
+# stops. The traced paths include every x-ray path from the foil through the capsule
+# toward a detector in the cone of the bundle, more paths than one imager accepts. Here
+# the foil is placed at the standoff that bundle 11 needs, rounded up to a millimeter:
 
 d_los = ceil(standoff[(348.0, "11")])
 los = line_of_sight(scene(348.0, d_los), (90.0, 348.0))
 
 # Every one of the 81 × 81 rays passes: the shields stand more than 3 mm above and
 # below the equatorial line of sight, the windows open the wall, and the foil covers
-# the capsule's disk. Without the windows the hohlraum wall stops every ray:
+# the capsule disk. Without the windows the hohlraum wall stops every ray:
 
 closed_wall = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                        wall = gold(albedo = 0.85, conversion = 0.8), sombrero = true)
 line_of_sight(scene(348.0, d_los; hohl = closed_wall), (90.0, 348.0))
 
-# and a foil closer in spreads the bundle more beyond the capsule. At 8 mm the rays
-# from the foil's corners through the capsule's rim reach about 1.7 mm from the line
+# and a foil closer in spreads the bundle more beyond the capsule. At 8 mm the rays from
+# the corners of the foil through the rim of the capsule reach about 1.7 mm from the line
 # of sight at the far wall, past the 1.5 mm radius of the detector-side window, which
 # stops a twentieth of them:
 
-s_far = (8.0 + 2.875) / 8.0           # the far wall's distance from the foil, in standoffs
+s_far = (8.0 + 2.875) / 8.0           # distance from the foil to the far wall, in standoffs
 @printf("bundle radius at the far wall %.2f mm
 ", s_far * 0.9 + (s_far - 1) * sqrt(2))
 line_of_sight(scene(348.0, 8.0), (90.0, 348.0))
 
-# ## The radiograph's signal
+# ## The radiograph signal
 #
 # A clear line of sight still needs enough photons. The freed quads heat the foil. A
 # fraction of their energy, the conversion efficiency (CE), comes out in the He-α line
-# of the foil's element, and the imager records what passes its pinhole and filters.
+# of the foil material, and the imager records what passes its pinhole and filters.
 # [`kshell_ce`](@ref) estimates the CE from published measurements on planar foils
 # ([`kshell_ce_data`](@ref)): OMEGA foils driven by a single 1 ns pulse (Workman and
 # Kyrala, 2001), NIF foils with a picket 3 ns ahead of a 2–5 ns drive (Barrios et al.,
@@ -300,12 +300,12 @@ line_of_sight(scene(348.0, 8.0), (90.0, 348.0))
 # uncertainty. The data do not separate the pulse
 # length from the picket or the source.
 #
-# [`backlighter_signal`](@ref) carries the chain through:
+# [`backlighter_signal`](@ref) computes the chain in six steps:
 # 1. the laser energy on each foil element, from a deposition calculation;
-# 2. the CE at the foil's mean irradiance;
+# 2. the CE at the mean irradiance of the foil;
 # 3. isotropic emission (the assumption the CE measurements were converted with);
 # 4. a pinhole imager on the line of sight;
-# 5. the filters' attenuation ([`filter_transmission`](@ref), from NIST mass
+# 5. the attenuation of the filters ([`filter_transmission`](@ref), from NIST mass
 #    attenuation coefficients);
 # 6. the photons per detector pixel, with the CE's uncertainty.
 #
@@ -324,18 +324,18 @@ imager = (; distance = 2000.0, pinhole = 0.02, pinhole_distance = 200.0, pixel =
 signal = backlighter_signal(bl_scene, bl_deposition, (90.0, 348.0); line = :Ge, pulse = 2.0,
                             prepulse = true, imager...)
 
-# The phase-plate spots at best focus spread the quads' light over most of the foil, so
-# the mean irradiance, about ``5\times10^{14}`` W/cm², lies just below the lowest
-# measured NIF point, which flags the result as extrapolated. It is also well below
-# germanium's fitted optimum of about ``2\times10^{15}`` W/cm². About 450 photons per
-# 50 µm pixel (6 µm at the capsule), averaged over the capsule's image, is uncertain by
-# a factor of 1.5 either way. Across the image the level varies a hundredfold
-# (`signal.photons_range`), because the foil's radiance follows the quads' spots: the
-# capsule's rim is backlit by the foil's weakly irradiated edges. All of the foil's
-# emitting area faces the detector, and through the open windows every element sees
-# it, so the power per steradian toward the detector is the isotropic ``E_x/4\pi``.
-# Lower-Z lines convert better at this irradiance; the capsule's transmission at each
-# energy determines the choice between them:
+# The phase-plate spots at best focus spread the light of the quads over most of the foil,
+# so the mean irradiance, about ``5\times10^{14}`` W/cm², lies just below the lowest
+# measured NIF point, which flags the result as extrapolated. It is also well below the
+# fitted optimum for germanium, about ``2\times10^{15}`` W/cm². About 450 photons per
+# 50 µm pixel (6 µm at the capsule), averaged over the capsule image, is uncertain by a
+# factor of 1.5 either way. Across the image the level varies a hundredfold
+# (`signal.photons_range`), because the radiance of the foil follows the spots of the
+# quads: the rim of the capsule is backlit by the weakly irradiated edges of the foil. All
+# the emitting area of the foil faces the detector, and through the open windows every
+# element sees it, so the power per steradian toward the detector is the isotropic
+# ``E_x/4\pi``. Lower-Z lines convert better at this irradiance; the transmission of the
+# capsule at each energy determines the choice between them:
 
 @assert signal.facing ≈ 1 && signal.per_sr ≈ signal.xray_energy / 4π
 println("line   hν (keV)  CE (%, 1σ range)      filters  photons per pixel (1σ range)")
@@ -347,11 +347,11 @@ for line in (:Cu, :Zn, :Ge, :Zr)
             s.transmission, s.photons_pixel, s.photons_lo * 0.05^2, s.photons_hi * 0.05^2)
 end
 
-# (`*`: outside the measured range of its class, here in irradiance.)
+# (A `*` marks a value outside the measured range of its class, here in irradiance.)
 
 # ## What each bundle costs
 #
-# Without a laser–plasma model the capsule's flux is linear in the beam powers.
+# Without a laser–plasma model the capsule flux is linear in the beam powers.
 # [`influence_matrix`](@ref) returns the harmonic coefficients produced by each quad
 # alone at 1 TW, so the coefficients for any assignment of powers ``P`` are ``M P``.
 # [`nif_bundles`](@ref) groups the quads into bundles.
@@ -362,7 +362,7 @@ without(k) = setdiff(eachindex(quads), bundles[k])
 
 # The rotations of ``D_2`` carry each bundle onto another, so the 24 bundles fall into
 # sets of equivalent bundles, and freeing any member of a set costs the same. Each
-# quad's image under a rotation is a quad of the image bundle:
+# quad maps under a rotation onto a quad of the image bundle:
 
 image(i, f) = findfirst(q -> norm(f(quads[i].port) - q.port) < 1e-6, quads)
 rotations = last.(operations[1:3])
@@ -381,7 +381,7 @@ for o in orbits
             (100 .* ε[1])..., cost(o[1])[1] / full[1])
 end
 
-# A bundle's two quads need not share a cone. The bundles whose quads both sit in the
+# The two quads of a bundle need not share a cone. The bundles whose quads both sit in the
 # 50° cone cost least, in mode 1 and in drive, and those of the 44.5° cone next. A
 # bundle with an inner quad costs three times as much mode 1: the inner quads deposit
 # their power around the waist of the hohlraum, closest to the capsule. Among the
@@ -398,9 +398,9 @@ remaining = quads[keep]
 
 # ## Freeing bundle 11
 #
-# A [`subset`](@ref) of the scenario holds the 46 remaining quads and reuses everything
-# but the deposition operator, which it restricts to their ports. The same coefficients
-# follow from the full scenario with the bundle's quads at zero power, and from the
+# A [`subset`](@ref) of the scenario contains the 46 remaining quads and reuses everything
+# except the deposition operator, which it restricts to their ports. The same coefficients
+# follow from the full scenario with the quads of the bundle at zero power, and from the
 # influence matrix:
 
 c_free = flux_ylm(evaluate(subset(scenario, keep), remaining); lmax = 4)
@@ -430,7 +430,7 @@ end
 # (Hammer) projection, so that equal areas of the map are equal solid angles of the
 # capsule. Polar angle θ is marked at the left edge and azimuth φ along the equator,
 # which runs across the middle. The flux is computed per element, on the 1,620
-# triangles of the capsule's geodesic mesh; the maps interpolate it linearly from the
+# triangles of the geodesic capsule mesh; the maps interpolate it linearly from the
 # element values averaged onto their corners. The left map shows the flux relative to the
 # mean flux, ``H/\langle H\rangle - 1``, where ``\langle H\rangle = c_{00}/\sqrt{4\pi}``.
 # The right map subtracts the same quantity for all 48 quads, which isolates what
@@ -478,7 +478,7 @@ fig
 # The rotation by 180° about ``z`` carries bundle 11 onto bundle 34. Freeing both
 # leaves ports with that symmetry, which removes every harmonic of odd ``m``, among
 # them the two transverse components of mode 1. The axial component ``c_{10}`` vanishes
-# for another reason: the hohlraum is axisymmetric, so a quad's contribution to
+# for another reason: the hohlraum is axisymmetric, so the contribution of a quad to
 # ``c_{10}`` depends only on its cone and hemisphere, and each freed bundle takes one
 # quad from each hemisphere of the same cone.
 
@@ -549,7 +549,7 @@ rowgap!(fig.layout, 8)
 fig
 
 # The same answer comes from the optimizer. [`optimize_pointing`](@ref) minimizes an
-# objective of an [`Evaluation`](@ref) over the scenario's parameters, here the 46
+# objective of an [`Evaluation`](@ref) over the parameters of the scenario, here the 46
 # quad powers, with gradients from forward-mode automatic differentiation. With the
 # misfit of the ``l \le 2`` coefficients as the objective and the bounds out of reach,
 # L-BFGS-B starts from ``P`` and moves only within the span of the gradients, which is
@@ -589,7 +589,7 @@ show_modes("re-pointed", flux_ylm(evaluate(repoint, first_try.x); lmax = 4))
 
 # Mode 1 is gone and nothing is clipped. But the clipping penalty sees only the
 # nominal beams, and a shot review judges a pointing on its worst case.
-# [`clearance`](@ref) grows each beam's envelope (here its contour at 1% of the peak,
+# [`clearance`](@ref) grows the envelope of each beam (here its contour at 1% of the peak,
 # the level of LMF's target-configuration rules, spread by the f-cone) by 50 µm of
 # pointing error and 25 µm of target positioning, adds ±1 mm of focus error, and reports
 # the smallest distance to the end caps, together with the worst-case power and
@@ -613,11 +613,11 @@ review_line("re-pointed", cap_review(first_try.beams))
 
 # The original pointing clears the caps by 66 µm in the worst case. The re-pointed
 # quads have used up that margin: in the worst case their 1% contours overlap the
-# entrance-hole lips, several of them fail, and up to several times 10⁻⁴ of a beam's
-# power lands on a cap.
+# entrance-hole lips, several of them fail, and up to several times 10⁻⁴ of the
+# power of a beam is deposited on a cap.
 #
 # The optimizer has to see the same worst case. An [`ApertureKeepOut`](@ref) computes
-# each beam's worst-case clearance from the rim of its entrance hole with the same
+# the worst-case clearance of each beam from the rim of its entrance hole with the same
 # envelope and error set, smoothly enough to differentiate, and adds a penalty when it
 # falls below a minimum, here 10 µm. On the original pointing it agrees with
 # [`clearance`](@ref):
@@ -634,12 +634,12 @@ c_repointed = flux_ylm(repointed; lmax = 4)
 show_modes("re-pointed, keep-out", c_repointed)
 review_line("re-pointed, keep-out", cap_review(second_try.beams))
 
-# Re-pointing within the clearance still removes nearly all of mode 1, to a few
-# kilometers per second of hot-spot velocity, and the drive stays within 0.3% of its
-# value after the bundle is freed. The worst-case clearance comes out at 8 µm rather
-# than exactly the 10 µm asked for: the penalty is soft, and the keep-out's distance
-# differs from the clearance check's by a few micrometers. The flux on the capsule
-# before and after re-pointing, on the same maps and color scales as above:
+# Re-pointing within the clearance still removes nearly all of mode 1, to a few kilometers
+# per second of hot-spot velocity, and the drive stays within 0.3% of its value after the
+# bundle is freed. The worst-case clearance comes out at 8 µm, short of the
+# 10 µm minimum: the penalty is soft, and the distance from the keep-out differs from that
+# of the clearance check by a few micrometers. The maps below show the flux on the capsule
+# before and after re-pointing, on the same color scales as above:
 
 fig = Figure(size = (800, 470))
 for (j, (title, H, c)) in enumerate((("bundle 11 freed", H_free, c_free),
@@ -675,8 +675,8 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 #
 # The objective above weighs mode 1 against the other modes and the drive by hand-set
 # weights. A design review states limits instead: every mode within a tolerance of the
-# 48-quad shape, the wall's laser irradiance no higher than the 48-quad pointing's, and
-# within those limits as much drive as possible.
+# 48-quad shape, the laser irradiance on the wall no higher than under the 48-quad
+# pointing, and within those limits as much drive as possible.
 #
 # The first limit is a gate per degree on the departure from the 48-quad shape,
 # ``\delta_l = \sqrt{(2l+1)\sum_m (c_{lm}/c_{00} - c'_{lm}/c'_{00})^2}``
@@ -687,18 +687,18 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 # is a lower bound: it is what pointing error alone produces, while the delivery of the
 # laser and the hohlraum plasma move the shape from shot to shot by more, in ways a
 # view-factor model does not quantify. The usual gate is a tolerance per degree in
-# physical units, a choice of the design; the floor serves here as the strictest case,
+# physical units, a choice of the design; the floor is used here as the strictest case,
 # and the research notes ("Mode gates in physical units") measure what relaxed gates buy
-# on this case in aim shift and drive. The second
-# is a ceiling on the laser irradiance over the wall's elements
-# ([`irradiance_ceiling`](@ref)): a hot spot on the gold drives the wall plasma inward,
-# and the 48-quad pointing's peak serves as the limit, an engineering choice rather
-# than a published criterion. The peak over the elements ([`peak_irradiance`](@ref))
-# has a kink wherever the hottest element changes, so the optimizer works on a smooth
-# stand-in, the area-weighted 64-norm of the irradiance ([`irradiance_norm`](@ref)),
-# scaled to equal the peak at the reference. Once a run has converged on the stand-in,
-# the ceiling compares the peak itself with the limit and lowers the stand-in's working
-# limit while the peak exceeds it (`exact = true`, its default).
+# on this case in aim shift and drive. The second limit is a ceiling on the laser
+# irradiance over the wall elements ([`irradiance_ceiling`](@ref)): a hot spot on the gold
+# drives the wall plasma inward. The peak under the 48-quad pointing serves as the limit,
+# an engineering choice; no published criterion sets it. The peak over the elements
+# ([`peak_irradiance`](@ref)) has a kink wherever the hottest element changes, so the
+# optimizer works on a smooth stand-in, the area-weighted 64-norm of the irradiance
+# ([`irradiance_norm`](@ref)), scaled to equal the peak at the reference. Once a run has
+# converged on the stand-in, the ceiling compares the peak itself with the limit and
+# lowers the working limit of the stand-in while the peak exceeds it (`exact = true`, its
+# default).
 
 ref48 = evaluate(scenario, quads)
 gates = mode_gate(full, mode_uncertainty(scenario, quads; pointing = 0.05, lmax = 4))
@@ -706,13 +706,13 @@ ceiling = irradiance_ceiling(ref48, :wall)
 check_constraints(evaluate(repoint, x0), (ceiling, gates))
 
 # Freeing the bundle puts every degree outside its gate, l = 1 by a factor of three,
-# while the wall's hottest element, lit by quads that stay, keeps the 48-quad peak:
+# while the hottest wall element, lit by quads that stay, remains at the 48-quad peak:
 # the ceiling is active from the start.
 #
 # [`optimize_pointing`](@ref) takes the limits as `constraints`. It handles them by an
 # augmented Lagrangian: a sequence of L-BFGS-B runs on the objective plus
 # multiplier-weighted terms, each run started where the last ended, with the multipliers
-# updated in between until every limit is met. The objective is the drive alone
+# updated in between until every limit is met. The objective is the drive
 # ([`drive_objective`](@ref)), with the usual penalties on light clipped by the
 # entrance holes.
 
@@ -720,19 +720,19 @@ most_drive = drive_objective(; drive = mean_flux(ref48))
 limited = optimize_pointing(repoint, most_drive; x0, lower, upper, constraints = (ceiling, gates),
                             iterations = 1000, evaluations = 3000)
 
-# One call from the start meets every gate and the ceiling. The start violates the
-# gates, so the run first looks for a design within the limits by minimizing the
-# violations alone (phase 1, `phase1` on by default) and starts its main run there. The
-# table lists each limit's value, its normalized excess and its multiplier; the outcome
-# records that the run converged with every constraint met inside the box. The
-# multipliers are those that best satisfy stationarity at the design, and the
-# stationarity line gives what they leave: here not small against the drive
-# gradient, since the drive is flat along the limits and the run ends on its value
-# tolerance, so the multipliers rank the limits' cost only roughly.
+# One call from the start meets every gate and the ceiling. The start violates the gates,
+# so the run first searches for a design within the limits by minimizing only the
+# violations (phase 1, `phase1` on by default) and starts its main run there. The table
+# lists the value of each limit, its normalized excess and its multiplier; the outcome
+# records that the run converged with every constraint met inside the box. The multipliers
+# are those that best satisfy stationarity at the design, and the stationarity line gives
+# the residual they leave. Here the residual is not small against the drive gradient: the
+# drive is flat along the limits and the run ends on its value tolerance, so the
+# multipliers rank the cost of the limits only roughly.
 #
 # The same limits as penalty terms are what a hand-written objective would add: 100
 # times the squared excess of each degree over its gate and of the irradiance over the
-# ceiling, with a small reward, 0.01 times each degree's squared ratio to its gate, for
+# ceiling, with a small reward, 0.01 times the squared ratio of each degree to its gate, for
 # symmetry inside the gates.
 
 function penalized(ev)
@@ -769,38 +769,38 @@ end
 # design again, in more evaluations (research notes, "Constrained re-pointing").
 #
 # The constrained run ends with the peak over the elements at the ceiling or under it
-# (from 0.8% under to 0.06% over, within the run's tolerance of 0.1%); the penalty
-# form, which bounds the 64-norm, the hot spots' mean, leaves the hottest element a
-# percent over it. Without the ceiling the same gates are met with the wall's peak
-# 27–38% above the 48-quad pointing's (research notes), the re-aimed quads stacking
-# their spots.
+# (from 0.8% under to 0.06% over, within the run tolerance of 0.1%). The penalty form
+# bounds the 64-norm, a mean over the hot spots, and leaves the hottest element a percent
+# over the ceiling. Without the ceiling the same gates are met with the wall peak 27–38%
+# above the peak under the 48-quad pointing (research notes), because the re-aimed quads
+# are stacked on the same spots.
 
 # ## A re-pointing study, end to end
 #
-# The design within limits holds the shape and the wall's irradiance, but nothing in its
-# run watched the entrance holes. The clearance check of the end caps finds what the
-# optimizer did not see:
+# The design within limits meets the shape and wall-irradiance limits, but no limit in its
+# run covered the entrance holes. The clearance check of the end caps shows what that run
+# left unconstrained:
 
 review_line("within limits", cap_review(limited.beams))
 
-# In the worst case the quads' 1% contours end within a few tens of micrometers of the
-# caps, on either side: nothing in the run held them, and over the perturbed starts
-# above the worst case ranges from 38 µm into a cap to 4 µm clear of it, with up to two
-# beams failing the check. A study repeats
-# the run with every limit a design review checks, on the parameters the design may
-# change, in two stages: the quads first, then each of their beams.
+# In the worst case the 1% contours of the quads end within a few tens of micrometers of
+# the caps, on either side: no limit in the run held them, and over the perturbed starts
+# above, the worst case ranges from 38 µm into a cap to 4 µm clear of it, with up to two
+# beams failing the check. A study repeats the run with every limit a design review
+# checks, on the parameters the design may change, in two stages: the quads first, then
+# each of their beams.
 #
 # ### The parameters
 #
 # Here the inner quads keep their pointing (their spots set the drive at the waist and
-# pass close to the capsule), the outer quads move by up to 0.3 mm as before, and each
-# cone's power may fall by up to 20% but not rise: an ignition pulse runs the laser at
-# its limit. [`PowerScales`](@ref) adds a power scale per cone after the pointing
-# parameters, and [`HeldParameters`](@ref) holds the parameters a predicate on their
-# names selects, here those of the inner quads, at their values. With `relative = true`
-# each quad's parameters are shifts from its present aim. [`remake`](@ref) puts the
-# composed parameterization in the scenario and keeps its deposition operator, since
-# the beams enter through the same ports.
+# pass close to the capsule), the outer quads move by up to 0.3 mm as before, and the
+# power of each cone may fall by up to 20% but not rise: an ignition pulse runs the laser
+# at its limit. [`PowerScales`](@ref) adds a power scale per cone after the pointing
+# parameters, and [`HeldParameters`](@ref) fixes at their values the parameters that a
+# predicate on their names selects, here those of the inner quads. With `relative = true`
+# the parameters of each quad are shifts from its present aim. [`remake`](@ref) puts the
+# composed parameterization in the scenario and reuses its deposition operator, since the
+# beams enter through the same ports.
 
 inner_quads = Set(b.quad for b in remaining if b.group in (:inner23, :inner30))
 by_quad = GroupPointing(remaining; by = :quad, fields = (:phi, :z), relative = true)
@@ -811,16 +811,16 @@ println(nparams(study.param), " free parameters, ending ", join(parameter_names(
 
 # ### The limits
 #
-# Four limits: the gates and the wall-irradiance ceiling above, a keep-out from the end
-# caps, and a ceiling on the light the caps receive. [`HardwareKeepOut`](@ref) gives
-# each beam's worst-case clearance from named parts, here the caps, exactly and with
-# the envelope and error set of the clearance check, and [`clearance_floor`](@ref) holds
-# each beam's clearance at or above the keep-out's minimum, 10 µm, as a constraint with
-# one component and one multiplier per beam. The keep-out judges the 1% contour;
-# [`light_ceiling`](@ref) bounds all the nominal light on the caps, the spots' wings
-# included ([`light_fraction`](@ref): absorbed, plus striking their outside), here at
-# 10⁻⁵ of the delivered power. On the 48-quad pointing the keep-out and the clearance
-# check agree:
+# The study has four limits: the gates and the wall-irradiance ceiling above, a keep-out
+# from the end caps, and a ceiling on the light the caps receive.
+# [`HardwareKeepOut`](@ref) gives the worst-case clearance of each beam from named parts,
+# here the caps, exactly and with the envelope and error set of the clearance check, and
+# [`clearance_floor`](@ref) makes the minimum of the keep-out, 10 µm, a lower bound on the
+# clearance of each beam, as a constraint with one component and one multiplier per beam.
+# The keep-out checks the 1% contour; [`light_ceiling`](@ref) bounds all the nominal light
+# on the caps, the wings of the spots included ([`light_fraction`](@ref), absorbed plus
+# striking their outside), here at 10⁻⁵ of the delivered power. On the 48-quad pointing
+# the keep-out and the clearance check agree:
 
 cap_keepout = HardwareKeepOut(target, (:cap_top, :cap_bottom); targets = (:wall, :capsule),
                               peak_fraction = 0.01, minimum = 0.01)
@@ -832,12 +832,13 @@ stage1 = optimize_pointing(study, most_drive; lower = lower_s, upper = upper_s, 
 
 # The run ends with every limit met and the box active: the 44.5° cone at full power,
 # the 30° cone 1.5–3.3% below it and the other two within 1%, and one to three of
-# the four gates active. The keep-out holds every quad above its 10 µm minimum (the
+# the four gates active. Every quad stays above the 10 µm minimum of the keep-out (the
 # display shows the worst of the 46 rows, one per quad, each with a separate multiplier,
-# and counts the active ones), and the light ceiling is met with room to spare: the
-# gates and the box bind here, not the caps. This run too ends in a flat family: from
-# the perturbed starts above it ends at 0.950 to 0.957 of the 48-quad drive, the
-# keep-out's least clearance 13 to 66 µm, after 650 to 1,650 evaluations.
+# and counts the active ones), and the light ceiling is met with room to spare: the gates
+# and the box are the binding limits in this run, and the cap limits are not. This run too
+# ends in a flat family: from the perturbed starts above it ends at 0.950 to 0.957 of the
+# 48-quad drive, with the least keep-out clearance at 13 to 66 µm, after 650 to 1,650
+# evaluations.
 
 ev1 = evaluate(study, stage1.x)
 @printf("%s after %d evaluations; cone powers %s of nominal\n", stage1.outcome, stage1.evaluations,
@@ -852,11 +853,12 @@ review_line("stage 1 (quads)", cap_review(stage1.beams))
 #
 # So far each quad has been one beam: one aim, one power and the deposition of its four
 # beams as a single f/7.9 cone. [`nif_beams`](@ref) gives the four beams of each quad,
-# each through its port at f/20.7, at the quad's aim and with a quarter of its power.
+# each through its port at f/20.7, at the aim of the quad and with a quarter of its power.
 # A scenario on them needs a deposition operator for their ports: `remake` builds one,
 # given the options of the first. The polish lets each outer beam move independently by up
-# to 0.1 mm, along the hohlraum axis and along its quad's tangent (a quad is the unit of
-# [`GroupPointing`](@ref)'s frame by default), the inner quads' beams held as before.
+# to 0.1 mm, along the hohlraum axis and along the tangent of its quad (a quad is the unit
+# of [`GroupPointing`](@ref)'s frame by default); the beams of the inner quads are held as
+# before.
 
 beams = nif_beams(stage1.beams)
 inner_beams = Set(b.name for b in beams if b.quad in inner_quads)
@@ -867,13 +869,14 @@ polish_start = evaluate(polish, initial_parameters(polish.param))
 gate_line("stage 1 on beams", polish_start)
 check_constraints(polish_start, limits)
 
-# The same aims, deposited beam by beam, give a slightly different drive: the four
-# beams of a quad enter at angles up to a few degrees apart, each with a separate, narrower
-# f-cone, and a departure that was at its gate can now exceed it by up to a couple of
-# percent (l = 1 or l = 3, depending on where the first stage ended). The limits are the same
-# objects as in the first stage. The keep-out's components follow the evaluation's
-# beams, 184 of them now, so the constraints carry over unchanged. The polish starts
-# from the first stage's aims (`relative = true`, all shifts zero) with a capped budget:
+# The same aims, deposited per beam, give a slightly different drive: the four beams of a
+# quad enter at angles up to a few degrees apart, each with a separate, narrower f-cone,
+# and a departure that was at its gate can now exceed it by up to a couple of percent
+# (l = 1 or l = 3, depending on where the first stage ended). The limits are the same
+# objects as in the first stage. The components of the keep-out follow the beams of the
+# evaluation, 184 of them now, so the constraints carry over unchanged. The polish starts
+# from the aims of the first stage (`relative = true`, all shifts zero) with a capped
+# budget:
 
 lower_p, upper_p = bounds(polish.param; phi = 0.1, z = 0.1)
 stage2 = optimize_pointing(polish, most_drive; lower = lower_p, upper = upper_p, constraints = limits,
@@ -881,11 +884,12 @@ stage2 = optimize_pointing(polish, most_drive; lower = lower_p, upper = upper_p,
 
 # ### The result
 #
-# The run's report above gives each limit's value against its limit, its multiplier and
-# its status. [`pointing_summary`](@ref) puts the polished beams beside the beams of the
-# quads before re-pointing (`nif_beams(remaining)`, matched by name): the aim shifts,
-# the power and cone fraction, the keep-out's least clearance against the reference's,
-# and the light clipped and missed. Together they record the design:
+# The report of the run above gives the value of each constrained quantity against its
+# limit, with its multiplier and status. [`pointing_summary`](@ref) puts the polished
+# beams beside the beams of the quads before re-pointing (`nif_beams(remaining)`, matched
+# by name): the aim shifts, the power and cone fraction, the least keep-out clearance
+# against that of the reference, and the light clipped and missed. Together they record
+# the design:
 
 pointing_summary(polish, stage2; reference = nif_beams(remaining), keepout = cap_keepout)
 
@@ -899,39 +903,39 @@ polished_review = cap_review(stage2.beams)
 review_line("polished", polished_review)
 held = filter(r -> r.name != "irradiance", stage2.constraints)   # gates, keep-out, light
 @assert stage2.outcome in (:interior, :box, :evaluations) && all(r -> r.violation <= 0.01, held)
-@assert ceiling.f(ev2) <= only(ceiling.limit) * 1.01   # the ceiling's smooth stand-in
+@assert ceiling.f(ev2) <= only(ceiling.limit) * 1.01   # the smooth stand-in of the ceiling
 @assert peak_irradiance(ev2, :wall) <= only(ceiling.limit) * 1.01   # the peak itself
 @assert polished_review.fail == 0 && polished_review.worst > 0
 
-# The polish brings the departures back to their gates. It stops at its budget, and a
-# run stopped by its budget with a limit beyond its tolerance returns its design of
-# least violation, here its best design within every limit (`least_violation` in the
-# result). Over six starts (the tutorial's and five moved by 10⁻¹² or 10⁻⁹ mm, which
-# stand for another CPU's rounding), two runs end within the limits and keep the drive
-# they gained, 0.17 and 0.32% over the first stage's aims on beams; on the other four
-# the last design exceeds a gate by more than the tolerance, and the run returns an
-# earlier one within the limits, at the drive it started from. Every limit then holds:
-# the gates, the keep-out, and the wall's peak at 0.93 to 0.995 of the ceiling: the
-# returned design is chosen on the reported rows, which hold the peak itself, while the
-# run itself holds the ceiling's smooth stand-in (the ceiling holds the peak only once a
-# run has converged; before this choice the peak ended 0.966 to 1.020 of the ceiling
-# over thirteen such starts). The budget is kept small here to keep the tutorial short; a design to hand off
-# runs to convergence, which on an earlier first stage took 861 evaluations (five and a
-# half minutes on 8 threads) and met every limit, the peak at 0.997 of the ceiling, at
-# the same drive (research notes, "Optimization defaults decided"). The clearance check
-# confirms the keep-out on the worst case: no beam fails, the closest staying 17 to
-# 49 µm from a cap.
+# The polish brings the departures back to their gates. It stops at its budget, and a run
+# stopped by its budget with a limit beyond its tolerance returns its design of least
+# violation, here its best design within every limit (`least_violation` in the result).
+# Six starts were compared: the start of this tutorial and five moved by 10⁻¹² or 10⁻⁹ mm,
+# which stand for another CPU's rounding. Two runs end within the limits and keep the
+# drive they gained, 0.17 and 0.32% over the aims of the first stage on beams. On the
+# other four the last design exceeds a gate by more than the tolerance, and the run
+# returns an earlier one within the limits, at the drive it started from. Every limit then
+# holds: the gates, the keep-out, and the wall peak at 0.93 to 0.995 of the ceiling. The
+# returned design is chosen on the reported rows, which contain the peak itself, while the
+# run constrains the smooth stand-in of the ceiling. The ceiling constrains the peak
+# itself only once a run has converged; before this choice the peak ended 0.966 to 1.020
+# of the ceiling over thirteen such starts. The budget is kept small here to keep the
+# tutorial short. A design to hand off runs to convergence, which on an earlier first
+# stage took 861 evaluations (five and a half minutes on 8 threads) and met every limit,
+# with the peak at 0.997 of the ceiling and the same drive (research notes, "Optimization
+# defaults decided"). The clearance check confirms the keep-out on the worst case: no beam
+# fails, and the closest stays 17 to 49 µm from a cap.
 #
 # Each stage was one call of [`optimize_pointing`](@ref) on exported names: a
-# parameterization, its box and the limits, the second stage's scenario built with
-# `remake` on the first stage's beams. Both results stay at hand for a report or a
+# parameterization, its box and the limits, with the scenario of the second stage built by
+# `remake` on the beams of the first stage. Both results stay at hand for a report or a
 # further stage.
 
 # ## A tolerance in physical units
 #
 # The gates above sit at the pointing-noise floor, the strictest case. A study states a
-# tolerance per degree instead, and the choice is the design's: 0.5% in ``P_2/P_0`` is
-# the modelers' repeat uncertainty for one ignition design (research notes, "Drive
+# tolerance per degree instead, a choice made for the design: 0.5% in ``P_2/P_0``
+# is the modelers' repeat uncertainty for one ignition design (research notes, "Drive
 # asymmetry inferred from post-shot capsule simulations"), and degrees 1, 3 and 4 have no
 # published number. Here, as an example, every degree is held within 0.5% of the
 # 48-quad shape. [`shift_objective`](@ref), the mean squared aim shift from the start,
@@ -950,10 +954,11 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 @assert sqrt(smallest.value) ≈ smallest_summary.shift_rms
 
 # Degrees 1–3 end at the tolerance and l = 4 well inside it; the quads move by 63 µm rms
-# and 0.105 mm at most, and the drive ends 0.3% below the start's (the objective does
-# not seek drive). The same call with the gates at the noise floor moves the quads
-# by 93 µm rms and up to 0.18 mm; with 1% per degree, which the start's departures in
-# l = 1 and 2 barely exceed, by 6 µm. The largest drive within each tolerance, from
+# and 0.105 mm at most, and the drive ends 0.3% below that of the start (the objective
+# does not reward drive). The same call with the gates at the noise floor moves the quads
+# by 93 µm rms and up to 0.18 mm; with 1% per degree, which the departures of the start in
+# l = 1 and 2 barely exceed, it moves them by 6 µm. The largest drive within each
+# tolerance, from
 # [`drive_objective`](@ref) under the same constraints, rises from 0.962 of the 48-quad
 # drive at the floor to 0.967 at 0.5% and 0.971 at 1% (research notes, "Mode gates in
 # physical units", measured before phase 1 was the default).
@@ -961,10 +966,10 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 # ## What this checks
 #
 # - The NIF ports have the symmetry ``D_2`` and no more, and every harmonic that
-#   ``D_2`` forbids vanishes from the computed drive to round-off.
+#   ``D_2`` forbids vanishes from the computed drive within round-off.
 # - Bundles in the same ``D_2`` orbit cost the same in every mode, as the symmetry
 #   requires.
-# - Three routes to the drive without a bundle agree to round-off: a scenario on the
+# - Three routes to the drive without a bundle agree within round-off: a scenario on the
 #   remaining beams, the full scenario with the bundle at zero power, and the
 #   influence matrix.
 # - Freeing a bundle together with its image under the 180° rotation about the
@@ -972,60 +977,59 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 # - The power rebalance from the pseudoinverse and from the automatic-differentiation
 #   optimizer agree, as they must for a linear least-squares problem solved from the
 #   same start.
-# - Every candidate bundle's worst-case standoff from the shields lies beyond the
-#   closed-form standoff at which its quads' axes graze the shield rim (asserted).
-# - The line-of-sight bundle's reach at the far wall with the foil at 8 mm, from the
-#   closed form for rays from the foil's corners through the capsule's rim, exceeds
-#   the detector-side window's radius, and [`line_of_sight`](@ref) finds rays stopped
-#   there and none at 14 mm. Its closed-form tests (`test/backlighter.jl`): a bundle
-#   exactly grazing a shield's rim, a foil rotated off the line of sight, and imaging
-#   rays converging on a point detector.
-# - The backlighter's power per steradian toward the detector equals the isotropic
+# - The worst-case standoff of every candidate bundle from the shields lies beyond the
+#   closed-form standoff at which the axes of its quads graze the shield rim (asserted).
+# - The reach of the line-of-sight bundle at the far wall with the foil at 8 mm, from the
+#   closed form for rays from the corners of the foil through the rim of the capsule,
+#   exceeds the radius of the detector-side window, and [`line_of_sight`](@ref) finds rays
+#   stopped there and none at 14 mm. Its closed-form tests (`test/backlighter.jl`) cover a
+#   bundle exactly grazing the rim of a shield, a foil rotated off the line of sight, and
+#   imaging rays converging on a point detector.
+# - The power per steradian of the backlighter toward the detector equals the isotropic
 #   ``E_x/4\pi``: every emitting element faces the detector and sees it through the
-#   windows (asserted). The chain's closed forms are tested in
-#   `test/backlighter_signal.jl`: point-projection fluence ``E_x/(4\pi r^2)``, a
-#   Lambertian foil's uniform image ``E_x A_p/(\pi A q^2)``, energy through the pinhole
-#   equal to the fluence times the image area, the angular distributions' hemispherical
-#   integrals (``E_x/2`` isotropic, ``E_x`` Lambertian), Beer–Lambert filters against
-#   the NIST nodes and edges, and the CE fit's weighted residuals, optimum and ``h\nu``
-#   scaling against the published ``(h\nu)^{-(2.5\text{–}4)}``; the form fitted without
-#   Coppari et al.'s 31 points predicts them within their stated 20% and the fit's
-#   scatter, and the fit predicts an OMEGA Ti foil below the fitted lines within 1.5σ
+#   windows (asserted). The closed forms of the chain are tested in
+#   `test/backlighter_signal.jl`: point-projection fluence ``E_x/(4\pi r^2)``, the uniform
+#   image ``E_x A_p/(\pi A q^2)`` of a Lambertian foil, energy through the pinhole equal
+#   to the fluence times the image area, the hemispherical integrals of the angular
+#   distributions (``E_x/2`` isotropic, ``E_x`` Lambertian), Beer–Lambert filters against
+#   the NIST nodes and edges, and the weighted residuals, optimum and ``h\nu`` scaling of
+#   the CE fit against the published ``(h\nu)^{-(2.5\text{–}4)}``. The form fitted without
+#   Coppari et al.'s 31 points predicts them within their stated 20% and the scatter of
+#   the fit, and the fit predicts an OMEGA Ti foil below the fitted lines within 1.5σ
 #   (both held out).
-# - The keep-out's worst-case clearance agrees with the clearance check's, and
-#   re-pointing against it passes that check.
+# - The worst-case clearance from the keep-out agrees with that from the clearance check,
+#   and re-pointing against it passes that check.
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,
-#   reproduces the optimizer's modes.
-# - Re-pointing within limits meets every gate and the ceiling in one call (asserted:
-#   no constraint violated, the run converged, the peak over the wall's elements within
-#   0.1% of the ceiling or below it). Its closed-form test
-#   (`test/constraints.jl`): with the drive's coefficients linear in the quad powers,
-#   a fit under a ceiling on the total power matches the solution of the
-#   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; on a drive-like
-#   objective linear in the powers under two active ceilings, the reported multipliers
-#   match the closed form's to 1e-3, also where the estimate of the iteration has zeroed
-#   one, and a bound sensitivity matches the closed form and restarts with the bound
-#   moved; the irradiance
-#   norm's power-mean ordering, its area-mean limit at p = 1 and the constraint values'
-#   gradients against central differences.
-# - The study's keep-out from the end caps agrees with the clearance check's worst case
-#   on the 48-quad pointing to within a micrometer, and the polished beams pass that
-#   check with no beam failing (asserted). The budget-stopped polish holds the limits it
-#   works on: every gate's, the keep-out's and the light ceiling's normalized violation
-#   at most 0.01 (1% of a gate, 10 µm of the keep-out), and the ceiling's smooth
-#   stand-in at most 1% over its limit (asserted; over 13 starts, perturbed by 10⁻¹² to
-#   10⁻⁹ mm or by rounding, the largest of those violations was 0.002 and the stand-in
-#   at most 0.994 of its limit); the wall's peak
-#   itself is held only by a converged run, and is not asserted here. The closed-form tests of
-#   the keep-out and light constraints (`test/constraints.jl`): with one free parameter,
-#   the 50° cone's aim, pulled by the objective into the caps, a constrained run ends
-#   with the constraint active at the aim where its value reaches the limit, found by
-#   bisection, to 1e-5 mm; the constraints' values against the quantities that define
-#   them (the light on the caps against `component_power` to 1e-12) and their
+#   reproduces the modes from the optimizer.
+# - Re-pointing within limits meets every gate and the ceiling in one call (asserted, with
+#   no constraint violated, the run converged and the peak over the wall elements within
+#   0.1% of the ceiling or below it). In its closed-form test (`test/constraints.jl`),
+#   with the coefficients of the drive linear in the quad powers, a fit under a ceiling on
+#   the total power matches the solution of the Karush–Kuhn–Tucker equations to 1e-4 and
+#   its multiplier to 1e-3. On a drive-like objective linear in the powers under two
+#   active ceilings, the reported multipliers match those of the closed form to 1e-3, also
+#   where the estimate of the iteration has zeroed one, and a bound sensitivity matches
+#   the closed form and restarts with the bound moved. The same file tests the power-mean
+#   ordering of the irradiance norm, its area-mean limit at p = 1, and the gradients of
+#   the constraint values against central differences.
+# - The keep-out of the study from the end caps agrees with the worst case of the
+#   clearance check on the 48-quad pointing to within a micrometer, and the polished beams
+#   pass that check with no beam failing (asserted). The budget-stopped polish meets the
+#   limits it works on: the normalized violation of every gate, the keep-out and the light
+#   ceiling is at most 0.01 (1% of a gate, 10 µm of the keep-out), and the smooth stand-in
+#   of the ceiling is at most 1% over its limit (asserted; over 13 starts, perturbed by
+#   10⁻¹² to 10⁻⁹ mm or by rounding, the largest of those violations was 0.002 and the
+#   stand-in at most 0.994 of its limit). Only a converged run constrains the wall peak
+#   itself, so the peak is not asserted here. In the closed-form tests of the keep-out and
+#   light constraints (`test/constraints.jl`), one free parameter, the aim of the 50°
+#   cone, is pulled by the objective into the caps, and a constrained run ends with the
+#   constraint active at the aim where its value reaches the limit, found by bisection, to
+#   1e-5 mm. The tests also check the values of the constraints against the quantities
+#   that define them (the light on the caps against `component_power` to 1e-12) and their
 #   gradients against central differences to 1e-6.
 # - The least re-pointing within a tolerance of 0.5% per degree meets the tolerance,
-#   the ceiling and the keep-out, and converges (asserted: no constraint violated), and
-#   the square root of its objective equals the summary's rms aim shift, computed from
-#   the aims directly (asserted). The objective's closed-form test
-#   (`test/pointing_summary.jl`): the least weighted re-pointing for one linear
-#   constraint, against its solution in closed form to 1e-5 mm.
+#   the ceiling and the keep-out, and converges (asserted, with no constraint violated), and
+#   the square root of its objective equals the rms aim shift of the summary, computed
+#   from the aims directly (asserted). The closed-form test of the objective
+#   (`test/pointing_summary.jl`) checks the least weighted re-pointing for one linear
+#   constraint against its solution in closed form, to 1e-5 mm.

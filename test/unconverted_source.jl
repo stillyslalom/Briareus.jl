@@ -1,5 +1,6 @@
-# Per-color x-ray sources in `solve`: a two-plate enclosure solved by hand, the 3ω path
-# bitwise, and the equivalent-3ω weighting for conversions independent of intensity.
+# This file tests per-color x-ray sources in `solve`: a two-plate enclosure solved by hand,
+# the unchanged 3ω path, and the equivalent-3ω weighting for conversions independent of
+# intensity.
 
 @testset "per-color x-ray sources" begin
     uc = nif_unconverted()
@@ -60,9 +61,9 @@
     S1h = η(3e14) * 3.0 + 0.5 * 0.95 * 0.5 + 0.5 * η(2e14) * 2.0
     @test isapprox(sh.source, [S1h, 0.5 * τ^0.2 * (0.4 + 0.5 * 0.1)]; rtol = 1e-12)
 
-    # A hohlraum: the 3ω path bitwise, and the equivalent 3ω power for conversions
-    # independent of intensity (constant gold; nif_gold's time-dependent conversion with a
-    # temperature-dependent albedo, iterated)
+    # In a hohlraum the 3ω path is unchanged. The equivalent 3ω power is checked for
+    # conversions independent of intensity, with constant gold and with the time-dependent
+    # conversion of nif_gold under an iterated temperature-dependent albedo.
     th = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
     mh = RadiationModel(th)
     rng = Xoshiro(11)
@@ -111,10 +112,10 @@ end
     @test isequal(R[:omega3], flux_response(m, [1, 2]; time = τ, laser = P))
     Hr(u) = R[:omega3] * P .+ R[:omega1] * u.omega1 .+ R[:omega2] * u.omega2
     @test isapprox(Hr(u), sol.H; rtol = 1e-12)
-    # away from the secant: the 2ω flux on plate 1 rises from 2e14 to 2.2e14 W/cm², on
-    # the table; the 1ω flux (5.5e13) stays below it and plate 2's conversion depends on
-    # time only. The response's error is the source change r₂ [η(2e14) − η(2.2e14)] 2.2
-    # on plate 1 through the 2×2 radiosity solve.
+    # Away from the secant, the 2ω flux on plate 1 rises from 2e14 to 2.2e14 W/cm², on the
+    # table. The 1ω flux (5.5e13) stays below the table, and the conversion of plate 2
+    # depends only on time. The error of the response is the source change r₂ [η(2e14) −
+    # η(2.2e14)] 2.2 on plate 1 through the 2×2 radiosity solve.
     u2 = (omega1 = 1.1 .* u.omega1, omega2 = 1.1 .* u.omega2, colors = uc)
     η(I) = 0.95 - 0.15 * log10(clamp(I, 1e14, 1e15) / 1e14)
     ΔS = r2 * (η(2e14) - η(2.2e14)) * 2.2
@@ -149,12 +150,13 @@ end
     a1, a2 = uc[1].absorption, uc[2].absorption
     fx = _UC_FX
 
-    # Two one-element plates in one beamlet's 3ω focal plane, facing the lens, under its
-    # 1ω and 2ω squares (1ω: 4.8–26.8 mm along ô from the 3ω axis; 2ω: 2.9–14.9 mm):
-    # plate a at 10 mm in both, plate b at 20 mm in the 1ω square only. Inside a square
-    # a plate in the focal plane absorbs absorption × fraction × P × area / footprint².
-    # The view factors are given (the opposed-squares closed form), so the 2×2
-    # radiosity is solved by hand at each of two steps.
+    # Two one-element plates lie in the 3ω focal plane of one beamlet, facing the lens,
+    # under its 1ω and 2ω squares. Along ô from the 3ω axis, the 1ω square spans 4.8–26.8 mm
+    # and the 2ω square 2.9–14.9 mm. Plate a, at 10 mm, is in both squares, and plate b, at
+    # 20 mm, is only in the 1ω square. Inside a square, a plate in the focal plane absorbs
+    # absorption × fraction × P × area / footprint². The view factors are given by the
+    # opposed-squares closed form, so the 2×2 radiosity is solved by hand at each of two
+    # steps.
     bl = first(nif_beams())
     k = direction(bl)
     ô = Briareus._own_side(bl.port, Briareus._nif_quad_port(bl.quad))
@@ -196,9 +198,9 @@ end
     end
     @test maximum(dev) < 1e-12
 
-    # A 1ω prepulse alone (zero fractions) on the same plates, before and during a 3ω pulse
-    # that starts at 1 ns: the 1ω light is absorption × prepulse × area / footprint² on
-    # both plates, whatever the 3ω power, by hand as above
+    # A 1ω prepulse by itself, with zero fractions, falls on the same plates before and
+    # during a 3ω pulse that starts at 1 ns. The 1ω light is absorption × prepulse × area /
+    # footprint² on both plates, whatever the 3ω power, computed by hand as above.
     main = PulseShape([1.0, 3.0], [1.0, 3.0])
     pre = PulseShape([0.0, 3.0], [0.05, 0.2])
     hq = drive_history(mp, op, τ -> with_pulses([bl], main, τ), [0.5, 2.0]; observe = :b, wall = (:a,), lmax = 0,
@@ -313,10 +315,10 @@ end
         abs(hpp.unconverted.delivered[:omega1][j] - u[:omega1].delivered) / u[:omega1].delivered
     end
     @test maximum(devp) < 1e-12 && minimum(inside) > 1e-3
-    # the power-split grouping: the cones' pulses equal through 1 ns, then apart, so the
-    # one set of beams the history deposits at first splits mid-history; the mock squares
-    # put the light inside. Each step against `solve` with `unconverted_deposition` of
-    # that step's beams at its powers
+    # For the power-split grouping, the cone pulses are equal through 1 ns and then differ,
+    # so the one set of beams the history deposits at first splits mid-history. The mock
+    # squares put the light inside. Each step is checked against `solve` with the
+    # `unconverted_deposition` of the beams of that step at its powers.
     inner = PulseShape([0.0, 1.0, 2.0, 3.0], [1.0, 2.0, 3.0, 3.0])
     outer = PulseShape([0.0, 1.0, 2.0, 3.0], [1.0, 2.0, 5.0, 4.0])
     batd = τ -> with_pulses(quads, Dict(:inner23 => inner, :inner30 => inner, :outer44 => outer,
@@ -359,12 +361,12 @@ end
         abs(hh.unconverted.delivered[:omega1][j] - u1.delivered) / u1.delivered
     end
     @test maximum(devh) < 1e-12 && 0 < hh.unconverted.delivered[:omega1][end] < hd.unconverted.delivered[:omega1][end]
-    # the same fractions as a vector per beam: bitwise the keyed history
+    # The same fractions as a vector per beam give a history identical to the keyed one.
     hv = drive_history(mh, oph, batd, times; record = sol -> sol, unconverted = (omega1 = [f1q[Symbol(b.quad)] for b in quads],
                        omega2 = 0.01), colors = mock)
     @test all(isequal(hh[f], hv[f]) for f in keys(hh) if f !== :record) &&
           isequal([s.B for s in hh.record], [s.B for s in hv.record])
-    # keyed fractions all equal: bitwise the scalar form
+    # Keyed fractions that are all equal give a history identical to the scalar form.
     he = drive_history(mh, oph, batd, times; record = sol -> sol, colors = mock, by = :quad,
                        unconverted = (omega1 = Dict(Symbol(b.quad) => fω1 for b in quads),
                                       omega2 = Dict(Symbol(b.quad) => 0.01 for b in quads)))
@@ -375,7 +377,7 @@ end
                                         by = :quad, colors = mock)
     @test_throws DimensionMismatch drive_history(mh, oph, batd, times; unconverted = (omega1 = [0.05], omega2 = 0.0),
                                                  colors = mock)
-    # a zero prepulse: bitwise the history without one
+    # A zero prepulse gives a history identical to the history without one.
     hz0 = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
                         colors = mock)
     hzp = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
@@ -389,7 +391,7 @@ end
                                              prepulse = Dict("omega1" => pre2))
     @test_throws ArgumentError drive_history(mh, oph, bat, times; unconverted = Dict("omega1" => 0.0, "omega2" => 0.0))
 
-    # zero fractions: bitwise the 3ω history
+    # Zero fractions give a history identical to the 3ω history.
     h0 = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B)
     hz = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B,
                        unconverted = (omega1 = 0.0, omega2 = 0.0))
@@ -443,10 +445,10 @@ end
     @test maximum(first, deva) < 1e-12 && maximum(x -> x[2], deva) < 1e-12
     @test all(x -> x[3] == 0, deva) && all(>(1), ha.Tr)    # no 3ω light, a prepulse Tr
 
-    # (b) the Lindl wall with its memory: a 1ω prepulse from -3 to 0 ns, then the main
-    # pulse alone. Its early Tr is above the history without the prepulse, by less and
-    # less; (c) without a prepulse, the main pulse's history is the history of the same
-    # steps with a zero prepulse, bitwise
+    # (b) The Lindl wall with its memory gets a 1ω prepulse from -3 to 0 ns and then only
+    # the main pulse. Its early Tr is above the history without the prepulse, by less and
+    # less. (c) Without a prepulse, the history of the main pulse is identical to the
+    # history of the same steps with a zero prepulse.
     tw = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8,
                   wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw)

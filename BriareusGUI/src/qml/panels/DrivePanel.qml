@@ -1,4 +1,4 @@
-// Drive results: capsule modes, foil spot, laser power accounting.
+// The drive results are the capsule modes, the foil spot and the laser power accounting.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

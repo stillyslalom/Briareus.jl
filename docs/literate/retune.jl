@@ -1,15 +1,16 @@
 # # Retuning a drive to a reference shot
 #
-# A shot that worked is the reference for the next one. When the next one cannot repeat
-# it exactly (a bundle is down, a quad's amplifiers cannot reach the power they gave
-# before, a backlighter takes a bundle from the drive), the question is how to set the
-# remaining beams' powers, at every moment of the pulse, so that the capsule sees the
-# drive it saw before: the same level and the same low-mode shape through time.
+# A shot that worked is the reference for the next one. The next one may not repeat it
+# exactly: a bundle may be down, the amplifiers of a quad may not reach the power they
+# gave before, or a backlighter may take a bundle from the drive. The question is then how
+# to set the powers of the remaining beams, at every moment of the pulse, so that the
+# capsule receives the drive it received before: the same level and the same low-mode
+# shape through time.
 #
 # This tutorial builds a reference shot from a total laser power and a cone fraction
-# against time (the way NIF pulses are written), drops a bundle, and retunes the other
-# 46 quads' power histories to match the reference's capsule drive, mode by mode
-# through ``l = 4``, within each quad's power limit. It introduces
+# against time (the way NIF pulses are written), drops a bundle, and retunes the power
+# histories of the other 46 quads to match the capsule drive of the reference in every
+# mode through ``l = 4``, within the power limit of each quad. It introduces
 # [`cone_fraction_pulses`](@ref), pulse tables ([`write_pulse_table`](@ref),
 # [`read_pulse_table`](@ref)), drive histories that keep their albedos, and
 # [`retune_drive`](@ref).
@@ -22,11 +23,11 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 
 # ## The reference shot
 #
-# The NIF-like hohlraum of the other tutorials (10.1 × 5.75 mm, 3.1 mm entrance holes,
-# a 0.9 mm capsule) with a gold wall that loses energy into the Marshak wave
-# ([`WallLossAlbedo`](@ref): the albedo rises through the pulse), at a coarse mesh to
-# keep the tutorial quick. The 48 quads are pointed as in
-# [Freeing a bundle for radiography](@ref).
+# The target is the NIF-like hohlraum of the other tutorials (10.1 × 5.75 mm, with 3.1 mm
+# entrance holes and a 0.9 mm capsule). Its gold wall loses energy into the Marshak wave
+# ([`WallLossAlbedo`](@ref), with an albedo that rises through the pulse), and the mesh is
+# coarse to keep the tutorial quick. The 48 quads are pointed as in [Freeing a bundle for
+# radiography](@ref).
 
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8),
@@ -40,11 +41,11 @@ function aimed(b)
 end
 quads = aimed.(nif_quads())
 
-# The reference pulse is a total power (a picket, a foot, a second step and a 420 TW
-# peak) and a cone fraction, the inner cones' share of it, that falls from 0.35 in the
-# foot to 0.25 at the peak. [`cone_fraction_pulses`](@ref) turns them into each cone's
-# power per quad; [`write_pulse_table`](@ref) writes them as CSV, the form in which a
-# reference shot's requested or measured powers come:
+# The reference pulse is a total power with a picket, foot, second step and 420 TW peak,
+# and a cone fraction, the share of the inner cones, that falls from 0.35 in the foot to
+# 0.25 at the peak. [`cone_fraction_pulses`](@ref) turns them into the power per quad of
+# each cone; [`write_pulse_table`](@ref) writes them as CSV, the form in which the
+# requested or measured powers of a reference shot come:
 
 tt = [0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0]
 total = [0.0, 60.0, 60.0, 15.0, 15.0, 50.0, 50.0, 420.0, 420.0, 0.0]
@@ -53,10 +54,10 @@ reference_pulses = cone_fraction_pulses(quads, tt, total, fraction)
 pulse_file = write_pulse_table(joinpath(mktempdir(), "reference.csv"), reference_pulses)
 print(read(pulse_file, String)[1:300], "…\n")
 
-# The reference drive is a [`drive_history`](@ref) of the shot, which solves the
-# radiosity at each time with the albedos the wall has then. With `ylm = true` it keeps
-# the capsule flux's real spherical harmonics, and with `keep_albedo = true` each
-# step's converged albedos: together, the target drive and the state to linearize
+# The reference drive is a [`drive_history`](@ref) of the shot, which solves the radiosity
+# at each time with the albedos the wall has then. With `ylm = true` it stores the real
+# spherical harmonics of the capsule flux, and with `keep_albedo = true` the converged
+# albedos of each step. Together these are the target drive and the state to linearize
 # about.
 
 model = RadiationModel(target; closed = true)
@@ -72,8 +73,8 @@ reference = drive_history(model, op, τ -> with_pulses(quads, reference_pulses, 
 # Bundle 31 (quads Q31T and Q31B, one in each hemisphere) is not available. With the
 # same pulses on the other 46 quads, the capsule loses some drive and gains a mode-1
 # asymmetry, a flux difference between its sides toward and away from the missing
-# ports. The deposition operator of the remaining quads is the reference's restricted
-# to them:
+# ports. The deposition operator of the remaining quads is that of the reference,
+# restricted to them:
 
 keep = findall(b -> nif_bundle(b) != "31", quads)
 kept = quads[keep]
@@ -87,16 +88,17 @@ peak(h, x) = (k = findall(t -> 7.6 <= t <= 9.4, h.time); sum(x[k]) / length(k))
 
 # ## Retuning the quads
 #
-# At any moment the capsule flux is linear in the beams' powers once the albedos are
-# fixed, and the reference history gives the albedos. So at each reference
-# time [`retune_drive`](@ref) finds each quad's power that brings the capsule flux's
-# shape ``c_{lm}/c_{00}`` back to the reference's for ``l = 1``–``4`` at the reference's
-# level ``c_{00}`` (the quantity [`CapsuleModes`](@ref)): a least-squares problem with
-# each quad's power between zero and its limit, here 1.3 times its cone's power per quad
-# in the reference at that time. The same retune holds a flat face's x-ray flux
-# ([`FaceFlux`](@ref), e.g. a package's face in a halfraum) or a backlighter foil's laser
-# irradiance ([`FoilIrradiance`](@ref)), to the reference's distribution or, with
-# `target = :uniform` and a `level`, as uniform as the powers allow at a prescribed mean.
+# At any moment the capsule flux is linear in the powers of the beams once the albedos are
+# fixed, and the reference history gives the albedos. So at each reference time
+# [`retune_drive`](@ref) finds the power of each quad that brings the shape of the capsule
+# flux, ``c_{lm}/c_{00}``, back to that of the reference for ``l = 1``–``4`` at the
+# reference level ``c_{00}`` (the quantity [`CapsuleModes`](@ref)). That is a
+# least-squares problem with the power of each quad between zero and its limit, here 1.3
+# times the power per quad of its cone in the reference at that time. The same retune
+# constrains the x-ray flux of a flat face ([`FaceFlux`](@ref), such as the package face
+# in a halfraum) or the laser irradiance of a backlighter foil ([`FoilIrradiance`](@ref)).
+# It matches either the distribution of the reference or, with `target = :uniform` and a
+# `level`, as uniform as the powers allow at a prescribed mean.
 
 nominal(k, τ) = reference_pulses[first(b.group for b in kept if Symbol(b.quad) == k)](τ)
 limit(k, τ) = (0.0, 1.3 * nominal(k, τ) + 1e-9)
@@ -104,7 +106,7 @@ retuned = retune_drive(CapsuleModes(model), op_kept, kept, reference; by = :quad
 @printf("linear prediction: shape matched to %.1e, drive to %.1e (worst time)\n",
         maximum(retuned.residual), maximum(abs.(retuned.drive .- 1)))
 
-# The prediction holds the albedos at the reference's; a drive history of the new
+# The prediction fixes the albedos at those of the reference; a drive history of the new
 # pulses, where the albedos follow the new drive, is the check:
 
 tuned = drive_history(model, op_kept, τ -> with_pulses(kept, retuned.pulses, τ; by = :quad),
@@ -112,8 +114,8 @@ tuned = drive_history(model, op_kept, τ -> with_pulses(kept, retuned.pulses, τ
 @printf("history against the prediction: c_lm/c₀₀ within %.1e\n",
         maximum(abs.(retuned.shape .- tuned.ylm[1:25, :] ./ tuned.ylm[1:1, :])))
 
-# The two agree to better than 1e-4: the drive stays close enough to the reference's
-# that the wall's albedos do not move. The retune takes the mode 1 out at every time
+# The two agree to better than 1e-4: the drive stays close enough to that of the
+# reference that the wall albedos do not move. The retune takes the mode 1 out at every time
 # and gives back the drive the bundle took:
 
 println("               ε₁ peak   ε₁ max   ε₂ peak   ε₄ peak   ΔTᵣ peak")
@@ -124,7 +126,7 @@ end
 
 # But it gets there by using the limits: at the peak many quads run at 1.3 times their
 # reference power and a few almost off. Many power sets restore the drive; with
-# `nominal` (the reference's powers) and a weight `stay`, the retune selects the one
+# `nominal` (the powers of the reference) and a weight `stay`, the retune selects the one
 # closest to the reference, trading a little of the match for smaller departures:
 
 k_peak = findfirst(≈(8.8), reference.time)
@@ -144,9 +146,9 @@ for (label, stay, r, h) in rows
 end
 
 # A small `stay` keeps most of the correction with only a few quads at their limit.
-# Larger ones give back mode 1 for powers within about 20% of the reference's. The
-# power histories of one design, as each quad's power over its reference power, for
-# the other quads of the dropped bundle's cluster (quads `Q3…`):
+# Larger ones give back mode 1 for powers within about 20% of those of the reference. The
+# power histories of one design are plotted below as the power of each quad over its
+# reference power, for the other quads in the cluster of the dropped bundle (quads `Q3…`):
 
 r_stay = rows[3][3]
 fig = Figure(size = (820, 420))
@@ -171,18 +173,19 @@ fig
 
 # ## What this checks
 #
-# - The per-time linear model is that of the drive history: the retuned pulses' history,
-#   with albedos that follow the drive, reproduces the predicted shape to better than
-#   1e-4 (the test suite checks 1e-4 on a separate mesh).
-# - Each quad stays within its limits and the drive level within 0.1% of the
-#   reference's at every time (test suite), and the dropped bundle's mode 1 falls by
-#   more than an order of magnitude.
+# - The per-time linear model is that of the drive history: the history of the retuned
+#   pulses, with albedos that follow the drive, reproduces the predicted shape to better
+#   than 1e-4 (the test suite checks 1e-4 on a separate mesh).
+# - Each quad stays within its limits and the drive level within 0.1% of the reference
+#   level at every time (test suite), and the mode 1 of the dropped bundle falls by more
+#   than an order of magnitude.
 # - Weighting the departure from the reference powers trades the match for smaller
-#   departures monotonically (test suite: a larger `stay`, a smaller departure and a
-#   larger residual).
-# - A face and a foil (test suite, `test/retune.jl`): two beams symmetric by a half
-#   turn, one at 0.6 of the other's power in the reference. The reference target
-#   recovers the powers to 1e-7; the uniform target gives equal powers at the level
-#   asked (1e-10), with the RMS below its value at power ratios of 0.9–1.1 on that
-#   level; the reported mean and RMS equal those recomputed from the depositions (foil)
-#   and from the drive history's flux on the face's elements (halfraum face) to 1e-12.
+#   departures monotonically; in the test suite a larger `stay` gives a smaller departure
+#   and a larger residual.
+# - A face and a foil (test suite, `test/retune.jl`) are tested with two beams symmetric
+#   by a half turn, one at 0.6 of the power of the other in the reference. The reference
+#   target recovers the powers to 1e-7. The uniform target gives equal powers at the
+#   requested level (1e-10), with the RMS below its value at power ratios of 0.9–1.1 on
+#   that level. The reported mean and RMS equal those recomputed from the depositions
+#   (foil) and from the flux of the drive history on the face elements (halfraum face) to
+#   1e-12.

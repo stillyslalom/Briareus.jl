@@ -40,8 +40,8 @@
     end
     @test kinds == Dict((false, false) => 12, (false, true) => 8, (true, true) => 4)
     @test all(nif_bundle(b) == nif_bundle(b.quad) for b in nif_beams())
-    # the LMF per-beam table: each quad's mean beam direction is its port, which also
-    # confirms the quad names read from the chamber-geometry figures
+    # In the LMF per-beam table the mean beam direction of each quad is its port, which
+    # also confirms the quad names taken from the chamber-geometry figures.
     nb = nif_beams()
     @test length(nb) == 192 && nb[1].name == "B111" && nb[1].quad == "Q11T"
     @test all(acosd(clamp(dot(normalize(sum(x.port for x in nb if x.quad == b.quad)), b.port), -1, 1)) < 0.01
@@ -92,7 +92,7 @@ end
             Dict(:name => :b, :theta => 120.0, :phi => 10.0, :group => :g2, :quad => "Q1",
                  :power => 3.0, :aim => (0.1, 0.2, 0.3), :defocus => 0.5, :fnumber => 7.0,
                  :spot => SuperGaussianSpot(0.2))]
-    # defaults: a value, or a function of the row
+    # A default is a value or a function of the row.
     bs = beams_from_table(rows; spot = r -> SuperGaussianSpot(r[:theta] / 100), fnumber = 9.0, power = 2.0)
     a, b = bs
     @test a.name == "a" && a.group === :none && a.quad == "" && a.power == 2.0 && a.fnumber == 9.0 &&

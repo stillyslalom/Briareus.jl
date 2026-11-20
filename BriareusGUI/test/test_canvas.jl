@@ -24,7 +24,7 @@ const B = BriareusGUI
     sess.view.cutaway[] = false
     @test sc.ntriangles[] == opaque
     sess.view.cutaway[] = true
-    # rays: one segment per beam from its start to where it lands on the wall
+    # The rays are one segment per beam, from its start to where it meets the wall.
     @test finite(sc.rays[1][]) == 2 * 48 && sc.rays.visible[]
     @test finite(sc.aims[1][]) == 48 && finite(sc.hits[1][]) == 48
     @test all(p -> abs(hypot(p[1], p[2]) - 2.875) < 0.1, sc.hits[1][])
@@ -36,7 +36,7 @@ const B = BriareusGUI
     sess.view.beams[] = :rays
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
 
-    # drive fields: chosen in the view, computed on request
+    # Drive fields are chosen in the view and computed on request.
     @test mc.ax.title[] == "Compute the drive to see the flux map"
     set_color!(sess, :laser)                          # builds the scenario (inline here)
     @test sess.drive.result[] !== nothing
@@ -69,7 +69,7 @@ const B = BriareusGUI
     @test sc.aims.color[][1] != sc.aims.color[][3]
     set_cluster!(sess.beams, [1, 2], String(sess.beams.beams[][1].group))
 
-    # selection: a component is highlighted, a beam drawn bold
+    # A selected component is highlighted, and a selected beam is drawn bold.
     @test !sc.highlight.visible[]
     select!(sess.view, "part:capsule")
     @test sc.highlight.visible[] && length(sc.highlight[1][]) == count(==(6), t.tri_comp)   # faces
@@ -88,7 +88,7 @@ const B = BriareusGUI
     n1 = length(sc.highlight[1][])
     select_add!(sess.view, "comp:hohlraum_cap_top")
     @test length(sc.highlight[1][]) > n1
-    sess.view.cutaway[] = false                                # whole triangles: the highlight is not cut either
+    sess.view.cutaway[] = false                                # whole triangles, so the highlight is not cut either
     @test length(sc.highlight[1][]) == ntri((:capsule, :hohlraum_cap_top))
     select!(sess.view, "part:hohlraum")
     nh = count(k -> tn.components[k].part === :hohlraum, tn.tri_comp)
@@ -96,7 +96,7 @@ const B = BriareusGUI
     sess.view.cutaway[] = true                                 # cut with the body
     @test length(sc.highlight[1][]) != nh
     sess.view.cutaway[] = false
-    @test B.selection_bounds(sess)[2] > 5                      # the part in pieces, not nothing
+    @test B.selection_bounds(sess)[2] > 5                      # the part in pieces is found
     sess.view.cutaway[] = true
     # Esc on the canvas clears the selection
     ev = B.Makie.events(sc.lscene.scene)
@@ -123,7 +123,8 @@ const B = BriareusGUI
     sess.view.beam_color[] = :group
     @test B._beam_status(sess) === nothing
 
-    # a target change: new mesh, map cleared until the drive is computed again
+    # A target change gives a new mesh, and the map is cleared until the drive is computed
+    # again.
     edit_part!(sess.target, 1, :radius, "3.0")
     @test sess.drive.result[] === nothing
     @test mc.ax.title[] == "Compute the drive to see the flux map"
@@ -203,7 +204,7 @@ end
     depth = B.dot(g - c.eye, B.camera_frame(c)[1])
     B.pan_camera!(c, 25, -10; depth)
     @test all(isapprox.(B.project_point(c, g), (pg[1] + 25, pg[2] - 10); atol = 1e-6))
-    # orthographic: same gestures
+    # The orthographic view takes the same gestures.
     B.set_projection!(sc, true)
     q2, _ = B._point_under(c, off)
     B.camera_scroll!(c, off, -1)
@@ -252,8 +253,9 @@ end
     @test B.camera_frame(c)[1] ≈ B.Makie.Vec3d(direction(b)...)
     # the triad follows the rotation
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
-    # the session keeps the pose (saved, not an undo step); a pose set with notification
-    # (a session loaded) moves the camera, and `nothing` brings back the default view
+    # The session keeps the pose, which is saved but is not an undo step. A pose set with
+    # notification, as when a session is loaded, moves the camera, and `nothing` brings
+    # back the default view.
     B.orbit_camera!(c, 0.3, 0.1)
     B.set_projection!(sc, true)
     p = sess.view.camera[]
@@ -276,7 +278,7 @@ end
     @test finite(sc.outlines[1][]) == 0
     add_window!(sess.target)
     add_window!(sess.target; phi = 200.0, open = true)
-    # round windows: inside and outside circles of 48 pieces each
+    # Round windows have inside and outside circles of 48 pieces each.
     @test finite(sc.outlines[1][]) == 2 * 2 * 48 * 2
     R = sess.target.parts[][1].values[:radius]
     @test all(p -> abs(hypot(p[1], p[2]) - R) < 0.02, filter(p -> all(isfinite, p), sc.outlines[1][]))
@@ -284,7 +286,7 @@ end
     # the closed window has a color; the open one is a hole
     pal = component_colors(sess.target.target[])
     @test haskey(pal, :hohlraum_window_1) && !haskey(pal, :hohlraum_window_2)
-    # a rectangular window: two arcs and two axial edges per loop
+    # A rectangular window has two arcs and two axial edges per loop.
     set_window_round!(sess.target, 1, false)
     @test finite(sc.outlines[1][]) == 2 * 48 * 2 + 2 * (2 * 12 + 2) * 2
     set_window_round!(sess.target, 1, true)
@@ -328,7 +330,8 @@ end
     @test all(isapprox.(segs[2:2:6] .- segs[1:2:5], [Point3f(0, 0, -L), Point3f(0, L, 0), Point3f(L, 0, 0)]; atol = 1e-5))
     @test sc.frame_axes.color[][1:2:5] == collect(B.TRIAD_COLORS)
     @test sc.frame_names.visible[] && sc.frame_names.text[] == ["mount"]
-    # switched on: drawn while another is selected, with the hohlraum's end frame toggled too
+    # A triad switched on is drawn while another node is selected, with the end frame of
+    # the hohlraum toggled too.
     set_triad!(sess.view, :mount, true)
     set_triad!(sess.view, Symbol("hohlraum.leh_top"), true)
     select!(sess.view, "target")
@@ -360,7 +363,8 @@ end
     @test tc.left[:dash][1].visible[]                       # Dante 1, dashed
     set_chart!(sess.time, :energy)
     @test shown(tc.left) == length(h.energy) && shown(tc.right) == 0
-    # the cursor: drawn on the chart, and the 3D view colored by that step on one scale
+    # The cursor is drawn on the chart, and the 3D view is colored by that step on one
+    # scale.
     set_time_cursor!(sess, 7.9)
     k = time_step(sess.time)
     @test tc.cursor.visible[] && tc.cursor[1][] == [h.time[k]]

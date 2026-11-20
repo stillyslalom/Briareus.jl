@@ -186,12 +186,13 @@ include("visrad_results.jl")
 include("cbet.jl")
 include("unconverted.jl")
 
-# Time to first design: a coarse NIF hohlraum through setup, evaluation, a short
-# optimization with keep-outs, clearance, the radiation solve and a drive history: what
-# most scripted sessions run. Niche paths (CBET, spectra and Dante, TALIS, CAD import,
-# the VisRad kit) compile at first use instead; each costs a rebuild for every user
-# otherwise ("Compile latency", research notes). Set the environment variable
-# BRIAREUS_NO_WORKLOAD=true to skip it (faster rebuilds while developing).
+# Precompile workload for the time to first design. A coarse NIF hohlraum goes through
+# setup, evaluation, a short optimization with keep-outs, clearance, the radiation solve
+# and a drive history, which is what most scripted sessions run. Niche paths (CBET,
+# spectra and Dante, TALIS, CAD import, the VisRad kit) compile at first use instead,
+# since each would otherwise cost a rebuild for every user ("Compile latency", research
+# notes). The environment variable BRIAREUS_NO_WORKLOAD=true skips the workload, for
+# faster rebuilds during development.
 @setup_workload begin
     get(ENV, "BRIAREUS_NO_WORKLOAD", "") == "true" || @compile_workload begin
         t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
@@ -224,8 +225,8 @@ include("unconverted.jl")
         flux_response(mh, s.observed; weights = s.moment_weights)
         clearance(t, quads[1:2]; targets = (:wall,), nspot = 5, nangles = 4)
         raytrace_deposition(t, quads[1:2]; nspot = 5)
-        # a drive history on a wall-loss wall (its march is compiled once for every
-        # `beams_at` closure)
+        # a drive history on a wall-loss wall, whose march is compiled once for every
+        # `beams_at` closure
         tw = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                       h = 1.2, capsule_h = 0.45, wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
         mw = RadiationModel(tw; F = s.model.F, closed = true)

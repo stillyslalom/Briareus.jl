@@ -14,19 +14,19 @@ display(target)
 
 # 48 quads at 8 TW; cone pointing in hohlraum (r, z) coordinates (mm). Positive r points
 # toward the port azimuth of the quad, so the inner cones' aims across the axis are
-# negative. These aims are an illustrative example, not a facility or shot pointing
-# (research notes, "Example NIF cone pointing: unsourced (2026-10-27)").
+# negative. These aims are an illustrative example; they are not a facility or shot
+# pointing (research notes, "Example NIF cone pointing: unsourced (2026-10-27)").
 cones = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
 quads = apply(cones, parameters(cones; inner23 = (z = 3.09, r = -1.09),
                                 inner30 = (z = 3.63, r = -0.60),
                                 outer44 = (z = 5.20,), outer50 = (z = 5.01,)))
 
-# One axial aim shift and one power per ring (inner: 23.5° and 30°; outer: 44.5° and
-# 50°), mirrored top to bottom: four parameters, fixed at the optimum by P2, P4, the mean
-# flux and the entrance-hole keep-out.
+# One axial aim shift and one power per ring, mirrored top to bottom, give four
+# parameters. The inner rings are 23.5° and 30° and the outer rings 44.5° and 50°. P2, P4,
+# the mean flux and the entrance-hole keep-out fix the parameters at the optimum.
 ring(b) = b.group in (:inner23, :inner30) ? :inner : :outer
 pointing = GroupPointing(quads; by = ring, fields = (:z, :power), relative = true)
-scenario = Scenario(target, pointing; observe = :capsule)   # closed: the hohlraum default
+scenario = Scenario(target, pointing; observe = :capsule)   # closed, the hohlraum default
 x0 = initial_parameters(pointing)
 println("\nExample pointing, 8 TW per quad:")
 report(evaluate(scenario, x0))
@@ -46,7 +46,8 @@ for (name, a, b) in zip(parameter_names(pointing), x0, result.x)
 end
 report(evaluate(scenario, result.x))
 
-# Independent check: brute-force ray trace + direct radiosity solve at the optimum.
+# An independent check runs a brute-force ray trace and a direct radiosity solve at the
+# optimum.
 rt = raytrace_deposition(target, result.beams)
 sol = solve(scenario.model, rt)
 a = legendre_moments(sol.H, target, elements(target, :capsule); lmax = 6)

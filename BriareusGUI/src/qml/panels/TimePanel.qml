@@ -1,5 +1,6 @@
-// Time: the pulses the beams fire, the drive history they give (the observed surface's
-// Tr and symmetry), where the energy goes, the irradiance checks and the latest retune.
+// The Time tab shows the pulses the beams fire, the drive history they give (the Tr and
+// symmetry of the observed surface), where the energy goes, the irradiance checks and the
+// latest retune.
 // The bottom row chooses what the 3D view shows: the drive at the powers set on the
 // beams, or a time of the drive history (the slider, or a click or drag on the chart).
 // The diagnostics a history records are in the Diagnostics tab.
@@ -78,7 +79,7 @@ Item {
                 }
                 // as tall as the buttons (the style separator is taller, and sets the row's height)
                 ToolSeparator { height: 26 }
-                // the pulses the beams fire: a pulse table, or a published shape
+                // The beams fire a pulse table or a published shape.
                 Button {
                     id: pulsesButton
                     text: "Pulses ▾"
@@ -202,7 +203,8 @@ Item {
                         text: app.timeEmpty
                     }
                 }
-                // the key: the charts' colors, as the model tree keys the 3D view's
+                // The key gives the chart colors, as the model tree keys the colors of the
+                // 3D view.
                 ColumnLayout {
                     id: timeKey
                     visible: app.timeEmpty === ""
@@ -235,8 +237,8 @@ Item {
                 }
             }
 
-            // what the 3D view shows: the drive at the powers set on the beams, or a time of
-            // the drive history (the slider, enabled in that mode)
+            // The 3D view shows the drive at the powers set on the beams or a time of the
+            // drive history, chosen with the slider, which is enabled in that mode.
             RowLayout {
                 visible: app.timeHasHistory
                 Layout.fillWidth: true

@@ -1,7 +1,7 @@
-# The placement triad: a drag commits the Move-along row's edit (`nudge_part!`) or its
-# rotational counterpart (`turn_part!`), checked against that edit and against a
-# `Rotate` placement step; the 3D view's handles driven by synthetic mouse events
-# through the camera's gesture handlers (offscreen GL).
+# This file tests the placement triad. A drag commits the edit of the Move-along row
+# (`nudge_part!`) or its rotational counterpart (`turn_part!`), checked against that edit
+# and against a `Rotate` placement step. The handles of the 3D view are driven by synthetic
+# mouse events through the gesture handlers of the camera (offscreen GL).
 
 using LinearAlgebra: norm
 
@@ -35,7 +35,8 @@ end
     @test a.beams.beams[] == b.beams.beams[] && a.beams.aim_frame[] == b.beams.aim_frame[]
     aims0 = [x.aim for x in _triad_design().beams.beams[][1:4]]
     @test all(isapprox(x.aim, y + Briareus.Vec3(0, 0.3, 0); atol = 1e-12) for (x, y) in zip(a.beams.beams[][1:4], aims0))
-    # the preview places the parts and the beams where the edit puts them (to round-off)
+    # The preview places the parts and the beams where the edit puts them, within
+    # round-off.
     c = _triad_design()
     parts = triad_parts(c.target.parts[], i, (:move, 2), 0.3)
     @test _same_parts(parts, b.target.parts[])
@@ -47,7 +48,7 @@ end
     moved = Dict(x.name => x for x in pv.components)
     @test all(isapprox(u, v; atol = 1e-12) for n in (:plate, :shield)
               for (u, v) in zip(moved[n].mesh.vertices, byname(b.target.target[], n).mesh.vertices))
-    # a zero drag makes no edit
+    # A zero drag does not make an edit.
     @test commit_triad!(c.target, i, (:turn, 1), 0.0) && _same_parts(c.target.parts[], _triad_design().target.parts[])
 
     # a ring drag of θ about axis k equals a `Rotate` step about the same chamber axis
@@ -88,8 +89,9 @@ end
     @test undo!(u)
     @test _same_parts(u.target.parts[], parts0) && u.beams.beams[] == beams0
 
-    # a square's drag: one nudge along the sum of its two components, as the two
-    # Move-along moves make it (to round-off), its preview the edit's parts, one undo
+    # The drag of a square is one nudge along the sum of its two components, as the two
+    # Move-along moves make it within round-off. Its preview shows the parts of the edit,
+    # and one undo reverts it.
     q, w = _triad_design(), _triad_design()
     record!(q)
     n0 = length(q.history.undo)
@@ -103,7 +105,7 @@ end
           _same_parts(q.target.parts[], _triad_design().target.parts[])
     @test commit_triad!(q.target, i, (:plane, 1), (0.0, 0.0)) && _same_parts(q.target.parts[], _triad_design().target.parts[])
 
-    # refused: a missing frame; a port frame (its axis is its port's)
+    # A missing frame is refused, and so is a port frame, whose axis is that of its port.
     @test !turn_part!(u.target, i, 1.0; frame = :nowhere) && occursin("no frame", u.target.error[])
     @test add_port_frame!(u.target, "Q31T", 23.5, 78.75)
     pf = findfirst(is_port_frame, u.target.parts[])
@@ -157,7 +159,8 @@ end
     @test length(sc.place_beams[1][]) == 2nfollow
     @test sess.target.parts[] === parts0 && !record!(sess)      # a preview is not an edit
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
-    # released: one edit, the Move-along row's 0.3 mm along z of the frame it is placed in
+    # On release there is one edit, the 0.3 mm of the Move-along row along z of the frame
+    # the part is placed in.
     B.camera_release!(c, p_end)
     @test sc.placing[] === nothing && !sc.place_ghost.visible[]
     ref = DesignSession(resolution = :coarse)
@@ -185,7 +188,7 @@ end
     rot = DesignSession(resolution = :coarse)
     @test turn_part!(rot.target, i, 30.0; frame = :tcc, axis = :y)
     @test _same_parts(sess.target.parts[], rot.target.parts[]) && sess.beams.beams[] == rot.beams.beams[]
-    # and the Rotate step's frames and beams, to round-off
+    # The frames and beams of the Rotate step agree within round-off.
     stp = DesignSession(resolution = :coarse)
     ps = copy(stp.target.parts[])
     ps[i] = Controllers._with(ps[i]; steps = Briareus.PlacementStep[Briareus.Rotate(F.R' * [0, 1, 0], 30.0)])
@@ -196,7 +199,8 @@ end
     @test all(isapprox(u.aim, v.aim; atol = 1e-12) for (u, v) in zip(sess.beams.beams[], stp.beams.beams[]))
     @test undo!(sess) && _same_parts(sess.target.parts[], parts0)
 
-    # Ctrl at the press: a tenth of the step; focus lost mid-drag: nothing changes
+    # Ctrl at the press gives a tenth of the step, and with focus lost mid-drag nothing
+    # changes.
     select!(sess.view, "part:hohlraum")
     B.camera_press!(c, p_z, :left; ctrl = true)
     B.camera_move!(c, B.project_point(c, O + (0.85L + 0.123) * ez))
@@ -211,7 +215,8 @@ end
     B.release_input!(sc)
     sc.triad_step[] = 0.1
 
-    # hover: the arrow under the pointer drawn brighter and thicker, plain again off it
+    # On hover the arrow under the pointer is drawn brighter and thicker, and plain again
+    # off it.
     arrow(k) = (6k-5):6k                           # its points in `place_arrows` (handle order)
     square(k) = 6 * B._TRIAD_RING_SEGMENTS .+ ((8k-7):8k)     # in `place_rings`, after the rings
     col(p, r) = p.color[][r]

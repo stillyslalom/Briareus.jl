@@ -1,8 +1,8 @@
-# Beam-table and result I/O (plain CSV, no dependencies).
+# This file reads and writes beam tables and results as plain CSV, with no dependencies.
 #
 # The canonical beam table has one row per beam with the columns in `BEAM_COLUMNS`
-# (lengths mm, power TW, angles degrees, wavelength µm, detuning Å). Foreign tables
-# (e.g. exported from VisRad or a shot setup sheet) are read by mapping their column
+# (lengths mm, power TW, angles degrees, wavelength µm, detuning Å). Foreign tables, such
+# as those exported from VisRad or a shot setup sheet, are read by mapping their column
 # names and units onto these fields.
 
 "Column names of the canonical beam table (see `write_beam_table`)."
@@ -15,8 +15,8 @@ const BEAM_COLUMNS = (:name, :quad, :group, :theta, :phi, :power, :aim_x, :aim_y
     write_beam_table(path, beams) -> path
 
 Write beams as CSV with the canonical columns `$(join(BEAM_COLUMNS, ", "))`
-(mm, TW, degrees, µm, Å). Hohlraum-cylindrical aim coordinates `aim_r` (toward the
-port azimuth), `aim_phi_offset` (tangential) are appended for reference.
+(mm, TW, degrees, µm, Å). The hohlraum-cylindrical aim coordinates `aim_r` (toward the
+port azimuth) and `aim_phi_offset` (tangential) are appended for reference.
 """
 function write_beam_table(path::AbstractString, beams::AbstractVector{<:Beam})
     v = ForwardDiff.value
@@ -44,12 +44,12 @@ _csvfield(x) = string(x)
 """
     read_csv(path; comment = '#') -> (header::Vector{String}, rows::Vector{Vector{String}})
 
-CSV reader without dependencies (RFC 4180 quoting). A field in double quotes may hold
-the delimiter, line breaks and the comment character, with `""` for a quote; its text
+CSV reader without dependencies (RFC 4180 quoting). A field in double quotes may contain
+the delimiter, line breaks and the comment character, with `""` for a quote. Its text
 is kept as quoted, while unquoted fields are stripped of surrounding blanks. Lines that
 are blank or start with `comment` (after blanks, outside a quoted field) are skipped.
 Tab- or semicolon-separated files are detected from the header line. A row with fewer
-fields than the header, or with more (other than empty trailing ones), and a quoted
+fields than the header, a row with more (other than empty trailing fields), and a quoted
 field left open at the end of the file throw an `ArgumentError` with the line number.
 """
 function read_csv(path::AbstractString; comment = '#')
@@ -57,7 +57,8 @@ function read_csv(path::AbstractString; comment = '#')
     return header, rows
 end
 
-# A digitized table in data/: numeric columns as Float64 vectors, others as strings.
+# Reads a digitized table in data/, with numeric columns as Float64 vectors and others
+# as strings.
 function _data_table(file)
     h, rows = read_csv(joinpath(@__DIR__, "..", "data", file))
     col(i) = (v = [r[i] for r in rows];
@@ -65,7 +66,7 @@ function _data_table(file)
     return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
 end
 
-# `read_csv`, with the file line on which each row starts.
+# `read_csv`, which also returns the file line on which each row starts.
 function _read_csv(path::AbstractString; comment = '#')
     text = read(path, String)
     startswith(text, '﻿') && (text = text[nextind(text, 1):end])     # byte-order mark
@@ -76,7 +77,7 @@ function _read_csv(path::AbstractString; comment = '#')
     delim = occursin('\t', l1) ? '\t' : (count(==(';'), l1) > count(==(','), l1) ? ';' : ',')
     records, starts = Vector{String}[], Int[]
     fields, buf = String[], IOBuffer()
-    inq = quoted = false                 # inside quotes; the field has a quoted part
+    inq = quoted = false                 # inside quotes, and whether the field has a quoted part
     line, start, i, n = 1, 1, firstindex(text), lastindex(text)
     atstart = true                       # at the start of a record
     endfield!() = (s = String(take!(buf)); push!(fields, quoted ? s : String(strip(s))); quoted = false)
@@ -87,7 +88,7 @@ function _read_csv(path::AbstractString; comment = '#')
     end
     while i <= n
         if atstart
-            # a blank or comment line before a record: skip to its end
+            # a blank or comment line before a record is skipped to its end
             j = something(findnext('\n', text, i), n + 1)
             if skipline(text[i:prevind(text, j)])
                 i, line = nextind(text, min(j, n)), line + 1
@@ -144,7 +145,8 @@ function _read_csv(path::AbstractString; comment = '#')
     return header, records, starts
 end
 
-# A number from a CSV field, or an error naming the file, line and column.
+# Parses a number from a CSV field, or throws an error that names the file, line and
+# column.
 function _csv_number(s::AbstractString, path, line, column)
     x = tryparse(Float64, s)
     x === nothing && throw(ArgumentError("$path, line $line, column $column: \"$s\" is not a number"))
@@ -156,14 +158,14 @@ end
         -> Vector{Beam}
 
 Read beams from a CSV. Canonical column names (see `write_beam_table`) are recognized
-case-insensitively; `columns` maps a canonical field to the file's column name for
-foreign tables, e.g. `Dict(:aim_x => "X (cm)", :theta => "Theta")`, and `scale`
+case-insensitively. For foreign tables, `columns` maps a canonical field to the column
+name in the file, e.g. `Dict(:aim_x => "X (cm)", :theta => "Theta")`, and `scale`
 multiplies a field after reading, e.g. `Dict(:aim_x => 10, :aim_y => 10, :aim_z => 10)`
 for cm → mm. Fields missing from the file come from `defaults` (a NamedTuple of
-canonical fields), or — when `template` is a beam vector — from the template beam with
-the same `name` (so a pointing table can update a facility beam set), else from the
-`Beam` defaults. A field that is not a number throws an `ArgumentError` naming the
-file's line and column.
+canonical fields). When `template` is a beam vector, they come instead from the template
+beam with the same `name`, so that a pointing table can update a facility beam set.
+Otherwise they take the `Beam` defaults. A field that is not a number throws an
+`ArgumentError` that names the line and column of the file.
 """
 function read_beam_table(path::AbstractString; columns = Dict{Symbol,String}(),
                          scale = Dict{Symbol,Float64}(), defaults = (;), template = nothing)
@@ -275,18 +277,18 @@ end
     read_stl(path; scale = 1.0) -> Mesh
 
 Triangle mesh from an STL file (binary or ASCII), one patch per facet, with vertex
-coordinates multiplied by `scale` (STL carries no units: 1 for millimeters, 10 for
-centimeters, 25.4 for inches). Facet normals in the file are ignored; the winding
-determines the front side, as STL specifies (counterclockwise seen from outside), but
-exported CAD often mixes windings: pass the mesh through `orient_mesh`, and through
-`coarsen_mesh` before view factors.
+coordinates multiplied by `scale`. STL files do not specify units, so `scale` is 1 for
+millimeters, 10 for centimeters and 25.4 for inches. Facet normals in the file are
+ignored, and the winding determines the front side, as STL specifies (counterclockwise
+seen from outside). Exported CAD often mixes windings, so the mesh should be passed
+through `orient_mesh`, and through `coarsen_mesh` before view factors.
 
-All facets of the file go into one mesh, also when an ASCII file holds several
-`solid … endsolid` blocks (one per CAD body, as many exporters write them);
-[`read_stl_solids`](@ref) keeps them apart. A binary file is recognized by its size
-(84 + 50n bytes for the n facets its header announces), so binary files whose header
-begins with "solid" (as SolidWorks writes them) read as binary. ASCII keywords are read
-in any case, with any whitespace and line endings.
+All facets of the file go into one mesh, also when an ASCII file contains several
+`solid … endsolid` blocks, one per CAD body, as many exporters write them.
+[`read_stl_solids`](@ref) keeps them apart. A binary file is recognized by its size,
+84 + 50n bytes for the n facets that its header announces. Binary files whose header
+begins with "solid", as SolidWorks writes them, are therefore read as binary. ASCII
+keywords are read in any case, with any whitespace and line endings.
 """
 function read_stl(path::AbstractString; scale::Real = 1.0)
     solids = read_stl_solids(path; scale)
@@ -298,11 +300,12 @@ end
 
 The solids of an STL file as `name => mesh` pairs in file order, each mesh as
 [`read_stl`](@ref) reads it (one patch per facet, coordinates multiplied by `scale`).
-An ASCII file gives one pair per `solid <name> … endsolid` block, named by the rest
-of its `solid` line (`"solid<k>"` for the k-th solid when that is blank; repeated
-names are kept as they are), and an empty solid gives an empty mesh. A binary file has
-no solids: it gives one pair named after the file. To build a target from the parts,
-e.g. `Target([Component(n, orient_mesh(m), gold()) for (n, m) in read_stl_solids(path)])`.
+An ASCII file gives one pair per `solid <name> … endsolid` block, named by the rest of
+its `solid` line. The k-th solid is named `"solid<k>"` when that line is blank, and
+repeated names are kept as they are. An empty solid gives an empty mesh. A binary file
+does not have solids, and it gives one pair named after the file. A target is built from
+the parts with, for example,
+`Target([Component(n, orient_mesh(m), gold()) for (n, m) in read_stl_solids(path)])`.
 """
 function read_stl_solids(path::AbstractString; scale::Real = 1.0)
     data = read(path)
@@ -342,8 +345,8 @@ function _stl_binary(data::Vector{UInt8}, n::Integer, scale::Float64)
     return _stl_mesh(vs)
 end
 
-# ASCII STL by a byte-level tokenizer over the file's text: no per-line or per-token
-# allocation (numbers parse from SubStrings).
+# Reads ASCII STL by a byte-level tokenizer over the text of the file, without per-line
+# or per-token allocation, since numbers are parsed from SubStrings.
 function _stl_token(d, i::Int, line::Int)           # next token d[i0:i1] from i; i0 > end at EOF
     len = length(d)
     while i <= len && _stl_space(d[i])
@@ -360,7 +363,7 @@ end
 _stl_iskey(d, i0::Int, i1::Int, key::String) =     # case-insensitive keyword match
     i1 - i0 + 1 == ncodeunits(key) && all(k -> d[i0+k] | 0x20 == codeunit(key, k + 1), 0:ncodeunits(key)-1)
 
-function _stl_eol(d, i::Int)                        # index of the end of i's line
+function _stl_eol(d, i::Int)                        # index of the end of the line of i
     while i <= length(d) && d[i] != UInt8('\n')
         i += 1
     end
@@ -369,11 +372,11 @@ end
 
 const _STL_POW10 = ntuple(k -> Float64(big(10)^(k - 1)), 23)   # 1e0 … 1e22, exact
 
-# Clinger's fast path: a decimal with an integer mantissa m ≤ 2⁵³ and a power of ten
-# |e| ≤ 22 is m·10^e or m/10^-e of two exact doubles, so one IEEE operation rounds it
-# correctly. The usual `%e` output of CAD exporters takes it; anything else (more
-# digits, inf, nan, malformed) goes to `tryparse` (strtod: ~0.4 µs per number on
-# Windows, ten times the fast path).
+# The fast path of Clinger. A decimal with an integer mantissa m ≤ 2⁵³ and a power of
+# ten |e| ≤ 22 is m·10^e or m/10^-e of two exact doubles, so one IEEE operation rounds
+# it correctly. The usual `%e` output of CAD exporters takes this path. Anything else
+# (more digits, inf, nan, malformed input) goes to `tryparse` (strtod), which costs about
+# ten times the fast path.
 function _stl_float(text::String, i0::Int, i1::Int)
     d = codeunits(text)
     i = i0
@@ -439,7 +442,7 @@ function _stl_ascii(text::String, scale::Float64)
     solids = Pair{String,Mesh}[]
     vs = Vec3[]                                     # vertices of the current solid
     nv = 0                                          # vertices of the current facet
-    name::Union{Nothing,String} = nothing           # current solid (nothing: between solids)
+    name::Union{Nothing,String} = nothing           # current solid (nothing between solids)
     line = 1
     i = 1
     while true
@@ -459,7 +462,7 @@ function _stl_ascii(text::String, scale::Float64)
         elseif _stl_iskey(d, i0, i1, "solid")
             _stl_close!(solids, name, vs, nv, line)
             vs = Vec3[]
-            j = _stl_eol(d, i)                      # the name: the rest of the line
+            j = _stl_eol(d, i)                      # the name is the rest of the line
             nm = strip(SubString(text, i, prevind(text, j)))
             name = isempty(nm) ? "solid$(length(solids) + 1)" : String(nm)
             i = j
@@ -468,7 +471,7 @@ function _stl_ascii(text::String, scale::Float64)
             vs = Vec3[]
             name = nothing
             i = _stl_eol(d, i)                      # skip the repeated name
-        end                                         # facet normal, outer loop, endloop: skipped
+        end                                         # facet normal, outer loop and endloop skipped
     end
     (name !== nothing || !isempty(vs)) && _stl_close!(solids, name, vs, nv, line)  # no endsolid
     return solids
@@ -477,27 +480,30 @@ end
 """
     write_stl(path, x; binary = true, scale = 1.0, apertures = true, name = "briareus") -> path
 
-Write `x` as an STL file for CAD or another code: a `Mesh`, a `Component`, a
-`Target`, or a vector of components or of `name => mesh` pairs. Every triangle
-becomes a facet whose normal is computed from its winding (the front side); vertex
-coordinates are divided by `scale` (STL carries no units: 1 writes millimeters, 10
-centimeters, 25.4 inches), so `read_stl(path; scale)` reads the same geometry back.
+Write `x` as an STL file for CAD or another code. `x` is a `Mesh`, a `Component`, a
+`Target`, or a vector of components or of `name => mesh` pairs. Every triangle becomes a
+facet whose normal is computed from its winding, toward the front side. Vertex
+coordinates are divided by `scale`, since STL files do not specify units: 1 writes millimeters,
+10 centimeters and 25.4 inches. `read_stl(path; scale)` then reads the same geometry
+back.
 
-`binary = true` writes binary STL (Float32 coordinates, so a coordinate of size L
-moves by up to ~6e-8 L; no names: the header lists them). `binary = false` writes ASCII
-STL with one `solid <name> … endsolid <name>` block per component (or pair), in order,
-at full Float64 precision; [`read_stl_solids`](@ref) reads them back as named parts
-(whitespace in a name is written as `_`). A mesh alone is named `name`.
+`binary = true` writes binary STL with Float32 coordinates, so a coordinate of size L
+moves by up to about 6e-8 L. Binary STL has no solid names, so the header lists them.
+`binary = false` writes ASCII STL with one `solid <name> … endsolid <name>` block per
+component (or pair), in order, at full Float64 precision. [`read_stl_solids`](@ref)
+reads them back as named parts, and whitespace in a name is written as `_`. A single
+mesh is named `name`.
 
-A two-sided component is written once, wound toward its front side. Apertures (laser
-entrance holes and other open windows, transparent to light) are written as their own
-solids so a CAD user sees them; pass `apertures = false` to leave them out, e.g. for a
-code that would take every facet for a wall. A closing lip (`aperture(...; closure)`,
-`hohlraum(; leh_closure)`) is a plasma model, not a part: a lip named `<hole>_lip` is
-written in the solid of its aperture `<hole>`, so the entrance hole comes out whole, at
-its full radius (a lip without its hole is written as a separate solid). A component's exact `CurvedSurface` is
-not written, only its facets, and the patch structure is lost (`read_stl` returns one
-patch per triangle).
+A two-sided component is written once, wound toward its front side. Apertures, which
+are laser entrance holes and other open windows transparent to light, are written as
+separate solids so that a CAD user sees them. `apertures = false` leaves them out, e.g.
+for a code that would take every facet for a wall. A closing lip
+(`aperture(...; closure)`, `hohlraum(; leh_closure)`) is a plasma model and is not a
+part. A lip named `<hole>_lip` is written in the solid of its aperture `<hole>`, so the
+entrance hole comes out whole, at its full radius. A lip without its hole is written as
+a separate solid. The exact `CurvedSurface` of a component is not written, only its
+facets, and the patch structure is lost, since `read_stl` returns one patch per
+triangle.
 """
 function write_stl(path::AbstractString, x; binary::Bool = true, scale::Real = 1.0,
                    apertures::Bool = true, name::AbstractString = "briareus")
@@ -524,7 +530,7 @@ function _stl_solids(cs::AbstractVector{Component}, apertures, _)
             continue                                    # written with its hole, below
         end
         m = c.mesh
-        for l in cs                                     # the hole's closing lip, if any
+        for l in cs                                     # the closing lip of the hole, if any
             lip(l) && String(l.name) == name * "_lip" && (m = merge_meshes(m, l.mesh))
         end
         # the pieces of a part split for computation are written as the part
@@ -547,7 +553,7 @@ function _stl_facet(m::Mesh, t::Integer, s::Float64)
 end
 
 function _write_stl_binary(io::IO, solids, s::Float64)
-    # 80 header bytes, not starting with "solid": the units and the solids' names
+    # 80 header bytes, not starting with "solid", with the units and the names of the solids
     header = Vector{UInt8}("Briareus.jl binary STL (units: mm/$s): " * join(first.(solids), ", "))
     nh = length(header)
     resize!(header, 80)
@@ -585,18 +591,18 @@ end
     write_results(dir, target, dep; sol = nothing, beams = nothing, observe = nothing,
                   lmax = 8) -> Vector{String}
 
-Write a calculation's results to the folder `dir` as CSV files, for postprocessing or
-comparison with another code, and return their paths:
+Write the results of a calculation to the folder `dir` as CSV files, for postprocessing
+or comparison with another code, and return their paths:
 
 - `elements.csv` — per element (`write_element_table`): absorbed laser power (TW) and
   intensity (W/cm²), and with a radiosity solution `sol` the x-ray source, radiosity
   and incident flux (W/cm²), albedo and transmitted fraction;
-- `components.csv` — per part (component, unless a part was split for computation by
-  `curved_components`; its pieces are summed): absorbed laser power (TW, front and the
-  unmodeled back side), and with `sol` the x-ray power absorbed, escaped (apertures)
-  and transmitted (thin foils, gaps) from `energy_balance`;
-- `beams.csv` — with `beams` (in the deposition's order): each beam's name, port angles,
-  delivered and landed power (TW);
+- `components.csv` — per part: absorbed laser power (TW, front and the unmodeled back
+  side), and with `sol` the x-ray power absorbed, escaped (apertures) and transmitted
+  (thin foils, gaps) from `energy_balance`. A part is a component unless it was split
+  for computation by `curved_components`, in which case its pieces are summed;
+- `beams.csv` — with `beams` (in the order of the deposition): the name, port angles,
+  and delivered and landed power (TW) of each beam;
 - `legendre.csv` and `ylm.csv` — with `observe` (part or component names) and `sol`: the
   Legendre moments `aₗ` (`write_moments`) and the real spherical-harmonic coefficients
   `c_lm` of the observed incident flux, with their ratios to the mean term;

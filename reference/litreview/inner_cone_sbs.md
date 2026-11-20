@@ -2,7 +2,7 @@
 
 ROADMAP "The P2 swing" and "Absolute energetics on N221204". `examples/n221204.jl` removes the measured N221204 backscatter
 (AS24: SBS 42 ± 11 kJ "early in peak power and mostly on the inner cones", SRS 6 ± 1 kJ
-"throughout peak") from the inner cones on time shapes of our own (*L*). This review asks
+"throughout peak") from the inner cones on time shapes of our own (*L*). This review examines
 what is published about the per-cone, time-resolved backscatter of HYBRID-E shots and
 about the late-time refraction of the inner beams, and whether either can be applied.
 Results of applying them: research notes, "Inner-cone SBS time histories and the
@@ -43,7 +43,8 @@ citations, no text or figures reproduced.
   ~4 ns peak.
 - Peak instantaneous fraction of the pre-CBET quad power: 23° 24%, 30° 10% (**L**).
 - Axis- vs equator-side beams of a quad: peak in-lens SBS ratio ~10 for both cones on
-  HYBRID-E (Fig. 8a: the 30° in-lens total 0.26 TW at 5.75 ns, nearly all axis side).
+  HYBRID-E (in Fig. 8a the 30° in-lens total is 0.26 TW at 5.75 ns, nearly all on the axis
+  side).
 - FABS (Q31B, 30°) spectra were not recorded on N210808; N211031 is used instead.
 - N221204 itself: not in K26. Its only published backscatter is AS24's 42 ± 11 kJ SBS
   and 6 ± 1 kJ SRS (already in the example).
@@ -52,7 +53,7 @@ citations, no text or figures reproduced.
 
 - pF3D on frozen 2D LASNEX (LHT) plasma maps, 4–6 snapshots per shot, post-CBET quad
   power (inline CBET, |δn/n| clamp 3.6 × 10⁻³) as the boundary condition; the post-shot
-  hydro matches drive with wall-opacity multipliers rather than the 85% laser power of
+  hydro matches drive with wall-opacity multipliers in place of the 85% laser power of
   earlier work (K24o).
 - **Single-species hydro (SSH)** over-predicts: 30° quad 2.42 TW at 6.0 ns against the
   measured 0.90 at 5.75 (Fig. 4); reflectivities R = 0.08 / 0.21 / 0.003 at 5 / 6 / 7 ns
@@ -148,7 +149,7 @@ citations, no text or figures reproduced.
 
 1. The published inner-cone history is **early and short**: N210808's inner SBS starts
    with the peak, is largest in its first ~0.7 ns and is gone ~2 ns into a ~4 ns peak.
-   AS24's "early in peak power" for N221204 says the same. The example's `measured`
+   AS24's "early in peak power" for N221204 implies the same. The example's `measured`
    shape (ramp 5.0–5.5, flat to 6.5, gone by 7.5 ns, equal on both cones) puts it later,
    flatter and longer, and splits it equally between the cones where the 23° cone
    carries 3.1× the 30°'s. `backscatter=history` applies the published curves.
@@ -157,7 +158,7 @@ citations, no text or figures reproduced.
    backscatter. What matters here is the measured history, now published per cone.
 3. The refraction is a reduction of the inner power reaching the ablator/waist region at
    ~7 ns (hydro), possibly ~6 ns (spectra). Briareus's `BubbleAbsorption` already
-   absorbs a rising share of the inner light in the bubble (0.22 → 0.57 over 5.5–6.5 ns
+   absorbs a rising share of the inner light in the bubble (from 0.22 to 0.57 over 5.5–6.5 ns
    on HYBRID-E) before the ridge stop: the spike's "refraction into the Au bubble" is
    partly the same physics, so a separate loss would double count. Tried as a bound
    (`refraction`, research notes): booked as lost with the spike ~1 ns early, it moves

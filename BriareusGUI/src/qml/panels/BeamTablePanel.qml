@@ -1,6 +1,7 @@
-// The beam table: pointing, defocus, power and on/off per cone, quad or beam, edited in
-// place, and the frame the aims are held in. Selecting a row selects it in the tree and the
-// 3D view; a heading click sorts the rows' display (not the beams' order).
+// The beam table shows pointing, defocus, power and on/off per cone, quad or beam, edited
+// in place, and the frame the aims are held in. Selecting a row selects it in the tree and
+// the 3D view. A heading click sorts the display of the rows; the order of the beams is
+// unchanged.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

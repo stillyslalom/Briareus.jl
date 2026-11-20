@@ -1,15 +1,16 @@
-# Soft x-ray optical constants: Henke atomic scattering factors (f1, f2), photoabsorption
-# of elements and compounds from 10 eV to 30 keV, and grazing-incidence mirror
-# reflectivity. Used by the Dante channel responses (`dante.jl`) and, below 3 keV or for
-# materials outside NIST's table, by `mass_attenuation`.
+# This file provides soft x-ray optical constants: Henke atomic scattering factors (f1,
+# f2), photoabsorption of elements and compounds from 10 eV to 30 keV, and
+# grazing-incidence mirror reflectivity. The Dante channel responses (`dante.jl`) use
+# them, and so does `mass_attenuation` below 3 keV or for materials outside the NIST table.
 #
-# Data: `data/henke/<element>.nff`, verbatim from the CXRO database
-# (https://henke.lbl.gov/optical_constants/sf/, fetched 2026-10-24): B. L. Henke,
-# E. M. Gullikson and J. C. Davis, "X-ray interactions: photoabsorption, scattering,
-# transmission, and reflection at E = 50–30000 eV, Z = 1–92", At. Data Nucl. Data Tables
-# 54, 181 (1993), with CXRO's later updates (Mg, Si, Be; Cr from Delmotte et al., J. Appl.
-# Phys. 124, 035107, 2018). Columns E (eV), f1, f2; f1 = -9999 where it is not tabulated.
-# B, F, Ca, Sc, Mn, Ge, Y and Mo fetched 2026-10-29 (line endings made LF).
+# The data files `data/henke/<element>.nff` are copied verbatim from the CXRO database at
+# https://henke.lbl.gov/optical_constants/sf/ (fetched 2026-10-24). The tables are those of
+# B. L. Henke, E. M. Gullikson and J. C. Davis, "X-ray interactions: photoabsorption,
+# scattering, transmission, and reflection at E = 50–30000 eV, Z = 1–92", At. Data Nucl.
+# Data Tables 54, 181 (1993). CXRO later updated Mg, Si and Be, and took Cr from Delmotte
+# et al., J. Appl. Phys. 124, 035107, 2018. The columns are E (eV), f1 and f2, with
+# f1 = -9999 where it is not tabulated. B, F, Ca, Sc, Mn, Ge, Y and Mo were fetched
+# 2026-10-29, with their line endings made LF.
 
 const _HENKE_ELEMENTS = (:H, :B, :Be, :C, :N, :O, :F, :Mg, :Al, :Si, :Cl, :Ca, :Sc, :Ti, :V, :Cr,
                          :Mn, :Fe, :Co, :Ni, :Cu, :Zn, :Ge, :Y, :Mo, :Ag, :Au)
@@ -20,8 +21,9 @@ const _ATOMIC_WEIGHT = Dict(:H => 1.008, :Be => 9.0122, :C => 12.011, :N => 14.0
                             :Cu => 63.546, :Zn => 65.38, :Ag => 107.87, :Au => 196.97, :B => 10.81,
                             :F => 18.998, :Ca => 40.078, :Sc => 44.956, :Mn => 54.938, :Ge => 72.630,
                             :Y => 88.906, :Mo => 95.95)
-# compounds: atoms per formula unit and the density (g/cm³) used for filters; the
-# densities marked *assumed* are typical values, not those of the Dante parts.
+# Each compound lists its atoms per formula unit and the density (g/cm³) used for
+# filters. The densities marked *assumed* are typical values; they were not measured on
+# the Dante parts.
 const _COMPOUNDS = Dict{Symbol,Tuple{Vector{Pair{Symbol,Int}},Float64}}(
     :CH => ([:C => 1, :H => 1], 1.05),                          # polystyrene, assumed
     :polystyrene => ([:C => 1, :H => 1], 1.05),
@@ -35,12 +37,12 @@ const _COMPOUNDS = Dict{Symbol,Tuple{Vector{Pair{Symbol,Int}},Float64}}(
     :polyethylene => ([:C => 2, :H => 4], 0.93),
     :SiO2 => ([:Si => 1, :O => 2], 2.2),                        # fused silica
     :CaF2 => ([:Ca => 1, :F => 2], 3.18),
-    :B4C => ([:B => 4, :C => 1], 2.52))                         # bulk; a mirror coating's is not public
+    :B4C => ([:B => 4, :C => 1], 2.52))                         # bulk; coating density not public
 
 const _HENKE_CACHE = Dict{Symbol,NTuple{3,Vector{Float64}}}()
 const _HENKE_LOCK = ReentrantLock()
 
-# (E, f1, f2) of an element, read once
+# Returns (E, f1, f2) of an element, read from its file once.
 function _henke(el::Symbol)
     el in _HENKE_ELEMENTS || throw(ArgumentError("no Henke table for :$el"))
     lock(_HENKE_LOCK) do
@@ -58,7 +60,7 @@ function _henke(el::Symbol)
     end
 end
 
-# log-log (f2) and log-linear (f1) interpolation at E (eV, 10–30000)
+# Interpolates f2 log-log and f1 log-linear at E (eV, 10–30000).
 function _henke_f(el::Symbol, E::Real)
     Et, f1, f2 = _henke(el)
     Et[1] <= E <= Et[end] || throw(ArgumentError("the Henke tables cover 10 eV – 30 keV"))
@@ -82,10 +84,11 @@ const _N_A = 6.02214076e23
 
 Photoabsorption mass attenuation coefficient of an element (`:Al`, `:Cr`, …) or compound
 (`:CH`, `:lexan`, `:parylene`, `:saran`, `:polyimide`, `:mylar`, `:SiO2`, …) at photon
-energy `E` (**eV**, 10–30 000) from Henke's f₂: μ/ρ = 2 ``r_e`` λ ``N_A`` Σ nᵢ f₂ᵢ / Σ nᵢ Aᵢ
-(CXRO tables, `data/henke/`; scattering is not included, < 1% of μ below ~10 keV for
-the filter materials used here). Absorption edges are tabulated as point pairs 0.2 eV
-apart, so log–log interpolation keeps them sharp.
+energy `E` (**eV**, 10–30 000) from Henke's f₂:
+μ/ρ = 2 ``r_e`` λ ``N_A`` Σ nᵢ f₂ᵢ / Σ nᵢ Aᵢ. The f₂ values come from the CXRO tables in
+`data/henke/`. Scattering is not included; it is < 1% of μ below ~10 keV for the filter
+materials used here. Absorption edges are tabulated as point pairs 0.2 eV apart, so they
+stay sharp under log–log interpolation.
 """
 function henke_mass_attenuation(mat::Symbol, E::Real)
     comp = _composition(mat)
@@ -100,10 +103,11 @@ end
 
 Specular reflectivity of a thick, flat `material` mirror (an element or compound, e.g.
 `:SiO2`) at grazing `angle` (degrees from the surface) and photon energy `E` (eV), for
-unpolarized light: the mean of the s and p Fresnel reflectivities with the refractive
-index n = 1 − δ − iβ from Henke's f₁, f₂ (`data/henke/`), and a Névot–Croce factor
-exp(−2 ``k_{z0} k_{z1}`` σ²) for an rms `roughness` σ (nm). `density` (g/cm³) defaults
-to the material's (`SiO2` 2.2).
+unpolarized light. The reflectivity is the mean of the s and p Fresnel reflectivities,
+with the refractive index n = 1 − δ − iβ from Henke's f₁, f₂ (`data/henke/`). For an rms
+`roughness` σ (nm), a Névot–Croce factor exp(−2 ``k_{z0} k_{z1}`` σ²) multiplies the
+amplitudes. `density` (g/cm³) defaults
+to the tabulated density of the material (`SiO2` 2.2).
 """
 function mirror_reflectivity(mat::Symbol, angle::Real, E::Real; roughness::Real = 0.0,
                              density = nothing)
@@ -133,22 +137,24 @@ end
     TabulatedCurve(E, values; extrapolate = :hold, file = "")
     TabulatedCurve(file; extrapolate = :hold)
 
-A measured curve, interpolated linearly in its abscissa `E` (increasing): against
-photon energy (eV), a filter's transmission, a mirror's reflectivity, a detector's
-sensitivity (V/GW) or a whole channel's response (V/GW); against time (ns), an area
-history ([`DanteView`](@ref)). Outside the table it holds its end values (`extrapolate
-= :hold`, for factors and histories) or is zero (`:zero`, for a whole response). The
-file form reads a CSV with a header line and two columns, the abscissa and the value.
+A measured curve, interpolated linearly in its abscissa `E` (increasing). Curves against
+photon energy (eV) include filter transmissions, mirror reflectivities, detector
+sensitivities (V/GW) and the responses of whole channels (V/GW); curves against time (ns)
+include area histories ([`DanteView`](@ref)). Outside the table, the end values are held
+(`extrapolate = :hold`, for factors and histories), or the curve is zero (`:zero`, for a
+whole response). The file form reads a CSV with a header line and two columns, the
+abscissa and the value.
 
 Linear interpolation is kept for every kind of curve. Henke's constants themselves are
-interpolated log-log (`henke_mass_attenuation`), but a transmission tabulated from them
-and read back log-log (or as a power law in the attenuation) is not more accurate where
-an absorption edge falls between two points, which dominates the error of a channel's
-response: on the filters of 17 of the 18 Dante 1 channels tabulated at 167 points per
+interpolated log-log (`henke_mass_attenuation`). A transmission tabulated from them and
+read back log-log, or as a power law in the attenuation, is not more accurate where an
+absorption edge falls between two points, and that case dominates the error of a channel
+response. On the filters of 17 of the 18 Dante 1 channels tabulated at 167 points per
 decade, the worst Planck-weighted response error is 4% read linearly and 9% read
-log-log; log-log is far better only on smooth, steep curves (channel 16's 250 µm Al
-filter: 44% against 0.3%). Tabulate a curve at the edge energies (research notes, "Dante channel
-responses and the unfold", interpolation of tabulated curves).
+log-log. Log-log is far better only on smooth, steep curves, such as the 250 µm Al filter
+of channel 16 (44% read linearly against 0.3% read log-log). Tabulate a curve at the
+edge energies (research notes, "Dante channel responses and the unfold", interpolation
+of tabulated curves).
 """
 struct TabulatedCurve
     E::Vector{Float64}

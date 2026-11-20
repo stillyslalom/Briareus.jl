@@ -1,6 +1,6 @@
-# User frames: the Frames folder (add, rename, remove), parts placed and beams aimed in
-# a user frame, port frames, the coordinate transform against hand computations, the
-# drawn axes, and sessions (round trip, version 8).
+# This file tests user frames: the Frames folder (add, rename, remove), parts placed and
+# beams aimed in a user frame, port frames, the coordinate transform against hand
+# computations, the drawn axes, and sessions (round trip, version 8).
 
 using LinearAlgebra: I, norm
 
@@ -30,22 +30,23 @@ const U3 = Briareus.Vec3
     edit_beam_set!(bt, idx, :aim_y, "0.2")
     edit_beam_set!(bt, idx, :aim_z, "0")
     @test all(i -> bt.beams[][i].aim ≈ U3(1, 0.2, 0), idx)
-    # moved: the part and the beams follow exactly
+    # When the frame moves, the part and the beams follow exactly.
     i = part_index(ts, :frame_1)
     @test edit_part!(ts, i, :x, "1.25")
     @test all(i -> isapprox(bt.beams[][i].aim, U3(1.25, 0.2, 0); atol = 1e-15), idx)
     @test part_frames(ts)[:shield].origin ≈ U3(1.75, 0, 0) atol = 1e-15
-    # renamed: the part placed in it, the beams aimed in it and its drawn axes follow
+    # When the frame is renamed, the part placed in it, the beams aimed in it and its
+    # drawn axes follow.
     set_triad!(s.view, :frame_1, true)
     @test edit_part!(ts, i, :name, "mount")
     @test ts.parts[][part_index(ts, :shield)].frame === :mount && all(==(:mount), bt.aim_frame[][idx])
     @test s.view.triads[] == Set([:mount]) && drawn_triads(s) == [:mount]
     @test !edit_part!(ts, i, :name, "shield") && occursin("defined twice", ts.error[])
-    # a frame has no surface fields and no role
+    # A frame does not have surface fields or a role.
     @test !edit_part!(ts, i, :albedo, "0.5") && occursin("no field", ts.error[])
     @test !set_part_role!(ts, i, :foil)
-    # a part is placed in it: removing the frame would place the part elsewhere; removed
-    # once nothing is in it, its beams keep their aims
+    # While a part is placed in the frame, removing the frame would place the part
+    # elsewhere. Once nothing is in it, the frame is removed and its beams keep their aims.
     @test frame_users(ts, :mount) == [:shield] && replaced_parts(ts, [:mount]) == [:shield]
     @test remove_part!(ts, part_index(ts, :shield))
     a = [bt.beams[][i].aim for i in idx]
@@ -103,23 +104,23 @@ end
     ts = s.target
     # the frame at (1, 0, 0) with z = +x, x = -z, y = +y
     @test add_frame!(ts; name = :fx, x = 1.0, theta = 90.0)
-    # by hand: (2, 3, 4) - (1, 0, 0) = (1, 3, 4) → (x·d, y·d, z·d) = (-4, 3, 1)
+    # By hand, (2, 3, 4) - (1, 0, 0) = (1, 3, 4), which maps to (x·d, y·d, z·d) = (-4, 3, 1).
     @test all(isapprox.(transform_coordinates(ts, :tcc, :fx, (2, 3, 4)), (-4.0, 3.0, 1.0); atol = 1e-15))
-    # spherical: r = √26, θ = acos(1/√26), φ = 180° - atan(3/4)
+    # In spherical coordinates, r = √26, θ = acos(1/√26) and φ = 180° - atan(3/4).
     @test all(isapprox.(transform_coordinates(ts, :tcc, :fx, (2, 3, 4); output = :spherical),
                         (√26, acosd(1 / √26), 180 - atand(3 / 4)); atol = 1e-12))
     # cylindrical in, Cartesian out: r = 2, φ = 90°, z = 1 in fx is (0, 2, 1) local, (2, 2, 0) chamber
     @test all(isapprox.(transform_coordinates(ts, :fx, :tcc, (2, 90, 1); input = :cylindrical), (2.0, 2.0, 0.0);
                         atol = 1e-15))
-    # a direction: fx's z is chamber +x, whatever the origins
+    # As a direction, the z of fx is chamber +x, whatever the origins.
     @test all(isapprox.(transform_coordinates(ts, :fx, :tcc, (0, 0, 1); direction = true), (1.0, 0.0, 0.0);
                         atol = 1e-15))
     @test_throws ArgumentError transform_coordinates(ts, :tcc, :nowhere, (0, 0, 0))
-    # a frame from a point: in fx, at the point, with TCC's axes
+    # A frame from a point lies in fx, at the point, with the axes of TCC.
     @test add_frame_from_transform!(ts, :tcc, :fx, (2, 3, 4); name = :at)
     p = ts.parts[][part_index(ts, :at)]
     @test p.frame === :fx && part_frames(ts)[:at] ≈ Frame(Matrix(1.0I, 3, 3), U3(2, 3, 4))
-    # from a direction: in fx, at its origin, z along chamber +y
+    # A frame from a direction lies in fx, at its origin, with z along chamber +y.
     @test add_frame_from_transform!(ts, :tcc, :fx, (0, 1, 0); direction = true, name = :up)
     F = part_frames(ts)[:up]
     @test F.origin ≈ U3(1, 0, 0) && F.R[:, 3] ≈ U3(0, 1, 0)

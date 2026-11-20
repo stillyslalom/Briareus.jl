@@ -89,7 +89,7 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
 - T_i(no-α) ≈ 4.0 keV (ρR_tot/1.4)^0.182 (V/370)^1.063 and ρR_hs ≈ 0.31 (…)^0.97 (V/370)^1.24
   g/cm² (**M**).
 - **Energy accounting for HyE (**H**).** Energy in the imploding mass grew from 19 to 33 kJ.
-  Coupling efficiency (laser → imploding KE) rose from 1.1% to 1.6%. "Hydrodynamic
+  Coupling efficiency (from laser to imploding KE) rose from 1.1% to 1.6%. "Hydrodynamic
   efficiency of about 14% so the capsule absorbed energy varies from ~210–235 kJ",
   i.e. ~11% of laser energy. HyE capsules absorbed ~210 kJ against ~140 kJ for the
   HDC (910 µm) capsules. Error bars are 3% on V and 5% on remaining mass. The inferences
@@ -104,7 +104,8 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
 
   These are directly checkable against a stage-0 run with a decaying P_abl(t).
 - Hurricane et al., PRL 132, 065103 (2024): **not read** (paywalled; OSTI 2283993 has no
-  full text). A search-engine excerpt says the ablation front drives "roughly 150 Mbar" (**M**).
+  full text). A search-engine excerpt states that the ablation front drives "roughly 150
+  Mbar" (**M**).
 
 ### 1.4 Spectral issue: M-band
 - Dewald et al., Phys. Plasmas 27, no. 12 (2020; page not verified), doi:10.1063/5.0027467, OSTI 1764324, accepted
@@ -123,7 +124,7 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
   preheat. A 3× underestimate of the hard fraction cut yield by only 30% for 1.3% Ge-doped
   CH.
 - When it matters (**L**):
-  - Stage 0: not at all, since a pressure BC carries no spectrum.
+  - Stage 0: not at all, since a pressure BC does not carry a spectrum.
   - Stages 1–2: the M-band sets the inner-ablator preheat, the ablator–ice Atwood number, and
     a separate pole-hot P2 that differs from the gray drive's P2.
   - A gray drive with the right a_l(t) should still give v_imp and bang time to the few-%
@@ -219,7 +220,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
 
 - **Green's-function response** (Masse 2019, **H**):
   - Shape response R_l(t) = Σ_i f_l(τ_i) G(t, τ_i), built from 45 HYDRA impulse runs over an
-    8 ns drive. It is linear; Clark 2019 says "this linearity assumption is very accurate".
+    8 ns drive. It is linear; Clark 2019 writes "this linearity assumption is very accurate".
   - Peak sensitivity is near 6 ns, roughly peak velocity.
   - **Sign inversion:** a pole-hot P2 before ~4.5 ns gives an oblate hot spot but a prolate
     one later. This explains why hot spot and shell are non-conformal, the "swing".
@@ -241,7 +242,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
   - The asymmetry must be applied near the ablation front, not at a distant wall.
   - The capsule–wall stagnation plasma at the equator (Dewald) and bubble or LEH geometry
     are absent.
-  - A gray view-factor drive gives no spectral angular dependence.
+  - A gray view-factor drive has no spectral angular dependence.
 
 ## (b) Staged coupling plan
 
@@ -312,7 +313,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
 
 ## (d) Open questions
 
-1. How large is the P_abl prefactor error from using the incident T_r rather than
+1. How large is the P_abl prefactor error from using the incident T_r in place of
    T_r,eff (reduced by ablator albedo)? Briareus's capsule albedo model sets this.
 2. Does a pressure or absorbed-flux source in an Eulerian compact-FD code survive the
    ~10³ density jump at the ablation front without artificial-property smearing that

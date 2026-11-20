@@ -39,8 +39,8 @@ end
 """
     display_number(x) -> String
 
-A number as text-field text: as printed when that is short, otherwise rounded to 6
-significant digits (the stored value stays exact until the field is edited).
+A number as text-field text, as printed when that is short and otherwise rounded to 6
+significant digits; the stored value stays exact until the field is edited.
 """
 function display_number(x::Real)
     x isa Integer && return string(x)

@@ -21,12 +21,12 @@ using Briareus: Vec3, SVector, SMatrix
                   end for (i, (θ, φ, ψ)) in enumerate(angles))
         @test all(det(euler_rotation(a...)) ≈ 1 && euler_rotation(a...)' * euler_rotation(a...) ≈ I
                   for a in angles)
-        # the GUI's part rotation (radians through cos), to round-off
+        # The part rotation of the GUI (radians through cos) agrees within round-off.
         Rz(a) = [cos(a) -sin(a) 0; sin(a) cos(a) 0; 0 0 1]
         Ry(a) = [cos(a) 0 sin(a); 0 1 0; -sin(a) 0 cos(a)]
         part_rotation(θ, φ, ψ) = Rz(deg2rad(φ)) * Ry(deg2rad(θ)) * Rz(deg2rad(ψ))
         @test all(isapprox(euler_rotation(a...), part_rotation(a...); atol = 1e-15) for a in angles)
-        # the VisRad workspace rotation it replaced, bitwise
+        # The VisRad workspace rotation it replaced is identical.
         vRz(a) = SMatrix{3,3,Float64}(cosd(a), sind(a), 0, -sind(a), cosd(a), 0, 0, 0, 1)
         vRy(a) = SMatrix{3,3,Float64}(cosd(a), 0, -sind(a), 0, 1, 0, sind(a), 0, cosd(a))
         @test all(euler_rotation(θ, φ, ψ) == vRz(φ) * vRy(θ) * vRz(ψ) for (θ, φ, ψ) in angles)
@@ -76,7 +76,7 @@ using Briareus: Vec3, SVector, SMatrix
         @test_throws KeyError port_angles(:omega, "B99")
         @test_throws ArgumentError port_angles(:custom, 1)
 
-        # by hand: the port frame at θ = 90°, φ = 0 has x = -ẑ, y = ŷ, z = x̂
+        # By hand, the port frame at θ = 90°, φ = 0 has x = -ẑ, y = ŷ, z = x̂.
         P = port_frame(90.0, 0.0)
         @test all(isapprox.(transform_point(CHAMBER, P, (1.0, 2.0, 3.0)), (-3.0, 2.0, 1.0); atol = 1e-15))
         # the same point in spherical coordinates: r = √14, θ = acos(1/√14), φ = 180° - atan(2/3)
@@ -126,7 +126,8 @@ using Briareus: Vec3, SVector, SMatrix
                  rotation = c[4], center = (0.1, -0.2, 0.3), n = 4)
         @test all(backlighter_foil(c[1]; kw(c)...).mesh.vertices == old_foil_vertices(c[1]; kw(c)...)
                   for c in cases)
-        # the frame: origin at the foil's center, z its front normal, x along its width
+        # The frame has its origin at the foil center, z along the front normal and x
+        # along the width.
         F = foil_frame((37.0, 211.0); standoff = 6.0, tilt = 20.0, tilt_toward = 90.0)
         c = backlighter_foil((37.0, 211.0); standoff = 6.0, tilt = 20.0, tilt_toward = 90.0,
                              width = 2.0, height = 1.0, n = 4)
@@ -150,11 +151,12 @@ using Briareus: Vec3, SVector, SMatrix
         @test component_frame(t1, :tube).R[:, 3] == ax
         @test component_frame(t2, :tube).R[:, 3] ≈ ax atol = 1e-12
         @test component_frame(t2, :tube).origin ≈ Vec3(1, 1, 1) atol = 1e-12
-        # a sphere has no axis: chamber z at its center
+        # A sphere does not have an axis, so its frame is the chamber frame at its center.
         ts = Target(Component(:s, sphere_mesh(0.7; ntheta = 12, nphi = 24), gold()))
         @test component_frame(ts, :s).R == CHAMBER.R
         @test part_centroid(ts)[:s] ≈ zero(Vec3) atol = 1e-14
-        # coordinates: closed forms and round trips through a rotated frame
+        # Coordinates are checked against closed forms and round trips through a rotated
+        # frame.
         @test all(coords_of((1.0, 1.0, √2), :spherical) .≈ (2.0, 45.0, 45.0))
         @test all(coords_of((-1.0, 0.0, 3.0), :cylindrical) .≈ (1.0, 180.0, 3.0))
         F = euler_frame((0.3, -1.2, 2.5), 37.0, 211.0, 20.0)
@@ -223,7 +225,7 @@ using Briareus: Vec3, SVector, SMatrix
         Fk = place(Concentric(:snout))
         @test isapprox(Fk.R[:, 3], a; atol = 1e-14) && norm(cross(Fk.origin - snout.origin, a)) < 1e-13 &&
               isapprox(dot(Fk.origin - snout.origin, a), dot(F0.origin - snout.origin, a); atol = 1e-13)
-        # antiparallel: half a turn about the frame x axis
+        # An antiparallel pair is half a turn about the frame x axis.
         @test resolve_frames(Dict(:a => FrameDef(steps = [Parallel(:tcc; flip = true)])))[:a].R ≈
               Diagonal([1.0, -1.0, -1.0]) atol = 1e-15
         # a roll from chamber x about chamber z
@@ -239,7 +241,7 @@ using Briareus: Vec3, SVector, SMatrix
         @test place(Rotate(:y, 35.0)) ≈ compose(F0, euler_frame((0, 0, 0), 35, 0, 0))
         @test place(Roll(35.0)) ≈ place(Rotate(:z, 35.0))
 
-        # degrees of freedom: what each step fixes, what stays free, redundancy
+        # The degrees of freedom show what each step fixes, what stays free, and redundancy.
         r = report(Distance(:tcc, 2.0), Facing(:snout), Roll(30.0; from = :tcc))
         @test r.fixed == [(1, 0), (0, 2), (0, 1)] && length(r.free_translation) == 2 &&
               isempty(r.free_rotation) && isempty(r.redundant)
@@ -283,7 +285,7 @@ using Briareus: Vec3, SVector, SMatrix
 
     @testset "FramePointing" begin
         quads = nif_quads(power = 8.0)[1:8]
-        # chamber frame: the initial parameters reproduce the template aims exactly
+        # In the chamber frame the initial parameters reproduce the template aims exactly.
         aimed = [remake(b; aim = (0.1i, -0.05i, 0.2 * sign(b.port[3]))) for (i, b) in enumerate(quads)]
         p0 = FramePointing(aimed, CHAMBER; by = :beam, fields = (:u, :v, :w))
         @test all(b.aim == a.aim for (b, a) in zip(apply(p0, initial_parameters(p0)), aimed))
@@ -302,14 +304,14 @@ using Briareus: Vec3, SVector, SMatrix
         xt = repeat([0.5, 7.5, 1.2, 0.8], nparams(ft) ÷ 4)
         @test all(a.power == b.power && a.defocus == b.defocus && a.spot == b.spot && a.dlambda == b.dlambda
                   for (a, b) in zip(apply(ft, xt), apply(gt, xt)))
-        @test all(a.aim == b.aim for (a, b) in zip(apply(ft, xt), aimed))   # no aim field: kept exactly
-        # a rotated frame: aim = R (u, v, w) + o exactly, and its Jacobian is R
+        @test all(a.aim == b.aim for (a, b) in zip(apply(ft, xt), aimed))   # no aim field, so aims are unchanged
+        # In a rotated frame, aim = R (u, v, w) + o exactly, and its Jacobian is R.
         F = euler_frame((0.3, -1.2, 2.5), 37.0, 211.0, 20.0)
         pr = FramePointing(quads[1:1], F; fields = (:u, :v, :w))
         xr = [0.4, -0.3, 0.2]
         @test apply(pr, xr)[1].aim == F.R * SVector(xr...) + F.origin
         @test ForwardDiff.jacobian(x -> apply(pr, x)[1].aim, xr) == F.R
-        # mirrored entrance-hole frames: one local aim per cone gives mirrored aims
+        # With mirrored entrance-hole frames, one local aim per cone gives mirrored aims.
         L = 10.0
         top = Frame(SMatrix{3,3,Float64}(I), (0.0, 0.0, L / 2))
         bottom = Frame(Diagonal([1.0, -1.0, -1.0]), (0.0, 0.0, -L / 2))
@@ -322,7 +324,8 @@ using Briareus: Vec3, SVector, SMatrix
         @test any(b -> b.port[3] < 0, bm) && any(b -> b.port[3] > 0, bm)
         @test all(b.port[3] > 0 || (b.aim[1], -b.aim[2], -b.aim[3]) == Tuple(bm[findfirst(c -> c.group === b.group && c.port[3] > 0, bm)].aim)
                   for b in bm)
-        # relative: zero aim shifts reproduce the template (to round-off); names, bounds
+        # With relative pointing, zero aim shifts reproduce the template within round-off.
+        # Names and bounds are checked too.
         rel = FramePointing(aimed, F; by = :beam, fields = (:u, :v, :power), relative = true)
         x0 = initial_parameters(rel)
         @test all(iszero, x0[1:3:end]) && all(iszero, x0[2:3:end]) && x0[3:3:end] == [b.power for b in aimed]
@@ -422,7 +425,7 @@ using Briareus: Vec3, SVector, SMatrix
                              callback = st -> (push!(seen, st.done); st.done == 2))
         @test sc.canceled && length(sc.rows) == 2 && seen == [0, 1, 2] && length(sc.values) == 7
         @test placement_sweep(d, [0.0]; callback = st -> true).canceled
-        # CSV: unchecked cells empty
+        # In the CSV, unchecked cells are empty.
         path = tempname() * ".csv"
         write_sweep_csv(path, sl)
         lines = readlines(path)

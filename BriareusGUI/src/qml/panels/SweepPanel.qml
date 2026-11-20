@@ -1,6 +1,6 @@
-// Placement sweep: a row per step (least clearance and where, failing and review pairs,
-// the line of sight, the captured power, the objective) beside a chart of the least
-// clearance and the blocked line of sight against the shift; a step can be applied.
+// The placement sweep shows a row per step (least clearance and where, failing and review
+// pairs, the line of sight, the captured power, the objective) beside a chart of the least
+// clearance and the blocked line of sight against the shift. A step can be applied.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -101,7 +101,7 @@ Item {
                         }
                     }
                 }
-                // without steps: one note at the top, as on the other tabs
+                // Without steps, one note shows at the top, as on the other tabs.
                 Note {
                     visible: !app.swHasResult
                     text: app.swRunning ? "" : "No steps yet: run Placement sweep"

@@ -1,5 +1,5 @@
-# Retuning a drive to a reference: pulses from a cone fraction, pulse tables, and the
-# per-time bounded least-squares retune against a full drive history.
+# This file tests retuning a drive to a reference. It covers pulses from a cone fraction,
+# pulse tables, and the per-time bounded least-squares retune against a full drive history.
 
 @testset "retune to a reference drive" begin
     t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
@@ -59,7 +59,7 @@
     @test maximum(amp1(dropped)) > 0.01
     @test maximum(amp1(tuned)) < maximum(amp1(dropped)) / 10
     @test maximum(abs.(tuned.Tr .- ref.Tr)) < 0.5
-    # staying near nominal powers: a smaller departure, a larger residual
+    # Staying near nominal powers gives a smaller departure and a larger residual.
     nominal(k, τ) = pul[first(b.group for b in kept if Symbol(b.quad) == k)](τ)
     near = retune_drive(cm, opk, kept, ref; by = :quad, limits = cap, nominal, stay = 1e-2)
     dep(r) = maximum(abs(r.power[g, k] / nominal(r.keys[g], r.time[k]) - 1)
@@ -76,8 +76,8 @@
 end
 
 @testset "retune with unconverted light" begin
-    # constant albedos and conversion: each step of a history is one linear solve, so the
-    # retune's linear prediction is that of the history to rounding
+    # With constant albedos and conversion, each step of a history is one linear solve, so
+    # the linear prediction of the retune equals that of the history within rounding.
     t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                  wall = Material(:Au; albedo = 0.8, conversion = 0.8),
                  nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
@@ -144,9 +144,10 @@ end
                        unconverted = uv, colors = mock)
     @test isapprox(rv.shape, tv.ylm[1:25, :] ./ tv.ylm[1:1, :]; rtol = 1e-12, atol = 1e-14)
     @test isapprox(rv.drive .* ref4.ylm[1, :], tv.ylm[1, :]; rtol = 1e-12)
-    # (the light is not vacuous: it raises the drive over the 3ω-only history)
+    # The unconverted light raises the drive over the 3ω-only history, so the test is not
+    # vacuous.
     @test all(ref4.ylm[1, :] .> ref3.ylm[1, :])
-    # zero fractions: the retune without unconverted light, bitwise
+    # Zero fractions give a retune identical to the one without unconverted light.
     r0 = retune_drive(cm, opk, kept, ref3; by = :quad, limits = cap)
     rz0 = retune_drive(cm, opk, kept, ref3; by = :quad, limits = cap, unconverted = (omega1 = 0.0, omega2 = 0.0),
                  colors = mock)

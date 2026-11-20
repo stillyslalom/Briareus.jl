@@ -1,12 +1,13 @@
-# The hohlraum part and its pieces: the starter "Hohlraum with capsule" against core
-# `hohlraum` (the former template's geometry, names mapped), sessions with a template
-# converted to parts against the drives of the template-era GUI, pieces and ends, the
-# entrance-hole and window frames, beams aimed in piece frames, roles, unique names on
-# insert.
+# This file tests the hohlraum part and its pieces. The starter "Hohlraum with capsule" is
+# checked against core `hohlraum`, the geometry of the earlier template with the names
+# mapped, and sessions with a template converted to parts against the drives of the
+# template-era GUI. The file also covers pieces and ends, the entrance-hole and window
+# frames, beams aimed in piece frames, roles, and unique names on insert.
 
 using LinearAlgebra: norm
 
-# The former template's component name of a starter component (`hohlraum_wall` → `wall`).
+# The component name of a starter component in the earlier template (`wall` for
+# `hohlraum_wall`).
 _template_name(n::Symbol) = Symbol(replace(String(n), r"^hohlraum_" => ""))
 
 # Whether every beam aims where its frame and local aim put it.
@@ -23,7 +24,8 @@ _same_component(a, b) =
 @testset "hohlraum part: the starter meshes as the former template (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
     m = ts.mesh[]
-    # the former template's call: core `hohlraum` at TCC, its capsule the geodesic mesh
+    # The earlier template called core `hohlraum` at TCC, with the geodesic mesh as its
+    # capsule.
     ref = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                    wall = gold(), h = m.h, capsule_h = m.capsule_h,
                    leh_open_radius = 0.84 * 1.55)
@@ -70,16 +72,18 @@ end
     @test sort(_template_name.(s.review.targets[])) == sort(Symbol.(e["review_targets"]))
     @test sort(_template_name.(s.review.hardware[])) == sort(Symbol.(e["review_hardware"]))
     @test _template_name.(s.talis.capture[]) == Symbol.(e["talis_capture"])
-    # the drive of the template-era GUI on the same session (its capsule now comes after the
-    # window: to round-off), which left this design's view factors unbalanced (the shield
-    # outside the hohlraum): the scenario without its cavities
+    # The reference is the drive of the template-era GUI on the same session, which is the
+    # scenario without its cavities. That GUI left the view factors of this design
+    # unbalanced, because the shield lies outside the hohlraum. The capsule now comes after
+    # the window, so the agreement is within round-off.
     build_scenario!(s)
     rb = s.drive.result[]
     out = Controllers._build_scenario(t, bt.beams[]; observed = observed_name(ts),
                                       profile = Controllers._deposition_profile(s.drive))
     r = Controllers._evaluate_drive(out.s, display_beams(bt), out.lookup, s.drive.spot_radius[];
                                     ratio = unconverted_ratios(s), foil = active_foil(ts))
-    # (the drive balances the hohlraum's cavity, the shield in none: +0.33% mean flux)
+    # The drive balances the cavity of the hohlraum and puts the shield in no cavity; the
+    # mean flux differs by +0.33%.
     c = only(Controllers._closed_cavities(ts))
     @test c.balanced && isempty(intersect(c.elements, elements(t, :shield)))
     @test isapprox(rb.mean_flux, e["mean_flux"]; rtol = 5e-3) && !isapprox(rb.mean_flux, e["mean_flux"]; rtol = 1e-3)
@@ -92,7 +96,7 @@ end
     hole(k) = startswith(k, "leh")
     @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-10) for (k, x) in e["incident_sum"] if !hole(k))
     @test all(isapprox(sums[Symbol(k)] / 2, x; rtol = 3e-3) for (k, x) in e["incident_sum"] if hole(k))
-    # saved again: the current version, read back the same
+    # Saved again, the session has the current version and loads back unchanged.
     f = joinpath(mktempdir(), "v10.briar.toml")
     save_session(f, s)
     @test TOML.parsefile(f)["version"] == Controllers.SESSION_VERSION
@@ -130,7 +134,7 @@ end
     @test_throws ArgumentError PartSpec(:sphere; windows = [WindowSpec()])
     @test_throws ArgumentError PartSpec(:hohlraum; name = :hr, frame = Symbol("hr.leh_top"))
 
-    # a closed end: its hole merged into its cap, of the wall's material
+    # A closed end has its hole merged into its cap, in the wall material.
     q = PartSpec(:hohlraum; name = :hr, values = Dict(:top_end => 0.0))
     @test hohlraum_pieces(q) == [:wall, :cap_top, :cap_bottom, :leh_bottom]
     open, closed = part_components(PartSpec(:hohlraum; name = :hr), 0.6), part_components(q, 0.6)
@@ -142,8 +146,8 @@ end
     @test cap(closed).kind === :surface && albedo(cap(closed).material) == q.values[:albedo] == albedo(gold())
     @test_throws ArgumentError part_components(PartSpec(:hohlraum; name = :hr, values = Dict(:top_end => 3.0)), 0.6)
 
-    # the frames: the ends' (z out of the hohlraum at either end) and the window's, which
-    # follow the part when it moves and turns
+    # The frames of the ends, with z out of the hohlraum at either end, and the frame of
+    # the window follow the part when it moves and turns.
     sess = DesignSession(starter = :none, resolution = :coarse)
     ts = sess.target
     @test insert_starter!(ts, :hohlraum) && [p.name for p in ts.parts[]] == [:hohlraum, :capsule]
@@ -185,11 +189,11 @@ end
     @test :hohlraum_wall in sess.review.targets[] && :capsule in sess.review.targets[]
     @test :hohlraum_cap_top in sess.review.hardware[] && :hohlraum_cap_top in sess.talis.hardware[]
     @test !set_part_role!(ts, part_index(ts, :hohlraum), :wall) && occursin("wall role", ts.error[])
-    # pieces are named on their own, the part stands for all of them
+    # The pieces are named separately, and the part stands for all of them.
     names = component_names(ts.target[])
     @test :hohlraum in names && :hohlraum_wall in names && :hohlraum_wall in surface_names(ts.target[])
     @test !(:hohlraum in surface_names(ts.target[]))
-    # the tree: the part's row, its pieces under it
+    # The tree shows the row of the part with its pieces under it.
     sess.view.expanded[] = union(sess.view.expanded[], ("target",))
     rows = model_tree(sess)
     k = findfirst(r -> r.id == "part:hohlraum", rows)
@@ -201,12 +205,12 @@ end
     @test isempty(wall_names(ts)) && !closed_design(ts)
     set_excluded!(ts, :hohlraum, false)
 
-    # a second insert: names made unique; the new capsule takes the observed role
+    # A second insert makes the names unique, and the new capsule takes the observed role.
     @test insert_starter!(ts, :hohlraum; frame = Symbol("hohlraum.leh_top"))
     @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :hohlraum_2, :capsule_2]
     @test ts.parts[][3].frame === Symbol("hohlraum.leh_top") && ts.parts[][4].frame === :hohlraum_2
     @test observed_name(ts) === :capsule_2 && !ts.parts[][2].observed
-    @test !closed_design(ts)                  # two cavities: not one enclosure
+    @test !closed_design(ts)                  # two cavities, so not one enclosure
     @test :hohlraum_2_wall in wall_names(ts)
     @test !insert_starter!(ts, :hohlraum; frame = :nowhere) && occursin("no frame", ts.error[])
 end

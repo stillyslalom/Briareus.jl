@@ -1,4 +1,5 @@
-# Mesh repair for imported CAD: consistent orientation and coarsening into elements.
+# This file tests mesh repair for imported CAD, both consistent orientation and coarsening
+# into elements.
 
 # a random subset of patches with reversed winding (as stitched CAD often has)
 function scramble(m::Mesh, rng)
@@ -49,7 +50,7 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
         o = orient_mesh(scramble(wall, rng); toward)
         @test all(dot(patch_normal(o, p), patch_center(o, p) .* Vec3(1, 1, 0)) < 0 for p in 1:npatches(o))
     end
-    o = orient_mesh(scramble(wall, rng); toward = (0, 0, 10r))    # far along the axis: ambiguous
+    o = orient_mesh(scramble(wall, rng); toward = (0, 0, 10r))    # far along the axis, so ambiguous
     signs = [sign(dot(patch_normal(o, p), patch_center(o, p) .* Vec3(1, 1, 0))) for p in 1:npatches(o)]
     @test all(==(signs[1]), signs)                                 # consistent, either way
     w2 = scramble(wall, rng)
@@ -72,7 +73,7 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
         for (n, u, v) in ((Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)), (Vec3(0, 1, 0), Vec3(0, 0, 1), Vec3(1, 0, 0)),
                           (Vec3(0, 0, 1), Vec3(1, 0, 0), Vec3(0, 1, 0))), s in (1, -1)
             q = [c + s * n - u - v, c + s * n + u - v, c + s * n + u + v, c + s * n - u + v]
-            add_polygon!(m, s > 0 ? reverse(q) : q)               # inward: clockwise seen from outside
+            add_polygon!(m, s > 0 ? reverse(q) : q)               # inward is clockwise from outside
         end
         return m
     end
@@ -82,7 +83,8 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
     o = @test_logs orient_mesh(pair)
     @test all(dot(patch_normal(o, p), patch_center(o, p) - (p <= 6 ? Vec3(0, 0, 0) : Vec3(2, 2, 0))) > 0
               for p in 1:12)
-    # a Möbius band has no consistent winding: refused, or kept with a warning
+    # A Möbius band does not have a consistent winding, so it is refused or kept with a
+    # warning.
     band = Mesh()
     edge(θ, s) = Vec3(2cos(θ), 2sin(θ), 0) + s * 0.3 * (cos(θ / 2) * Vec3(cos(θ), sin(θ), 0) + sin(θ / 2) * Vec3(0, 0, 1))
     for k in 0:11
@@ -114,7 +116,7 @@ end
     @test zs == [-5.0, 5.0, 0.0]                        # equal areas ordered by first vertex
     @test sum(npatches, pcs) == npatches(m) && sum(x -> length(x.triangles), pcs) == length(m.triangles)
     @test all(all(v -> v[3] == p.vertices[1][3], p.vertices) for p in pcs)  # each piece one part
-    # windings kept: each annulus faces as built (down at -5, up at +5)
+    # With the windings kept, each annulus faces as built (down at -5, up at +5).
     @test all(r -> Briareus._patch_area_vector(pcs[1], r)[3] < 0, pcs[1].patches)
     @test all(r -> Briareus._patch_area_vector(pcs[2], r)[3] > 0, pcs[2].patches)
     # one connected mesh is one piece, with its patches and triangles as they were
@@ -124,7 +126,8 @@ end
 end
 
 @testset "coarsen_mesh" begin
-    # a finely divided plate: patches merged up to the size, triangles and area unchanged
+    # On a finely divided plate, patches are merged up to the size, with triangles and
+    # area unchanged.
     plate = rectangle_mesh(4.0, 2.0; nu = 40, nv = 20)
     c = coarsen_mesh(plate; size = 0.8)
     @test sort(c.triangles) == sort(plate.triangles) && c.vertices == plate.vertices
@@ -135,7 +138,7 @@ end
     t, tc = Target([Component(:p, plate, gold())]), Target([Component(:p, c, gold())])
     @test sum(tc.elem_area) ≈ sum(t.elem_area) rtol = 1e-12
     @test all(n -> n ≈ Vec3(0, 0, 1), tc.elem_normal)
-    # a curved surface: merged elements stay within the angle of planar
+    # On a curved surface, merged elements stay within the angle of planar.
     s = sphere_mesh(1.0; ntheta = 48, nphi = 96)
     cs = coarsen_mesh(s; size = 0.3, angle = 10.0)
     @test npatches(cs) < npatches(s) / 3
@@ -144,7 +147,8 @@ end
         @test all(dot(normalize(Briareus._patch_area_vector(cs, k:k)), n) >= cosd(10.0) - 1e-12
                   for k in cs.patches[p] if norm(Briareus._patch_area_vector(cs, k:k)) > 0)
     end
-    # never across a fold: the cube's faces stay apart however large the size
+    # Merging never crosses a fold, so the faces of the cube stay apart however large the
+    # size.
     cube = Mesh()
     for (n, u, v) in ((Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)), (Vec3(0, 1, 0), Vec3(0, 0, 1), Vec3(1, 0, 0)),
                       (Vec3(0, 0, 1), Vec3(1, 0, 0), Vec3(0, 1, 0))), sg in (1, -1)
@@ -233,13 +237,14 @@ end
     @test all(p -> outline_edges(r, p) == 4, 1:npatches(r))
     t = Target([Component(:p, r, gold())])
     @test all(n -> n ≈ Vec3(0, 0, 1), t.elem_normal)
-    # the same surface: its only open edges are the plate's outline
+    # The surface is the same, and its only open edges are the outline of the plate.
     @test open_edges(r)[2] ≈ 12 && open_edges(r)[3] == 0
 
-    # a closed can (radius 1, length 2) as one sheet: wall strips spanning its length,
-    # caps as fans of slivers from the axis, every facet with unshared vertices, windings
-    # scrambled; every other wall strip is split at the midpoint of its bottom chord,
-    # which the cap's facet does not have (a T-junction, as between CAD faces)
+    # A closed can (radius 1, length 2) is built as one sheet. Wall strips span its length,
+    # and the caps are fans of slivers from the axis. Every facet has unshared vertices, and
+    # the windings are scrambled. Every other wall strip is split at the midpoint of its
+    # bottom chord, a point the facet of the cap does not have, which makes a T-junction as
+    # between CAD faces.
     nphi = 48
     facets = NTuple{3,Vec3}[]
     for j in 1:nphi
@@ -266,9 +271,10 @@ end
     @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on, q)
     @test all(x -> x.diam / sqrt(x.A) < 2.2, q)
     @test all(x -> x.A > 0.3size^2, q)                              # no slivers left between elements
-    # radiation inside it (turned inward): every element sees the whole enclosure (rows
-    # sum to 1 within 0.6%, mean 0.14%; the prism below: 0.33%, mean 0.16%), and the wall
-    # sends the caps what the same prism meshed by `cylinder_mesh` sends
+    # For radiation inside the can, turned inward, every element sees the whole enclosure.
+    # The rows sum to 1 within 0.6%, with a mean of 0.14%; for the prism below the figures
+    # are 0.33% and 0.16%. The wall sends the caps what the same prism meshed by
+    # `cylinder_mesh` sends.
     inside = Target([Component(:can, Mesh(r.vertices, [(a, c, b) for (a, b, c) in r.triangles], r.patches),
                                gold())])
     F = view_factors(inside)
@@ -283,11 +289,12 @@ end
     exchange(t, F) = sum(t.elem_area[i] * F[i, j] for i in wall(t), j in cap(t)) / sum(t.elem_area[wall(t)])
     @test exchange(inside, F) ≈ exchange(prism, Fp) rtol = 2e-3
 
-    # a tube of 360 full-length sliver strips (radius 2, length 3: 35 µm by 3 mm), its
-    # length a multiple of size/3, so a strip's diagonal, a hair longer than its sides,
-    # would take one point more under equal spacing and stagger every cut. The strips are
-    # cut on common planes and elements fill bands between them: every cut across the
-    # strips is one straight chord per strip, shared by the elements on both sides
+    # A tube of 360 full-length sliver strips has radius 2 and length 3, so each strip is 35
+    # µm by 3 mm. The length is a multiple of size/3, so the diagonal of a strip, a hair
+    # longer than its sides, would take one point more under equal spacing and stagger every
+    # cut. The strips are cut on common planes, and elements fill the bands between them.
+    # Every cut across the strips is one straight chord per strip, shared by the elements on
+    # both sides.
     nphi = 360
     ring(z) = [Vec3(2cos(2π * j / nphi), 2sin(2π * j / nphi), z) for j in 0:nphi-1]
     tube = Mesh([ring(-1.5); ring(1.5)], NTuple{3,Int}[], UnitRange{Int}[])
@@ -306,15 +313,17 @@ end
     @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on && x.diam / sqrt(x.A) < 1.6, q)
     zext = [extrema(r.vertices[v][3] for k in r.patches[p] for v in r.triangles[k]) for p in 1:npatches(r)]
     @test length(unique(round(z; digits = 6) for e in zext for z in e)) == round(Int, 3 / size) + 1
-    # outlines: a chord across each strip at the two cuts, two runs along strips
+    # The outlines have a chord across each strip at the two cuts and two runs along
+    # strips.
     strip_of(c) = floor(Int, mod(atan(c[2], c[1]), 2π) * nphi / 2π)
     nstrips(p) = length(unique(strip_of(sum(r.vertices[v] for v in r.triangles[k])) for k in r.patches[p]))
     @test all(p -> outline_edges(r, p) <= 2nstrips(p) + 2, 1:npatches(r))
 
-    # a finely faceted sphere (40k facets, as CAD writes a capsule) at a size the angle
-    # bounds: every element is under the merge's minimum area, and those of more than
-    # `_DISSOLVE_MAX` triangles are left whole (three here) rather than shared out;
-    # still the same closed surface, every element acceptable
+    # A finely faceted sphere of 40k facets, as CAD writes a capsule, is merged at a size
+    # that the angle bounds. Every element is under the minimum area of the merge. The
+    # elements of more than `_DISSOLVE_MAX` triangles, three in this case, are left whole;
+    # they are not shared out. The result is still the same closed surface, and every
+    # element is acceptable.
     sph = sphere_mesh(1.1; ntheta = 100, nphi = 200)
     size = 0.6
     r = remesh_mesh(sph; size)

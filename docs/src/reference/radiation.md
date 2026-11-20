@@ -17,13 +17,14 @@ quad or beam. Each wall element loses energy by its temperature history and
 re-emits stored energy when the drive falls; the wall moves ([`WallMotion`](@ref)), the
 entrance holes close as prescribed ([`GapClosure`](@ref)) or computed
 ([`LipClosure`](@ref)), and the capsule absorbs on a shrinking radius
-([`CapsuleAlbedo`](@ref)). [`dante1`](@ref) and [`dante_unfold`](@ref) read the drive as
-the Dante instrument would. [`retune_drive`](@ref) finds the power histories that hold
-a drive quantity through time under per-key power limits: a capsule's modes
-([`CapsuleModes`](@ref)), a flat face's x-ray flux ([`FaceFlux`](@ref)) or a
-backlighter foil's laser irradiance ([`FoilIrradiance`](@ref)), each to a reference
-shot's or uniform at a prescribed level. With NIF bundle 31 down, retuning the other
-46 quads takes the mode-1 drive asymmetry from 2% to 0.02% at the peak.
+([`CapsuleAlbedo`](@ref)). [`dante1`](@ref) and [`dante_unfold`](@ref) record the drive
+as the Dante instrument would. [`retune_drive`](@ref) finds the power histories that hold
+a drive quantity through time under per-key power limits. The quantity is the modes of a
+capsule ([`CapsuleModes`](@ref)), the x-ray flux of a flat face ([`FaceFlux`](@ref)) or
+the laser irradiance of a backlighter foil ([`FoilIrradiance`](@ref)), held either to
+the values of a reference shot or uniform at a prescribed level. With NIF bundle 31
+down, retuning the other 46 quads takes the mode-1 drive asymmetry from 2% to 0.02% at
+the peak.
 
 ```@autodocs
 Modules = [Briareus]

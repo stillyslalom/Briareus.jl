@@ -1,5 +1,5 @@
-// TaLIS report: the notes (short lines, wrapped to the panel), the per-rule summary,
-// every check colored by status, CSV export.
+// The TaLIS report shows the notes (short lines, wrapped to the panel), the per-rule
+// summary and every check colored by status, with CSV export.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -64,7 +64,7 @@ ColumnLayout {
                     }
                 }
                 SectionLabel { text: "Rules"; visible: app.tlHasReport }
-                // one rule in two lines: its counts, then its worst check
+                // One rule takes two lines, its counts and then its worst check.
                 Repeater {
                     model: ruleModel
                     delegate: ColumnLayout {

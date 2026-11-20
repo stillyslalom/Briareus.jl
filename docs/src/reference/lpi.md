@@ -13,10 +13,10 @@ fluence ratio [`picket_ratio`](@ref) can take from the outer picket fluence of a
 pointing on the wall ([`picket_fluence`](@ref)). [`PicketLinkedBubble`](@ref) takes it from
 the beams inside every evaluation, so that the bubble follows a re-pointed design, and
 [`bubble_prediction`](@ref) reports what a re-pointing does to the picket, the bubble
-and the P2 swing; [`picket_irradiance`](@ref) and [`picket_ceiling`](@ref) give the
-outer cones' irradiance in a phase (its peak, its energy-weighted mean, the spatially
-averaged value of the published scalings, or its mean near the inner beams'
-centerlines) and hold it in a constrained optimization, and
+and the P2 swing. [`picket_irradiance`](@ref) gives the irradiance of the outer cones in a
+phase, and [`picket_ceiling`](@ref) bounds it in a constrained optimization. The
+irradiance is the peak, the energy-weighted mean, the spatially averaged value of the
+published scalings, or the mean near the centerlines of the inner beams.
 [`picket_hot_elements`](@ref) lists the hottest elements.
 [`lpi_deposit`](@ref) applies them together. The CBET model assumes uniform LEH plasma
 and full pairwise overlap, and its unsaturated coupling overpredicts transfer: its

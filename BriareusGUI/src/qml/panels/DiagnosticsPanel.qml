@@ -1,8 +1,8 @@
-// Diagnostics: the synthetic diagnostics a drive history records, by category. A toggle
-// chooses the category (x-ray power, x-ray imagers, radiography); the row beside it adds
-// instruments of that category and shows the recorded ones as chips (a chip's menu
-// chooses its configuration); below, the category's view on one canvas: the power
-// diagnostics' chart, or one of the imagers' images.
+// The Diagnostics tab shows the synthetic diagnostics a drive history records, by
+// category. A toggle chooses the category (x-ray power, x-ray imagers, radiography). The
+// row beside it adds instruments of that category and shows the recorded ones as chips,
+// and the menu of a chip chooses its configuration. Below, one canvas shows the view of
+// the category: the chart of the power diagnostics, or the image of one of the imagers.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

@@ -1,5 +1,5 @@
-// Optimization results: objective, modes before and after, clipping and capsule
-// clearance, the parameter table, and applying the result.
+// The optimization results show the objective, the modes before and after, clipping and
+// capsule clearance, and the parameter table, and the panel applies the result.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

@@ -1,5 +1,5 @@
-# Area backlighter: point OMEGA beams onto a foil for a uniform irradiance spot without
-# clipping the main target, then report the x-ray power toward the imager.
+# This example points OMEGA beams onto an area backlighter foil for a uniform irradiance
+# spot without clipping the main target, and then reports the x-ray power toward the imager.
 #
 #   julia --project=. -t auto examples/backlighter.jl
 
@@ -10,7 +10,7 @@ using LinearAlgebra
 # TCC stands in for the main target. The imager looks along +x through TCC at the foil.
 foil_center = Vec3(6.0, 0.0, 0.0)
 backlighter = foil(:backlighter, foil_center, (-1, 0, 0); width = 2.0, n = 40,
-                   material = foil_material(:Ti), two_sided = false)      # suggested values, not measured
+                   material = foil_material(:Ti), two_sided = false)      # suggested values; none is measured
 main = Component(:main, sphere_mesh(1.0; ntheta = 16, nphi = 24), BLACK)
 target = Target(backlighter, main)
 

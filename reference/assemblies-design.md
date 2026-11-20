@@ -96,20 +96,20 @@ phase lands; the docstrings and research notes then hold what was built.
      are, as `set_part_frame!` does), ungroup, rename, remove a subtree. Sessions store
      the tree; the analyses see the flattened components and never the tree.
 
-   One workflow this serves: a CAD workspace imported as one part or assembly, proposed
+   One workflow this supports is a CAD workspace imported as one part or assembly, proposed
    add-ons mocked up as separate assemblies, and configurations compared by including
    or excluding them. The design does not depend on that workflow: the tree is general
    (any nesting, any mix of parts and assemblies, any number at the top).
 
-## Bitwise identity
+## Identical results
 
 The starter *Hohlraum with capsule* calls the same core `hohlraum(...)` at the identity
 frame, so its meshes, view factors and drive equal the former template's exactly; only
-the names change (checked: see "Phase B as built").
+the names change (checked in "Phase B as built").
 
 ## Phases
 
-A. Landed (roles in the GUI, bitwise identical; session version 7): commit 3a07a50.
+A. Landed (roles in the GUI, identical results; session version 7): commit 3a07a50.
 B. Landed (the hohlraum part kind, piece aim points, target kinds removed, sessions with a
    template converted to parts, Insert ▸ starters; session version 8): commit cd46de8 and
    the commit after it.
@@ -145,8 +145,8 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   hole or closed (`top_end`, `bottom_end`: a closed end's hole merges into its cap, of
   the wall's material). Per-end radii and open ends come with phase C.
 - Piece frames are analytic, so they exist before meshing and follow every edit exactly:
-  `<part>.leh_top` and `<part>.leh_bottom` (the template's entrance-hole axes) serve
-  the entrance holes and the caps (a cap's centroid is its end's center), each window has
+  `<part>.leh_top` and `<part>.leh_bottom` (the template's entrance-hole axes) are used
+  for the entrance holes and the caps (a cap's centroid is its end's center), each window has
   `<part>.window_k` (origin on the wall), and the wall aims in the part frame (its
   center). A VisRad primitive's pieces have no frames of their own yet.
 - The aim-frame and placement lists are flat, each part followed by its piece frames
@@ -173,7 +173,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - An assembly is a part of kind `:assembly` (a `PartSpec`, like a user frame: no
   geometry), not a separate `Assembly` type. Its frame is the part frame
   (`part_frame_def`: placement fields and steps), so placement, Move along, steps,
-  renames, sweeps and undo serve it unchanged. `PartSpec.assembly` is the membership (an
+  renames, sweeps and undo work on it unchanged. `PartSpec.assembly` is the membership (an
   assembly's is its parent); `TOP_LEVEL` (`Symbol("")`) is the top. `check_tree` (called
   by `part_frames`) refuses a member of a missing assembly, an assembly inside itself and
   a user frame in an assembly (frames stay in the Frames folder).
@@ -199,7 +199,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   objects placed in it, open in the tree); so does a multi-body STL file. Insert with an
   assembly selected puts the starter in it (window only).
 - The tree's expanded nodes are not saved (as before): assemblies load collapsed.
-- Bitwise checks: grouping the starter leaves its frames, its components (the same objects)
+- Identity checks: grouping the starter leaves its frames, its components (the same objects)
   and its target unchanged, and the drive equal (test). The default design's drive is
   equal before and after this phase built with the same precompile settings; built with
   and without the GUI's precompile workload it differs at round-off (P0/P4 in the last
@@ -214,7 +214,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   new `turn_part!`, its rotational counterpart, which re-expresses the part's angles
   (`theta`, `phi`, `rotation`) in that frame and keeps its origin. No placement step is
   appended per drag (the steps list would grow with every turn); a part without steps
-  ends where a `Rotate` step about the same chamber axis puts it, to round-off. A turn
+  ends where a `Rotate` step about the same chamber axis puts it, within round-off. A turn
   its steps undo is refused as a fixed move is. `nudged_parts`/`turned_parts` give the
   edit's parts without making it (the preview).
 - Shown for one selected part, assembly, user frame, or a piece, window or component
@@ -253,7 +253,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   is. The amount is where the pointer's ray meets the plane, each component snapped to
   the Move-along step (a tenth with Ctrl). The commit is one `nudge_part!` along the sum
   of the two components (its length and direction), one edit and one undo; it equals
-  the two Move-along moves to 1e-12 (test) rather than bitwise, since the
+  the two Move-along moves to 1e-12 (test). The two are not identical, since the
   direction is normalized.
 - Tests (`test_triad.jl`, synthetic events): hover over an arrow highlights it (color,
   width) and leaves the others plain; moving off clears it; a drag keeps the dragged
@@ -270,7 +270,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   fillets and sombreros (a fillet at an open end would be a lip; a sombrero shields a
   hole). With a closing lip, an end with a different radius scales `leh_open_radius` by the
   ratio of the radii.
-- Bitwise checks: the components, element centroids and areas of nine `hohlraum`
+- Identity checks: the components, element centroids and areas of nine `hohlraum`
   configurations, and the view factors, deposition, B, H and moments of a coarse NIF
   hohlraum under `nif_quads`, serialized before and after: identical. The GUI hohlraum
   part's components (default, closed ends with and without lips, a placed part, windows)
@@ -312,12 +312,12 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 
 - Core: `retune_drive(quantity, op, beams, reference; target, level, ...)` with
   `CapsuleModes`, `FaceFlux` or `FoilIrradiance`; `target = :reference` restores the
-  reference's whole shape (modes, or the flux over the elements), `:uniform` asks for a
+  reference's whole shape (modes, or the flux over the elements), `:uniform` requests a
   uniform drive at `level`. The level is held (secant on a shifted penalty target), not
   a soft penalty. `drive_history(...; observed_flux = true)` keeps the face's flux.
 - GUI: `retune_pulses` picks what it holds (`kind`): an observed sphere (capsule), an
   observed flat face (`_observed_flat`), else the active foil within the drive's spot
-  radius (laser only; the drive needs no radiation model). The face's and the foil's
+  radius (laser only; the drive does not need a radiation model). The face's and the foil's
   `reference`, `before` and `after` are `(; time, mean, peak, low, rms)`, the face's from
   `_face_stats` on each history step, the foil's from depositions over `_spot_elements`
   (shared with `_spot_stats`). The retune chart's right axis then shows the RMS (before,
@@ -372,7 +372,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   OMEGA beams aim at the holes' centers (offset zero), as before for a hohlraum centered
   on TCC. When the hole's frame equals the reference frame (the default hohlraum at TCC),
   the aim is the reference aim itself, not a round trip through the frame.
-- Bitwise checks: the default design's chamber aims equal the cone pointing's (`isequal`,
+- Identity checks: the default design's chamber aims equal the cone pointing's (`isequal`,
   signs of zero included) and its drive (modes, mean flux, H, beam powers) equals the
   drive of the same beams held at TCC; the OMEGA hohlraum aims equal the former formula's
   (test, `test_halfraum.jl`).
@@ -380,13 +380,14 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   drives it and the lower beams are disabled, aimed as without a hohlraum (at TCC). The
   lower beams would reach the sample's back through the open end, not the cavity.
   Without any hole (the foil, an empty target) every beam aims in `:tcc` as before.
-- When it applies: loading a preset (`load_preset!`, the session's default table), File ▸
-  New target when the beams of a hohlraum preset do not aim in the new target's holes as
-  the preset would (a halfraum pair after a hohlraum: the preset is loaded again; a new
-  hohlraum after a hohlraum keeps the beams and their edits), and Insert of a starter
-  into a design whose beams drive no hole (`insert_starter!` on the session, then
-  `aim_in_lehs!`): the beams held at TCC move to the new holes keeping their offsets from
-  the reference holes (edits made at TCC carry over), enabled flags untouched. Inserting
+- Re-aiming applies in three cases: loading a preset (`load_preset!`, the session's
+  default table); File ▸ New target when the beams of a hohlraum preset do not aim in the
+  new target's holes as the preset would; and Insert of a starter into a design whose
+  beams drive no hole (`insert_starter!` on the session, then `aim_in_lehs!`). For a
+  halfraum pair after a hohlraum the preset is loaded again, and a new hohlraum after a
+  hohlraum keeps the beams and their edits. The beams held at TCC move to the new holes,
+  keeping their offsets from the reference holes (edits made at TCC carry over), and
+  their enabled flags are untouched. Inserting
   next to a hohlraum the beams already drive leaves them with it.
 - Sessions: aims are saved with their frames and local coordinates and loaded through
   `set_beams!`, never re-aimed; a session saved before this change (aims at TCC) loads
@@ -409,7 +410,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   sombreros (the bore must clear the widest radius) work as on the cylinder. Windows are
   cut into cylindrical sections only, each within one; a window on a cone or across a
   break is refused, and so are corner fillets.
-- Bitwise checks: the cylinder path was refactored into shared helpers; the phase C
+- Identity checks: the cylinder path was refactored into shared helpers; the phase C
   snapshots (core: nine `hohlraum` configurations and a coarse NIF drive; GUI: five
   hohlraum parts) serialized before and after are identical. Validation: a closed
   frustraum against coaxial-disk closed forms, and LEH loss and capsule drive against
@@ -462,7 +463,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   at TCC by the frustraum pointing's change from the cylinder pointing for that beam
   (by name) before carrying it to the frustraum's hole, so edits made at TCC are kept as
   offsets. File ▸ New target reloads the preset, as for any change of holes.
-- Bitwise checks: cylinder hohlraums (the default design, the halfraum starters) keep their
+- Identity checks: cylinder hohlraums (the default design, the halfraum starters) keep their
   aims (`test_halfraum.jl` unchanged and passing). Changed: the frustraum starter's aims
   (its drive was not a reference anywhere).
 - Not built: switching a hohlraum part's profile in place does not re-aim beams already
@@ -491,7 +492,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - The drive chart adds a dotted wall-Tr series per cavity when there are two or more
   (colored as each cavity's wall); with one cavity it is unchanged, the observed surface
   the headline (decision 8). `DriveResult.cavities` and `DriveHistory.cavities` hold the
-  rows. The panel's heading reads *Observed face* without the empty mode table for a flat
+  rows. The panel heading shows *Observed face* without the empty mode table for a flat
   observed face, and the common choice box sizes its list for lists from Julia.
 - Dante: `DanteView`'s collimated field of view, its center and the reference area
   already existed (diagnostics phase 2, 2026-10-29), as did the sourced field: ±30 mm at
@@ -503,7 +504,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   results would not change; the user rejected that, and the one definition replaced
   both). The dated Dante 1 configurations take the same field (46d8a76); Dante 2 and
   Omega's Dante look through the hole (their fields are not public).
-- Bitwise checks: the default design's drive (modes, mean flux, H, B, powers, map) and drive
+- Identity checks: the default design's drive (modes, mean flux, H, B, powers, map) and drive
   history (every core field, the GUI's Tr, modes, fields, ranges, energy, diagnostics)
   equal those computed without cavities, the path before this phase (test); its one
   cavity's wall Tr equals the history's `wall_Tr` exactly. Core: a history without
@@ -512,13 +513,13 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   / Σ A over its wall elements found by component name in the test, per step of the
   core history's recorded flux, to 1e-12 (two hohlraums side by side driven unequally;
   the shock-tube starter with half its lower beams off). Dante: a field of 8 mm about
-  one hohlraum receives exactly nothing from a blackbody in the other; the field reads
-  the view through that hohlraum's hole to 1.2e-4, a 60 mm field both holes' sum to
-  1.4e-4; on the shock tube `nif_dante1` reads the view through the lower hole to
-  3.5e-4.
+  one hohlraum receives exactly nothing from a blackbody in the other; the field matches
+  the view through the hole of that hohlraum to 1.2e-4, and a 60 mm field matches the sum
+  of both holes to 1.4e-4; on the shock tube `nif_dante1` matches the view through the
+  lower hole to 3.5e-4.
 - Not built: per-cavity albedo or energy
   series; a Dante field centered on a part from the GUI (a definition's `center_part`
-  serves).
+  can be used instead).
 
 ## Piece roles as built (2026-11-02): decision 7's second half
 
@@ -551,7 +552,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   sphere without a role inside the hohlraum changed accordingly). The ghost check (a piece
   of the hohlraum or the observed part left out leaves a hole) is as before.
 - GUI: a piece's properties have a *Role* box, and its tree row's right-click menu the
-  three roles (those it cannot take disabled); the row's detail reads `observed`, `wall` or
+  three roles (those it cannot take disabled); the row detail shows `observed`, `wall` or
   `no role` when the piece's role is not its default; Help ▸ Pieces ▸ A piece's role.
   Undo comes with the session state. Sessions: version 11 stores `piece_roles` per part;
   older sessions load with the defaults (test).
@@ -562,7 +563,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   cap is a landing surface the TaLIS check leaves out, as any observed surface), the
   optimizer and sweep (`observed_name`). Dante's field and `ApertureKeepOut` read no role
   (geometry and apertures only).
-- Bitwise checks: the default design's and the shock tube's drive (modes, mean flux, H, B,
+- Identity checks: the default design's and the shock tube's drive (modes, mean flux, H, B,
   powers, map, face, cavities, summary) and drive history (every core field, Tr, Legendre
   rows, face, fields, ranges, energy, diagnostics, cavities, the drive and energy charts),
   serialized before (fe18c7f) and after: identical.
@@ -595,9 +596,10 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 8. Drive is per cavity: each hohlraum part reports Tr from the area-weighted flux incident
    on its `wall` pieces; the `observed` surface keeps a separate Tr beside them, and for
    a single hohlraum with a capsule the capsule's Tr stays the headline (today's value).
-9. `foil` (laser-driven: spot uniformity, the foil objective, line of sight) and
-   `observed` (x-ray-driven: a capsule, a package face, an opacity sample) stay two roles;
-   a flat `observed` face reuses the foil map's face view.
+9. `foil` and `observed` stay two roles. A `foil` is laser-driven, with spot uniformity,
+   the foil objective and a line of sight. An `observed` surface is x-ray-driven, such as
+   capsules, package faces and opacity samples. A flat `observed` face reuses the face view
+   of the foil map.
 10. Synthetic Dante views the whole assembly, not one LEH: rays across a collimator
     field of view (a disk of given diameter at a center frame, TCC by default) sum every
     visible element's radiance, occluded by any geometry. Shock-tube walls and thinned
@@ -614,7 +616,7 @@ Taken without a question (reverse any):
 - The aim-frame list is a nested menu (part ▸ piece); CAD parts with many pieces list
   them the same way, collapsed.
 - Old template sessions convert to top-level parts (a hohlraum part and the capsule
-  sphere `observed`), no wrapping assembly, so the bitwise test compares like with
+  sphere `observed`) and no wrapping assembly, so the identity test compares like with
   like.
 - The cropped-through-a-hole `DanteView` stays as the special case of a FOV equal to the
   hole; the FOV path is checked against it on a closed hohlraum (the wall's outside is
@@ -625,7 +627,7 @@ Taken without a question (reverse any):
 - The 37 `:capsule` uses span drive, Dante, TaLIS, clearance and the optimizer; phase A
   must be a pure refactor, checked by the existing GUI suite unchanged.
 - Sessions from every version so far convert through one path; keep its tests.
-- A halfraum's open end meeting a package needs no gap between components: checked and
+- A halfraum's open end meeting a package does not need a gap between components: checked and
   fixed (see "Package seams as built"). Two cavities joined by a package are balanced
   separately since 2026-11-03 ("Per-cavity balancing as built").
 
@@ -640,18 +642,19 @@ Taken without a question (reverse any):
   element size (0.28 mm, the default) the disk's rim was a 36-gon inside the wall's
   40-gon: 6.8e-3 mm², 9.6e-4 of the end (the inscribed polygons' areas). The coarse and
   fine sizes happened to agree (16 and 56).
-- Leak, the upper halfraum closed by its disk alone (unbalanced view factors, wall
-  driven, energy balance exact to 5e-15): Σ A(1 − ΣF) out of the enclosure 3.8e-4 mm²
-  larger with the gap, the power lost 2.3e-5 of the source larger (−6.437e-4 → −6.672e-4:
-  the closure error of the view factors, a quadrature excess, is the larger term).
+- Leak, the upper halfraum closed only by its disk (unbalanced view factors, wall driven,
+  energy balance exact to 5e-15): Σ A(1 − ΣF) out of the enclosure 3.8e-4 mm² larger with
+  the gap, and the power lost 2.3e-5 of the source larger (from −6.437e-4 to −6.672e-4). The
+  closure error of the view factors, a quadrature excess, is the larger term.
 - Fixed at the source (decision taken): the GUI's circular parts take core's rule
   (`_nphi`, multiples of 8), so a part of a hohlraum part's radius and element size meets
   the wall ring at every vertex; after it the starter's closed configuration equals
   the one with the disk remeshed at the wall's count, exactly. Results change for any
   disk, washer, cylinder or cone meshed at a size where the two rules differ (the
-  shock-tube starter at the standard size among them: 1760 → 1840 elements, the observed
-  face's mean flux +1.0e-4 relative, its RMS 4.705% → 4.710%, each halfraum's wall Tr
-  311.2789 → 311.2875 eV); the default design has none.
+  shock-tube starter at the standard size among them goes from 1760 to 1840 elements,
+  the mean flux of the observed face changes by +1.0e-4 relative and its RMS from 4.705%
+  to 4.710%, and the wall Tr of each halfraum from 311.2789 to 311.2875 eV); the default
+  design has no such part.
   Test: the seams' vertex azimuths equal at the coarse and standard sizes
   (`test_halfraum.jl`). Research notes, "Halfraum ends and starters".
 
@@ -664,18 +667,18 @@ Taken without a question (reverse any):
   exchange matrix separately (Sinkhorn on the block, one product with the scaling masked
   to the cavity per cavity and iteration) and applies the one diagonal scaling to the
   whole matrix, so reciprocity holds everywhere and elements in no cavity keep a factor
-  of one. One cavity of every element takes the whole-target path, with bitwise identical
+  of one. One cavity of every element takes the whole-target path, with identical
   results. `Keyframes(...; closed)` takes cavities of its first keyframe's elements.
   `open_fraction(t; cavity)` is the ray check of a declared cavity (rays from its
   elements that meet nothing, or an element side outside it, leak).
-- How cavities are found (decision taken: both, one checking the other). The GUI's
-  geometry names them: one per hohlraum part in the calculations (`_cavity_volumes`), its
-  pieces by component name (never by `Component.part`), and every other element whose
-  centroid lies in the part's closed volume and whose radiating side faces into it
-  (`_in_cavity`). Core's rays check them (`_closed_cavities`: `open_fraction(t; cavity)`
-  at most `CAVITY_MAX_LEAK`, 1e-2). Core `enclosure`'s flux selection was not used to
-  find cavities: apertures are transparent to it, so it reaches through an entrance hole
-  to whatever lies beyond, and its threshold is statistical.
+- How cavities are found. The decision taken is to use both methods, one checking the other.
+  The GUI geometry names them: one per hohlraum part in the calculations
+  (`_cavity_volumes`), its pieces by component name (never by `Component.part`), and every
+  other element whose centroid lies in the part's closed volume and whose radiating side
+  faces into it (`_in_cavity`). Core's rays check them (`_closed_cavities`:
+  `open_fraction(t; cavity)` at most `CAVITY_MAX_LEAK`, 1e-2). Core `enclosure`'s flux
+  selection was not used to find cavities: apertures are transparent to it, so it reaches
+  through an entrance hole to whatever lies beyond, and its threshold is statistical.
 - A package's two faces (decision taken): by side and normal. Each element side belongs
   to the cavity its front faces: the package's top disk, in the upper halfraum's open
   end and facing up, to the upper halfraum; the bottom disk to the lower one; each side
@@ -699,10 +702,10 @@ Taken without a question (reverse any):
 - The drive's status names the cavities balanced and why one is not, when the design
   has more than one or one is not balanced. `_build_scenario` takes `cavities` in place
   of `closed` and returns them (`cavities`).
-- Bitwise checks: the default design's, the frustraum's and the opacity halfraum's drive and
+- Identity checks: the default design's, the frustraum's and the opacity halfraum's drive and
   drive history, every serialized field (standard size), before and after: identical.
   The shock tube changes at the view factors' error (observed face −4.4e-4, each wall Tr
-  311.2875 → 311.2444 eV). Validation (sphere closed forms over every bounce, the
+  from 311.2875 to 311.2444 eV). Validation (sphere closed forms over every bounce, the
   coaxial-disk closed form, per-cavity energy balance to 3e-13, a Monte Carlo of the
   element model on watertight facets): research notes, "Per-cavity balancing".
 - The sweep and the cavity drive (2026-11-03, the item's leftovers). The placement

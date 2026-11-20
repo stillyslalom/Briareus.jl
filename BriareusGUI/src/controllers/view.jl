@@ -1,7 +1,7 @@
-# What the window shows: the 3D view's coloring, beam drawing (which beams' 1ω, 2ω and
-# 3ω light is drawn), each component's display mode, the cutaway, the selection, and
-# the model tree (target components, beams by cone and quad, analyses) with its
-# expanded nodes. No GL: the canvas reads this state.
+# What the window shows: the coloring of the 3D view, the beam drawing (the beams whose
+# 1ω, 2ω and 3ω light is drawn), the display mode of each component, the cutaway, the
+# selection, and the model tree (target components, beams by cone and quad, analyses)
+# with its expanded nodes. This file uses no GL; the canvas reads this state.
 
 """
 What the 3D view colors the target by: `:component`, or a drive field (see
@@ -98,13 +98,15 @@ green and blue, and the frame's name), besides the selected frame's
 
 `beam_sort` is the beam table's display order, `(column, descending)` with `column`
 one of [`BEAM_SORT_COLUMNS`](@ref) (`:row`: the table's order; see
-[`sort_beam_rows!`](@ref)): a display choice, not saved and not an undo step.
+[`sort_beam_rows!`](@ref)). It is a display choice, so it is neither saved nor an undo
+step.
 
 `camera` is the 3D view's camera pose, `(; eye, lookat, up, ortho, turntable)` (points
 and the up direction in mm as 3-tuples; orthographic projection, turntable rotation),
 or `nothing` for the default view (isometric, fitted to the target): the canvas keeps
 it current without notifying, and applies a pose set with notification (a session
-loaded). Saved with the session, not an undo step ([`session_state`](@ref)).
+loaded). The pose is saved with the session but is not an undo step
+([`session_state`](@ref)).
 
 Tree node ids: `"target"`, `"comp:<name>"`, `"window:<name>"` (a hohlraum part's window
 `<part>_window_k`), `"part:<name>"`, `"assembly:<name>"` (an assembly, see
@@ -253,8 +255,8 @@ Cut with a plane that contains a line of sight: the line through `origin` (mm) a
 plane's normal perpendicular to the line and turned `rotation` degrees about it. At
 rotation 0 the normal is ẑ × d / |ẑ × d| for the unit direction d (ŷ × d for a line
 along z), so the plane is vertical and contains the line and the z direction; at 90 it
-is d × that normal. The plane's offset becomes 0 (it passes through the line). A
-rotation alone turns the plane of the current line. Unspecified settings are kept.
+is d × that normal. The plane's offset becomes 0, since it passes through the line. A
+rotation by itself turns the plane of the current line. Unspecified settings are kept.
 """
 function set_cut_line!(v::ViewState; direction = nothing, angles = nothing, origin = v.cut_point[],
                        rotation = v.cut_rotation[])
@@ -361,7 +363,8 @@ end
 
 `select!` selects one node; `select_add!` adds a node to the selection, or removes it
 if already selected (Ctrl + click), when it is of the selection's family (beam nodes,
-or component nodes: components, parts and windows); other nodes are selected alone.
+or component nodes: components, parts and windows); other nodes are selected by
+themselves.
 `select_range!` (Shift + click) selects the nodes of the family from the selection to
 `id` in the tree's order.
 """
@@ -426,7 +429,8 @@ end
 """
     selection_kind(id) -> (kind::Symbol, key::String)
 
-Split a tree node id: `("comp", "wall")` → `(:comp, "wall")`; `"target"` → `(:target, "")`.
+Split a tree node id: `("comp", "wall")` becomes `(:comp, "wall")`, and `"target"` becomes
+`(:target, "")`.
 """
 function selection_kind(id::AbstractString)
     isempty(id) && return (:none, "")
@@ -435,7 +439,7 @@ function selection_kind(id::AbstractString)
     return (Symbol(id[1:i-1]), String(id[i+1:end]))
 end
 
-"""Tree node id of a target component (window and part components get their own kinds;
+"""Tree node id of a target component (window and part components get separate kinds;
 an entrance hole's closing lip is its hole's)."""
 function component_id(ts, name::Symbol)
     window_of(ts, name) === nothing || return "window:" * String(name)
@@ -695,8 +699,8 @@ function model_tree(sess)
         end
         ps = ts.parts[]
         kinds = Dict{Symbol,Symbol}(p.name => p.kind for p in ps)
-        # a part made in pieces (a hohlraum part): its row, then its pieces under it;
-        # another part: its components
+        # A part made in pieces, such as a hohlraum part, gets its row and then its pieces
+        # under it; another part gets its components.
         function part_rows!(name, depth)
             cs = pop!(byp, name, nothing)
             cs === nothing && return

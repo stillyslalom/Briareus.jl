@@ -127,7 +127,7 @@ function _in_convex(px, q)
 end
 
 # Position (mm) in the plane of `F` normal to its axis `k`, along its axes `k + 1` and
-# `k + 2`, where the pixel's ray meets it ((0, 0) for a ray along the plane).
+# `k + 2`, where the ray of the pixel meets the plane; (0, 0) for a ray along the plane.
 function _plane_position(c::CadCamera, F::Frame, k, px)
     o, d = pixel_ray(c, px)
     n = Makie.Vec3d(F.R[:, k]...)
@@ -173,11 +173,11 @@ function triad_amount(c::CadCamera, g::TriadDrag, px)
     a = _screen_angle(c, g.F, px)
     g.angle += rem2pi(a - g.last, RoundNearest)
     g.last = a
-    s = dot(e, camera_frame(c)[1]) < 0 ? 1.0 : -1.0      # the axis toward the viewer: counterclockwise
+    s = dot(e, camera_frame(c)[1]) < 0 ? 1.0 : -1.0      # counterclockwise about the axis toward the viewer
     return rad2deg(s * g.angle)
 end
 
-# Press: grab a handle of the shown triad (`c.triad_at`).
+# On press, grab a handle of the shown triad (`c.triad_at`).
 function _triad_press!(c, sess, px, ctrl::Bool)
     at = c.triad_at[]
     at === nothing && return false
@@ -194,7 +194,7 @@ function _triad_press!(c, sess, px, ctrl::Bool)
     return true
 end
 
-# Drag: the snapped amount, and its preview when it changes.
+# On drag, update the snapped amount and its preview when it changes.
 function _triad_move!(c, sess, px)
     g = c.placing[]
     g === nothing && return
@@ -217,7 +217,8 @@ function _triad_move!(c, sess, px)
     return
 end
 
-# Release: one edit (none for a zero amount), then the triad where the part now is.
+# On release, commit one edit (none for a zero amount), then show the triad where the part
+# now is.
 function _triad_release!(c, sess, px)
     _triad_move!(c, sess, px)
     g = c.placing[]
@@ -254,7 +255,7 @@ function _triad_hover!(c, sess, px)
     return true
 end
 
-# Where the triad is: the selection's part and its triad frame, or nothing.
+# Where the triad is: the part of the selection and its triad frame, or nothing.
 function _place_triad!(c, sess)
     c.triad_hover[] = nothing
     i = triad_subject(sess)

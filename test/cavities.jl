@@ -1,8 +1,8 @@
-# Targets with several cavities (assemblies phase C2): each cavity's wall temperature
-# (`wall_temperature`, `drive_history(; cavities)`) against the area-weighted incident
-# flux of its wall elements reduced here directly from the solution, the history without
-# `cavities` bitwise unchanged, and a Dante field of view that leaves one cavity out
-# receiving nothing from it.
+# Targets with several cavities (assemblies phase C2). The wall temperature of each cavity
+# (`wall_temperature`, `drive_history(; cavities)`) is checked against the area-weighted
+# incident flux of its wall elements, reduced in this file directly from the solution. The
+# history without `cavities` is unchanged, and a Dante field of view that leaves one cavity
+# out receives nothing from it.
 
 using Briareus, LinearAlgebra, Test
 using Briareus: RadiationSolution
@@ -31,21 +31,22 @@ using Briareus: RadiationSolution
     h0 = run()
     h = run(; cavities = [cavities; :all => every])
 
-    # independent reduction: each cavity's wall elements found from the components'
-    # names, Σ H A / Σ A of each step's recorded incident flux
+    # The independent reduction finds the wall elements of each cavity from the component
+    # names and takes Σ H A / Σ A of the recorded incident flux at each step.
     own(p) = [e for e in 1:nelements(t) if t.components[t.elem_comp[e]].name in walls(p)]
     Tr(H, es) = (sum(H[e] * t.elem_area[e] for e in es) / sum(t.elem_area[e] for e in es) / SIGMA_SB)^0.25
     @test all(isapprox(h.cavity_Tr[p], [Tr(H, own(p)) for H in h.record]; rtol = 1e-12) for p in (:a, :b))
     # two cavities, two temperatures; together they are the history's wall temperature
     @test all(abs.(h.cavity_Tr[:a] .- h.cavity_Tr[:b]) .> 1.0)
     @test h.cavity_Tr[:all] == h.wall_Tr
-    # without `cavities` the history is bitwise the same
+    # Without `cavities` the history is unchanged.
     @test isempty(h0.cavity_Tr) && all(k -> k === :cavity_Tr || isequal(h0[k], h[k]), keys(h))
     # `wall_temperature` on one solution
     sol = solve(m, deposit(op, q))
     @test wall_temperature(sol, walls(:b)...) ≈ Tr(sol.H, own(:b)) rtol = 1e-12
-    # `per_component`: the energy per piece, not summed into the parts; each part's sum of
-    # its pieces is the by-part history's, and every other field is unchanged
+    # `per_component` gives the energy per piece; the pieces are not summed into the parts.
+    # The sum over the pieces of each part equals the by-part history, and every other field
+    # is unchanged.
     hc = run(; per_component = true)
     @test haskey(hc.absorbed, :a_cap_top) && !haskey(hc.absorbed, :a) && haskey(h0.absorbed, :a)
     bypart(d, p) = sum(v for (k, v) in d if startswith(String(k), String(p) * "_"))
@@ -75,36 +76,39 @@ using Briareus: RadiationSolution
     @test dante(narrow, bb(lit(:a))).intensity ≈ hole(:a) rtol = 1e-3       # measured 1.2e-4
     @test dante(wide, bb(lit(:a) .+ lit(:b))).intensity ≈ hole(:a) + hole(:b) rtol = 1e-3   # 1.4e-4
     @test issubset((:a, :b), keys(visible_area(wide, t)))
-    # the built-in Dante 1 sees the whole target: that field at TCC, Dante 1's channels;
-    # this target has no `leh_bottom` to quote Tr over, so only the power
+    # The built-in Dante 1, with its field at TCC and the Dante 1 channels, sees the whole
+    # target. This target does not have a `leh_bottom` to quote Tr over, so only the power
+    # is checked.
     fv = dante1()
     @test fv.field_of_view == 60.0 && fv.center == zero(fv.center) && fv.through === :leh_bottom &&
           (fv.theta, fv.phi) == (143.25, 274.0) && length(fv.channels) == 18
     r = dante(fv, bb(lit(:a) .+ lit(:b)))
     @test isnan(r.Tr) && isapprox(r.intensity, hole(:a) + hole(:b); rtol = 5e-3)   # 1.8e-3 (400 pixels)
 
-    # a field of view per channel: channel 1 with a separate field, the others the view field.
-    # The blackbodies as spectra (every element's groups its Planck fractions).
+    # Each channel can have a field of view. Channel 1 has a separate field, and the others
+    # use the view field. The blackbodies are given as spectra, with the Planck fractions in
+    # the groups of every element.
     E = spectral_edges()
     spec(B) = (G = length(E) - 1; Z = zeros(n, G);
                SpectralSolution(bb(B), E, Z, B .* planck_fractions(T0, E)', Z, Z, fill(T0, n), z, zeros(G), false))
     sa, sb, sab = spec(lit(:a)), spec(lit(:b)), spec(lit(:a) .+ lit(:b))
     chans(f) = [c.number == 1 ? Briareus._with_field(c, f) : Briareus._with_field(c, nothing) for c in dante1_channels()]
     chview(f; kw...) = DanteView(d1...; through = :a_leh_bottom, channels = chans(f), kw...)
-    # a channel given the view field records bitwise what it records without one
+    # A channel given the view field records the same values as without one.
     same = dante(chview(60.0; field_of_view = 60.0), sab)
     @test all(k -> isequal(same[k], dante(chview(nothing; field_of_view = 60.0), sab)[k]),
               (:intensity, :Tr, :spectrum, :channels, :color_temperature, :Tr_unfold))
-    # 8 mm about a in the 60 mm field: channel 1 sees nothing of b and reads, from a, channel 1
-    # of the 8 mm view (the same rays; the in-group spectral shape is each view's
-    # Tr_open, 1.5e-6 apart here); the other channels see both cavities
+    # With 8 mm about a in the 60 mm field, channel 1 sees nothing of b and records from a
+    # the channel 1 signal of the 8 mm view. The rays are the same, and the in-group
+    # spectral shape is the Tr_open of each view; the two differ by 1.5e-6 in this case. The
+    # other channels see both cavities.
     eight(s) = dante(chview(8.0; field_of_view = 60.0, center = :a), s).channels
     @test eight(sb)[1] == 0 && all(>(0), eight(sb)[2:end])
     @test eight(sa)[1] ≈ dante(chview(nothing; field_of_view = 8.0, center = :a), sa).channels[1] rtol = 1e-4
     @test eight(sa)[1] > 0
     @test eight(sab)[2:end] == dante(chview(nothing; field_of_view = 60.0, center = :a), sab).channels[2:end]
-    # through a's hole alone: a channel field that holds the hole changes nothing; 8 mm
-    # about TCC (a's hole lies 6 mm off it) sees none of it
+    # The next views see only the hole of a. A channel field that contains the hole changes
+    # nothing, and a field of 8 mm about TCC sees none of the hole, which lies 6 mm off TCC.
     hv(f) = dante(chview(f; center = zero(Briareus.Vec3)), sa).channels
     @test hv(60.0) == hv(nothing) && hv(8.0)[1] == 0 && hv(8.0)[2:end] == hv(nothing)[2:end]
 end
@@ -133,8 +137,8 @@ end
                         surface = DiskSurface(center = (0, 0, R * c)))
         return [translate(named(x, p), center) for x in (wall, hole)], (1 + c) / 2
     end
-    # two of them side by side, and a black disk in the open above a's hole, which a's
-    # wall sees through it: an element in no cavity
+    # Two of them stand side by side, with a black disk in the open above the hole of a,
+    # which the wall of a sees through the hole. The disk is an element in no cavity.
     R, α = 1.5, 0.8
     ca, w = sphere_cavity(:a, R, 10, 24, (-4.0, 0.0, 0.0); albedo = α)
     cb, _ = sphere_cavity(:b, R, 10, 24, (4.0, 0.0, 0.0); albedo = α)
@@ -146,7 +150,7 @@ end
     @test all(c -> maximum(abs.(rows(F0, c) .- 1)) > 1e-3, (a, b))            # 1.6e-2 on the polar band
     @test open_fraction(t; cavity = :a).fraction == 0 && open_fraction(t; cavity = b).fraction == 0
     @test open_fraction(t; cavity = :a_wall).fraction > 0.05                   # without its hole
-    # each cavity balanced separately: its rows sum to one over its elements
+    # Each cavity is balanced separately, and its rows sum to one over its elements.
     model(closed) = RadiationModel(t; F = copy(F0), closed)
     m = model([:a, :b])
     @test all(c -> maximum(abs.(rows(m.F, c) .- 1)) < 1e-10, (a, b))
@@ -154,9 +158,10 @@ end
     @test model([1:nelements(t)]).F == model(true).F
     @test_throws ArgumentError model([:a, [first(a)]])
     @test_throws ArgumentError model(:a)
-    # the wall's mean incident flux against the closed form: per-cavity balancing moves it
-    # toward it (3.3e-3 → 3.7e-4); balancing the whole target, the free disk's rows and
-    # the wall's view of it with it, is wrong by 36%
+    # The mean incident flux on the wall is checked against the closed form. Per-cavity
+    # balancing brings it closer, from 3.3e-3 to 3.7e-4. Balancing the whole target, which
+    # includes the rows of the free disk and the view of the disk from the wall, is wrong by
+    # 36%.
     wa, wb = elements(t, :a_wall), elements(t, :b_wall)
     P = zeros(nelements(t))
     P[wa] .= t.elem_area[wa]
@@ -205,8 +210,9 @@ end
     s = solve(m, P)
     eb = energy_balance(s; by = :component)
     src = sum(P)
-    # within the view factors' error of the closed forms (raw: −6.0e-4, −3.0e-4, −3.2e-5;
-    # balanced: −7.2e-5, +3.1e-4, −3.5e-5), and nothing lost
+    # The results agree with the closed forms within the error of the view factors, and
+    # nothing is lost. The raw errors are −6.0e-4, −3.0e-4 and −3.2e-5; the balanced errors
+    # are −7.2e-5, +3.1e-4 and −3.5e-5.
     @test eb.escaped[:top_leh_top] / src ≈ Fl rtol = 1e-3
     @test eb.absorbed[:top_cap_top] / src ≈ Fe - Fl rtol = 1e-3
     @test eb.absorbed[:top_wall] / src ≈ 1 - Fe rtol = 1e-3

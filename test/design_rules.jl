@@ -80,8 +80,9 @@ Briareus.keepout_clearance(::_NaNKeepOut, beams::AbstractVector{<:Beam}) = fill(
     @test [power_fraction(ev, :stalk), clipped_fraction(ev, :stalk)] .* P ≈ [cp[:stalk], cp[:stalk_outside]] rtol = 1e-12
     @test clipped_fraction(ev, (c.name for c in t.components)...) ≈ clipped_fraction(ev) rtol = 1e-12
     @test sum(n -> on(ev, n), parts(t)) + missed_fraction(ev) ≈ 1 rtol = 1e-12
-    # against the reference ray trace (both sides of each component; the operator's
-    # sampling of the spot edge at the hardware: 2e-3 and 8e-4 measured)
+    # The result is checked against the reference ray trace on both sides of each component.
+    # The sampling of the spot edge at the hardware by the operator limits the agreement to
+    # the measured 2e-3 and 8e-4.
     rt = raytrace_component_power(t, ev.beams; nspot = 121)
     @test [on(ev, n) for n in (:shield, :stalk)] ≈
           [sum(rt[:, part_pieces(t, n)]) / P for n in (:shield, :stalk)] rtol = 5e-3
@@ -106,9 +107,10 @@ end
     c = [hardware_clearance(k, beams) for k in ks]
     w = [worst(:shield), worst(:stalk)]
     @test any(<(0), c[1]) && any(>(0), c[1]) && any(<(0), c[2]) && any(>(0), c[2])
-    # where both judge the same points (clearance skips those hidden from the beam, so
-    # it reads higher above 1.2 mm on the shield), deep violations included: within its
-    # 1e-7 mm resolution. Everywhere the keep-out is the lower: conservative
+    # Where both judge the same points, deep violations included, they agree within the 1e-7
+    # mm resolution of the report. The clearance skips points hidden from the beam, so it is
+    # higher above 1.2 mm on the shield. Everywhere the keep-out is the lower value, which
+    # is conservative.
     near = [findall(x -> x < 1.0, wi) for wi in w]
     @test sum(length, near) >= 12 && any(j -> any(<(-0.75), w[j][near[j]]), 1:2)
     @test maximum(maximum(abs.(c[j][near[j]] .- w[j][near[j]])) for j in 1:2) < 1e-6
@@ -131,8 +133,8 @@ end
     end
     @test err < 1e-6
 
-    # the keep-out's penalty, alone and beside another keep-out, and its quantity on an
-    # evaluation
+    # The penalty of the keep-out is checked by itself and beside another keep-out, with its
+    # quantity on an evaluation.
     kp = HardwareKeepOut(t, (:shield, :stalk); targets = (:wall, :capsule), minimum = 0.2, weight = 3.0)
     cp = hardware_clearance(kp, beams)
     @test all(isapprox.(cp, min.(c[1], c[2]); atol = 1e-12))
@@ -156,10 +158,10 @@ end
 end
 
 @testset "design rules: TaLIS 3ω clearance as a keep-out" begin
-    # closed form: two square plates along a beam down −z, one near TCC and one far from
-    # it; each plate's minimum lies at the middle of its far edge (the f-cone and the
-    # tolerance both grow upstream), and the closest point jumps from the far plate to
-    # the near one as the aim crosses x = 3·cone
+    # The closed form has two square plates along a beam down −z, one near TCC and one far
+    # from it. The minimum of each plate lies at the middle of its far edge, because the
+    # f-cone and the tolerance both grow upstream. The closest point jumps from the far
+    # plate to the near one as the aim crosses x = 3·cone.
     near = foil(:near, (1.0, 0.0, 2.0), (-1.0, 0.0, 0.0); width = 2.0, n = 2)
     far = foil(:far, (-1.0, 0.0, 8.0), (1.0, 0.0, 0.0); width = 2.0, n = 2)
     tp = Target([near, far])
@@ -175,7 +177,8 @@ end
     post = [(x < 3cone ? 1 + x - 9cone - tα * sqrt(82) : 1 - x - 3cone - tα * sqrt(10)) - R - 0.075 - cone for x in xs]
     @test maximum(abs, diff(post)) > 0.04
     @test maximum(abs, diff(c)) <= 1.001e-3          # 1-Lipschitz in the aim
-    # the landing: a beam along −x through the near plate, aimed at TCC's plane x = 0
+    # For the landing, a beam along −x passes through the near plate, aimed at the plane
+    # x = 0 through TCC.
     side = Beam("side"; theta = 90, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 2.0))
     hc(part; kw...) = only(hardware_clearance(HardwareKeepOut(tp, part; kw...), [side]))
     @test hc(:near; targets = (:near,)) == Inf                 # lands on the part itself
@@ -196,10 +199,10 @@ end
     w = [[r.worst for r in rs] for rs in rows]
     @test all(all(isfinite.(c[j]) .== isfinite.(w[j])) for j in 1:2)
     @test sum(j -> count(<(0.5), c[j]), 1:2) >= 20 && sum(j -> count(x -> 0.5 < x < Inf, c[j]), 1:2) >= 10
-    # talis_check's worst points inside the envelope next to the major axis (where its
-    # point–ellipse distance lost digits before 2026-11-18, reading up to 6e-6 mm low):
-    # there the keep-out is also checked against the closed form on the axis,
-    # d = −B √(1 − u²/(A² − B²)), at talis_check's point
+    # Some worst points of talis_check lie inside the envelope next to the major axis.
+    # Before 2026-11-18 the point–ellipse distance of talis_check lost digits at these
+    # points and was up to 6e-6 mm low. At these points the keep-out is also checked against
+    # the closed form on the axis, d = −B √(1 − u²/(A² − B²)), at the point of talis_check.
     medial = [falses(length(beams)) for _ in 1:2]
     onaxis = [fill(Inf, length(beams)) for _ in 1:2]
     for j in 1:2, (i, b) in enumerate(beams)
@@ -248,10 +251,10 @@ end
 end
 
 @testset "design rules: TaLIS 3ω capture as a quantity" begin
-    # closed form: a square foil (half side h) at TCC normal to a round beam down −z, the
-    # aim moved across its edge x = h. The margin lies at the middle of that edge (the
-    # tolerance about TCC there h·tan α); past the edge the continuation less twice the
-    # axis's distance from it is the same line
+    # The closed form has a square foil of half side h at TCC, normal to a round beam down
+    # −z, with the aim moved across the edge x = h. The margin lies at the middle of that
+    # edge, where the tolerance about TCC is h·tan α. Past the edge, the continuation less
+    # twice the distance of the axis from the edge is the same line.
     h = 1.0
     sq = Target([foil(:sq, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0); width = 2h, n = 4)])
     k = CaptureKeepIn(sq, :sq)
@@ -262,12 +265,13 @@ end
     c = capture_margin(k, [remake(b0; aim = (x, 0.0, 0.0)) for x in xs])
     @test c ≈ [h - x - R - tα * h - 0.075 - cone for x in xs] rtol = 1e-12
     @test keepout_penalty(k, [b0]) == 0 && keepout_clearance(k, [b0]) == capture_margin(k, [b0])
-    # a closed part has no substrate edge
+    # A closed part does not have a substrate edge.
     tball = Target([Component(:ball, icosphere_mesh(1.0; n = 4), gold())])
     kball = CaptureKeepIn(tball, :ball)
     @test only(capture_margin(kball, [b0])) == Inf
-    # and a beam whose axis misses it has no margin to continue: -Inf, which the penalty
-    # and the constraint refuse with the keep-out and the beam named (+Inf adds nothing)
+    # A beam whose axis misses the part does not have a margin to continue, so the margin
+    # is -Inf. The penalty and the constraint refuse it and name the keep-out and the beam
+    # (+Inf adds nothing).
     miss = remake(b0; name = "stray", aim = (5.0, 0.0, 0.0))
     @test only(capture_margin(kball, [miss])) == -Inf
     @test keepout_penalty(kball, [b0]) == 0
@@ -299,9 +303,9 @@ end
     # where it misses (the report's −Inf), finite and negative
     @test all(isfinite, c) && all(<(0), c[.!landed])
     @test keepout_penalty(kc, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
-    # continuity across the edge: a beam's aim moved along the foil's long axis through
-    # its end: no step where the axis leaves the foil (3-Lipschitz in the aim), and falling
-    # beyond it
+    # For continuity across the edge, the aim of a beam is moved along the long axis of the
+    # foil through its end. The margin does not step where the axis leaves the foil, since
+    # it is 3-Lipschitz in the aim, and it falls beyond the end.
     b = beams[findmax(c)[2]]
     e = Vec3(-1.0, 0.0, 0.0)                 # in the foil's plane, along its long side
     ys = -0.3:0.005:0.6
@@ -323,10 +327,10 @@ end
 end
 
 @testset "design rules: TaLIS 3ω incidence as a quantity" begin
-    # closed form: a part of two plates, one normal to a round beam down −z (it lands
-    # there) and one tilted 60° beside it, its near edge at x = 1.2 on the focal plane.
-    # The tilted plate counts in full once the footprint reaches it and fades at
-    # `sharpness` degrees per mm of clearance outside it
+    # The closed form has a part of two plates. One is normal to a round beam down −z, where
+    # the beam is deposited, and one is tilted 60° beside it with the near edge at x = 1.2
+    # on the focal plane. The tilted plate counts in full once the footprint reaches it and
+    # fades at `sharpness` degrees per mm of clearance outside it.
     pa = foil(:pa, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0); width = 2.0, n = 4)
     pb = foil(:pb, (1.2 + 0.5cosd(60), 0.0, 0.5sind(60)), (-sind(60), 0.0, cosd(60)); width = 1.0, height = 2.0, n = 2)
     tp = Target([Component(c.name, c.mesh, c.material; part = :p) for c in (pa, pb)])
@@ -353,9 +357,9 @@ end
     # no landing, no incidence
     @test only(incidence_angle(k, [remake(b0; aim = (5.0, 0.0, 0.0))])) == -Inf
 
-    # against talis_check's :incidence_3w rows on the mock-up hohlraum: the wall and the
-    # capsule with their exact normals, every quad (the largest angle on each lies
-    # inside the footprint: no fading)
+    # The angles are checked against the :incidence_3w rows of talis_check on the mock-up
+    # hohlraum, for the wall and the capsule with their exact normals and for every quad.
+    # The largest angle on each lies inside the footprint, so there is no fading.
     t = DR_TARGET
     beams = apply(GroupPointing(nif_quads(); fields = (:z, :r)), DR_X)
     rep = talis_check(t, beams; capture = (:wall, :capsule), hardware = (), omega1 = false)
@@ -366,11 +370,11 @@ end
 end
 
 @testset "design rules: TaLIS 1ω clearance as a quantity" begin
-    # closed form: one beamlet's footprint (an `offsets` entry: the square displaced along
-    # +x) without the taper (a prism) and without the focus error, and a plate across the
-    # gap between the beam and the footprint, along the beam at x = 4: the footprint's
-    # near edge lies at x = aim + 4.45, so every point of the plate is 0.45 + aim from it,
-    # and the tolerance is largest at the plate's corners, √21 mm from TCC
+    # The closed form takes the footprint of one beamlet, an `offsets` entry that displaces
+    # the square along +x, without the taper (a prism) and without the focus error. A plate
+    # lies across the gap between the beam and the footprint, along the beam at x = 4. The
+    # near edge of the footprint lies at x = aim + 4.45, so every point of the plate is 0.45
+    # + aim from it. The tolerance is largest at the corners of the plate, √21 mm from TCC.
     b0 = Beam("b"; theta = 0, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 0.0))
     pl = Target([foil(:pl, (4.0, 0.0, 1.0), (-1.0, 0.0, 0.0); width = 2.0, n = 2)])
     k = Omega1KeepOut(pl, :pl; offsets = Dict("b" => 0.0), omega1_focus = Inf, lens_distance = Inf, focus = 0.0)
@@ -395,7 +399,7 @@ end
     c = omega1_clearance(ko, beams)
     @test any(<(0.2), c) && any(>(0.2), c)
     @test keepout_penalty(ko, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in c) rtol = 1e-12
-    # continuity: an aim scan, no step beyond the Lipschitz bound
+    # An aim scan shows no step beyond the Lipschitz bound.
     b = beams[argmin(c)]
     ys = -0.5:0.01:0.5
     m = omega1_clearance(ko, [remake(b; aim = Tuple(b.aim + Vec3(0.0, y, 0.0))) for y in ys])

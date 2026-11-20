@@ -1,8 +1,8 @@
-# The Drive step: the Scenario (deposition operator, view factors and capsule flux
-# response; built once per target and beam ports, on a worker) and its evaluation for
-# the current pointing (deposition, radiosity solve, capsule modes, power accounting).
-# Pointing, power and on/off edits only re-evaluate; the scenario is rebuilt when the
-# target or the beam ports change.
+# The Drive step builds the Scenario, with the deposition operator, view factors and capsule
+# flux response, once per target and beam ports on a worker. It then evaluates the scenario
+# for the current pointing: deposition, radiosity solve, capsule modes and power accounting.
+# Pointing, power and on/off edits only re-evaluate; the scenario is rebuilt when the target
+# or the beam ports change.
 
 """
 Element fields the 3D view colors the target by (all W/cm²): `:laser` (absorbed
@@ -15,9 +15,9 @@ const DRIVE_FIELD_LABELS = Dict(:laser => "Absorbed laser intensity (W/cm²)",
                                 :incident => "Incident x-ray flux (W/cm²)")
 
 """
-Beam models of the drive's laser deposition: `:fcone` (Briareus's: the focal spot
-convolved over the f-cone) and `:visrad` (VisRad's, `VisRadProfile`, so that a design
-exported to VisRad deposits there as here).
+Beam models of the drive's laser deposition: `:fcone`, the Briareus model of the focal
+spot convolved over the f-cone, and `:visrad`, the VisRad model (`VisRadProfile`), so
+that a design exported to VisRad deposits in VisRad as it does in Briareus.
 """
 const BEAM_MODELS = (:fcone, :visrad)
 
@@ -168,8 +168,8 @@ end
 The unconverted 1ω and 2ω power of every beam as a fraction of its 3ω power (≥ 0; 0
 turns the color off). The beams whose 1ω or 2ω light takes part
 ([`set_participation!`](@ref)) then add `unconverted_deposition`'s absorbed power to the
-drive. There is no default: the NIF User Guide gives no fraction (most of the light is
-1ω, more for shaped pulses), so the ratio is an input, as in VisRad.
+drive. There is no default, since the NIF User Guide does not give a fraction (most of
+the light is 1ω, more for shaped pulses); the ratio is an input, as in VisRad.
 """
 function set_unconverted_ratio!(dr::DriveState, omega1::Real, omega2::Real)
     (isfinite(omega1) && isfinite(omega2) && omega1 >= 0 && omega2 >= 0) ||
@@ -181,9 +181,9 @@ end
 # The deposition profile of the drive's scenario (`nothing`: the f-cone model).
 _deposition_profile(dr::DriveState) = dr.beam_model[] === :visrad ? dr.profile[] : nothing
 
-# A `VisRadProfile` as plain data (session files, and the scenario's key: profiles
-# compare by value). TOML has no `nothing`: an absent envelope is VisRad's default
-# ratio.
+# A `VisRadProfile` as plain data, for session files and for the key of the scenario,
+# since profiles compare by value. TOML has no `nothing`, so an absent envelope is the
+# default VisRad ratio.
 function _profile_state(p::VisRadProfile)
     d = Dict{String,Any}()
     p.envelope === nothing ||
@@ -230,7 +230,8 @@ function _render_image(dr::DriveState)
     h = cam.width / 2
     x = range(-h, h; length = cam.nx)
     y = range(-h, h; length = cam.ny)
-    # rows from the top: as a matrix over (x, y) with y increasing
+    # The rows run from the top, so they are turned into a matrix over (x, y) with y
+    # increasing.
     values = permutedims(to_Wcm2.(img)[end:-1:1, :])
     return (; x, y, values, title = "X-ray radiance viewed from " * _view_angles(-cam.dir))
 end
@@ -350,7 +351,7 @@ function _fitted_target(t::Target, refs::AbstractDict)
     end
     fmap = [get(at, (tf.components[tf.elem_comp[e]].part, tf.elem_side[e], tf.elem_centroid[e]), 0)
             for e in 1:nelements(tf)]
-    all(>(0), fmap) && allunique(fmap) || return t, nothing      # (not expected: keep the flat target)
+    all(>(0), fmap) && allunique(fmap) || return t, nothing      # not expected; keep the flat target
     return tf, fmap
 end
 
@@ -402,13 +403,13 @@ end
 "Whether the latest cavity is a sealed pocket (no open area: a film closes the point in)."
 cavity_sealed(dr::DriveState) = dr.enclosure[] !== nothing && _sealed(dr.enclosure[])
 
-# A pocket: nothing escapes from the point, and at most two parts bound it (a capsule in
-# its tent, say).
+# Whether the cavity is a pocket: nothing escapes from the point, and at most two parts
+# bound it, as for a capsule in its tent.
 _sealed(enc) = enc.escape < 1e-3 && length(Briareus.parts(enc.target)) <= 2
 
-# The cavity around a point, and when films seal it into a pocket, the part of the
-# pocket whose leaving out opens the largest cavity (the film: a tent or a window, tried
-# among the pocket's three largest parts). Returns (enclosure, index, film or nothing).
+# The cavity around a point and, when films seal it into a pocket, the part of the pocket
+# whose omission opens the largest cavity. That part is the film, a tent or a window, tried
+# among the three largest parts of the pocket. Returns (enclosure, index, film or nothing).
 function _open_cavity(t::Target, point, films)
     enc, index = _cavity(t, point, films)
     _sealed(enc) || return enc, index, nothing
@@ -428,10 +429,11 @@ end
 _has_part(t::Target, name) =
     name !== nothing && (name in component_names(t) || any(c -> c.part === name, t.components))
 
-# The names core's `observe` keywords take for a scenario's observed elements, `()` when it
-# observes none: each part whose components are all observed (a capsule, a CAD capsule's
-# fitted pieces), else the observed components by name (a hohlraum part's cap, never its
-# part: the part's name stands for all of its pieces).
+# The names that the `observe` keywords of the core take for the observed elements of a
+# scenario, `()` when it observes none. These are each part whose components are all
+# observed, such as a capsule or the fitted pieces of a CAD capsule, and otherwise the
+# observed components by name, such as the cap of a hohlraum part. The part itself is never
+# named, since the part name stands for all of its pieces.
 function _observed_parts(s::Scenario)
     t = s.target
     comps = unique([t.elem_comp[e] for e in s.observed])
@@ -469,19 +471,19 @@ struct _CavityVolume
     holed::Bool                               # a boundary element left out of the calculations
 end
 
-# Build a scenario for a target and the table's beams (all of them: disabled beams are
-# evaluated at zero power, so on/off needs no rebuild). `observed` (a part or component
-# name, [`observed_name`](@ref)) is the surface the radiation model observes;
-# `cavities` (`_cavity_volumes`) are the design's cavities, whose view factors are
-# balanced separately when rays find it closed (`_closed_cavities`). Every target gets a radiation model for the B/H fields, unless it is too
-# large for its view factors (`radiation_size`: laser only). With `cavity = (point,
-# films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
-# pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
-# a point in the open (most of its rays escape: a backlighter foil and its shields, say)
-# keeps the whole target. The cavity is balanced per cavity of `cavities` it holds that
-# rays find closed, else as one when apertures close it (`_cavity_closure`). `profile` is
-# the deposition's beam model (`nothing`: the f-cone; a `VisRadProfile`: VisRad's, see
-# `set_beam_model!`).
+# Build a scenario for a target and all the beams of the table. Disabled beams are evaluated
+# at zero power, so on/off does not need a rebuild. `observed` (a part or component name,
+# [`observed_name`](@ref)) is the surface the radiation model observes; `cavities`
+# (`_cavity_volumes`) are the design's cavities, whose view factors are balanced separately
+# when rays find it closed (`_closed_cavities`). Every target gets a radiation model for the
+# B/H fields, unless it is too large for its view factors (`radiation_size`: laser only).
+# With `cavity = (point, films)` the scenario is built on the cavity around the point (see
+# `set_cavity!`); a pocket sealed by a film is opened by leaving that film out too
+# (`_open_cavity`), and a point in the open, where most of its rays escape as for a
+# backlighter foil and its shields, keeps the whole target. The cavity is balanced per
+# cavity of `cavities` it holds that rays find closed, else as one when apertures close it
+# (`_cavity_closure`). `profile` is the beam model of the deposition: `nothing` for the
+# f-cone, or a `VisRadProfile` for the VisRad model (see `set_beam_model!`).
 # `references` (CAD part name => file facets, `_fit_references`) splits those parts into
 # their fitted curved pieces in the drive's target (`_fitted_target`). `foil`: the
 # backlighter foil of the flux map (`active_foil`). Returns `(; s,
@@ -524,9 +526,10 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; cavities = _Ca
     if enc === nothing
         closed = _closure_kw(t, cs)
     else
-        # the cavity's hohlraum parts closed by rays: each balanced separately, as the whole
-        # design's are, rather than the enclosure (what it reaches through an entrance
-        # hole, outside the hohlraum, keeps its raw rows); else the enclosure as one
+        # The hohlraum parts of the cavity that rays find closed are each balanced
+        # separately, as those of the whole design are, and the enclosure is not balanced.
+        # What the enclosure reaches through an entrance hole, outside the hohlraum, keeps
+        # its raw rows. Otherwise the enclosure is balanced as one.
         cs = filter(c -> !isempty(c.elements), cs)
         if any(c -> c.balanced, cs)
             closed = _closure_kw(t, cs)
@@ -554,12 +557,12 @@ factors of a cavity that has apertures (`closed = true`, `enforce_closure!`), an
 each cavity of the design's hohlraum parts (each balanced separately). Adding
 apertures is the user's declaration that they close the cavity's openings; this guard
 keeps a cavity with an opening left without one, or with an aperture facing out of the
-cavity (dropped by the selection), unbalanced. An engineering default, not a facility
-criterion, set from the fractions measured in the research notes ("Closure on bored,
-windowed and CAD cavities"): cracks where meshes meet 2–7 × 10⁻⁴ (2.7 × 10⁻³ on a coarse
-hohlraum before its entrance holes took the caps' count) and a 40 µm waist gap 4 × 10⁻³
-lie below it; a CAD cavity's two open LEHs,
-7 × 10⁻², lie well above it.
+cavity (dropped by the selection), unbalanced. The value is an engineering default set
+from the fractions measured in the research notes ("Closure on bored, windowed and CAD
+cavities"); no facility criterion sets it. Cracks where meshes meet, 2–7 × 10⁻⁴
+(2.7 × 10⁻³ on a coarse hohlraum before its entrance holes took the caps' count), and a
+40 µm waist gap, 4 × 10⁻³, lie below it; the two open LEHs of a CAD cavity, 7 × 10⁻²,
+lie well above it.
 """
 const CAVITY_MAX_LEAK = 1e-2
 
@@ -672,7 +675,7 @@ function _flat_face(t::Target, es)
     return all(e -> dot(t.elem_normal[e], n) > 1 - 1e-9, es)
 end
 
-# Whether a scenario observes a flat face rather than a capsule.
+# Whether a scenario observes a flat face instead of a capsule.
 _observed_flat(s::Scenario) = _flat_face(s.target, s.observed)
 
 # A flat observed face's incident x-ray flux `H` (TW/mm²) over its elements: mean, peak
@@ -710,10 +713,10 @@ end
 
 # ---------------------------------------------------------------- evaluation
 
-# Evaluate beams on a scenario: deposition, radiosity, modes, power accounting, map.
-# `ratio`: `nothing`, or the unconverted power fractions per beam, `(; omega1, omega2)`
-# (vectors), deposited with `colors` (`UnconvertedColor`s: footprints, and absorption and
-# x-ray conversion relative to 3ω).
+# Evaluate beams on a scenario: deposition, radiosity, modes, power accounting and map.
+# `ratio` is `nothing` or the unconverted power fractions per beam, `(; omega1, omega2)`
+# as vectors, deposited with `colors`. The `UnconvertedColor`s give the footprints and the
+# absorption and x-ray conversion relative to 3ω.
 #
 # With unconverted light, the evaluation's deposition is the absorbed power of every
 # color (what the laser coloring, power accounting and back-side losses show:
@@ -857,11 +860,11 @@ function power_rows(ev::Evaluation; minor::Real = 1e-3)
     return rows
 end
 
-# A fraction as a percentage without trailing zeros: 1e-3 → "0.1%".
+# A fraction as a percentage without trailing zeros; 1e-3 gives "0.1%".
 _pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), "%"))
 
 # Text with a no-break space before each unit and after each mode symbol (ε₂), so that a
-# wrapped line keeps a number with its unit and its symbol.
+# wrapped line keeps each number with its unit and symbol.
 _nobreak(s::AbstractString) = replace(s, r"(?<=ε[₀-₉]) | (?=%|W/cm²|eV|mm|TW)" => string(Char(0xa0)))
 
 # The front elements of foil `foil` (a part or component name of `t`) within `radius` of

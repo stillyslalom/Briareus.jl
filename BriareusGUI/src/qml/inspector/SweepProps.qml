@@ -1,5 +1,6 @@
-// The placement sweep: what moves, along which frame's axis or through which number of
-// its placement steps, the values, the checks at each step, the sampling, run.
+// The placement sweep page sets what moves, along the axis of which frame or through which
+// number of its placement steps, the values, the checks at each step and the sampling,
+// and runs the sweep.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

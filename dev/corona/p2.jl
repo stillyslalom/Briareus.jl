@@ -1,10 +1,11 @@
-# What a spherical corona drops: the OMEGA 40-beam PDD case (public inputs; review §4.1:
-# rings 21.4°/42.0°/58.9° of `omega_beams` shifted 90/150/150 µm normal to the beam toward
-# the equator, SG4 r₀ = 308 µm, n = 3.66, f/6.7) in an isothermal exponential corona
-# (r_c = 0.40 mm, L = 0.08 mm, η⊥ = 1 - e^{-2.4}, truncated at r_c + 14L; an engineering
-# snapshot) whose critical radius carries a P2, n_e/n_c = exp(-(r - r_c(1 + ε P₂))/L):
-# 3-D ray tracing (Corona.jl) against the package's spherical `CoronaOperator`, which
-# returns the ε = 0 result for every ε. Numbers: research notes, "Corona model prototype".
+# This study shows what a spherical corona drops. It takes the OMEGA 40-beam PDD case from
+# public inputs (review §4.1): the rings 21.4°/42.0°/58.9° of `omega_beams` shifted
+# 90/150/150 µm normal to the beam toward the equator, with SG4 r₀ = 308 µm, n = 3.66 and
+# f/6.7. The corona is an isothermal exponential engineering snapshot with r_c = 0.40 mm, L
+# = 0.08 mm and η⊥ = 1 - e^{-2.4}, truncated at r_c + 14L, whose critical radius carries a
+# P2, n_e/n_c = exp(-(r - r_c(1 + ε P₂))/L). 3-D ray tracing (Corona.jl) is compared with
+# the spherical `CoronaOperator` of the package, which returns the ε = 0 result for every ε.
+# The numbers are in the research notes, "Corona model prototype".
 #   julia --project=. -t 8 dev/corona/p2.jl [ε] [hlat] [hτ]
 include(joinpath(@__DIR__, "Corona.jl"))
 using .Corona, Briareus, Printf

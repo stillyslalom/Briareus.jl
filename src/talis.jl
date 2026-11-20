@@ -1,6 +1,7 @@
-# NIF TaLIS target-configuration checks: 3ω capture and clearance, 1ω clearance and
-# unconverted-light management, and the geometric hardware rules Briareus can
-# represent, judged on the worst case over pointing, positioning and focus errors.
+# NIF TaLIS target-configuration checks. They cover 3ω capture and clearance, 1ω clearance
+# and unconverted-light management, and the geometric hardware rules Briareus can
+# represent. Each check is judged on the worst case over pointing, positioning and focus
+# errors.
 
 "Source of the rules implemented by `talis_check`."
 const TALIS_SOURCE = "NIF \"TCC Configuration Requirements\" (NIF User Forum, 27 Oct 2018)"
@@ -26,7 +27,7 @@ const _TALIS_LEH = "LEH clearance (an entrance-hole edge, not hardware): " *
 """
     TaLISRow
 
-One check of `talis_check`: a (beam, rule, component) triple.
+One check of `talis_check`, for a (beam, rule, component) triple.
 
 - `beam` — beam name (`"upper beams"`/`"lower beams"` for `:tas_stay_in`)
 - `rule` — `:capture_3w`, `:incidence_3w`, `:clearance_3w`, `:clearance_1w`,
@@ -59,7 +60,7 @@ end
 """
     TaLISReport
 
-Result of `talis_check`: `rows` (one `TaLISRow` per beam, rule and component), the
+Result of `talis_check`, with `rows` (one `TaLISRow` per beam, rule and component), the
 `settings` used (thresholds, error set, tolerance interpretation) and `notes` on checks
 that were not evaluated. See `violations`, `write_talis_csv`.
 """
@@ -69,8 +70,8 @@ struct TaLISReport
     notes::Vector{String}
 end
 
-# The rule tolerance: a lateral allowance tan(α)·r, r the distance of the point from
-# the pivot.
+# The rule tolerance is a lateral allowance tan(α)·r, with r the distance of the point
+# from the pivot.
 struct _TaLISTol
     tanα::Float64
     pivot::Symbol            # :tcc, :aim, :max or :point
@@ -109,64 +110,67 @@ NIF TaLIS target-configuration checks from the "TCC Configuration Requirements"
 orthogonal to the beam, as the document states, and judged on the worst case over the
 error set (and, except for incidence, the rule tolerance), never at nominal.
 
-`capture` lists the components that beams are meant to land on (backlighter foils, capture
-surfaces, a hohlraum wall). Each beam's *landing component* is the first of them its
-nominal axis meets. `leh` lists the components that form the edge of a laser entrance
-hole the beams pass through (a hohlraum's end caps or LEH lips, e.g.
-`(:cap_top, :cap_bottom)` for [`hohlraum`](@ref)); they are checked for 3ω clearance
-like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `leh`,
-`omega1_components`, `diagnostics` and `curvature`, a component may be named by its part: a part split for computation
-(`curved_components`) is checked as one, its rows under the part's name.
+`capture` lists the components that beams are meant to land on, such as backlighter foils,
+capture surfaces and hohlraum walls. The *landing component* of a beam is the first of
+them its nominal axis meets. `leh` lists the components that form the edge of a laser
+entrance hole the beams pass through (the end caps or LEH lips of a hohlraum, e.g.
+`(:cap_top, :cap_bottom)` for [`hohlraum`](@ref)); they are checked for 3ω clearance like
+`hardware`, whether or not `hardware` names them. Here and in `hardware`, `leh`,
+`omega1_components`, `diagnostics` and `curvature`, a component may be named by its part:
+a part split for computation (`curved_components`) is checked as one, and its rows are
+listed under the part name.
 
 # Rules
 
-- `:capture_3w` — the `capture_contour` (10%)-of-peak contour must lie ≥
-  `capture_margin` (0.5 mm) inside the landing component's substrate edge: the minimum
-  over the edge of the transverse distance to the beam envelope (best-focus contour grown
-  by the f-cone at each point's axial position, see `BeamEnvelope`). Substrate edges are
-  the free edges of the opaque mesh (edges with a single triangle; edges shared with
-  another component are not edges). A beam whose axis
-  misses every capture component fails with component `:none`.
+- `:capture_3w` — the `capture_contour` (10%)-of-peak contour must lie ≥ `capture_margin`
+  (0.5 mm) inside the substrate edge of the landing component: the minimum over the edge
+  of the transverse distance to the beam envelope (best-focus contour grown by the f-cone
+  at the axial position of each point, see `BeamEnvelope`). Substrate edges are the free
+  edges of the opaque mesh (edges with a single triangle; edges shared with another
+  component are not edges). A beam whose axis misses every capture component fails with
+  component `:none`.
 - `:incidence_3w` — incidence < `max_incidence` (70°) to the target normal, the maximum
-  over the landing component's surface inside the worst-case 10% footprint (visible
+  over the surface of the landing component inside the worst-case 10% footprint (visible
   from the beam; exact normals on `SphereSurface`/`CylinderSurface` components). The
-  angle is that of the f-cone's steepest ray, the beam axis's angle plus the cone's
-  half-angle atan(1/(2f#)) (1.38° at NIF), as VisRad's capture report measures it (VisRad
-  21 reads tilt + 1.384–1.390° on plates tilted 68–69.7° toward either spot axis).
-  Incidence takes the error set but not the rule tolerance; the capture margin and the
-  clearances take both.
+  angle is that of the steepest ray of the f-cone, the angle of the beam axis plus the
+  cone half-angle atan(1/(2f#)) (1.38° at NIF), as VisRad's capture report measures it
+  (VisRad 21 reports tilt + 1.384–1.390° on plates tilted 68–69.7° toward either spot
+  axis). The incidence check includes the error set but not the rule tolerance; the
+  capture margin and the clearances include both.
 - `:clearance_3w` — the `clearance_contour` (1%)-of-peak contour must clear each
-  `hardware` component other than the landing component by > `clearance_margin`
-  (0.5 mm); hardware downstream of the landing point is skipped, and everything along
-  the beam is checked if the beam lands on no capture component. Capture and clearance
-  failures carry the TaLIS consequence: blow-by assessment by the backscatter working
-  group. On an `leh` component the rule is an LEH-clearance assessment: not clearing it
-  is a `:review`, not a `:fail` (see "Entrance-hole edges").
+  `hardware` component other than the landing component by > `clearance_margin` (0.5 mm);
+  hardware downstream of the landing point is skipped, and everything along the beam is
+  checked if the beam misses every capture component. Capture and clearance failures have
+  the TaLIS consequence, an assessment of blow-by by the backscatter working group. On an
+  `leh` component the rule is an LEH-clearance assessment: not clearing it is a `:review`
+  (on other hardware, a `:fail`; see "Entrance-hole edges").
 - `:clearance_1w` — the 10% contour of the 1ω footprint must clear each
   `omega1_components` component by > `omega1_margin` (0.2 mm). Not clearing is a
-  `:review` (TaLIS: evaluate unconverted-light management), decided by the next rule.
-- `:management_1w` — for each surface the 1ω footprint does not clear: pass if its
-  radius of curvature is < `cylinder_radius` (2 mm, cylindrical) or < `sphere_radius`
-  (5 mm, spherical); otherwise the specular 1ω reflection from every uncleared facet
-  must stay > `reflection_angle` (20°) from every open quad (`open_ports`), less twice
-  the tolerance angle (a tilt by α turns a reflection by 2α). Curvature comes from
-  `curvature[name]` — `(:cylinder, r)`, `(:sphere, r)`, `:flat`, or `(:dimpled, r)` /
-  `(:dimpled, r, half_side)` for a surface covered with spherical dimples of radius of
-  curvature `r` (e.g. the dimpled 1ω "sombrero" shield around an ignition hohlraum's
-  LEH, modeled as a flat `annulus_mesh`), judged like a sphere against
-  `sphere_radius`; the NIF User Guide (§5.6.2) also requires a dimple half-side/radius
-  ≥ 0.25, so a dimpled surface passes only with `half_side` given and that ratio met,
-  and is a `:review` otherwise — else from the component's
-  `CylinderSurface`/`SphereSurface`, or a planar mesh. For other meshes the curvature is
+  `:review` (the TaLIS outcome is to evaluate unconverted-light management) and is
+  resolved by the next
+  rule.
+- `:management_1w` — for each surface the 1ω footprint does not clear: pass if its radius
+  of curvature is < `cylinder_radius` (2 mm, cylindrical) or < `sphere_radius` (5 mm,
+  spherical); otherwise the specular 1ω reflection from every uncleared facet must stay >
+  `reflection_angle` (20°) from every open quad (`open_ports`), less twice the tolerance
+  angle (a tilt by α turns a reflection by 2α). Curvature comes from `curvature[name]`
+  when given, and otherwise from the `CylinderSurface`/`SphereSurface` of the component or
+  a planar mesh. The entry is `(:cylinder, r)`, `(:sphere, r)`, `:flat`, or
+  `(:dimpled, r)` / `(:dimpled, r, half_side)` for a surface covered with spherical
+  dimples of radius of curvature `r`, e.g. the dimpled 1ω "sombrero" shield around the LEH
+  of an ignition hohlraum, modeled as a flat `annulus_mesh`. A dimpled surface is judged
+  like a sphere against `sphere_radius`. The NIF User Guide (§5.6.2) also requires a
+  dimple half-side/radius ≥ 0.25, so a dimpled surface passes only with `half_side` given
+  and that ratio met, and is a `:review` otherwise. For other meshes the curvature is
   unknown and a failing reflection check is a `:review`. A flat component without a
-  `curvature` entry gets the reflection check, which a horizontal plate usually fails
+  `curvature` entry is given the reflection check, which a horizontal plate usually fails
   (it mirrors each beam into the conjugate port of the same hemisphere).
 - `:diagnostic_1w` — the `diagnostics` components (diagnostic hardware modeled in the
   target) must stay ≥ 10 mm from 1ω light at TCC, growing linearly to 25 mm at 1 m
   (`10 + 0.015 r` mm, r the distance from TCC; interpretation of "a cone of 10 mm at TCC
-  extruded to 25 mm at 1 m"). With no `diagnostics` the rule is listed in the report's
-  `notes` as not evaluated: diagnostic hardware given only as `hardware` gets the 3ω
-  and 0.2 mm 1ω clearances, not this one.
+  extruded to 25 mm at 1 m"). With no `diagnostics` the rule is listed in the `notes` of
+  the report as not evaluated. Diagnostic hardware given only as `hardware` is checked
+  for the 3ω and 0.2 mm 1ω clearances but not for this rule.
 - `:tas_stay_in` — (NIF beams) no component may extend more than `stay_in` (19 mm)
   above the lowest aim point of an upper beam or below the highest aim point of a lower
   beam (TAS alignment stay-in zone; violating it may require a different alignment
@@ -178,9 +182,9 @@ The remaining requirements of the document are listed in `TALIS_OUT_OF_SCOPE`.
 
 The 1ω rules apply to beams whose `quad` is a NIF quad name (or that have an `offsets`
 entry). A NIF quad-level beam (port within 0.1° of its quad port, as from `nif_quads`)
-is expanded into its four beamlets (LMF beam table) sharing its aim and defocus. Each
-beamlet's 1ω footprint at its 3ω best-focus plane is a square of side `omega1_size`
-whose nearest edge is `omega1_edge` = 4.45 mm (TaLIS: the 10% contour) from the 3ω
+is expanded into its four beamlets (LMF beam table) sharing its aim and defocus. The
+1ω footprint of each beamlet at its 3ω best-focus plane is a square of side `omega1_size`
+whose nearest edge is `omega1_edge` = 4.45 mm (the TaLIS 10% contour) from the 3ω
 axis, displaced in φ̂ toward the beamlet side of its quad (the side of the quad
 axis its port lies on; NIF User Guide Fig. 4-12 — *derived*, confidence medium). The
 default side is the User Guide's 22 mm footprint grown by 4.8 − 4.45 = 0.35 mm per
@@ -191,7 +195,7 @@ center `lens_distance` (7.7 m) upstream: at axial position `s` the near edge is
 `4.45 + 0.027 s` mm, i.e. closer to the 3ω axis upstream of focus (*derived*). Pass
 `omega1_focus = Inf, lens_distance = Inf` for a prism (the footprint fixed in the
 transverse plane). `offsets` maps beam names to a footprint direction (degrees from the
-port's θ̂ toward φ̂, or a vector) and overrides the NIF convention for that beam. The
+port θ̂ toward φ̂, or a vector) and overrides the NIF convention for that beam. The
 focus error moves the footprint with the 3ω focal plane; shadowing is ignored
 (conservative).
 
@@ -200,54 +204,55 @@ focus error moves the footprint with the 3ω focal plane; shadowing is ignored
 The TaLIS document states 3ω clearance "to target features" without distinguishing the
 entrance holes of a target from hardware, and gives every 3ω violation the same
 consequence: the configuration "must be assessed for blow-by by the backscatter working
-group", an assessment rather than a prohibition. Reporting LEH edges as `:review` while
-hardware proper (shields, stalks, diagnostics, closed windows) stays `:fail` **is an
-assumption of Briareus, not a TaLIS statement**. Its basis: no NIF hohlraum with
-3.1 mm-diameter LEHs meets the rule on its LEH edge. The best-focus 1% contour of an
-inner (23.5°) quad has a semi-axis of 1.145 mm along φ̂, which is horizontal and
-orthogonal to the beam; with the axis through the LEH center that leaves
-1.55 − 1.145 = 0.405 mm to the lip before the f-cone, any error or the tolerance
-(0.5 mm required).
-Light that reaches the lip is LEH clipping, which the deposition computes as such.
+group". The consequence is an assessment and does not prohibit the configuration.
+Reporting LEH edges as `:review` while hardware proper, such as shields, stalks,
+diagnostics and closed windows, stays `:fail` **is an assumption of Briareus; the TaLIS
+document does not state it**. It is based on the fact that no NIF hohlraum with 3.1
+mm-diameter LEHs meets the rule on its LEH edge. The best-focus 1% contour of an inner
+(23.5°) quad has a semi-axis of 1.145 mm along φ̂, which is horizontal and orthogonal to
+the beam. With the axis through the LEH center, 1.55 − 1.145 = 0.405 mm remains to the lip
+before the f-cone, any error or the tolerance is counted; the rule requires 0.5 mm. Light
+that reaches the lip is LEH clipping, which the deposition computes as such.
 
 # Tolerance and error set
 
-The document adds "up to 0.5 degrees metrology/alignment/positioning tolerance" to the
-3ω and 1ω clearances; Briareus also applies it to the 3ω capture margin. The angle is an insertion or assembly error of the target
-component: the beams must still clear with the component rotated by up to 0.5° off
-nominal in the least favorable direction, whether the whole target is inserted rotated
-or the component is assembled off-square (user, from facility practice, 2026-10-27; the
-document gives no formula). It enters as a lateral allowance `r·tan(tolerance)`, with
-`r` the distance of the hardware point from the pivot of the rotation: the largest
-displacement of the point that such a rotation causes, taken in full toward the beam
-(conservative). The default `pivot = :tcc` is the target inserted rotated about TCC; a
-component assembled off-square rotates about its mount, given as a point
-(`pivot = (0, 0, 12.0)`). `:aim` (rotation about the beam's aim point) and `:max` (the
-larger of the TCC and aim distances) are alternatives; `tolerance = 0` drops it.
+The document adds "up to 0.5 degrees metrology/alignment/positioning tolerance" to the 3ω
+and 1ω clearances; Briareus also applies it to the 3ω capture margin. The angle is an
+insertion or assembly error of the target component: the beams must still clear with the
+component rotated by up to 0.5° off nominal in the least favorable direction, whether the
+whole target is inserted rotated or the component is assembled off-square (user, from
+facility practice, 2026-10-27; the document does not give a formula). It enters as a
+lateral allowance `r·tan(tolerance)`, with `r` the distance of the hardware point from the
+pivot of the rotation: the largest displacement of the point that such a rotation causes,
+taken in full toward the beam (conservative). The default `pivot = :tcc` is the target
+inserted rotated about TCC; a component assembled off-square rotates about its mount,
+given as a point (`pivot = (0, 0, 12.0)`). `:aim` (rotation about the beam aim point) and
+`:max` (the larger of the TCC and aim distances) are alternatives; with `tolerance = 0`
+the allowance is dropped.
 
 It is combined with the error set of `clearance` by linear addition (no RSS):
 
     worst = nominal − (pointing + target_offset + hardware_tolerance) − focus/(2F) − r·tan(tolerance)
 
-evaluated point by point and minimized over the component (for the 1ω footprint the
+evaluated at each point and minimized over the component (for the 1ω footprint the
 focus term is the footprint shift over `±focus` instead of the f-cone). The
 `target_offset` and `hardware_tolerance` partly overlap what the tolerance is meant to
-cover, so this double counts conservatively; set them to 0 to rely on the tolerance
-alone. `ssd` (mm) widens the 3ω envelopes as in `clearance`.
+cover, so this double counts conservatively; set them to 0 to rely only on the
+tolerance. `ssd` (mm) widens the 3ω envelopes as in `clearance`.
 
-Distances are minimized over the whole of each triangle (and each substrate edge), not
-at sample points: every distance in these rules is Lipschitz in the point (the beam
-envelope's by √(1 + cone²), the 1ω footprint's by 1 plus its taper, the tolerance
-allowance's by tan(tolerance)), so a branch-and-bound subdivision bounds the minimum
-from below. The reported worst and nominal values are those lower bounds, never above
-the exact minimum and within `resolution` (mm) or `rtol` times the value's distance from
-the rule's threshold, whichever is larger: a bound never crosses the threshold, so the
-status is exact (up to `resolution`), and only large margins are reported coarser
-(1% by default). A plate crossed by a beam between its vertices fails. The incidence
-and specular-reflection rules take each of the `4^level` sub-triangles of a component
-(with its normal) that has any point inside the footprint, decided the same way.
-Clearance-only far-field wings (`nif_wings`) are not used: the TaLIS rules refer to
-contours of the beam spot.
+Distances are minimized over the whole of each triangle (and each substrate edge), not at
+sample points. Every distance in these rules is Lipschitz in the point, so a
+branch-and-bound subdivision bounds the minimum from below. The Lipschitz constant is √(1
++ cone²) for the beam envelope, 1 plus its taper for the 1ω footprint and tan(tolerance)
+for the tolerance allowance. The reported worst and nominal values are those lower bounds,
+never above the exact minimum and within `resolution` (mm) or `rtol` times the distance of
+the value from the rule threshold, whichever is larger: a bound never crosses the
+threshold, so the status is exact (up to `resolution`), and only large margins are
+reported coarser (1% by default). A plate crossed by a beam between its vertices fails.
+The incidence and specular-reflection rules include each of the `4^level` sub-triangles of
+a component (with its normal) that has any point inside the footprint, and whether a
+sub-triangle reaches the footprint is determined in the same way. Clearance-only far-field
+wings (`nif_wings`) are not used: the TaLIS rules refer to contours of the beam spot.
 """
 function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                      hardware = nothing, leh = (), omega1_components = nothing, diagnostics = (),
@@ -265,7 +270,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     0 <= rtol < 1 || throw(ArgumentError("rtol must be in [0, 1)"))
     tol = _talis_tol(tolerance, pivot)
     R = pointing + target_offset + hardware_tolerance
-    # checked items: name => its components (a part's pieces, or one component)
+    # Each checked item pairs a name with its components, the pieces of a part or one
+    # component.
     surf = Pair{Symbol,Vector{Int}}[]
     for p in parts(t)
         cis = [ci for ci in part_pieces(t, p) if t.components[ci].kind === :surface]
@@ -299,8 +305,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
           curvature, ε = Float64(resolution), rtol = Float64(rtol),
-          # Lipschitz constant of the 1ω footprint distance: 1 plus the taper of the
-          # footprint's center (c0/L) and half-side (h0/f1) along the beam
+          # The Lipschitz constant of the 1ω footprint distance is 1 plus the taper of the
+          # center (c0/L) and half-side (h0/f1) of the footprint along the beam.
           lip1 = 1 + hypot((omega1_edge + W0 / 2) / lens_distance + W0 / 2 / f1, W0 / 2 / f1))
     out = [TaLISRow[] for _ in vb]
     Threads.@threads for bi in eachindex(vb)
@@ -336,7 +342,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
 end
 
 # Per-beam checks (3ω capture, incidence and clearance; 1ω clearance, management and
-# diagnostics). `bl` holds the beam's 1ω beamlets, or `nothing`.
+# diagnostics). `bl` contains the 1ω beamlets of the beam, or is `nothing`.
 function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     aim = Vec3(b.aim)
     tol = cx.tol
@@ -368,7 +374,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             note = !isfinite(worst) ? "no free substrate edge" : m >= 0 ? "" : _TALIS_BLOWBY
             push!(rows, TaLISRow(b.name, :capture_3w, name, m >= 0 ? :pass : :fail, m, :mm, worst,
                                  nom, cx.capture_margin, wp, note))
-            # the steepest ray of the f-cone: the axis angle plus the cone's half-angle
+            # The steepest ray of the f-cone is at the axis angle plus the cone half-angle.
             hc = atand(1 / (2b.fnumber))
             worst, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift, L3, cx.ε)
             worst, θn = min(worst + hc, 90.0), min(θn + hc, 90.0)
@@ -431,8 +437,8 @@ end
 
 # Largest incidence angle (degrees) on a landing component inside the worst-case and
 # nominal footprints, over sub-triangles visible from upstream that reach into them
-# anywhere (`_talis_reaches`, `lip` the Lipschitz constant of `envelope_distance`). The
-# sub-triangle nearest the beam axis is always included.
+# anywhere. Reaching is tested with `_talis_reaches`, and `lip` is the Lipschitz constant
+# of `envelope_distance`. The sub-triangle nearest the beam axis is always included.
 function _talis_incidence(t::Target, g, env, k, aim, shift, lip, res)
     far = 4 * (t.scale + norm(aim)) + 1
     ε = 1e3 * _ray_eps(t)
@@ -458,8 +464,8 @@ function _talis_incidence(t::Target, g, env, k, aim, shift, lip, res)
     return θw, θn, ip
 end
 
-# 1ω management of an uncleared item `name` made of the components `cis`: the worst of
-# its components' rows (status first, then margin), under the item's name.
+# 1ω management of an uncleared item `name` made of the components `cis`. The result is the
+# worst row of its components (status first, then margin), under the name of the item.
 function _talis_management(t::Target, name::Symbol, cis, b::Beam, bl, cx)
     rank(r) = r.status === :fail ? 0 : r.status === :review ? 1 : 2
     best = nothing
@@ -473,7 +479,7 @@ function _talis_management(t::Target, name::Symbol, cis, b::Beam, bl, cx)
                     r.point, r.note)
 end
 
-# 1ω management of an uncleared component: curvature, else specular reflection.
+# 1ω management of an uncleared component, by curvature or else by specular reflection.
 function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     c = t.components[ci]
     aim = Vec3(b.aim)
@@ -483,7 +489,7 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     if kind !== :flat && kind !== :unknown && rc < lim
         what = kind === :dimpled ? "spherical dimple" : string(kind)
         note = @sprintf("%s radius of curvature %.3g mm < %.3g mm scatters 1ω", what, rc, lim)
-        # NIF User Guide §5.6.2: dimple half-side / radius must not be below 0.25
+        # The NIF User Guide (§5.6.2) requires a dimple half-side / radius of at least 0.25.
         if kind === :dimpled && !isfinite(half)
             return TaLISRow(b.name, :management_1w, c.name, :review, lim - rc, :mm, rc, rc, lim, aim,
                             note * "; dimple spacing unknown: give (:dimpled, r, half_side) to check half-side/radius ≥ 0.25 (User Guide §5.6.2)")
@@ -520,7 +526,8 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
                     cx.reflection_angle, wp, note)
 end
 
-# (kind, radius, dimple half-side): kind :cylinder, :sphere, :dimpled, :flat or :unknown.
+# Returns (kind, radius, dimple half-side), with kind :cylinder, :sphere, :dimpled, :flat or
+# :unknown.
 function _talis_curvature(t::Target, ci, overrides)
     c = t.components[ci]
     if haskey(overrides, c.name) || haskey(overrides, c.part)
@@ -539,8 +546,8 @@ function _talis_curvature(t::Target, ci, overrides)
     return (:unknown, NaN, NaN)
 end
 
-# Transverse signed distance (negative inside) from `x` to the union of a beam's 1ω
-# footprints: at nominal focus, and the minimum over focus offsets 0, ±focus.
+# Transverse signed distance (negative inside) from `x` to the union of the 1ω footprints
+# of a beam, at nominal focus and as the minimum over focus offsets 0 and ±focus.
 function _omega1_distance(x, bl, cx)
     dn, dw = Inf, Inf
     for (kb, fb, ô) in bl
@@ -555,8 +562,9 @@ function _omega1_distance(x, bl, cx)
     return dn, dw
 end
 
-# Footprint square at axial position s = d·k from the 3ω focus: center c0(1 + s/L) along
-# ô (chief ray from the lens center), half-side h0|1 − s/f1| (cone to the 1ω focus).
+# Footprint square at axial position s = d·k from the 3ω focus. Its center is c0(1 + s/L)
+# along ô, the chief ray from the lens center, and its half-side is h0|1 − s/f1|, from the
+# cone to the 1ω focus.
 function _omega1_square(d, k, ô, c0, h0, f1, L)
     s = dot(d, k)
     c = c0 * (1 + s / L)
@@ -610,8 +618,8 @@ function _talis_open_ports(spec, beams)
     return [x isa Beam ? x.port : normalize(Vec3(x...)) for x in spec]
 end
 
-# TAS stay-in zone (NIF beams): extent of each component above the lowest upper-beam aim
-# point and below the highest lower-beam aim point.
+# TAS stay-in zone (NIF beams), as the extent of each component above the lowest
+# upper-beam aim point and below the highest lower-beam aim point.
 function _talis_stay_in(t::Target, beams, surf, limit, htol)
     rows = TaLISRow[]
     nif = [b for b in beams if _is_nif(b)]
@@ -660,8 +668,8 @@ end
 _talis_tris(cx, cis) = length(cis) == 1 ? cx.geo[only(cis)].tris :
                        reduce(vcat, (cx.geo[ci].tris for ci in cis))
 
-# Whether `f` (Lipschitz constant `lip`) is ≤ `thr` somewhere on the simplex `s`;
-# undecided down to lip·ρ ≤ `ε`, it counts as reached (conservative).
+# Whether `f` (Lipschitz constant `lip`) is ≤ `thr` somewhere on the simplex `s`. A
+# simplex still undecided at lip·ρ ≤ `ε` counts as reached (conservative).
 function _talis_reaches(f, s, lip, thr, ε)
     m = sum(s) / length(s)
     fm = f(m)
@@ -735,7 +743,8 @@ _talis_rank(x::TaLISRow) = x.status === :fail ? 0 : x.status === :review ? 1 : 2
 """
     violations(report::TaLISReport; status = (:fail, :review)) -> Vector{TaLISRow}
 
-Rows of a TaLIS report whose status is in `status`; failures first, then by margin.
+Rows of a TaLIS report whose status is in `status`, sorted with failures first and then
+by margin.
 """
 violations(r::TaLISReport; status = (:fail, :review)) =
     sort(filter(x -> x.status in status, r.rows); by = x -> (_talis_rank(x), x.margin))
@@ -778,12 +787,13 @@ end
 """
     write_talis_csv(path, report)
 
-Write every row of a TaLIS report as CSV (margins in the row's `unit`), after a header
-of `#` comment lines that makes the file stand alone: the source of the rules, every
-setting (`settings`: thresholds, error set, rule tolerance and pivot, capture, LEH and
-diagnostic components, resolution), the requirement of each rule, the checks not
-evaluated (`notes`) and the requirements out of scope (`TALIS_OUT_OF_SCOPE`). Readers
-skip the header with a comment option (`CSV.File(path; comment = "#")`).
+Write every row of a TaLIS report as CSV, with margins in the `unit` of each row. A
+header of `#` comment lines makes the file stand alone. The header contains the source of
+the rules, every setting in `settings`, the requirement of each rule, the checks not
+evaluated (`notes`) and the requirements out of scope (`TALIS_OUT_OF_SCOPE`). The settings
+are the thresholds, the error set, the rule tolerance and pivot, the capture, LEH and
+diagnostic components, and the resolution. CSV readers skip the header with a comment
+option, e.g. `CSV.File(path; comment = "#")`.
 """
 function write_talis_csv(path::AbstractString, r::TaLISReport)
     open(path, "w") do io

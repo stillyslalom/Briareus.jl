@@ -26,8 +26,8 @@ merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "halfraum.jl", "profiles.jl",
 in_shard(file) = SHARD == "" || get(SHARDS, file, 1) == parse(Int, SHARD)
 shard_include(file) = in_shard(file) && include(file)
 
-# Testsets go in included files, not in this block: its body is one top-level expression,
-# which keeps the locals of every testset written here alive until the suite ends.
+# Testsets go in included files. The body of this block is one top-level expression, which
+# would keep the locals of every testset written in it alive until the suite ends.
 @testset "Briareus" begin
 
 # Docs cross-references, docstrings and @autodocs coverage (cheap; no Documenter).

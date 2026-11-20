@@ -1,65 +1,77 @@
-# Hierarchical (H-matrix) view factors: near pairs dense, far cluster pairs of uniform
-# visibility low rank (adaptive cross approximation on the exact pair kernel), so
-# storage and assembly grow as N^1.3–1.5 rather than N² on a hohlraum (the capsule's
-# shadow edges and the near field stay dense). Only products are offered (`mul!` with F and Fᵀ), which is
-# all the iterative radiosity path uses.
+# This file computes hierarchical (H-matrix) view factors. Near pairs are dense, and far
+# cluster pairs of uniform visibility are low rank, by adaptive cross approximation on
+# the exact pair kernel. Storage and assembly then grow as N^1.3–1.5 on a hohlraum,
+# against N² for a dense matrix; the shadow edges of the capsule and the near field stay
+# dense. Only products are offered (`mul!` with F and Fᵀ), which is all that the
+# iterative radiosity path uses.
 
 """
     HMatrix
 
-View factors in hierarchical form (`view_factors(target; storage = :hmatrix)`, and
-`RadiationModel` by default above `Briareus.HMATRIX_MODEL[]` elements): the symmetric
-exchange matrix `G = diag(A) F` (`Gᵢⱼ = Aᵢ Fᵢⱼ`, stored once per unordered pair, so
-reciprocity is exact) partitioned over a cluster tree of the elements, and `F = diag(A)⁻¹
-S G S` with a diagonal balancing `S` (`enforce_closure!` updates `S` only). Reads as an
-`AbstractMatrix{Float64}`; products with Float64 vectors and matrices (`*`, `mul!`, also
-transposed, and with dual vectors) accumulate in Float64, which is all the iterative
-radiosity path uses. Indexing one entry searches the blocks (for inspection only);
-`Matrix(H)` expands it by products with the identity.
+View factors in hierarchical form, from `view_factors(target; storage = :hmatrix)` and
+by default from `RadiationModel` above `Briareus.HMATRIX_MODEL[]` elements. The form
+stores the symmetric exchange matrix `G = diag(A) F` (`Gᵢⱼ = Aᵢ Fᵢⱼ`), once per
+unordered pair so that reciprocity is exact, partitioned over a cluster tree of the
+elements. Then `F = diag(A)⁻¹ S G S` with a diagonal balancing `S`, and
+`enforce_closure!` updates only `S`. The type is an `AbstractMatrix{Float64}`.
+Products with Float64 vectors and matrices (`*`, `mul!`, also transposed, and with dual
+vectors) accumulate in Float64, which is all that the iterative radiosity path uses.
+Indexing one entry searches the blocks, for inspection only, and `Matrix(H)` expands
+the matrix by products with the identity.
 
-Clusters split the elements by the surface they lie on (a component's curved surface, or
-the component), then bisect the centroids along the longest axis of their box down to
-`leaf` elements, so that no cluster mixes capsule and wall, or cap and wall at a corner
-(such blocks seldom compress, and their low-rank error falls on the small rows). A pair of clusters whose boxes are `eta` × the larger diameter apart is
+Clusters split the elements by the surface they lie on (the curved surface of a
+component, or the component). They then bisect the centroids along the longest axis of
+their box down to `leaf` elements. No cluster therefore mixes capsule and wall, or cap
+and wall at a corner; such blocks seldom compress, and their low-rank error falls on
+the small rows. A pair of clusters whose boxes are `eta` × the larger diameter apart is
 a candidate for low rank, decided block by block:
-- rows and columns whose elements face no centroid of the other cluster are zero (a box
-  test), and so is a block that a convex closed part (a capsule) hides wholly (its
-  inscribed ball blocks every segment between the boxes, a cone test from each corner);
-- the *shaft* between the boxes (their convex hull) is searched for facets that could
-  occlude a segment between them (Haines & Wallace's shaft culling, with the facets of
-  a curved surface both lie inside, of a convex part one of them lies on, and of a plane
-  both lie in front of or in excluded). An empty shaft makes every facing pair wholly
-  visible: its entries need no ray, and the block is cross-approximated (ACA with partial
-  pivoting on the exact pair kernel, recompressed by SVD to `tol` relative Frobenius
-  error, checked on sampled entries); a block that does not compress within `maxrank`
-  terms is refined;
-- a shaft holding facets of one convex part only (the capsule, both clusters outside its
-  circumscribed ball) resolves each pair exactly by the part's balls: a segment missing
-  the circumscribed ball is visible, one through the inscribed ball hidden, and only the
-  few between take a ray. The mask makes the block zero, low rank without further rays,
-  or refined with it down to dense leaf pairs (a shadow edge);
-- any other occupied shaft is refined down to leaf pairs. A leaf pair whose shaft holds
-  facets of up to 8 parts with a certificate is decided the same way, pair by pair and
-  exactly as the ray would: a planar part (a washer, an LEH cap, a disc) by where the
-  segment crosses its plane, inside or outside its facets with margin; a cylinder or
-  cone part by its axisymmetric bounds, and a prism of facets parallel to its axis (a
-  wall of chord rectangles) also by the side lines of its cross-section (a segment whose
-  part within the prism's axial range stays inside every side's half-plane, as one
-  through a waist gap onto the wall does); a convex part by its balls or the plane of an end
-  element lying on it. Other leaf pairs take every pair's visibility ray. Wholly hidden
-  pairs give zero, wholly visible ones a cross approximation, and partly seen ones (a
-  rim, `:sampled` fractions) stay dense. With `visibility = :sampled` the certificates
-  resolve a pair's whole bundle of sample rays at once (margins grown by the samples'
-  spread), else each of its rays, and the fractions are those of `view_factors`;
-- pairs the facing slack admits (rays that start farther off curved facets) are judged
-  on their own ray ends when the shaft's exclusions hold with that margin, and take the
-  ray otherwise;
-- rows cut by the facing test (a sphere's terminator) are refined against the column
-  cluster's children beside the low-rank rest (low rank on the rows facing a child
-  wholly, dense against a leaf or when few), and a small block with only a few facing
-  pairs is stored on those.
-Near pairs are dense (Float32), with the same entries as `view_factors` (`_vf_pair`);
-blocks whose entries are all zero are not stored.
+
+- Rows and columns whose elements face no centroid of the other cluster are zero, by a
+  box test. A block that a convex closed part, such as a capsule, hides wholly is also
+  zero. The test is that the inscribed ball blocks every segment between the boxes, by
+  a cone test from each corner.
+- The *shaft* between the boxes, their convex hull, is searched for facets that could
+  occlude a segment between them (the shaft culling of Haines & Wallace). The search
+  excludes the facets of a curved surface that both clusters lie inside, of a convex
+  part that one of them lies on, and of a plane that both lie in front of or in. An
+  empty shaft makes every facing pair wholly visible, so its entries need no ray, and
+  the block is cross-approximated. The approximation is ACA with partial pivoting on the
+  exact pair kernel, recompressed by SVD to `tol` relative Frobenius error and checked
+  on sampled entries. A block that does not compress within `maxrank` terms is refined.
+- A shaft with facets of only one convex part, such as the capsule with both clusters
+  outside its circumscribed ball, resolves each pair exactly by the balls of the part. A
+  segment that misses the circumscribed ball is visible, one through the inscribed ball
+  is hidden, and only the few between take a ray. With the resulting mask the block is
+  zero, low rank without further rays, or refined with the mask down to dense leaf pairs
+  at a shadow edge.
+- Any other occupied shaft is refined down to leaf pairs. A leaf pair whose shaft
+  contains facets of up to 8 parts with a certificate is decided in the same way, pair
+  by pair and exactly as the ray would decide it. The certificates are:
+  - for planar parts such as washers, LEH caps and discs, the point where the segment
+    crosses the plane of the part, inside or outside its facets with margin;
+  - for a cylinder or cone part, its axisymmetric bounds. A prism of facets parallel to
+    its axis, such as a wall of chord rectangles, is also decided by the side lines of
+    its cross-section. A segment qualifies when its part within the axial range of the
+    prism stays inside the half-plane of every side, as a segment through a waist gap
+    onto the wall does;
+  - for a convex part, its balls or the plane of an end element lying on it.
+
+  Other leaf pairs take the visibility ray of every pair. Wholly hidden pairs give zero,
+  wholly visible ones a cross approximation, and partly visible ones, such as at a rim
+  or with `:sampled` fractions, stay dense. With `visibility = :sampled` the
+  certificates resolve the whole bundle of sample rays of a pair at once, with margins
+  grown by the spread of the samples, and otherwise each of its rays. The fractions are
+  those of `view_factors`.
+- Pairs that the facing slack admits, whose rays start farther off curved facets, are
+  judged on their ray ends when the exclusions of the shaft hold with that margin, and
+  take the ray otherwise.
+- Rows cut by the facing test, at the terminator of a sphere, are refined against the
+  children of the column cluster beside the low-rank rest. They are low rank on the rows
+  that face a child wholly, and dense against a leaf or when few. A small block with
+  only a few facing pairs is stored on those pairs.
+
+Near pairs are dense (Float32), with the same entries as `view_factors` (`_vf_pair`).
+Blocks whose entries are all zero are not stored.
 
 On the hohlraum presets (10–29k elements) the default `tol = 1e-6` changes the capsule
 moments by ≤ 1e-8 and the incident flux by ≤ 2e-6 relative per element against the
@@ -70,15 +82,15 @@ zero blocks and cut rows, "H-matrix near field"; for the visibility certificates
 """
 struct HMatrix <: AbstractMatrix{Float64}
     n::Int
-    perm::Vector{Int}                   # tree position → element
-    iperm::Vector{Int}                  # element → tree position
+    perm::Vector{Int}                   # element at each tree position
+    iperm::Vector{Int}                  # tree position of each element
     area::Vector{Float64}               # element areas (element order)
     scale::Vector{Float64}              # balancing S (element order)
     dense::Vector{Tuple{Int,Int,Matrix{Float32}}}               # (row0, col0, D), tree order
     lowrank::Vector{Tuple{Int,Int,Matrix{Float32},Matrix{Float32}}}   # (row0, col0, U, V)
     scattered::Vector{Tuple{Vector{Int},Vector{Int},Matrix{Float32}}}  # (rows, cols, D), off the diagonal
     lowrank_index::Vector{Tuple{Vector{Int},Vector{Int},Matrix{Float32},Matrix{Float32}}}  # (rows, cols, U, V)
-    groups::Vector{Vector{Tuple{Int,Int}}}    # product work per task: (kind, index)
+    groups::Vector{Vector{Tuple{Int,Int}}}    # product work per task, as (kind, index)
     info::NamedTuple
 end
 
@@ -86,7 +98,7 @@ Base.size(H::HMatrix) = (H.n, H.n)
 Base.copy(H::HMatrix) = HMatrix(H.n, H.perm, H.iperm, H.area, copy(H.scale), H.dense, H.lowrank, H.scattered,
                                 H.lowrank_index, H.groups, H.info)
 
-# Stored G entry at tree positions (p, q).
+# Returns the stored G entry at tree positions (p, q).
 function _hentry(H::HMatrix, p::Int, q::Int)
     for (r0, c0, D) in H.dense
         m, n = size(D)
@@ -99,8 +111,8 @@ function _hentry(H::HMatrix, p::Int, q::Int)
         a, b = findfirst(==(q), rs), findfirst(==(p), cs)
         a !== nothing && b !== nothing && return Float64(D[a, b])
     end
-    # the indexed blocks before the contiguous ones: a low-rank block's cut rows are zero
-    # in it and stored in scattered or indexed blocks
+    # The indexed blocks come before the contiguous ones, since the cut rows of a low-rank
+    # block are zero in it and stored in scattered or indexed blocks.
     for (rs, cs, U, V) in H.lowrank_index
         a, b = findfirst(==(p), rs), findfirst(==(q), cs)
         a !== nothing && b !== nothing && return _hlr_entry(U, V, a, b)
@@ -175,11 +187,11 @@ _hdist(a::_HCluster, b::_HCluster) =
     norm(max.(zero(Vec3), max.(a.bmin - b.bmax, b.bmin - a.bmax)))
 _hleaf(c::_HCluster) = c.kids == (0, 0)
 
-# Bisection of the centroids along the longest axis of their box, at the median. A
-# cluster whose elements lie on several surfaces (`group`) is first split by surface,
-# the largest one from the rest, so that no cluster mixes, say, capsule and wall
-# elements, or a cap and the wall at a corner (such blocks seldom compress, and a
-# capsule element in a wall cluster keeps it from the capsule's ball certificate).
+# Bisects the centroids along the longest axis of their box, at the median. A cluster
+# whose elements lie on several surfaces (`group`) is first split by surface, the largest
+# from the rest. No cluster then mixes, for example, capsule and wall elements, or a cap
+# and the wall at a corner. Such blocks seldom compress, and a capsule element in a wall
+# cluster would bar the cluster from the ball certificate of the capsule.
 function _hcluster_tree(C::Vector{Vec3}, pad::Vector{Float64}, leaf::Int, group::Vector{Int} = zeros(Int, length(C)))
     n = length(C)
     perm = collect(1:n)
@@ -218,8 +230,9 @@ function _hcluster_tree(C::Vector{Vec3}, pad::Vector{Float64}, leaf::Int, group:
     return nodes, perm
 end
 
-# Per element: an index of the surface it lies on (its component's curved surface, or
-# its component if it has none), so that coplanar caps and LEH discs share one.
+# Returns, per element, an index of the surface it lies on: the curved surface of its
+# component, or the component if it has none. Coplanar caps and LEH discs therefore share
+# one index.
 function _hsurface_groups(t::Target)
     keys = Any[]
     gc = map(t.components) do c
@@ -230,8 +243,9 @@ function _hsurface_groups(t::Target)
     return [gc[c] for c in t.elem_comp]
 end
 
-# Cluster pairs (s, t), s before t or s = t, covering the upper triangle of G: geometric
-# candidates for low rank (`far`, decided per block in assembly) and leaf pairs (`near`).
+# Returns the cluster pairs (s, t), s before t or s = t, that cover the upper triangle of
+# G. They are geometric candidates for low rank (`far`, decided per block in assembly)
+# and leaf pairs (`near`).
 function _hblock_pairs(nodes, η)
     far, near = Tuple{Int,Int}[], Tuple{Int,Int}[]
     function rec(s, t)
@@ -255,17 +269,19 @@ end
 
 # ------------------------------------------------------------------ assembly
 
-# Visibility between two clusters. The shaft (the convex hull of their boxes) holds every
-# segment between their elements; if no facet that could occlude one of those segments
-# meets it, the pair is wholly visible wherever it faces (exact, conservative: Haines &
-# Wallace's shaft culling). Facets of the elements of the two clusters are not occluders
-# (a ray leaves its element's facet, and the receiving facet is its end), nor are those
-# of a curved surface both clusters lie inside (`_vf_visible`'s rule).
+# Visibility between two clusters. The shaft, the convex hull of their boxes, contains
+# every segment between their elements. If no facet that could occlude one of those
+# segments meets it, the pair is wholly visible wherever it faces. The test is exact and
+# conservative (the shaft culling of Haines & Wallace). Facets of the elements of the two
+# clusters are not occluders, since a ray leaves the facet of its element and ends on the
+# receiving facet. The facets of a curved surface that both clusters lie inside are not
+# occluders either (the rule of `_vf_visible`).
 
-# Planes (n, d), n·x ≤ d inside, of the convex hull of two boxes: the faces of their
-# union box and the planes through an edge of each, parallel to an axis (every face of
-# the hull is one of these; Haines & Wallace 1994). Each candidate is kept only if it
-# supports both boxes, so the planes bound a region containing the hull in any case.
+# Returns the planes (n, d), with n·x ≤ d inside, of the convex hull of two boxes. They
+# are the faces of the union box and the planes through an edge of each box, parallel to
+# an axis; every face of the hull is one of these (Haines & Wallace 1994). Each candidate
+# is kept only if it supports both boxes, so the planes always bound a region that
+# contains the hull.
 function _shaft_planes(alo, ahi, blo, bhi)
     lo, hi = min.(alo, blo), max.(ahi, bhi)
     planes = Tuple{Vec3,Float64}[]
@@ -280,7 +296,7 @@ function _shaft_planes(alo, ahi, blo, bhi)
     for k in 1:3
         ek = Vec3(ntuple(i -> i == k ? 1.0 : 0.0, 3))
         for pa in ca, pb in cb
-            (pa[k] == alo[k] && pb[k] == blo[k]) || continue    # one edge each, by its lower end
+            (pa[k] == alo[k] && pb[k] == blo[k]) || continue    # one edge per box, by its lower end
             nv = cross(ek, pb - pa)
             nn = norm(nv)
             nn <= 1e-9 * L && continue
@@ -307,38 +323,44 @@ _box_corners(lo, hi) = (Vec3(lo[1], lo[2], lo[3]), Vec3(hi[1], lo[2], lo[3]), Ve
                         Vec3(hi[1], hi[2], lo[3]), Vec3(lo[1], lo[2], hi[3]), Vec3(hi[1], lo[2], hi[3]),
                         Vec3(lo[1], hi[2], hi[3]), Vec3(hi[1], hi[2], hi[3]))
 
-# What occludes the shaft between clusters a and b (an `_HOcc`): nothing that could
-# occlude a segment between them; only facets of up to 8 components with a certificate
-# (a convex part's balls, a planar part, a cylinder's or cone's axisymmetric bounds:
-# `_hcert_verdict` decides each segment, or leaves it to the ray); or a facet of another
-# component. A facet is not an occluder (for the pairs `_vf_pair_free` evaluates
-# without a ray: facing beyond the slack, so leaving their facets; with `:sampled`
-# visibility, for every ray between their samples lifted by ε: the plane tests below
-# take the box of those points, `opts.qbox`, and the least height of a cluster's samples
-# off a plane, `cplane`) if
-# - it lies on a curved surface (cylinder, sphere, cone) both clusters lie inside;
-# - it belongs to a convex component (every vertex behind every facet) one of the
-#   clusters lies on entirely, each element's facets in one plane through its centroid
-#   with its normal: a segment leaving a face of a convex polyhedron outward stays
-#   outside it;
+# Returns what occludes the shaft between clusters a and b, as an `_HOcc`. The result is
+# one of:
+# - nothing that could occlude a segment between them;
+# - only facets of up to 8 components with a certificate. The certificates are the balls
+#   of a convex part, a planar part, and the axisymmetric bounds of a cylinder or cone.
+#   `_hcert_verdict` decides each segment or leaves it to the ray;
+# - a facet of another component.
+#
+# The tests apply to the pairs that `_vf_pair_free` evaluates without a ray, which face
+# beyond the slack and so leave their facets. With `:sampled` visibility they apply to
+# every ray between the samples of the pair lifted by ε. The plane tests below then use
+# the box of those points, `opts.qbox`, and the least height of the samples of a cluster
+# off a plane, `cplane`. A facet is not an occluder if:
+# - it lies on a curved surface (cylinder, sphere, cone) that both clusters lie inside;
+# - it belongs to a convex component (every vertex behind every facet) on which one of
+#   the clusters lies entirely, with the facets of each element in one plane through its
+#   centroid with its normal. A segment that leaves a face of a convex polyhedron outward
+#   stays outside it;
 # - each cluster lies strictly in front of its plane, or is planar in that plane facing
-#   the same way: the lifted ray ends are in front, so the segment does not cross it.
+#   the same way. The lifted ray ends are then in front, so the segment does not cross
+#   the plane.
 # For the pairs admitted by the slack (`_hslack_verdict`, whose rays start farther off
-# their facets) it also records whether every plane exclusion holds with that margin
-# (`liftx`), and which convex components a cluster lies on were met in the shaft.
-# `full`: up to 8 certified components, else only a convex part's balls with both boxes
-# outside its circumscribed ball (the search stops at the first other facet: the tests
-# for an empty shaft).
+# their facets), the result also records whether every plane exclusion holds with that
+# margin (`liftx`), and which convex components on which a cluster lies were met in the
+# shaft. With `full`, up to 8 certified components are allowed. Otherwise only the balls
+# of a convex part with both boxes outside its circumscribed ball are allowed, and the
+# search stops at the first other facet, as for the tests of an empty shaft.
 function _shaft_occluder(ctx, opts, sa::Int, sb::Int, full::Bool = false)
     (; t, bvh, tri_surf, ε) = ctx
     a, b = opts.nodes[sa], opts.nodes[sb]
     allin, cplane, ccomp, convex = opts.allin, opts.cplane, opts.ccomp, opts.convex
     planes = _shaft_planes(a.bmin, a.bmax, b.bmin, b.bmax)
     outside_box(lo, hi) = any(((n, d),) -> dot(n, ifelse.(n .> 0, lo, hi)) > d, planes)
-    # (the ray ends' boxes: centroids, or with `:sampled` visibility the samples lifted)
+    # (boxes of the ray ends, which are centroids, or with `:sampled` visibility the
+    # lifted samples)
     ca, cb = _box_corners(opts.qbox[sa]...), _box_corners(opts.qbox[sb]...)
     L = norm(max.(a.cmax, b.cmax) - min.(a.cmin, b.cmin))
-    # 0: not clear of the plane; 1: clear; 2: clear also with the slack lifts
+    # 0 for not clear of the plane, 1 for clear, 2 for clear also with the slack lifts
     function clear(c, corners, n, d)
         h = minimum(x -> dot(n, x) - d, corners)
         h > 2ε + 1e-12 * L && return h > 2ε + 1e-12 * L + opts.liftx[c] ? 2 : 1
@@ -348,8 +370,9 @@ function _shaft_occluder(ctx, opts, sa::Int, sb::Int, full::Bool = false)
         end
         return 0
     end
-    # components whose facets need no test: convex ones a cluster lies on (never
-    # occluders), and the certified ones once a facet of them is in the shaft
+    # Components whose facets need no test are the convex ones on which a cluster lies,
+    # which are never occluders, and the certified ones once one of their facets is in
+    # the shaft.
     excluded(c) = c > 0 && convex[c] && (ccomp[sa] == c || ccomp[sb] == c)
     isempty(bvh.nodes) && return _HOCC_EMPTY
     found = ntuple(_ -> 0, 8)
@@ -402,16 +425,17 @@ function _shaft_occluder(ctx, opts, sa::Int, sb::Int, full::Bool = false)
     return _HOcc(nf, found, slackok, (xa, xb))
 end
 
-# A block's entries by its shaft: the empty shaft itself (no rays), else `false` (a ray
-# per pair).
+# Returns how the entries of a block are computed from its shaft: the empty shaft itself
+# (no rays), or else `false` (a ray per pair).
 _hfree(occ) = occ.n == 0 ? occ : false
 
-# What occludes a shaft (`_shaft_occluder`): `n = 0` nothing, `n = -1` a facet no
-# certificate decides (every pair takes a ray), else the components `c[1:n]` whose
-# certificates decide most pairs (`_hvis_cert`): a convex part's balls, a planar part's
-# facets (`_HPlanar`), a part's axisymmetric bounds (`_HHull`). For the pairs the facing
-# slack admits (`_hslack_verdict`): `slack`, whether the plane exclusions hold with their
-# rays' lifts, and `x`, the convex components excluded because a cluster lies on them.
+# What occludes a shaft (`_shaft_occluder`). `n = 0` means nothing, and `n = -1` a facet
+# that no certificate decides, so that every pair takes a ray. Otherwise `c[1:n]` are the
+# components whose certificates decide most pairs (`_hvis_cert`): the balls of a convex
+# part, the facets of a planar part (`_HPlanar`), or the axisymmetric bounds of a part
+# (`_HHull`). For the pairs that the facing slack admits (`_hslack_verdict`), `slack`
+# records whether the plane exclusions hold with the lifts of their rays, and `x` the
+# convex components excluded because a cluster lies on them.
 struct _HOcc
     n::Int
     c::NTuple{8,Int}
@@ -421,9 +445,10 @@ end
 const _HOCC_EMPTY = _HOcc(0, ntuple(_ -> 0, 8), true, (0, 0))
 const _HOCC_RAYS = _HOcc(-1, ntuple(_ -> 0, 8), false, (0, 0))
 
-# Whether convex component c's balls decide every pair between clusters a and b but those
-# between the balls: c has balls (`occluders`) and both boxes lie outside its
-# circumscribed ball. (The one certificate of `_shaft_occluder` without `full`.)
+# Whether the balls of convex component c decide every pair between clusters a and b,
+# except those between the balls. This holds when c has balls (`occluders`) and both
+# boxes lie outside its circumscribed ball. It is the only certificate of
+# `_shaft_occluder` without `full`.
 function _hball_whole(opts, c, a::_HCluster, b::_HCluster)
     k = opts.ball[c]
     k == 0 && return false
@@ -431,11 +456,11 @@ function _hball_whole(opts, c, a::_HCluster, b::_HCluster)
     return _box_distance(ctr, a.bmin, a.bmax) > rout && _box_distance(ctr, b.bmin, b.bmax) > rout
 end
 
-# A planar component (a washer, a disc, a foil): every facet within `tp` of the plane
-# n·(x - c) = 0, in-plane basis (u, v), in-plane distances from c within [rlo, rhi]. Its
-# facets as seen in the plane (inward edge lines, radial range) are binned on a polar
-# grid (nθ × nρ from ρ0 by dρ; CSR `start`/`idx`), each in the bins its angular span and
-# radial range overlap and their neighbors.
+# A planar component, such as a washer, a disc or a foil. Every facet lies within `tp` of
+# the plane n·(x - c) = 0, with in-plane basis (u, v) and in-plane distances from c within
+# [rlo, rhi]. Its facets as seen in the plane (inward edge lines, radial range) are binned
+# on a polar grid (nθ × nρ from ρ0 by dρ, CSR `start`/`idx`). Each facet is placed in the
+# bins that its angular span and radial range overlap and in their neighbors.
 struct _HPlanar
     c::Vec3
     n::Vec3
@@ -454,15 +479,16 @@ struct _HPlanar
     rr::Vector{NTuple{2,Float64}}       # least and largest in-plane distance from c
 end
 
-# A component's axisymmetric bounds about the axis (c, a) of its surface: every facet
-# within a·(x - c) ∈ [z0, z1] and at distance [rlo, rhi] from the axis. If every facet is
-# parallel to the axis and lies, seen along it, on one of `ns` > 0 lines (a prism: a
-# wall of chord rectangles), those side lines in the basis (u, v) of the plane normal to
-# the axis: (νx, νy, p), outward unit normal and distance from the axis, the axis inside
-# every one (p ≥ pmin > 0), each facet within `pf` of its line. Lines are binned by the
-# azimuth of ν (`nb` bins, CSR `start`/`idx`): a bin lists every line whose ν is within Δ
-# of it, cos Δ = `cosΔ`, so a point at distance r from the axis with r cos Δ ≤ pmin - M
-# lies at least M inside every line its bin leaves out (`_hprism_inside`).
+# The axisymmetric bounds of a component about the axis (c, a) of its surface, with every
+# facet within a·(x - c) ∈ [z0, z1] and at distance [rlo, rhi] from the axis. The facets
+# may all be parallel to the axis and lie, seen along it, on one of `ns` > 0 lines, as in
+# a prism such as a wall of chord rectangles. The bounds then also hold those side lines
+# in the basis (u, v) of the plane normal to the axis, as (νx, νy, p), the outward unit
+# normal and the distance from the axis. The axis lies inside every line (p ≥ pmin > 0),
+# and each facet lies within `pf` of its line. Lines are binned by the azimuth of ν (`nb`
+# bins, CSR `start`/`idx`). A bin lists every line whose ν is within Δ of the bin, with
+# cos Δ = `cosΔ`. A point at distance r from the axis with r cos Δ ≤ pmin - M therefore
+# lies at least M inside every line that its bin leaves out (`_hprism_inside`).
 struct _HHull
     c::Vec3
     a::Vec3
@@ -482,7 +508,7 @@ struct _HHull
     sides::Vector{NTuple{3,Float64}}
 end
 
-# Distance from the origin to the triangle (A, B, C) in the plane.
+# Returns the distance from the origin to the triangle (A, B, C) in the plane.
 function _origin_tri_distance(A, B, C)
     function seg(P, Q)
         e = Q - P
@@ -499,7 +525,7 @@ end
 
 _hbasis(n) = (u = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0))); (u, cross(n, u)))
 
-# The certificate of component facets `ks` if they are planar (else nothing).
+# Returns the certificate of component facets `ks` if they are planar, or else nothing.
 function _hplanar(t::Target, ks, surface)
     n = t.tri_normal[ks[1]]
     all(k -> abs(dot(t.tri_normal[k], n)) > 1 - 1e-12, ks) || return nothing
@@ -513,13 +539,13 @@ function _hplanar(t::Target, ks, surface)
     nf = length(ks)
     edges = Vector{NTuple{9,Float64}}(undef, nf)
     rr = Vector{NTuple{2,Float64}}(undef, nf)
-    span = Vector{NTuple{2,Float64}}(undef, nf)        # angular span (lo, hi), or (-Inf, Inf): all
+    span = Vector{NTuple{2,Float64}}(undef, nf)        # angular span (lo, hi), or (-Inf, Inf) for all
     for (f, k) in enumerate(ks)
         A, B, C = map(P, tri(k))
         rr[f] = (_origin_tri_distance(A, B, C), max(norm(A), norm(B), norm(C)))
         σ = sign((B - A)[1] * (C - A)[2] - (B - A)[2] * (C - A)[1])
         line(p, q) = (e = q - p; l = norm(e); nx = -σ * e[2] / l; ny = σ * e[1] / l; (nx, ny, nx * p[1] + ny * p[2]))
-        # (a degenerate facet gets NaN lines: never decided, so its pairs take the ray)
+        # (A degenerate facet gets NaN lines. It is never decided, so its pairs take the ray.)
         edges[f] = σ == 0 ? ntuple(_ -> NaN, 9) : (line(A, B)..., line(B, C)..., line(C, A)...)
         if rr[f][1] > 0
             θ1 = atan(A[2], A[1])
@@ -551,7 +577,7 @@ function _hplanar(t::Target, ks, surface)
     return _HPlanar(c, n, u, v, tp, rlo, rhi, nθ, nρ, rlo, dρ, start, reduce(vcat, bins), edges, rr)
 end
 
-# The axisymmetric bounds of component facets `ks` about the axis (c, a).
+# Returns the axisymmetric bounds of component facets `ks` about the axis (c, a).
 function _hhull(t::Target, ks, c, a)
     u, v = _hbasis(a)
     z0, z1, rlo, rhi = Inf, -Inf, Inf, 0.0
@@ -568,13 +594,14 @@ function _hhull(t::Target, ks, c, a)
     return _HHull(c, a, z0, z1, rlo, rhi, u, v, _hprism(t, ks, c, a, u, v)...)
 end
 
-# The side lines of facets `ks` (`_HHull`'s ns, pmin, pf, cosΔ, nb, start, idx, sides) if
-# every facet is parallel to the axis (c, a) and, seen along it, lies within 1e-10
-# (relative) of a line that keeps the axis inside (pmin > 1e-6 of the largest radius);
-# else ns = 0. Facets are grouped into lines by the azimuth of their outward normals (runs
-# with one normal to 1e-12 and one offset to 1e-10; a line split into several runs is
-# kept several times, harmlessly), each line through the mid-range of its facets'
-# vertices, `pf` the largest half-range.
+# Returns the side lines of facets `ks` (the ns, pmin, pf, cosΔ, nb, start, idx and sides
+# of `_HHull`). They are found if every facet is parallel to the axis (c, a) and, seen
+# along it, lies within 1e-10 (relative) of a line that keeps the axis inside, with pmin
+# > 1e-6 of the largest radius. Otherwise ns = 0. Facets are grouped into lines by the
+# azimuth of their outward normals, in runs with one normal to 1e-12 and one offset to
+# 1e-10. A line split into several runs is kept several times, which is harmless. Each
+# line passes through the mid-range of the vertices of its facets, and `pf` is the
+# largest half-range.
 function _hprism(t::Target, ks, c, a, u, v)
     none = (0, 0.0, 0.0, -1.0, 0, Int32[1], Int32[], NTuple{3,Float64}[])
     P(x) = SVector(dot(u, x - c), dot(v, x - c))
@@ -630,7 +657,7 @@ function _hprism(t::Target, ks, c, a, u, v)
 end
 
 # Whether the points xa and xb (from the axis, normal to it) lie at least M inside every
-# side line of the prism H (beyond each line's facets by M, seen along the axis).
+# side line of the prism H, which is M beyond the facets of each line seen along the axis.
 function _hprism_inside(H::_HHull, xa, xb, M)
     M += 2 * H.pf
     pm = H.pmin - M
@@ -639,7 +666,7 @@ function _hprism_inside(H::_HHull, xa, xb, M)
     ra, rb = Xa^2 + Ya^2, Xb^2 + Yb^2
     c2 = H.cosΔ * abs(H.cosΔ)
     (ra * c2 <= pm^2 && rb * c2 <= pm^2) || return false
-    # (inside the inscribed circle of the lines by M: inside every one)
+    # (a point inside the inscribed circle of the lines by M lies inside every line)
     return (ra <= pm^2 || _hprism_sides(H, Xa, Ya, M)) && (rb <= pm^2 || _hprism_sides(H, Xb, Yb, M))
 end
 
@@ -653,8 +680,8 @@ end
     return true
 end
 
-# atan(y, x) within 2e-5 rad (Abramowitz & Stegun 4.4.49 on the octant, 1e-5): the bin
-# of `_hprism_sides`, whose lists have 1e-4 of slack.
+# Returns atan(y, x) within 2e-5 rad (Abramowitz & Stegun 4.4.49 on the octant, 1e-5),
+# for the bin of `_hprism_sides`, whose lists have 1e-4 of slack.
 function _atan_approx(y, x)
     ax, ay = abs(x), abs(y)
     a = min(ax, ay) / max(ax, ay, floatmin(Float64))
@@ -665,8 +692,8 @@ function _atan_approx(y, x)
     return ifelse(y < 0, -r, r)
 end
 
-# Per component: its certificate (> 0 into `planar`, < 0 into `hull`, 0 none). Convex
-# parts with balls keep those; apertures are no occluders.
+# Returns the certificate of each component (> 0 into `planar`, < 0 into `hull`, 0 for
+# none). Convex parts with balls keep their balls, and apertures are not occluders.
 function _hrim_data(t::Target, ball)
     planar, hull = _HPlanar[], _HHull[]
     cert = zeros(Int, length(t.components))
@@ -689,18 +716,20 @@ function _hrim_data(t::Target, ball)
     return cert, planar, hull
 end
 
-# The ball verdict of the segment oi → oj for a convex part with inscribed ball (ctr,
-# rin) and circumscribed ball rout: 1 if it misses the circumscribed ball (so every
-# facet), 0 if it passes through the inscribed ball with both ends outside the
-# circumscribed one (so it crosses the closed surface), else -1. Margins 1e-9 relative
-# on top of those in `rin`, `rout`.
+# Returns the ball verdict of the segment from oi to oj for a convex part with inscribed
+# ball (ctr, rin) and circumscribed ball rout. The verdict is 1 if the segment misses the
+# circumscribed ball, and so every facet. It is 0 if the segment passes through the
+# inscribed ball with both ends outside the circumscribed one, so that it crosses the
+# closed surface, and -1 otherwise. Margins of 1e-9 relative are added to those in
+# `rin`, `rout`.
 #
-# Bundles (every certificate): with `ri`, `rj` > 0 the verdict holds for every segment
-# from a point within `ri` of oi to one within `rj` of oj (`:sampled` visibility: the
-# segments between two elements' ray samples). Such a segment's point at parameter s lies
-# within ρ = max(ri, rj) of the point of oi → oj at s (a tube about it), and its ends'
-# heights over a plane within ri, rj of those of oi, oj. Zero radii give the segment's
-# verdict, bitwise identical to that without them.
+# Bundles apply to every certificate. With `ri`, `rj` > 0, the verdict holds for every
+# segment from a point within `ri` of oi to one within `rj` of oj. With `:sampled`
+# visibility these are the segments between the ray samples of two elements. The point
+# of such a segment at parameter s lies within ρ = max(ri, rj) of the point of the
+# segment from oi to oj at s, in a tube about it. The heights of its ends over a plane
+# lie within ri, rj of those of oi, oj. Zero radii give the verdict of the segment,
+# identical to that without them.
 function _ball_verdict(oi, oj, ctr, rin, rout, ri = 0.0, rj = 0.0)
     ro = rout * (1 + 1e-9)
     (dot(oi - ctr, oi - ctr) > (ro + ri)^2 && dot(oj - ctr, oj - ctr) > (ro + rj)^2) || return Int8(-1)
@@ -715,13 +744,15 @@ function _ball_verdict(oi, oj, ctr, rin, rout, ri = 0.0, rj = 0.0)
     return Int8(-1)
 end
 
-# The planar verdict of the segment oi → oj, as `_vf_visible`'s ray (`any_hit` to
-# 1 - 1e-9, barycentric slack 1e-10) finds the facets: 1 if the segment stays on one
-# side of the plane or crosses it outside every facet, 0 if it crosses inside a facet
-# with its end and start off the plane, else -1. Margins 1e-9 relative (and the plane's
-# flatness `tp`), grown by 1/sin of the crossing angle in the plane. A bundle's crossings
-# (radii ri, rj) lie within ρ (1 + |w|/|dh|) of oi → oj's (ρ = max(ri, rj)): a point at
-# height ≤ ρ on the tube's axis is that far along it from the crossing.
+# Returns the planar verdict of the segment from oi to oj, as the ray of `_vf_visible`
+# finds the facets (`any_hit` to 1 - 1e-9, barycentric slack 1e-10). The verdict is 1 if
+# the segment stays on one side of the plane or crosses it outside every facet, 0 if it
+# crosses inside a facet with its end and start off the plane, and -1 otherwise. Margins
+# of 1e-9 relative and the flatness `tp` of the plane are grown by 1/sin of the crossing
+# angle in the plane. The crossings of a bundle (radii ri, rj) lie within
+# ρ (1 + |w|/|dh|) of the crossing of the segment from oi to oj, with ρ = max(ri, rj),
+# since a point at height ≤ ρ on the axis of the tube is that far along it from the
+# crossing.
 function _planar_verdict(P::_HPlanar, oi, oj, ri = 0.0, rj = 0.0)
     hi, hj = dot(P.n, oi - P.c), dot(P.n, oj - P.c)
     L = max(norm(oi - P.c) + ri, norm(oj - P.c) + rj, P.rhi)
@@ -757,11 +788,12 @@ function _planar_verdict(P::_HPlanar, oi, oj, ri = 0.0, rj = 0.0)
     return out ? Int8(1) : Int8(-1)
 end
 
-# The axisymmetric verdict of the segment oi → oj: 1 if its part within the facets'
-# axial range (widened by the margin) lies inside rlo or outside rhi, or, on a prism,
-# inside every side line by the margin (a segment through a waist gap onto the wall: it
-# passes the wall's edge outside its axial range), else -1. A bundle (tube radius ρ) is
-# decided as its axis against bounds widened by ρ.
+# Returns the axisymmetric verdict of the segment from oi to oj. The verdict is 1 if the
+# part of the segment within the axial range of the facets, widened by the margin, lies
+# inside rlo or outside rhi. On a prism it is also 1 if that part lies inside every side
+# line by the margin, as for a segment through a waist gap onto the wall, which passes
+# the edge of the wall outside its axial range. Otherwise the verdict is -1. A bundle
+# (tube radius ρ) is decided as its axis against bounds widened by ρ.
 function _hull_verdict(H::_HHull, oi, oj, ρ = 0.0)
     pi, pj = oi - H.c, oj - H.c
     zi, zj = dot(H.a, pi), dot(H.a, pj)
@@ -782,7 +814,7 @@ function _hull_verdict(H::_HHull, oi, oj, ρ = 0.0)
     xa, xb = Ri + sa * Rw, Ri + sb * Rw
     rlo = H.rlo - ρ
     rlo > m && max(dot(xa, xa), dot(xb, xb)) < (rlo - m)^2 && return Int8(1)
-    # a prism: that part inside every side line (it is convex), so beyond its facets
+    # on a prism, that part lies inside every side line (it is convex), so beyond its facets
     H.ns > 0 && _hprism_inside(H, xa, xb, m + ρ) && return Int8(1)
     ww = dot(Rw, Rw)
     s = ww > 0 ? clamp(-dot(Ri, Rw) / ww, sa, sb) : sa
@@ -791,13 +823,13 @@ function _hull_verdict(H::_HHull, oi, oj, ρ = 0.0)
     return Int8(-1)
 end
 
-# The verdict of component c's certificate on the segment oi → oj between elements i
-# and j. A convex part is also cleared by the plane of an end's element lying on it
-# (`onconvex`: its facets in that plane): the part lies behind it (within the convexity
-# tolerance), so a segment with both ends in front misses it. With radii ri, rj: the
-# verdict of the bundle of segments between points within ri of oi and rj of oj, the
-# ray samples of elements i and j (`_hvis_bundle`); the samples of an end element lie in
-# its plane within `opts.hdev`.
+# Returns the verdict of the certificate of component c on the segment from oi to oj
+# between elements i and j. A convex part is also cleared by the plane of the element of
+# an end that lies on it (`onconvex`, with its facets in that plane). The part lies behind
+# that plane, within the convexity tolerance, so a segment with both ends in front misses
+# it. With radii ri, rj, the verdict is that of the bundle of segments between points
+# within ri of oi and rj of oj, which are the ray samples of elements i and j
+# (`_hvis_bundle`). The samples of an end element lie in its plane within `opts.hdev`.
 function _hcert_verdict(ctx, opts, c, i, j, oi, oj, ri = 0.0, rj = 0.0)
     k = opts.ball[c]
     if k != 0
@@ -813,7 +845,8 @@ function _hcert_verdict(ctx, opts, c, i, j, oi, oj, ri = 0.0, rj = 0.0)
     return k > 0 ? _planar_verdict(opts.planar[k], oi, oj, ri, rj) : _hull_verdict(opts.hull[-k], oi, oj, max(ri, rj))
 end
 
-# Per BVH node: the component of every facet below it, or -1 if they are of several.
+# Returns, per BVH node, the component of every facet below it, or -1 if the facets
+# belong to several components.
 function _bvh_components(bvh, tri_comp)
     sig = zeros(Int, length(bvh.nodes))
     function rec(ni)
@@ -831,14 +864,15 @@ function _bvh_components(bvh, tri_comp)
     return sig
 end
 
-# Whether every segment between the boxes a and b crosses the ball (c, r) (exactly, for
-# boxes outside the ball). For a point q outside the ball, the points x past the ball as
-# seen from q (the segment qx crosses it) include the convex set K_q: the cone from q
-# over the ball, beyond q's polar plane (x - c)·(q - c) < r². If every corner of a lies
-# in K_q for every corner q of b, each segment from a corner of b to any point of a
-# crosses the ball; each corner of b then lies past the ball from any point p of a, so
-# in K_p (a point outside the ball past it from p is beyond p's polar plane), and so does
-# all of b (K_p is convex): every segment from a to b crosses it.
+# Whether every segment between the boxes a and b crosses the ball (c, r), exactly for
+# boxes outside the ball. For a point q outside the ball, the points x past the ball as
+# seen from q, where the segment qx crosses it, include the convex set K_q. K_q is the
+# cone from q over the ball, beyond the polar plane of q, (x - c)·(q - c) < r². Suppose
+# every corner of a lies in K_q for every corner q of b. Then each segment from a corner
+# of b to any point of a crosses the ball. Each corner of b then lies past the ball from
+# any point p of a, and so in K_p, since a point outside the ball past it from p lies
+# beyond the polar plane of p. All of b then lies in K_p, since K_p is convex, so every
+# segment from a to b crosses the ball.
 function _ball_blocks(alo, ahi, blo, bhi, c, r)
     for q in _box_corners(blo, bhi)
         w = c - q
@@ -857,9 +891,9 @@ function _ball_blocks(alo, ahi, blo, bhi, c, r)
 end
 
 # Whether a convex component (closed, outward normals) hides every pair of clusters a and
-# b from each other: its inscribed ball (about the vertex mean) blocks every segment
-# between their boxes, both boxes lying outside its circumscribed ball (so each segment
-# enters the component through a facet). Neither cluster may lie on it.
+# b from each other. Its inscribed ball (about the vertex mean) must block every segment
+# between their boxes, with both boxes outside its circumscribed ball, so that each
+# segment enters the component through a facet. Neither cluster may lie on it.
 function _convex_hides(opts, sa, sb)
     a, b = opts.nodes[sa], opts.nodes[sb]
     for (c, ctr, rin, rout) in opts.occluders
@@ -888,10 +922,10 @@ end
 
 _box_distance(p, lo, hi) = norm(max.(zero(Vec3), max.(lo - p, p - hi)))
 
-# Per cluster: its plane (n, d) if every element is a flat patch of facets in one plane
-# with one normal (else a zero normal), and its component if every element is a
-# one-facet element of one component (else 0). Per component: whether its mesh is convex
-# with outward normals (sphere-surface components only).
+# Returns, per cluster, its plane (n, d) if every element is a flat patch of facets in
+# one plane with one normal (else a zero normal), and its component if every element is
+# a one-facet element of one component (else 0). Per component, it returns whether the
+# mesh is convex with outward normals, for sphere-surface components only.
 function _hcluster_data(t::Target, nodes, perm, pts = nothing)
     cplane = Vector{Tuple{Vec3,Float64,Float64}}[]
     ccomp = Int[]
@@ -906,9 +940,9 @@ function _hcluster_data(t::Target, nodes, perm, pts = nothing)
     for nd in nodes
         es = perm[nd.lo:nd.hi]
         L = norm(nd.cmax - nd.cmin) + norm(nd.cmax) + norm(nd.cmin)
-        # the planes of its flat elements, each with the least height above it of the
-        # cluster's other elements (Inf if none): of their centroids, or of the points
-        # `pts[e]` (`:sampled` visibility: the ray samples lifted)
+        # The planes of its flat elements, each with the least height above it of the
+        # other elements of the cluster (Inf if none). The heights are those of their
+        # centroids, or with `:sampled` visibility of the lifted ray samples `pts[e]`.
         planes = Tuple{Vec3,Float64,Float64}[]
         for e in es
             flat[e] || continue
@@ -953,25 +987,25 @@ function _hcluster_data(t::Target, nodes, perm, pts = nothing)
     return cplane, ccomp, convex, occluders
 end
 
-# The exact visibility of every pair of a block (`_vf_visible`'s verdict, by tree
-# positions from (r0, c0)): -1 not facing, 0 hidden, 1 visible.
+# The exact visibility of every pair of a block, the verdict of `_vf_visible` by tree
+# positions from (r0, c0): -1 for not facing, 0 for hidden and 1 for visible.
 struct _HMask
     v::Matrix{Int8}
     r0::Int
     c0::Int
 end
 
-# The visible fractions (`_vf_visible`'s, -1 if not facing) of every pair of a block, by
-# tree positions from (r0, c0) (`:sampled` visibility).
+# The visible fractions of every pair of a block, those of `_vf_visible` with -1 for not
+# facing, by tree positions from (r0, c0) (`:sampled` visibility).
 struct _HFrac
     v::Matrix{Float64}
     r0::Int
     c0::Int
 end
 
-# G at tree positions (p, q); `ev`: the pair's shaft holds no occluder (an empty `_HOcc`:
-# no ray but for some pairs the facing slack admits), `false` (a ray per pair), or the
-# block's visibility mask.
+# Returns G at tree positions (p, q). `ev` is an empty `_HOcc` when the shaft of the pair
+# holds no occluder, with no ray except for some pairs that the facing slack admits. It is
+# `false` for a ray per pair, or the visibility mask of the block.
 function _hentry_eval(ctx, perm, p, q, ::Bool)
     return _vf_exchange(ctx, perm[p], perm[q])
 end
@@ -996,13 +1030,15 @@ function _hentry_eval(ctx, perm, p, q, M::_HFrac)
     return _vf_kernel(ctx, i, j, f, d, dot(d, d))
 end
 
-# The ray ends of `_vf_visible` for the pair i < j (centroids at distance r, facing
-# cosines ci, cj) that only the facing slack admits, and whether its shaft's exclusions
-# (`_shaft_occluder`) hold for that segment: the ends stay inside the clusters' boxes
-# (lifted by at most the boxes' padding), the plane exclusions had the lifts' margin
-# (`occ.slack`), and each convex component a cluster lies on is cleared by the plane of
-# an end's element on it (`ctx.onplane`: its facets in that plane, which the convex part
-# lies behind) with both ends in front by `ctx.hsep`.
+# Returns the ray ends of `_vf_visible` for the pair i < j (centroids at distance r,
+# facing cosines ci, cj) that only the facing slack admits. It also returns whether the
+# exclusions of its shaft (`_shaft_occluder`) hold for that segment. They hold when:
+# - the ends stay inside the boxes of the clusters, lifted by at most the padding of
+#   the boxes;
+# - the plane exclusions had the margin of the lifts (`occ.slack`);
+# - each convex component on which a cluster lies is cleared by the plane of the element
+#   of an end on it, with both ends in front by `ctx.hsep`. `ctx.onplane` marks elements
+#   with their facets in that plane, behind which the convex part lies.
 function _hslack_ends(ctx, i, j, r, ci, cj, occ::_HOcc)
     (; t, C, Nrm, size, ε, onplane, hsep) = ctx
     li, lj = ε + size[i] * max(0.0, -ci), ε + size[j] * max(0.0, -cj)
@@ -1016,12 +1052,13 @@ function _hslack_ends(ctx, i, j, r, ci, cj, occ::_HOcc)
     return ok, oi, oj
 end
 
-# Visibility of the pair i < j whose shaft holds facets of the certified components
-# `occ.c[1:occ.n]` only (`_shaft_occluder`), as `_vf_visible`'s ray finds it: hidden if
-# one certificate finds the segment through its facets, visible if every one finds it
-# clear (`_hcert_verdict`: a convex part's balls, a planar part's facets, a part's
-# axisymmetric bounds). A pair the facing slack admits is judged on its ray ends
-# (`_hslack_ends`). Only pairs left undecided take the ray. Centroid visibility only.
+# Returns the visibility of the pair i < j whose shaft contains only facets of the
+# certified components `occ.c[1:occ.n]` (`_shaft_occluder`), as the ray of `_vf_visible`
+# finds it. The pair is hidden if one certificate finds the segment through its facets,
+# and visible if every certificate finds it clear (`_hcert_verdict`). The certificates
+# are the balls of a convex part, the facets of a planar part and the axisymmetric bounds
+# of a part. A pair that the facing slack admits is judged on its ray ends
+# (`_hslack_ends`). Only pairs left undecided take the ray. For centroid visibility only.
 function _hvis_cert(ctx, opts, i, j, occ::_HOcc)
     (; C, Nrm, slack, ε) = ctx
     d = C[j] - C[i]
@@ -1048,7 +1085,7 @@ function _hvis_cert(ctx, opts, i, j, occ::_HOcc)
     return first(_vf_visible(ctx, i, j)) > 0 ? Int8(1) : Int8(0)
 end
 
-# The visibility mask of the block rows × cols whose shaft `occ` certifies.
+# Returns the visibility mask of the block rows × cols whose shaft `occ` certifies.
 function _hmask(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, occ::_HOcc)
     V = Matrix{Int8}(undef, length(rows), length(cols))
     for (b, q) in enumerate(cols), (a, p) in enumerate(rows)
@@ -1057,22 +1094,25 @@ function _hmask(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, occ
     return _HMask(V, first(rows), first(cols))
 end
 
-# The `:sampled` visible fraction of the pair i < j whose shaft holds facets of the
-# certified components `occ.c[1:occ.n]` only (`_shaft_occluder`, searched with the
-# clusters' sample boxes), `===` `_vf_visible`'s. Its rays (the centroid ray, the probes',
-# those between the samples) all run between points within `opts.rvis` of the two ray
-# ends, so each certificate decides the bundle (`_hcert_verdict` with radii): hidden if
-# one finds every segment through its facets, visible if all find every segment clear.
-# Otherwise `_visible_fraction` runs as `_vf_visible` does, each segment decided by the
-# certificates that did not clear the bundle (`_HSeen`), or by its ray. The shaft's
-# exclusions must hold for the samples: their ends inside the cluster boxes (rvis + the
-# lift within the padding), the plane exclusions with the slack lifts' margin for a pair
-# the slack admits (`occ.slack`), and each convex part a cluster lies on cleared by an
-# end element's plane (per bundle, else per segment). Folded elements (whose own facets
-# the samples' rays skip) take `_vf_visible`.
+# Returns the `:sampled` visible fraction of the pair i < j whose shaft contains only
+# facets of the certified components `occ.c[1:occ.n]` (`_shaft_occluder`, searched with
+# the sample boxes of the clusters). The result is `===` that of `_vf_visible`. The rays
+# of the pair, which are the centroid ray, the rays of the probes and those between the
+# samples, all run between points within `opts.rvis` of the two ray ends. Each
+# certificate therefore decides the bundle (`_hcert_verdict` with radii). The pair is
+# hidden if one certificate finds every segment through its facets, and visible if all
+# find every segment clear. Otherwise `_visible_fraction` runs as `_vf_visible` does,
+# with each segment decided by the certificates that did not clear the bundle (`_HSeen`)
+# or by its ray. The exclusions of the shaft must hold for the samples:
+# - their ends lie inside the cluster boxes (rvis plus the lift within the padding);
+# - for a pair that the slack admits, the plane exclusions hold with the margin of the
+#   slack lifts (`occ.slack`);
+# - each convex part on which a cluster lies is cleared by the plane of an end element,
+#   per bundle or else per segment.
+# Folded elements, whose facets the rays of the samples skip, take `_vf_visible`.
 function _hvis_bundle(ctx, opts, i, j, occ::_HOcc)
     (; t, bvh, C, Nrm, size, slack, ε, tri_surf, inside, vis, multi, onplane, hsep) = ctx
-    facing, _, _, ci, cj, oi, oj = _vf_ends(C, Nrm, size, slack, ε, i, j)    # `_vf_visible`'s
+    facing, _, _, ci, cj, oi, oj = _vf_ends(C, Nrm, size, slack, ε, i, j)    # as in `_vf_visible`
     facing || return -1.0
     (multi[i] || multi[j]) && return first(_vf_visible(ctx, i, j))
     li, lj = oi - C[i], oj - C[j]
@@ -1080,7 +1120,8 @@ function _hvis_bundle(ctx, opts, i, j, occ::_HOcc)
     ok = ((ci > slack[i] && cj > slack[j]) || occ.slack) &&
          ri + norm(li) <= size[i] / sqrt(2) && rj + norm(lj) <= size[j] / sqrt(2)
     ok || return first(_vf_visible(ctx, i, j))
-    # convex parts a cluster lies on: cleared for the bundle, else checked per segment
+    # convex parts on which a cluster lies are cleared for the bundle, or else checked per
+    # segment
     xs = (0, 0)
     for (k, x) in enumerate(occ.x)
         x == 0 && continue
@@ -1104,10 +1145,10 @@ function _hvis_bundle(ctx, opts, i, j, occ::_HOcc)
     return _visible_fraction(seen, vis[i], vis[j], oi, oj, li, lj, Nrm[i], Nrm[j], !seen(oi, oj))
 end
 
-# Whether the segment p → q between the ray samples of elements i and j is unobstructed:
-# by the certificates of `occ` that did not clear the bundle (`vb[k] != 1`), once the
-# convex parts `xs` a cluster lies on are cleared by an end element's plane; else by the
-# ray.
+# Whether the segment from p to q between the ray samples of elements i and j is
+# unobstructed. It is decided by the certificates of `occ` that did not clear the bundle
+# (`vb[k] != 1`), once the convex parts `xs` on which a cluster lies are cleared by the
+# plane of an end element, and otherwise by the ray.
 struct _HSeen{C,O,R}
     ctx::C
     opts::O
@@ -1137,7 +1178,7 @@ function (s::_HSeen)(p, q)
     return clear || s.ray(p, q)
 end
 
-# The visible fractions of the block rows × cols whose shaft `occ` certifies.
+# Returns the visible fractions of the block rows × cols whose shaft `occ` certifies.
 function _hfrac(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, occ::_HOcc)
     V = Matrix{Float64}(undef, length(rows), length(cols))
     for (b, q) in enumerate(cols), (a, p) in enumerate(rows)
@@ -1146,14 +1187,16 @@ function _hfrac(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, occ
     return _HFrac(V, first(rows), first(cols))
 end
 
-# The certified visibility of a block: a mask (centroid visibility) or fractions.
+# Returns the certified visibility of a block, as a mask (centroid visibility) or as
+# fractions.
 _hcertified(ctx, opts, perm, rows, cols, occ) =
     ctx.vis === nothing ? _hmask(ctx, opts, perm, rows, cols, occ) : _hfrac(ctx, opts, perm, rows, cols, occ)
 
-# `_vf_pair` of a pair i < j whose shaft `occ` holds no occluder: a pair facing beyond the
-# slack of the facing test leaves its elements' facets, and its ray would be
-# unobstructed; one admitted by the slack is visible if its ray ends keep the
-# shaft's exclusions (`_hslack_ends`; centroid visibility), else it takes the ray.
+# `_vf_pair` of a pair i < j whose shaft `occ` holds no occluder. A pair facing beyond the
+# slack of the facing test leaves the facets of its elements, and its ray would be
+# unobstructed. A pair admitted by the slack is visible if its ray ends satisfy the
+# exclusions of the shaft (`_hslack_ends`, centroid visibility), and otherwise it takes
+# the ray.
 function _vf_pair_free(ctx, i, j, occ::_HOcc)
     (; C, Nrm, slack) = ctx
     d = C[j] - C[i]
@@ -1168,8 +1211,8 @@ function _vf_pair_free(ctx, i, j, occ::_HOcc)
     return _vf_kernel(ctx, i, j, 1.0, d, r2)
 end
 
-# Dense block of G at tree positions rows × cols (Float32); a diagonal block is filled
-# from its upper triangle.
+# Returns the dense block of G at tree positions rows × cols (Float32). A diagonal block
+# is filled from its upper triangle.
 function _hdense(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, free)
     D = Matrix{Float32}(undef, length(rows), length(cols))
     if rows == cols
@@ -1186,7 +1229,8 @@ function _hdense(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, free)
     return D
 end
 
-# Dense block at tree positions rows × cols (index lists of two different clusters).
+# Returns the dense block at tree positions rows × cols (index lists of two different
+# clusters).
 function _hdense_index(ctx, perm, rows::Vector{Int}, cols::Vector{Int}, free)
     D = Matrix{Float32}(undef, length(rows), length(cols))
     for b in eachindex(cols), a in eachindex(rows)
@@ -1195,8 +1239,8 @@ function _hdense_index(ctx, perm, rows::Vector{Int}, cols::Vector{Int}, free)
     return D
 end
 
-# Dense block rows × cols (s ≠ t) whose visibility `vis` (`_vf_visible`'s fraction, by
-# position in the block) is known.
+# Returns the dense block rows × cols (s ≠ t) whose visibility `vis` is known, as the
+# fraction of `_vf_visible` by position in the block.
 function _hdense_masked(ctx, perm, rows, cols, vis)
     D = zeros(Float32, length(rows), length(cols))
     for b in eachindex(cols), a in eachindex(rows)
@@ -1209,11 +1253,12 @@ function _hdense_masked(ctx, perm, rows, cols, vis)
     return D
 end
 
-# The positions in `rows` whose element may face some centroid of cluster c: those
-# with a corner of c's centroid box in front of the element's plane (by the facing test's
-# slack); the others' rows of the block are zero. And those that face all of c's box
-# beyond the slack: their rows have no facing cut-off (a kink in the kernel that the
-# cross approximation resolves slowly, at a sphere's terminator).
+# Returns the positions in `rows` whose element may face some centroid of cluster c,
+# which are those with a corner of the centroid box of c in front of the plane of the
+# element, by the slack of the facing test. The rows of the other positions in the block
+# are zero. It also returns the positions that face all of the box of c beyond the slack.
+# Their rows have no facing cut-off, a kink in the kernel that the cross approximation
+# resolves slowly at the terminator of a sphere.
 _hactive(ctx, perm, rows, c::_HCluster) = _hactive(ctx, perm, rows, c.cmin, c.cmax)
 function _hactive(ctx, perm, rows, cmin::Vec3, cmax::Vec3)
     corners = _box_corners(cmin, cmax)
@@ -1230,7 +1275,8 @@ function _hactive(ctx, perm, rows, cmin::Vec3, cmax::Vec3)
     return act, full
 end
 
-# The rows and columns (of `rows` × `cols`) with some pair that passes the facing test.
+# Returns the rows and columns (of `rows` × `cols`) with some pair that passes the facing
+# test.
 function _hfacing(ctx, perm, rows, cols)
     (; C, Nrm, slack) = ctx
     rk, ck = falses(length(rows)), falses(length(cols))
@@ -1268,7 +1314,7 @@ function _haca(ctx, perm, rows, cols, tol, kmax, i0, free)
         end
         j = argmax(abs.(row))
         if row[j] == 0
-            # a zero residual row: the block may be zero (rank 0) or this row alone
+            # after a zero residual row, the block may be zero (rank 0), or only this row
             zeros_seen += 1
             left = findall(!, used)
             (zeros_seen > 3 || isempty(left)) && return Us, Vs, true
@@ -1293,8 +1339,9 @@ function _haca(ctx, perm, rows, cols, tol, kmax, i0, free)
         push!(Us, u)
         push!(Vs, v)
         uu * vv <= tol^2 * nrm2 && return Us, Vs, true
-        # give up early when the terms' decay, extrapolated, misses tol at kmax: a block
-        # that will not compress is refined, and its children pay for it again
+        # The approximation stops early when the extrapolated decay of the terms misses tol
+        # at kmax. A block that will not compress is refined, and its children then pay
+        # for it again.
         e = sqrt(uu * vv / nrm2)
         push!(hist, e)
         k = length(hist)
@@ -1312,7 +1359,7 @@ function _haca(ctx, perm, rows, cols, tol, kmax, i0, free)
     return Us, Vs, false
 end
 
-# Recompress U Vᵀ (QR of both factors, SVD of the small core) to relative accuracy tol.
+# Recompresses U Vᵀ (QR of both factors, SVD of the small core) to relative accuracy tol.
 function _hrecompress(Us, Vs, tol)
     k = length(Us)
     k == 0 && return zeros(Float32, 0, 0), zeros(Float32, 0, 0)
@@ -1335,11 +1382,12 @@ function _hrecompress(Us, Vs, tol)
     return Matrix{Float32}(Uc), Matrix{Float32}(Vc)
 end
 
-# Estimated Frobenius error of U Vᵀ against the block, from `ns` sampled entries, plus the
-# error of the entries where a row's or a column's quadrature tier switches
-# (`_htier_entries`): G jumps there by the quadrature rules' difference, and an isolated
-# jump (one pair of a capsule's polar sliver past the far boundary) is missed by the
-# cross approximation's pivots and the random samples alike.
+# Returns the estimated Frobenius error of U Vᵀ against the block, from `ns` sampled
+# entries, plus the error of the entries where the quadrature tier of a row or a column
+# switches (`_htier_entries`). G jumps there by the difference of the quadrature rules.
+# An isolated jump, such as one pair of a polar sliver of a capsule past the far
+# boundary, is missed by the pivots of the cross approximation and the random samples
+# alike.
 function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free)
     m, n = length(rows), length(cols)
     rng = Xoshiro(seed)
@@ -1367,10 +1415,11 @@ function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free)
     return sqrt(e2 * m * n / ns + x2), sqrt(g2 * m * n / ns)
 end
 
-# The positions (a, b) of the block rows × cols where G may jump: in each row (column)
-# whose pairs fall in more than one quadrature tier (`_vf_tier`), the pairs outside its
-# most common tier; at most m + n of them. None, without a pass over the pairs, if the
-# centroid boxes are farther apart than `mid` times the largest element (all far).
+# Returns the positions (a, b) of the block rows × cols where G may jump. In each row
+# (column) whose pairs fall in more than one quadrature tier (`_vf_tier`), these are the
+# pairs outside its most common tier, at most m + n of them. There are none, without a
+# pass over the pairs, if the centroid boxes are farther apart than `mid` times the
+# largest element, so that all pairs are far.
 function _htier_entries(ctx, perm, rows, cols)
     out = Tuple{Int,Int}[]
     (; C, size, mid2) = ctx
@@ -1387,8 +1436,8 @@ function _htier_entries(ctx, perm, rows, cols)
         d = C[j] - C[i]
         T[a, b] = code(_vf_tier(ctx, i, j, dot(d, d)))
     end
-    # lines (a row a > 0 or a column -a) with their pairs outside the most common tier,
-    # the fewest first: an isolated jump is the one the cross approximation misses
+    # Lines (a row a > 0 or a column -a) with their pairs outside the most common tier,
+    # the fewest first, since the cross approximation misses an isolated jump.
     lines = Tuple{Int,Int,UInt8}[]
     function line!(k, line)
         c1, c2, c3 = count(==(0x01), line), count(==(0x02), line), count(==(0x03), line)
@@ -1416,8 +1465,9 @@ function _htier_entries(ctx, perm, rows, cols)
     return out
 end
 
-# The exact visibility of the block rows × cols by a ray per pair (`_vf_visible`) on the
-# facing positions ra × cb (the others do not face); centroid visibility only.
+# Returns the exact visibility of the block rows × cols by a ray per pair (`_vf_visible`)
+# on the facing positions ra × cb, since the others do not face. For centroid visibility
+# only.
 function _hmask_rays(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, ra, cb)
     V = fill(Int8(-1), length(rows), length(cols))
     for q in cb, p in ra
@@ -1427,7 +1477,7 @@ function _hmask_rays(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, ra, 
     return _HMask(V, first(rows), first(cols))
 end
 
-# Visible and hidden facing pairs of a mask on positions ra × cb.
+# Returns the visible and hidden facing pairs of a mask on positions ra × cb.
 function _hmask_counts(M::_HMask, ra, cb)
     nv = nh = 0
     for q in cb, p in ra
@@ -1437,7 +1487,7 @@ function _hmask_counts(M::_HMask, ra, cb)
     end
     return nv, nh
 end
-# (fractions: visible, and hidden or partly visible)
+# (for fractions, the visible pairs, and the hidden or partly visible pairs)
 function _hmask_counts(M::_HFrac, ra, cb)
     nv = nh = 0
     for q in cb, p in ra
@@ -1448,13 +1498,14 @@ function _hmask_counts(M::_HFrac, ra, cb)
     return nv, nh
 end
 
-# The blocks of cluster pair (s, t) into `dense`/`lowrank`: low rank when the pair is
-# admissible, of uniform visibility and its cross approximation converges and passes a
-# sampled check; otherwise its children, down to dense leaf pairs. `known`: what a parent
-# block found of the pair's visibility (`true`: an empty shaft; a mask), else `nothing`.
-# `sub`: the rows of s that a facing test cut against a parent of t (`split` below),
-# refined over t only: against t's smaller boxes most of them face wholly (low rank) or
-# not at all. Blocks go into `out` = (dense, lowrank, scattered, lowrank_index).
+# Assembles the blocks of cluster pair (s, t) into `dense`/`lowrank`. The block is low
+# rank when the pair is admissible and of uniform visibility, and its cross approximation
+# converges and passes a sampled check. Otherwise its children are assembled, down to
+# dense leaf pairs. `known` is what a parent block found of the visibility of the pair
+# (`true` for an empty shaft, or a mask), or else `nothing`. `sub` holds the rows of s
+# that a facing test cut against a parent of t (`split` below), refined only over t.
+# Against the smaller boxes of t, most of them face wholly (low rank) or not at all.
+# Blocks go into `out` = (dense, lowrank, scattered, lowrank_index).
 function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
                      sub::Union{Nothing,Vector{Int}} = nothing)
     dense, lowrank, scattered, lowrank_index = out
@@ -1464,7 +1515,7 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
     st = opts.stats
     leaves = _hleaf(a) && _hleaf(b)
     vis = nothing        # visible fractions of a leaf pair (`:sampled` visibility)
-    ev = false           # entries: `true` (empty shaft, no rays), `false` (rays), a mask
+    ev = false           # entries from `true` (empty shaft, no rays), `false` (rays) or a mask
     ra, cb = Int[], Int[]
     if far
         Threads.atomic_add!(st.candidates, 1)
@@ -1472,9 +1523,9 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
         amin, amax = sub === nothing ? (a.cmin, a.cmax) : _hcentroid_box(ctx.C, perm, sub)
         (ra, fa), (cb, fb) = _hactive(ctx, perm, rows, b), _hactive(ctx, perm, cols, amin, amax)
         if !isempty(ra) && !isempty(cb) && length(ra) * length(cb) <= opts.facing_size
-            # small blocks: the facing test pair by pair (no rays), which leaves the rows
-            # and columns of some facing pair; a block facing itself in a few pairs only
-            # (a sphere's terminator) is kept dense on those
+            # Small blocks get the facing test pair by pair (no rays), which leaves the rows
+            # and columns of some facing pair. A block facing itself in only a few pairs,
+            # at the terminator of a sphere, is kept dense on those pairs.
             ra, cb = _hfacing(ctx, perm, ra, cb)
             fa, fb = intersect(fa, ra), intersect(fb, cb)
             if !isempty(ra) && 4 * length(ra) * length(cb) <= m * n
@@ -1497,14 +1548,14 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
                 return                                   # wholly behind a convex part
             end
             if occ.n > 0 && m * n <= opts.mask_size
-                # only certified parts' facets in the shaft: their certificates decide
-                # most pairs (`:sampled`: whole sample bundles), at any level (a block of
-                # uniform visibility then gets the cross approximation instead of being
-                # refined)
+                # With only facets of certified parts in the shaft, their certificates
+                # decide most pairs (with `:sampled`, whole sample bundles) at any level. A
+                # block of uniform visibility then gets the cross approximation and is not
+                # refined.
                 ev = _hcertified(ctx, opts, perm, rows, cols, occ)
                 Threads.atomic_add!(st.masked, 1)
             elseif occ.n != 0 && leaves
-                # the exact visibility of every pair: a ray each
+                # the exact visibility of every pair, with a ray each
                 if ctx.vis === nothing
                     ev = _hmask_rays(ctx, perm, rows, cols, ra, cb)
                 else
@@ -1523,8 +1574,8 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
             end
         end
         if ev isa _HMask || ev isa _HFrac
-            # zero if wholly hidden, low rank if wholly visible (no more rays), else
-            # refined with the mask down to dense leaf pairs
+            # The block is zero if wholly hidden, low rank if wholly visible (no more rays),
+            # and otherwise refined with the mask down to dense leaf pairs.
             nv, nh = _hmask_counts(ev, ra, cb)
             if nv == 0
                 Threads.atomic_add!(st.hidden, 1)
@@ -1536,8 +1587,8 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
             end
         end
         if ev !== false || vis !== nothing
-            # rows and columns facing the other cluster wholly get the cross approximation,
-            # the few cut by the facing test (if they are few) are kept dense
+            # Rows and columns that face the other cluster wholly get the cross
+            # approximation, and those cut by the facing test, if few, are kept dense.
             split = (length(fa) < length(ra) || length(fb) < length(cb)) &&
                     2length(fa) >= length(ra) && 2length(fb) >= length(cb) && !isempty(fa) && !isempty(fb)
             ar, ac = split ? (fa, fb) : (ra, cb)
@@ -1568,8 +1619,8 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
                             elseif _hleaf(b) || length(pa) <= 4 || !(ev isa _HOcc || ev isa _HMask || ev isa _HFrac)
                                 _hpush_nonzero!(scattered, (pa, cb, _hdense_index(ctx, perm, pa, cb, ev)))
                             else
-                                # the cut rows against t's children, where most face wholly
-                                # or not at all
+                                # the cut rows against the children of t, where most face
+                                # wholly or not at all
                                 for k in b.kids
                                     _hassemble!(out, ctx, nodes, perm, s, k, true, opts, ev, pa)
                                 end
@@ -1588,8 +1639,8 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
     end
     @label dense
     if sub !== nothing
-        # cut rows: dense against a leaf or if they are few (low rank would not pay), else
-        # refined over t
+        # Cut rows are dense against a leaf or if they are few, since low rank would not
+        # pay, and are otherwise refined over t.
         if _hleaf(b) || length(ra) <= 4
             _hpush_nonzero!(scattered, (ra, cb, _hdense_index(ctx, perm, ra, cb, ev)))
         else
@@ -1603,15 +1654,15 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
         elseif far
             D = _hdense(ctx, perm, rows, cols, ev)
         else
-            # a near leaf pair: no ray in an empty shaft, the certificates' mask in a
-            # certified one, else a ray per pair
+            # A near leaf pair needs no ray in an empty shaft, uses the mask of the
+            # certificates in a certified one, and otherwise takes a ray per pair.
             occ = _shaft_occluder(ctx, opts, s, t, true)
             D = _hdense(ctx, perm, rows, cols, occ.n == 0 ? occ :
                         occ.n > 0 ? _hcertified(ctx, opts, perm, rows, cols, occ) : false)
         end
-        any(!iszero, D) && push!(dense, (a.lo, b.lo, D))     # (a capsule's near field is zero)
+        any(!iszero, D) && push!(dense, (a.lo, b.lo, D))     # (zero in the near field of a capsule)
     else
-        # what this block found of the visibility holds for its children
+        # the visibility found for this block also holds for its children
         kn = far && ev !== false ? ev : nothing
         if _hleaf(b) || (!_hleaf(a) && m >= n)
             for k in a.kids
@@ -1626,11 +1677,11 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
     return
 end
 
-# A scattered block, unless all its entries are zero (rows cut at a sphere's terminator
-# against the far side of a box).
+# Pushes a scattered block, unless all its entries are zero, as for rows cut at the
+# terminator of a sphere against the far side of a box.
 _hpush_nonzero!(v, blk) = (any(!iszero, blk[3]) && push!(v, blk); v)
 
-# Bounding box of the centroids at tree positions ps.
+# Returns the bounding box of the centroids at tree positions ps.
 function _hcentroid_box(C, perm, ps)
     lo = hi = C[perm[ps[1]]]
     for p in ps
@@ -1643,11 +1694,16 @@ end
     Briareus.HMATRIX_DEFAULTS
 
 Defaults of the hierarchical view factors (`view_factors(...; storage = :hmatrix)`):
-`tol` (relative Frobenius accuracy of each low-rank block), `eta` (admissibility:
-cluster boxes at least `eta` × the larger diameter apart), `leaf` (largest leaf
-cluster), `maxrank` (most terms of a cross approximation before the block is refined).
-Engineering defaults, from the work–precision sweeps in the research notes
-("Hierarchical view factors"; `tol` 1e-5 → 1e-6 in "The H-matrix's N^1.5 remainder").
+
+- `tol`: the relative Frobenius accuracy of each low-rank block;
+- `eta`: the admissibility, with cluster boxes at least `eta` × the larger diameter
+  apart;
+- `leaf`: the largest leaf cluster;
+- `maxrank`: the most terms of a cross approximation before the block is refined.
+
+These are engineering defaults, from the work–precision sweeps in the research notes
+("Hierarchical view factors"). The change of `tol` from 1e-5 to 1e-6 is in "The
+H-matrix's N^1.5 remainder".
 """
 const HMATRIX_DEFAULTS = (tol = 1e-6, eta = 1.0, leaf = 48, maxrank = 32)
 
@@ -1676,20 +1732,20 @@ function _hmatrix_view_factors(ctx; tol = HMATRIX_DEFAULTS.tol, eta = HMATRIX_DE
     return _hfinish(t, perm, opts, outs, tol, eta, leaf, maxrank)
 end
 
-# The assembly context (the view-factor context with sector receivers vectorized and the
-# data of `_hslack_ends`), cluster tree, block pairs and assembly data (visibility
-# certificates) of a view-factor context.
+# Returns the assembly context, cluster tree, block pairs and assembly data (visibility
+# certificates) of a view-factor context. The assembly context is the view-factor
+# context with sector receivers vectorized and the data of `_hslack_ends`.
 function _hsetup(ctx, tol, eta, leaf, maxrank)
     t = ctx.t
-    # per element: whether its facets lie in one plane through its centroid with its normal
+    # per element, whether its facets lie in one plane through its centroid with its normal
     onplane = map(1:nelements(t)) do e
         n, C = t.elem_normal[e], t.elem_centroid[e]
         δ = 1e-12 * (norm(C) + 1)
         all(k -> dot(t.tri_normal[k], n) > 1 - 1e-12 && abs(dot(n, t.tri_v0[k] - C)) <= δ, t.elem_tris[e])
     end
-    # sectors receive through the vectorized contour (`_SoAReceiver`; round-off); `hsep`:
-    # the margin of a plane clearing a convex part (10× its convexity tolerance, 1e-9 of
-    # its size, and a tenth of the rays' lift ε)
+    # Sectors receive through the vectorized contour (`_SoAReceiver`, within round-off).
+    # `hsep` is the margin of a plane that clears a convex part: 10× its convexity
+    # tolerance, 1e-9 of its size, and a tenth of the lift ε of the rays.
     ctx = merge(ctx, (; recv = Union{_Receiver,_SoAReceiver,_PolyReceiver}[_soa_receiver(r) for r in ctx.recv],
                       onplane = BitVector(onplane), hsep = 1e-8 * max(t.scale, 1.0)))
     pad = ctx.size ./ sqrt(2)
@@ -1698,16 +1754,17 @@ function _hsetup(ctx, tol, eta, leaf, maxrank)
     far, near = _hblock_pairs(nodes, eta)
     stats = NamedTuple{(:candidates, :lowrank, :facing, :sparse, :shadowed, :masked, :hidden, :mixed, :unconverged,
                         :rejected)}(ntuple(_ -> Threads.Atomic{Int}(0), 10))
-    # allin[k, c]: every element of cluster c inside curved surface k
+    # allin[k, c] marks every element of cluster c inside curved surface k
     ns = size(ctx.inside, 1)
     allin = BitMatrix(undef, ns, length(nodes))
     for (c, nd) in enumerate(nodes), k in 1:ns
         allin[k, c] = all(p -> ctx.inside[k, perm[p]], nd.lo:nd.hi)
     end
-    # `:sampled` visibility: per element the ends of its sample rays lifted by ε (as
-    # `_vf_visible` lifts them for a pair facing beyond the slack), their largest distance
-    # from the lifted centroid (`rvis`) and the samples' from the element's plane (`hdev`);
-    # per cluster the box of those ends, for the shaft's plane tests (`qbox`)
+    # For `:sampled` visibility, per element: the ends of its sample rays lifted by ε, as
+    # `_vf_visible` lifts them for a pair facing beyond the slack, their largest distance
+    # from the lifted centroid (`rvis`), and the largest distance of the samples from the
+    # plane of the element (`hdev`). Per cluster: the box of those ends, for the plane
+    # tests of the shaft (`qbox`).
     N = nelements(t)
     if ctx.vis === nothing
         pts = nothing
@@ -1728,9 +1785,10 @@ function _hsetup(ctx, tol, eta, leaf, maxrank)
         ball[o[1]] = k
     end
     cert, planar, hull = _hrim_data(t, ball)
-    # per element: the convex part with balls it lies on, its facets in one plane (else 0)
+    # per element, the convex part with balls on which it lies, with its facets in one
+    # plane (else 0)
     onconvex = [ball[t.elem_comp[e]] != 0 && onplane[e] ? Int(t.elem_comp[e]) : 0 for e in 1:nelements(t)]
-    # per cluster: the largest extra lift of a ray the facing slack admits (`_vf_visible`)
+    # per cluster, the largest extra lift of a ray that the facing slack admits (`_vf_visible`)
     liftx = [maximum(p -> ctx.size[perm[p]] * ctx.slack[perm[p]], nd.lo:nd.hi) for nd in nodes]
     opts = (; tol = Float64(tol), maxrank = Int(maxrank), iperm, stats, nodes, allin, cplane, ccomp, convex, occluders,
             ball, cert, planar, hull, onconvex, liftx, qbox, rvis, hdev, bvh_comp = _bvh_components(ctx.bvh, t.tri_comp),
@@ -1738,7 +1796,7 @@ function _hsetup(ctx, tol, eta, leaf, maxrank)
     return ctx, nodes, perm, far, near, opts
 end
 
-# The HMatrix of the assembled blocks.
+# Returns the HMatrix of the assembled blocks.
 function _hfinish(t, perm, opts, outs, tol, eta, leaf, maxrank)
     N, iperm, stats, nt = nelements(t), opts.iperm, opts.stats, length(outs)
     dense = sort!(reduce(vcat, getindex.(outs, 1)); by = x -> (x[1], x[2]))
@@ -1759,7 +1817,8 @@ function _hfinish(t, perm, opts, outs, tol, eta, leaf, maxrank)
     return HMatrix(N, perm, iperm, copy(t.elem_area), ones(N), dense, lowrank, scattered, lowrank_index, groups, info)
 end
 
-# Assembly tasks taken one at a time (a function barrier: no captured variables).
+# Takes assembly tasks one at a time, behind a function barrier without captured
+# variables.
 function _hwork!(out, ctx, nodes, perm, tasks, next, opts)
     while (k = Threads.atomic_add!(next, 1)) <= length(tasks)
         (s, u), isfar = tasks[k]
@@ -1768,7 +1827,7 @@ function _hwork!(out, ctx, nodes, perm, tasks, next, opts)
     return nothing
 end
 
-# Blocks split into contiguous runs (by row) of about equal product cost.
+# Splits the blocks into contiguous runs (by row) of about equal product cost.
 function _hgroups(dense, lowrank, scattered, lowrank_index, nt)
     items = [[(0, k, dense[k][1], 2 * length(dense[k][3])) for k in eachindex(dense)];
              [(1, k, lowrank[k][1], 2 * (length(lowrank[k][3]) + length(lowrank[k][4])))
@@ -1791,7 +1850,7 @@ end
 
 # ------------------------------------------------------------------ products
 
-# Y += G Z (tree order) over the blocks of one group; Z, Y n × k.
+# Computes Y += G Z (tree order) over the blocks of one group, with Z, Y n × k.
 function _hgroup_mul!(Y, H::HMatrix, Z, group, tmp)
     k = size(Z, 2)
     for (kind, idx) in group
@@ -1890,8 +1949,9 @@ function _hgroup_mul!(Y, H::HMatrix, Z, group, tmp)
     return Y
 end
 
-# W = G Z in tree order (n × k), threaded over the groups, each into a separate buffer,
-# summed in group order (deterministic for a given thread count).
+# Computes W = G Z in tree order (n × k), threaded over the groups. Each group writes a
+# separate buffer, and the buffers are summed in group order, which is deterministic for
+# a given thread count.
 function _hmul_tree(H::HMatrix, Z::Matrix{Float64})
     n, k = size(Z)
     ng = length(H.groups)
@@ -1912,7 +1972,8 @@ function _hmul_tree(H::HMatrix, Z::Matrix{Float64})
     return W
 end
 
-# Y = F X = A⁻¹ S G S X (tr = false) or Fᵀ X = S G S A⁻¹ X (tr = true), in column chunks.
+# Computes Y = F X = A⁻¹ S G S X (tr = false) or Fᵀ X = S G S A⁻¹ X (tr = true), in
+# column chunks.
 function _hmul!(Y::AbstractMatrix{Float64}, H::HMatrix, X::AbstractMatrix{Float64}, tr::Bool)
     n, k = H.n, size(X, 2)
     p, s, A = H.perm, H.scale, H.area
@@ -1935,9 +1996,10 @@ end
 
 # ------------------------------------------------- interpolated keyframe exchange
 
-# The exchange factors between two keyframes of hierarchical models, Fᵢⱼ = c₀ᵢ F₀ᵢⱼ +
-# c₁ᵢ F₁ᵢⱼ with c₀ = (1 - w) A₀/A and c₁ = w A₁/A (`_interpolate_exchange`), kept as the two
-# operators (their blocks differ) with a symmetric balancing `S F S`.
+# The exchange factors between two keyframes of hierarchical models,
+# Fᵢⱼ = c₀ᵢ F₀ᵢⱼ + c₁ᵢ F₁ᵢⱼ with c₀ = (1 - w) A₀/A and c₁ = w A₁/A (`_interpolate_exchange`).
+# They are kept as the two operators, since their blocks differ, with a symmetric
+# balancing `S F S`.
 struct _BlendedExchange{M0<:AbstractMatrix{Float64},M1<:AbstractMatrix{Float64}} <: AbstractMatrix{Float64}
     F0::M0
     F1::M1
@@ -2013,8 +2075,9 @@ function LinearAlgebra.mul!(Y::StridedMatrix{Float64}, X::StridedMatrix{Float64}
     return _axpby!(Y, transpose(Z), α, β)
 end
 
-# Products with strided vectors of first-order Float64 duals (values and partials as
-# columns; strided, so FillArrays zero vectors keep their own methods).
+# Products with strided vectors of first-order Float64 duals, with values and partials as
+# columns. The vectors are strided, so that FillArrays zero vectors keep their separate
+# methods.
 for T in (:_OperatorMatrix, :_HT)
     @eval function Base.:*(A::$T, x::StridedVector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
         X = Matrix{Float64}(undef, length(x), N + 1)

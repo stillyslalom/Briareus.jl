@@ -23,8 +23,8 @@
         c = Constraint(:a, identity; lower = [1.0, 2.0], labels = ("x", "y"))
         @test !c.upper && c.scale == [1.0, 2.0] && c.labels == ["x", "y"]
 
-        # the departure: one coefficient off by δ c₀₀ departs by √(2l+1) |δ| at that
-        # degree and nowhere else, whatever the two shapes' overall levels
+        # One coefficient off by δ c₀₀ gives a departure of √(2l+1) |δ| at that degree and
+        # nowhere else, whatever the overall levels of the two shapes.
         r = [1.0; 0.01 .* sin.(1:24)]
         x = 3.0 .* r
         x[mode_index(2, 1)] += 3.0 * 0.004
@@ -32,7 +32,7 @@
         @test d[2] ≈ sqrt(5) * 0.004 rtol = 1e-12
         @test all(abs.(d[[1, 3, 4]]) .< 1e-15)
         @test mode_departure(r, r; lmax = 4) == zeros(4)
-        # an axisymmetric difference: |aₗ/a₀ - aₗ'/a₀'| (c_l0 = aₗ √(4π/(2l+1)))
+        # An axisymmetric difference is |aₗ/a₀ - aₗ'/a₀'|, with c_l0 = aₗ √(4π/(2l+1)).
         y = copy(r)
         y[mode_index(3, 0)] += 0.02 * sqrt(4π / 7) / sqrt(4π) * r[1]
         @test mode_departure(y, r; lmax = 3)[3] ≈ 0.02 rtol = 1e-12
@@ -41,10 +41,11 @@
         @test mode_gate(r, (; rms_mode = [0.001, 0.002])).limit ≈ [sqrt(3) * 0.001, sqrt(5) * 0.002]
     end
 
-    # A quadratic program with a closed form: quad powers fitted to 1.1 times the
-    # 48-quad drive's coefficients through l = 2 (linear in the powers: the influence
-    # matrix M), regularized toward the start, under a ceiling on the total power that
-    # the fit would exceed. KKT: H P + ν 1 = r, 1ᵀP = cap.
+    # A quadratic program with a closed form fits the quad powers to 1.1 times the
+    # coefficients of the 48-quad drive through l = 2. The coefficients are linear in the
+    # powers through the influence matrix M. The fit is regularized toward the start, under
+    # a ceiling on the total power that the fit would exceed. The KKT conditions are H P + ν
+    # 1 = r and 1ᵀP = cap.
     @testset "augmented Lagrangian against a closed form" begin
         t = hohlraum(; geom..., h = 0.8, capsule_h = 0.9)
         quads = nif_quads(power = 8.0)
@@ -57,7 +58,8 @@
         f(ev) = sum(abs2, flux_ylm(ev; lmax = 2) .- b) / b[1]^2 +
                 ε * sum(abs2, (q.power - 8.0) / 8.0 for q in ev.beams)
         cap = 0.95 * sum(P0)
-        # a ceiling on a quantity of the beams alone, and a floor that stays inactive
+        # The ceiling is on a quantity that depends only on the beams, and the floor stays
+        # inactive.
         total = Constraint(:total_power, ev -> sum(q.power for q in ev.beams); upper = cap)
         drive = Constraint(:drive, mean_flux; lower = 0.5 * mean_flux(evaluate(s, P0)))
         H = 2 .* (M' * M) ./ b[1]^2 + (2ε / 64) * I
@@ -77,21 +79,22 @@
         @test res.value ≈ f(evaluate(s, res.x)) && res.initial_value ≈ f(evaluate(s, P0))
         @test occursin("constraints met inside the box", sprint(show, MIME"text/plain"(), res))
         @test check_constraints(evaluate(s, P0), (total, drive))[1].status === :violated
-        # a start already feasible and on the cap, the objective scaled so that its gradient
-        # lies below the first inner tolerance (1e-3): the run still reaches the solution
-        # rather than ending at the start on the first inner run, with zero multipliers
+        # The start is already feasible and on the cap, and the objective is scaled so that
+        # its gradient lies below the first inner tolerance (1e-3). The run still reaches
+        # the solution; it does not end at the start with zero multipliers on the first
+        # inner run.
         small(ev) = 1e-4 * f(ev)
         Pa = P0 .* (cap / sum(P0))
         on_cap = optimize_pointing(s, small; x0 = Pa, lower = lo, upper = hi, constraints = (total,))
         @test on_cap.outcome === :interior && norm(on_cap.x - Pstar) / norm(Pstar) < 1e-3
         @test norm(Pa - Pstar) / norm(Pstar) > 0.05
 
-        # warm restarts. Split at an outer iteration (each inner run starts its L-BFGS-B
-        # afresh, from the state the result carries), the continued run is the
-        # uninterrupted one bitwise. Split inside an inner run by the evaluation budget,
-        # the restart loses that run's L-BFGS-B memory and takes another path to the same
-        # strictly convex optimum: the designs agree to the convergence tolerance
-        # (feasibility 1e-8; the run lies 1e-8 from the KKT point), tested at 1e-6.
+        # Warm restarts. Each inner run starts its L-BFGS-B afresh from the state stored in
+        # the result, so a run split at an outer iteration and continued is identical to the
+        # uninterrupted run. A run split inside an inner run by the evaluation budget loses
+        # the L-BFGS-B memory of that inner run and takes another path to the same strictly
+        # convex optimum. The designs agree within the convergence tolerance (feasibility
+        # 1e-8, with the run 1e-8 from the KKT point), tested at 1e-6.
         cs2 = (total, drive)
         a = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs2,
                               feasibility = 1e-8, outer = 2)
@@ -122,19 +125,21 @@
         @test boxed.outcome === :infeasible_box && boxed.reason === :converged
         @test boxed.constraints[1].status === :violated && length(boxed.at_bounds) == 48
         @test occursin("ended with constraints violated", sprint(show, MIME"text/plain"(), boxed))
-        # with phase 1 the same verdict, and the cap relaxed alone (no other constraint) to
-        # the least total power the box allows, every power at its lower bound
+        # With phase 1 the verdict is the same. Only the cap is relaxed, since there is no
+        # other constraint, to the least total power the box allows, with every power at its
+        # lower bound.
         bv = optimize_pointing(s, f; x0 = P0, lower = 0.99 .* P0, upper = hi, constraints = (total,),
                                relaxation = true)
         @test bv.outcome === :infeasible_box && only(bv.relaxations).status === :relaxed
         @test only(bv.relaxations).violation ≈ 0.99 * sum(P0) / (0.95 * sum(P0)) - 1 rtol = 1e-9
 
-        # Phase 1 and the relaxations on a conflict with closed forms. The drive
-        # (`mean_flux`) is linear in the powers, `m` per quad by unit powers, so the largest
-        # drive at a total power and the least total power for a drive are fills of the
-        # quads in decreasing `m` to the box's 20 TW. A cap of 120 TW and a drive floor 5%
-        # above the cap's largest drive: the floor relaxed alone falls to that drive (by
-        # 1 - 1/1.05 of itself), the cap relaxed alone rises to the floor's least power.
+        # Phase 1 and the relaxations are checked on a conflict with closed forms. The drive
+        # (`mean_flux`) is linear in the powers, with `m` per quad at unit power. The
+        # largest drive at a given total power and the least total power for a given drive
+        # are therefore fills of the quads in decreasing `m` up to the 20 TW of the box. The
+        # cap is 120 TW and the drive floor is 5% above the largest drive under the cap.
+        # When only the floor is relaxed, it falls to that drive, by 1 - 1/1.05 of its
+        # value. When only the cap is relaxed, it rises to the least power for the floor.
         m = [mean_flux(evaluate(s, Float64.(1:48 .== i))) for i in 1:48]
         @test dot(m, P0) ≈ mean_flux(evaluate(s, P0)) rtol = 1e-12
         order = sortperm(m; rev = true)
@@ -156,8 +161,8 @@
         cap120 = Constraint(:total_power, ev -> sum(q.power for q in ev.beams); upper = 120.0)
         Dfl = 1.05 * drive_at(120.0)
         above = Constraint(:drive, mean_flux; lower = Dfl)
-        @test power_for(Dfl) < 20 * count(>(0), m)       # the floor alone is feasible
-        # (the augmented Lagrangian alone, without phase 1: the comparison)
+        @test power_for(Dfl) < 20 * count(>(0), m)       # the floor by itself is feasible
+        # For comparison, the augmented Lagrangian runs without phase 1.
         today = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
                                   feasibility = 1e-8, phase1 = false)
         v = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
@@ -244,7 +249,7 @@
         # the budget ends a run first
         short = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, evaluations = 10, constraints = [total])
         @test short.outcome === :evaluations && short.stopped && short.evaluations == 10
-        # without constraints: the plain run, its outcome from the box alone
+        # Without constraints the run is the plain run, and only the box sets its outcome.
         plain = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi)
         @test plain.outcome === :interior && isempty(plain.constraints) && plain.outer == 0
         @test plain.least_violation === plain.last_feasible === nothing && plain.capped == 0
@@ -304,13 +309,14 @@
         @test_throws ArgumentError dfb.f(evaluate(s, xb))
     end
 
-    # Multipliers from the converged active set (`PointingResult.constraints`), against the
-    # Karush–Kuhn–Tucker multipliers of a closed form: a drive-like objective, linear in the
-    # quad powers with a small regularization toward the start, under ceilings on the total
-    # power and on the inner cones' (both active at the optimum) and a floor on the 50°
-    # cone's power (inactive). KKT: ε (P - P₀) = c - Aᵀν with A P = b on the active rows;
-    # the normalized constraint (aᵀP - b)/b has the multiplier ν b. The stationarity
-    # residual is computed from the closed-form gradients, not from the optimizer's.
+    # The multipliers from the converged active set (`PointingResult.constraints`) are
+    # checked against the Karush–Kuhn–Tucker multipliers of a closed form. The objective is
+    # drive-like, linear in the quad powers with a small regularization toward the start. It
+    # is held under ceilings on the total power and on the power of the inner cones, both
+    # active at the optimum, and above an inactive floor on the power of the 50° cone. The
+    # KKT conditions are ε (P - P₀) = c - Aᵀν with A P = b on the active rows, and the
+    # normalized constraint (aᵀP - b)/b has the multiplier ν b. The stationarity residual is
+    # computed from the closed-form gradients; the optimizer gradients are not used.
     @testset "multipliers from the converged active set" begin
         t = hohlraum(; geom..., nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
         quads = nif_quads(power = 8.0)
@@ -342,7 +348,7 @@
         r = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs)
         @test r.outcome === :interior && norm(r.x - Pk) / norm(Pk) < 1e-3
         @test all(isapprox.(mults(r)[1:2], λk[1:2]; rtol = 1e-3))
-        # complementarity: the floor inactive, its multiplier zero
+        # By complementarity, the multiplier of the inactive floor is zero.
         @test r.constraints[3].status === :satisfied && r.constraints[3].multiplier == 0
         @test resid(r.x, mults(r)) <= resid(r.x, r.state.λ)
         # the result's stationarity is that residual (every parameter inside the box)
@@ -360,13 +366,13 @@
         note = filter(l -> occursin("stand-in", l), split(shown, '\n'))
         @test length(note) == 1 && occursin("total", only(note)) && ro.constraints[1] === odd
 
-        # The old failure: from that design at a large penalty (μ = 10⁶, the order a drive
-        # run under gates reaches), the inner run ends on its value tolerance a few 1e-6
-        # inside the inner cones' limit, and the first-order update λ + μ g zeroes that
-        # limit's multiplier (`state.λ`, what a further restart continues from): its
-        # stationarity residual is thousands of times the reported multipliers', which
-        # still match the closed form. The penalty is set by copying the result with
-        # another `state`.
+        # The old failure started from that design at a large penalty, μ = 10⁶, the order a
+        # drive run under gates reaches. The inner run ended on its value tolerance a few
+        # 1e-6 inside the limit of the inner cones, and the first-order update λ + μ g
+        # zeroed the multiplier of that limit. That multiplier, `state.λ`, is the value a
+        # further restart continues from. Its stationarity residual was thousands of times
+        # that of the reported multipliers, which still match the closed form. The penalty
+        # is set by copying the result with another `state`.
         big = PointingResult((k === :state ? merge(r.state, (; μ = 1e6, μmax = 1e14)) : getfield(r, k)
                               for k in fieldnames(PointingResult))...)
         rb = optimize_pointing(s, f; from = big, constraints = cs)
@@ -396,12 +402,13 @@
         @test only(rbnd.bound_gradient) ≈ -c[i] + ε * (rbnd.x[i] - 8.0) rtol = 1e-6
         @test only(rbnd.bound_sensitivity) < 0
 
-        # The inner value tolerance (`inner_reltol`): its default given explicitly is the
-        # default run bitwise. With the plain `c` the inner cones' cap of 130 TW binds
-        # with a small multiplier; at the default the run ends 0.8% from the KKT point
-        # (research notes), and continued through `from` with the value tolerance off
-        # (inner runs to `g_tol`) it reaches the KKT point and multipliers. Any converged
-        # run of this strictly convex problem does, so no rounding-dependent path is tested.
+        # The inner value tolerance is `inner_reltol`. Its default given explicitly gives a
+        # run identical to the default run. With the plain `c` the cap of 130 TW on the
+        # inner cones binds with a small multiplier. At the default the run ends 0.8% from
+        # the KKT point (research notes). Continued through `from` with the value tolerance
+        # off, so that the inner runs go to `g_tol`, it reaches the KKT point and
+        # multipliers. Any converged run of this strictly convex problem does, so no
+        # rounding-dependent path is tested.
         @test optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs,
                                 inner_reltol = 1e-10).x == r.x
         c0 = (1 .+ 0.3 .* sin.(1:n)) ./ 384
@@ -416,11 +423,11 @@
         @test all(isapprox.(mults(rt)[1:2], λ0; rtol = 1e-3)) && mults(rt)[3] == 0
         @test_throws ArgumentError optimize_pointing(s, f0; from = r0, constraints = cs, inner_reltol = -1.0)
 
-        # An inner evaluation cap (`inner_evaluations`). Above every inner run (more than
-        # the whole run's evaluations) it leaves the run bitwise unchanged; at 20, below the
-        # default run's longest inner runs (about 40), every inner run stays within it
-        # (the callback's evaluations per outer iteration) and the run still converges to
-        # the KKT point.
+        # An inner evaluation cap is set with `inner_evaluations`. A cap above every inner
+        # run, larger than the evaluation count of the whole run, leaves the run unchanged.
+        # At 20, below the longest inner runs of the default run (about 40), every inner run
+        # stays within the cap, as the callback evaluations per outer iteration show, and
+        # the run still converges to the KKT point.
         big_cap = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs,
                                     inner_evaluations = r.evaluations + 1)
         @test big_cap.x == r.x && big_cap.evaluations == r.evaluations && big_cap.outer == r.outer
@@ -458,9 +465,10 @@
         ceiling = irradiance_ceiling(ref, :wall)
         gates = mode_gate(c48, mode_uncertainty(s, quads; pointing = 0.05, lmax = 4))
 
-        # the irradiance: power means below the peak, rising with p; p = 1 the area mean;
-        # homogeneous in the beams' powers; a weight of one reproduces the deposition and
-        # a weight of zero on the inner cones their deposition at zero power
+        # The power means of the irradiance lie below the peak and rise with p, and p = 1
+        # gives the area mean. They are homogeneous in the beam powers. A weight of one
+        # reproduces the deposition, and a weight of zero on the inner cones reproduces the
+        # deposition with those cones at zero power.
         pk = peak_irradiance(ref, :wall)
         wall = elements(t, :wall)
         norms = [irradiance_norm(ref, :wall; p) for p in (8, 32, 64)]
@@ -484,19 +492,20 @@
             @test ad ≈ fd rtol = 1e-5
         end
 
-        # the start: every gate violated, the ceiling at its limit (the freed quads
-        # do not reach the hottest elements)
+        # At the start every gate is violated and the ceiling is at its limit, because the
+        # freed quads do not reach the hottest elements.
         start = check_constraints(evaluate(rp, x0), (ceiling, gates))
         @test count(r -> r.status === :violated, start) == 4 && start[1].status !== :violated
         @test peak_irradiance(evaluate(rp, x0), :wall) ≈ pk rtol = 1e-12
 
-        # the exact peak held (`exact = true`, the default): the stand-in's working limit
-        # lowered until the peak over the elements is within `feasibility` of the limit. The
-        # stand-in alone (`exact = false`) does not bound the peak to a fixed margin: designs
-        # with the same gates differ in the peak by several percent (from this start, 0.997
-        # and 1.030 of the limit with the norm at 0.974 and at the limit, under two
-        # roundings: research notes). Under `--check-bounds=yes` the run reaches another
-        # design of the same flat family: only what every admissible design meets is tested.
+        # With the exact peak held (`exact = true`, the default), the working limit of the
+        # stand-in is lowered until the peak over the elements is within `feasibility` of
+        # the limit. The stand-in by itself (`exact = false`) does not bound the peak to a
+        # fixed margin. Designs with the same gates differ in the peak by several percent.
+        # From this start, the peaks are 0.997 and 1.030 of the limit, with the norm at
+        # 0.974 and at the limit, under two roundings (research notes). Under
+        # `--check-bounds=yes` the run reaches another design of the same flat family, so
+        # the test checks only what every admissible design meets.
         plain = irradiance_ceiling(ref, :wall; exact = false)
         @test ceiling.f.exact && !plain.f.exact
         res = optimize_pointing(rp, drive_objective(; drive = mean_flux(ref)); x0, lower, upper,
@@ -515,7 +524,8 @@
         @test all(r -> r.multiplier >= 0, res.constraints)
         @test all(r -> r.status !== :satisfied || r.multiplier == 0, res.constraints[2:end])
         @test res.stationarity >= 0
-        # the rows: the exact ceiling reports the peak against the limit, the plain one its norm
+        # In the rows, the exact ceiling reports the peak against the limit, and the plain
+        # ceiling reports its norm.
         @test res.constraints[1].value == peak_irradiance(ev, :wall) && res.constraints[1].limit == pk
         @test check_constraints(ev, ceiling)[1].value == peak_irradiance(ev, :wall)
         @test check_constraints(ev, plain)[1].value == plain.f(ev) == ceiling.f(ev)
@@ -556,7 +566,8 @@
         @test [r.name for r in rows[1:48]] == ["clearance[$(b.name)]" for b in quads]
         @test [r.value for r in rows[49:96]] == aperture_clearance(ak, ev.beams)
         @test all(r -> r.violation ≈ (0.05 - r.value) / 1.0, filter(r -> isfinite(r.value), rows[1:48]))
-        # a beam the keep-out does not apply to (Inf: no aperture on its side) holds
+        # A beam that the keep-out does not apply to (Inf, with no aperture on its side) is
+        # satisfied.
         top = aperture_clearance(sk, ev.beams)
         @test count(isinf, top) == 24 && all(r -> r.status === :satisfied, rows[97:end][isinf.(top)])
         @test_throws ArgumentError clearance_floor(42)
@@ -564,7 +575,7 @@
         kc = CaptureKeepIn(t, :wall; minimum = 0.0)
         cc = clearance_floor(kc; name = :capture)
         @test cc.f(ev) == capture_margin(kc, ev.beams) && cc.limit == [0.0]
-        # the display: a constraint of more than eight components as its worst row
+        # The display shows a constraint of more than eight components as its worst row.
         shown = sprint(show, MIME"text/plain"(), rows)
         worst = rows[argmax([r.violation for r in rows[1:48]])]
         @test count(==('\n'), shown) == 3 && occursin("the worst of 48", shown) && occursin(worst.name, shown)
@@ -608,8 +619,8 @@
             end
             return (a + b) / 2
         end
-        # the keep-out: the smallest clearance at the start less 0.1 mm, reached by the 50°
-        # cone first
+        # The keep-out floor is the smallest clearance at the start less 0.1 mm, and the 50°
+        # cone reaches it first.
         least(z) = minimum(filter(isfinite, hardware_clearance(hw, at(z).beams)))
         floor_ = clearance_floor(hw; minimum = least(5.01) - 0.1)
         zk = root(z -> least(z) - only(floor_.limit), 4.0, 5.01)
@@ -620,7 +631,7 @@
         @test !isempty(act) && all(r -> startswith(r.name, "clearance[Q") && r.multiplier > 0, act)
         @test all(r -> abs(r.value - r.limit) <= 1e-6, act)
         @test all(r -> r.status !== :violated, rk.constraints)
-        # the light on the caps: a ceiling at 0.1% of the delivered power
+        # The light on the caps has a ceiling at 0.1% of the delivered power.
         ceil_ = light_ceiling(1e-3, caps...)
         zl = root(z -> 1e-3 - light_fraction(at(z), caps...), 4.0, 5.01)
         rl = optimize_pointing(sh, pull; lower = [4.0], upper = [5.3], constraints = [ceil_],
@@ -629,8 +640,9 @@
         @test only(rl.constraints).status === :active && only(rl.constraints).multiplier > 0
         @test abs(only(rl.constraints).value - 1e-3) <= 1e-6 * 1e-3
 
-        # the pieces compose: held parameters of power scales per cone in a constrained
-        # run, with the keep-out and the light as constraints, and the summary of the result
+        # The pieces compose. A constrained run uses held parameters of power scales per
+        # cone, with the keep-out and the light as constraints, and the result is
+        # summarized.
         ps = HeldParameters(PowerScales(p), n -> startswith(n, "inner") && !endswith(n, "power_scale"))
         sc = remake(s; parameterization = ps)
         y0 = initial_parameters(sc.param)
@@ -654,10 +666,10 @@
         @test sm.shift_max ≈ maximum(norm(b.aim - a.aim) for (b, a) in zip(rc.beams, start)) rtol = 1e-14
     end
 
-    # VisRad's hard cut (`smooth_cut`, the default): the run on the profile tapered below
-    # the cut, on the same operator's points, reported under the scenario cut. The
-    # reference: the same run on a scenario built with the tapered profile (its operator
-    # built afresh), bitwise.
+    # Under the VisRad hard cut (`smooth_cut`, the default), the run uses the profile
+    # tapered below the cut on the points of the same operator and is reported under the
+    # scenario cut. The reference is the same run on a scenario built with the tapered
+    # profile and a newly built operator, and the two are identical.
     @testset "VisRad's hard cut optimized tapered" begin
         t = hohlraum(; geom..., nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
         quads = nif_quads(power = 8.0)
@@ -683,7 +695,7 @@
         @test r.outcome === Briareus._outcome(r.reason, r.constraints, r.at_bounds)
         @test occursin("tapered", sprint(show, MIME"text/plain"(), r)) &&
               !occursin("tapered", sprint(show, MIME"text/plain"(), r0))
-        # a phased scenario: each phase tapered, the report under the hard cut
+        # In a phased scenario each phase is tapered, and the report uses the hard cut.
         ps = PhasedScenario(p, Phase(:a, hard; power = 8.0), Phase(:b, hard; power = 4.0, scaled = false))
         @test all(sc -> sc.deposition.profile.taper == 1, Briareus._tapered(ps).scenarios)
         pobj = ev -> obj(ev[:a])

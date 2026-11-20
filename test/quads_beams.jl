@@ -1,12 +1,12 @@
-# NIF quads and their beams: a quad model split into its facility beams and back, the
-# mean aim of a split quad against the closed form of a pointing rule, and a per-beam
-# pointing table applied to a quad model through the SST reader.
+# This file tests NIF quads and their beams. A quad model is split into its facility beams
+# and back, the mean aim of a split quad is checked against the closed form of a pointing
+# rule, and a per-beam pointing table is applied to a quad model through the SST reader.
 
 using Briareus, LinearAlgebra, Test
 
 @testset "NIF quads and their beams" begin
     byname(bs) = sort(bs; by = b -> b.name)
-    # the beams of the quads are bitwise the facility beams
+    # The beams of the quads are identical to the facility beams.
     @test byname(nif_beams(nif_quads(power = 8.0))) == byname(nif_beams(power = 2.0))
 
     # a quad model's aim, defocus, power, detuning and group reach its four beams
@@ -19,7 +19,7 @@ using Briareus, LinearAlgebra, Test
     @test all(i -> fields(beams[i]) == fields(quads[cld(i, 4)]), eachindex(beams))
     @test all(i -> beams[i].power == quads[cld(i, 4)].power / 4, eachindex(beams))
     @test all(b -> b.fnumber == 20.7, beams)
-    # and back: the quads at their ports, with their values again
+    # Back from beams to quads, the quads are at their ports with their values again.
     back = nif_quads(beams)
     @test [q.port for q in back] == [q.port for q in quads]
     @test all(i -> isapprox(back[i].aim, quads[i].aim; rtol = 1e-14), eachindex(quads))
@@ -27,7 +27,7 @@ using Briareus, LinearAlgebra, Test
     @test all(i -> (back[i].group, back[i].fnumber) == (quads[i].group, 7.9), eachindex(quads))
     @test all(i -> isapprox([back[i].defocus, back[i].dlambda], [quads[i].defocus, quads[i].dlambda];
                             rtol = 1e-14, atol = 1e-15), eachindex(quads))
-    # spots: each beam's quad spot, in the quad frame and back
+    # Each beam gets the spot of its quad, in the quad frame and back.
     vq = nif_quads(spot = visrad_nif_spot)
     turned = nif_beams(vq; spot_frame = :quad)
     @test all(i -> turned[i].spot.a == vq[cld(i, 4)].spot.a, eachindex(turned))

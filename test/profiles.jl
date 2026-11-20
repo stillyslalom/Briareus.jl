@@ -1,7 +1,8 @@
-# Hohlraum profiles (`hohlraum(; profile)`): a profile of one cylindrical section is the
-# cylindrical hohlraum bitwise; frustraums and multi-section walls mesh as planar
-# sections that meet at shared vertices; a closed frustraum's exchanges against the
-# coaxial-disk closed form, and its drive and LEH loss against Monte Carlo transport.
+# This file tests hohlraum profiles (`hohlraum(; profile)`). A profile of one cylindrical
+# section is identical to the cylindrical hohlraum. Frustraums and multi-section walls mesh
+# as planar sections that meet at shared vertices. The exchanges of a closed frustraum are
+# checked against the coaxial-disk closed form, and its drive and LEH loss against Monte
+# Carlo transport.
 
 using Briareus, LinearAlgebra, Test
 
@@ -38,7 +39,8 @@ using Briareus, LinearAlgebra, Test
     @test_throws ArgumentError hohlraum(; profile = fr, leh_radius = 1.0, capsule_radius = 2.4)
     @test_throws ArgumentError hohlraum(; profile = fr, leh_radius = 1.0, windows = [WallWindow(; phi = 0, diameter = 0.5)])
 
-    # a frustraum: two cones, each with its exact area, meeting at shared vertices at the waist
+    # A frustraum is two cones, each with its exact area, meeting at shared vertices at
+    # the waist.
     t = hohlraum(; profile = fr, leh_radius = 1.0, capsule_radius = 0.8, h = 0.4, capsule_h = 0.3)
     @test names_of(t) == [:wall_1, :wall_2, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :capsule] && t.closed
     @test all(c -> c.part === :wall, t.components[1:2]) && t.components[1].surface isa ConeSurface
@@ -68,13 +70,13 @@ using Briareus, LinearAlgebra, Test
     @test_throws ArgumentError hohlraum(; profile = st, leh_radius = 0.8, windows = [WallWindow(; phi = 0, z = -2.0, diameter = 0.5)])
     @test_throws ArgumentError hohlraum(; profile = st, leh_radius = 0.8, windows = [WallWindow(; phi = 0, z = 0.9, diameter = 0.5)])
 
-    # A closed frustraum (waist radius rw, end radius re, length L; ends closed, no
-    # capsule) against closed forms built from the coaxial-disk factor F(a → b, d) alone:
-    # the ends see each other unobstructed (F_ee = F(re → re, L)); the waist plane splits
-    # the cavity, so an end sees the far cone through the waist disk,
-    # F(re → rw, L/2) − F_ee, and the near cone with the rest; the near cone's view of the
-    # far one is what passes the waist disk less what lands on the far end (reciprocity),
-    # and its view of itself the remainder.
+    # A closed frustraum with waist radius rw, end radius re and length L, closed ends and
+    # no capsule, is checked against closed forms built only from the coaxial-disk factor
+    # F(a → b, d). The ends see each other unobstructed, so F_ee = F(re → re, L). The waist
+    # plane splits the cavity, so an end sees the far cone through the waist disk,
+    # F(re → rw, L/2) − F_ee, and the near cone with the rest. By reciprocity, the view of
+    # the far cone from the near cone is what passes the waist disk less what reaches the
+    # far end, and its view of itself is the remainder.
     Fdisk(a, b, d) = (A = a / d; B = b / d; X = 1 + (1 + B^2) / A^2; (X - sqrt(X^2 - 4 * (B / A)^2)) / 2)
     L, rw, re = 4.0, 2.0, 1.2
     Ae, Aw, Ac = π * re^2, π * rw^2, π * (re + rw) * hypot(rw - re, L / 2)
@@ -97,12 +99,12 @@ using Briareus, LinearAlgebra, Test
     @test flux(c1, c2) ≈ exact.c1c2 rtol = 3e-3                   # 1.5e-3
     @test flux(c1, c1) ≈ exact.c1c1 rtol = 1.5e-3                 # 5.4e-4
 
-    # Drive and loss of a frustraum with entrance holes and a capsule, the wall driven:
-    # the energy balance closes, and the LEH loss and capsule drive agree with Monte Carlo
-    # transport on the same facets (`reemit = :element`, the element model with exact
-    # view factors), as the cylinder of the same length and holes does (measured on the
-    # balanced model at h = 0.3: frustraum 1.2e-3 and 1.9e-3, cylinder 1.8e-3 and 2.6e-3,
-    # statistical error 6e-4).
+    # A frustraum with entrance holes and a capsule is driven on the wall. The energy
+    # balance closes, and the LEH loss and capsule drive agree with Monte Carlo transport on
+    # the same facets (`reemit = :element`, the element model with exact view factors), as
+    # for the cylinder with the same length and holes. On the balanced model at h = 0.3 the
+    # measured differences are 1.2e-3 and 1.9e-3 for the frustraum and 1.8e-3 and 2.6e-3 for
+    # the cylinder, with a statistical error of 6e-4.
     au = Material(:Au; albedo = 0.8, conversion = 0.8)
     t0 = hohlraum(; profile = p, h = 0.3, leh_radius = 0.7, capsule_radius = 0.6, capsule_h = 0.3, wall = au)
     t = Target([Component(c.name, c.mesh, c.material; kind = c.kind, part = c.part) for c in t0.components];

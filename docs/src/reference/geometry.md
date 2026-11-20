@@ -7,9 +7,9 @@ transparent apertures that measure the escaping x-ray flux. A component can carr
 exact surface its mesh approximates ([`SphereSurface`](@ref), [`CylinderSurface`](@ref),
 [`DiskSurface`](@ref)), and the radiation model then integrates over the true curved
 surface; hohlraums do this by default. A [`HohlraumProfile`](@ref) gives a hohlraum a
-radius per break instead of one radius: a frustraum ([`frustraum_profile`](@ref)) or a
-multi-section wall, each section a cylinder, a cone ([`ConeSurface`](@ref)) or a flat
-step.
+radius per break instead of one radius. It describes a frustraum
+([`frustraum_profile`](@ref)) or a multi-section wall whose sections are cylinders, cones
+([`ConeSurface`](@ref)) or flat steps.
 
 [`WallWindow`](@ref) cuts rectangular or round diagnostic windows, with optional assembly
 gaps, into a hohlraum wall at exact areas, and the mesh conforms to their edges. Closed

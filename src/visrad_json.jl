@@ -1,8 +1,9 @@
-# VisRad's JSON workspace (`.vrw`, "Workspace Format ID": 1001), which VisRad 21 writes
-# when it saves a workspace it has computed. It holds the text format's content under
-# readable keys; this file maps it onto the text reader's structures, so
-# `read_visrad_workspace` and `visrad_power_sources` take either format. Layout read off
-# VisRad 21.0.0 files (research notes, "VisRad JSON workspaces").
+# This file reads the JSON workspace of VisRad (`.vrw`, "Workspace Format ID": 1001),
+# which VisRad 21 writes when it saves a workspace that it has computed. The JSON format
+# holds the content of the text format under readable keys. This file maps it onto the
+# structures of the text reader, so that `read_visrad_workspace` and
+# `visrad_power_sources` take either format. The layout was taken from VisRad 21.0.0
+# files (research notes, "VisRad JSON workspaces").
 
 # Whether `path` is a JSON workspace: its first non-blank character is `{`.
 function _vrw_is_json(path::AbstractString)
@@ -47,10 +48,10 @@ function _vrj_section(d, key, path)
     return d[key]
 end
 
-# Target components: the text format's object block, as `_vrw_build_objects` takes it.
-# Keys are the text format's (the parameters `_vrw_build_objects` and `_vrw_primitive`
-# read), except "Object color" (RGB) and "Gen. mesh object origin", which are arrays, and
-# the node array and connectivity columns.
+# Target components, as the object block of the text format that `_vrw_build_objects`
+# takes. Keys are those of the text format, the parameters that `_vrw_build_objects` and
+# `_vrw_primitive` use, except "Object color" (RGB) and "Gen. mesh object origin", which
+# are arrays, and the node array and connectivity columns.
 function _vrj_block(o, path)
     name = String(strip(_vrj_str(o["Object name"])))
     params = Dict{String,String}()
@@ -91,8 +92,9 @@ function _vrj_block(o, path)
     return (; name, params, nodes, faces)
 end
 
-# Folders from "Target comp list structure": each component as "Target Components/<folder
-# path>/<name>"; the text reader's folder is the path between the two, "" at the top.
+# Folders from "Target comp list structure", with each component as "Target
+# Components/<folder path>/<name>". The folder of the text reader is the path between the
+# two, and "" at the top.
 function _vrj_folders(d)
     out = Dict{String,String}()
     s = get(d, "Target comp list structure", nothing)
@@ -105,9 +107,9 @@ function _vrj_folders(d)
     return out
 end
 
-# The text format's beam row (`_VRW_BEAM_COLUMNS`) from a JSON beam: `key => column`.
-# "Beam cone F numuber" is VisRad's spelling. The cone half-angles (`cone_min`,
-# `cone_max`, not stored) are VisRad's: 0 and atan(1/2F), in degrees.
+# The beam row of the text format (`_VRW_BEAM_COLUMNS`) from a JSON beam, as
+# `key => column`. "Beam cone F numuber" is the spelling of VisRad. The cone half-angles
+# (`cone_min`, `cone_max`, not stored) are those of VisRad, 0 and atan(1/2F), in degrees.
 const _VRJ_BEAM_KEYS = (
     :port => "Port index", :theta => "Port polar angle", :phi => "Port azimuthal angle",
     :port_radius => "Port position radius", :custom => "Beam is a custom beam",
@@ -145,12 +147,13 @@ function _vrj_beam(b, useran, path)
     vals[:cone_max] = atand(1 / (2 * vals[:fnumber]))
     vals[:rot_id] = String(strip(_vrj_str(get(b, "Beam rotation angle orientation id", ""))))
     row = NamedTuple{_VRW_BEAM_COLUMNS}(Tuple(vals[c] for c in _VRW_BEAM_COLUMNS))
-    # power tables under the text reader's labels, one string per row (its columns joined
-    # by spaces, as the text format lists them); the files seen have none, so the column
-    # keys ("<table>-Values Col c", as the mesh connectivity) are an *assumption*
-    # (the text reader keeps a label for each table line its file has, empty or not; the
-    # JSON file lists all three, so only non-empty tables are kept: the readers then agree
-    # on whether a beam has a power table)
+    # Power tables are stored under the labels of the text reader, with one string per
+    # row and its columns joined by spaces, as the text format lists them. The sample
+    # files have no power tables, so the column keys ("<table>-Values Col c", as for the
+    # mesh connectivity) are an *assumption*. The text reader keeps a label for each table
+    # line of its file, empty or not. The JSON file lists all three tables, so only
+    # non-empty tables are kept, and the two readers then agree on whether a beam has a
+    # power table.
     tables = Dict{String,Vector{String}}()
     for (k, label) in _VRJ_TABLES
         n = Int(_vrj_num(get(b, "$k-Num rows", 0)))
@@ -167,7 +170,8 @@ function _vrj_beam(b, useran, path)
                   pulse = String(strip(_vrj_str(get(b, "Pulse shape name", "")))), tables, random_used = useran), row)
 end
 
-# (version, objects, clusters, rows) of a JSON workspace, as the text reader builds them.
+# Returns (version, objects, clusters, rows) of a JSON workspace, as the text reader
+# builds them.
 function _vrj_workspace(d, path)
     version = String(_vrj_str(get(get(d, "Header data", Dict()), "VisRad version", "")))
     tc = get(d, "Target component data", nothing)
@@ -187,8 +191,8 @@ function _vrj_workspace(d, path)
     return version, objects, clusters, rows
 end
 
-# The power-source columns of the JSON format ("<label>-Values") in the text table's
-# order, with the text reader's names and units.
+# The power-source columns of the JSON format ("<label>-Values") in the order of the text
+# table, with the names and units of the text reader.
 const _VRJ_PS_COLUMNS = (
     "Direct laser pwr src" => (:direct_laser_pwr_source, "TW/cm2"), "Uniform pwr src" => (:uniform_source, "TW/cm2"),
     "Albedo" => (:albedo, ""), "Xray conv eff" => (:x_ray_conv_efficiency, ""),
@@ -198,8 +202,8 @@ const _VRJ_PS_COLUMNS = (
 const _VRJ_PS_INT = (:n_red_cones_hitting_surf, :n_blue_cones_hitting_surf)
 
 # `visrad_power_sources` of a JSON workspace. Its "Power source data" lists one
-# "Power source element[k]" per target component, in the components' order (the
-# objects carry no names there).
+# "Power source element[k]" per target component, in the order of the components, since
+# the objects have no names there.
 function _vrj_power_sources(d, path, stale)
     ps = _vrj_section(d, "Power source data", path)
     if _vrj_num(get(ps, "Num pwr src up to date", 0)) == 0

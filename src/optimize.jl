@@ -11,87 +11,90 @@ const _SPH_FIELDS = (:theta_s, :dphi_s, :split_theta, :split_phi)
     GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true,
                   relative = false, unit = :quad, radius = nothing, center = (0, 0, 0))
 
-Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. cone —,
-`:quad`, `:beam`, or a function `beam -> key`); each group gets one value per field:
+Maps a parameter vector to beams. Beams are grouped by `by`: `:group` (e.g. a cone),
+`:quad`, `:beam`, or a function `beam -> key`. Each group gets one value per field:
 
 - `:z` — axial aim coordinate (mm). With `mirror`, beams from the lower hemisphere
   (port `z < 0`) aim at `-z`, so one value describes a top/bottom-symmetric cone.
-- `:r` — radial aim offset (mm) toward the port azimuth of the beam's quad (the beam port azimuth with
-  `unit = :beam`, below).
+- `:r` — radial aim offset (mm) toward the quad port azimuth. With `unit = :beam`
+  (below), the offset is toward the beam port azimuth.
 - `:phi` — tangential aim offset (mm), counterclockwise about `z`.
-- `:split` — tangential split of a quad's beams about its aim point (mm), along the
-  quad's φ̂: each beam's aim moves by `±split`, with the sign of its port azimuth
-  from its quad's mean port (beams counterclockwise of it `+split`), so a positive split
-  opens a quad's aims in the sense of its ports and a negative one crosses them (the `s`
-  of [`hybride_mock_pointing`](@ref) is `split = -s`). It sets each beam's tangential
-  offset from its quad's mean template aim (a shift of it with `relative`); a quad held
-  as one beam gets none. Needs `unit = :quad` and `quad` names.
+- `:split` — tangential split of the beams of a quad about its aim point (mm), along the
+  quad φ̂. Each beam aim moves by `±split`, with the sign of the beam port azimuth
+  measured from the mean port of the quad; beams counterclockwise of it take `+split`.
+  A positive split therefore opens the aims of a quad in the sense of its ports, and a
+  negative one crosses them. The `s` of [`hybride_mock_pointing`](@ref) is
+  `split = -s`. The field sets the tangential offset of each beam from the mean
+  template aim of its quad, or shifts that offset with `relative`. A quad held as one
+  beam is not split. The field needs `unit = :quad` and `quad` names.
 - `:defocus` — focal-plane offset along the beam (mm, see `Beam`).
 - `:power` — power per beam (TW).
 - `:spot` — multiplier on the best-focus spot semi-axes.
 - `:dlambda` — wavelength detuning (Å), used by laser–plasma models.
 
-Fields not listed keep each beam's template value.
+Fields not listed keep the template value of each beam.
 
-**Pointing on a sphere** (polar direct drive). With `radius = R` (mm) the aim can instead
-be a point on the sphere of radius `R` about `center`, the target surface on which
-direct-drive pointings are published (Barlow et al., PRL 133, 175101, 2024, Table I;
+**Pointing on a sphere** (polar direct drive). With `radius = R` (mm), the aim can
+instead be a point on the sphere of radius `R` about `center`. Direct-drive pointings
+are published on this target surface (Barlow et al., PRL 133, 175101, 2024, Table I;
 Yeamans et al., Nucl. Fusion 61, 046031, 2021, Table 1; Hohenberger et al., PoP 22,
-056308, 2015, Table I):
+056308, 2015, Table I). The spherical fields are:
 
 - `:theta_s` — polar angle of the aim point (degrees from `+z`). With `mirror`, beams
   from the lower hemisphere aim at `180° - theta_s`, so one value describes a
-  top/bottom-symmetric cone pair and a larger value moves both toward the equator.
-- `:dphi_s` — azimuth of the aim point relative to the beam port azimuth
-  (degrees, counterclockwise about `z`; the same for both hemispheres).
-- `:split_theta`, `:split_phi` — split of a quad's beams (degrees): each beam's aim
+  top/bottom-symmetric cone pair, and a larger value moves both toward the equator.
+- `:dphi_s` — azimuth of the aim point relative to the beam port azimuth, in degrees
+  counterclockwise about `z` and the same for both hemispheres.
+- `:split_theta`, `:split_phi` — split of the beams of a quad (degrees). Each beam aim
   moves by `±split_theta` in polar angle and `±split_phi` in azimuth, with the sign of
-  its port offset from its quad's mean port (beams at a larger polar angle than
-  their quad's, counted from the pole of their hemisphere when mirrored, take `+split_theta`;
-  beams counterclockwise of it `+split_phi`), so positive values open a quad's aims in
-  the sense of its ports. This is the split-quad pointing of Cok et al. (PoP 15,
-  082705, 2008) and Yeamans et al. 2021 (left/right `Δφ`) as angles on the sphere.
-  A quad given as one beam, or a beam level with its quad's mean, gets no split. Needs
-  `quad` names; other per-beam aims come from `by` (e.g. one group per sub-ring).
+  the beam port offset from the mean port of the quad. Beams at a larger polar angle
+  than the quad port take `+split_theta`, with the angle counted from the pole of their
+  hemisphere when mirrored. Beams counterclockwise of the quad port take `+split_phi`.
+  Positive values therefore open the aims of a quad in the sense of its ports. This is
+  the split-quad pointing of Cok et al. (PoP 15, 082705, 2008) and Yeamans et al. 2021
+  (left/right `Δφ`) as angles on the sphere. A quad given as one beam, or a beam level
+  with the mean port of its quad, is not split. The fields need `quad` names; other
+  per-beam aims come from `by`, e.g. one group per sub-ring.
 
 The aim is the surface point itself, `aim = center + R * port_vector(θ, φ)`, which the
 axis meets first when it faces the port (`Beam`). Best focus is then at
-`aim + defocus * k`: defocus is measured from the surface aim point, as VisRad measures
-the focus offset from its reference point (research notes, "Pointing and focus
-conventions"). Each template beam's angles are those of the first point where its axis
-meets the sphere (an `ArgumentError` if it misses); listed spherical values are shared
-by a group's members, and an angle that no listed field governs keeps the value of
-each beam. The aim moves to the surface along the template's axis, so the focus moves with
-it unless the template aim was already on the sphere. The spherical fields and the
-hohlraum fields `:z`, `:r`, `:phi` exclude each other.
+`aim + defocus * k`, so defocus is measured from the surface aim point, as VisRad
+measures the focus offset from its reference point (research notes, "Pointing and focus
+conventions"). The angles of each template beam are those of the first point where its
+axis meets the sphere; an `ArgumentError` is thrown if the axis misses. Listed spherical
+values are shared by the members of a group. For an angle not set by a listed field, the
+value of each beam is kept. The aim moves to the surface along the template axis, so the
+focus moves with it unless the template aim was already on the sphere. The spherical fields
+and the hohlraum fields `:z`, `:r`, `:phi` exclude each other.
 
-A quad is the unit of the hohlraum fields' pointing by default (`unit = :quad`): `:r`,
-`:phi` and `:split` are measured in the azimuth of the quad's port, the mean port of the
-beams that share its `quad` name, instead of the port of each beam. The beams of a quad that
-share their values then share one aim point, whether the table holds the quad as one
-beam or as its four, so a NIF pointing given per cone or per quad stays one aim per quad
-while the deposition is computed per beam. A quad's beams pointed apart about its aim
-point:
+By default (`unit = :quad`), the unit of pointing for the hohlraum fields is a quad.
+`:r`, `:phi` and `:split` are then measured in the azimuth of the quad port, which is
+the mean port of the beams that share its `quad` name, instead of the port of each beam.
+The beams of a quad that share their values then share one aim point, whether the table
+contains the quad as one beam or as four. A NIF pointing given per cone or per quad thus
+stays one aim per quad while the deposition is computed per beam. The beams of a quad
+are pointed apart about its aim point as follows:
 
 ```julia
 p = GroupPointing(nif_beams(); by = :quad, fields = (:z, :r, :phi, :split))
 beams = apply(p, parameters(p, "Q31T" => (z = 5.8, split = 0.5)))
 ```
 
-`by = :beam` gives each beam a separate aim (its offsets still in its quad's azimuth), and
-a per-beam table (an as-shot SST export, `read_visrad_sst(path; template =
-nif_beams(quads))`) keeps its beams' differences under one shift per quad with
-`relative = true` (below). `unit = :beam` measures each beam's `:r` and `:phi` in its
-port azimuth instead, so a quad's four beams with the same `r` aim `r sin Δφ` apart (Δφ:
-a beam's azimuth from its quad's, up to 5.7° on NIF's 23.5° cone). A quad held as one
-beam, and a beam without a quad name, are bitwise identical either way.
+`by = :beam` gives each beam a separate aim, with its offsets still in the quad azimuth.
+With `relative = true` (below), the differences between the beams of a per-beam table
+are kept under one shift per quad. An as-shot SST export,
+`read_visrad_sst(path; template = nif_beams(quads))`, is such a table. `unit = :beam`
+measures `:r` and `:phi` of each beam in the beam port azimuth instead. The four beams
+of a quad with the same `r` then aim `r sin Δφ` apart, where Δφ is the azimuth of a beam
+from that of its quad, up to 5.7° on the NIF 23.5° cone. A quad held as one beam, and a
+beam without a quad name, give identical results either way.
 
-`relative = true` makes the aim fields (`:z`, `:r`, `:phi`, `:split`, or the spherical ones) shifts
-added to the template aim of each beam instead of values the group's beams share, so a
-group moves rigidly and keeps its members' differences: re-pointing an as-shot table,
-whose beams within a quad aim at different points (a facility's per-beam offsets), by
-one shift per quad. Its initial parameters are then zero; the other fields stay
-absolute.
+`relative = true` makes the aim fields (`:z`, `:r`, `:phi`, `:split`, or the spherical
+ones) shifts added to the template aim of each beam, instead of values shared by the
+beams of a group. A group then moves rigidly, and the differences between its
+members are kept. This re-points an as-shot table, whose beams within a quad aim at
+different points (the per-beam offsets of a facility), by one shift per quad. The initial
+parameters are then zero; the other fields stay absolute.
 """
 struct GroupPointing{K}
     template::Vector{Beam{Float64}}
@@ -104,7 +107,7 @@ struct GroupPointing{K}
     center::Vec3
     sph::Vector{NTuple{5,Float64}}       # per beam: θ' (mirrored frame), Δφ, sθ, sφ, φ_port
     sph0::Vector{NTuple{4,Float64}}      # per group: mean θ', mean Δφ, θ' split, Δφ split
-    unit::Symbol                         # :beam or :quad: whose port azimuth :r and :phi refer to
+    unit::Symbol                         # :beam or :quad, the port azimuth of :r and :phi
     radial::Vector{NTuple{2,Vec3}}       # per beam: those radial and tangential directions
     split::Vector{NTuple{2,Float64}}     # per beam with `:split`: its sign, its template offset
 end
@@ -120,8 +123,8 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     return _group_pointing(beams, map(key, beams); fields, mirror, relative, unit, radius, center)
 end
 
-# A `GroupPointing` of `beams` with group key `ks[i]` for beam i (the constructor's
-# keywords but `by`).
+# Builds a `GroupPointing` of `beams` with group key `ks[i]` for beam i. The keywords are
+# those of the constructor, except `by`.
 function _group_pointing(beams::AbstractVector{<:Beam}, ks::AbstractVector; fields, mirror::Bool,
                          relative::Bool, unit::Symbol, radius::Union{Nothing,Real}, center)
     for f in fields
@@ -159,10 +162,11 @@ function _group_pointing(beams::AbstractVector{<:Beam}, ks::AbstractVector; fiel
                          sph, sph0, unit, radial, split)
 end
 
-# Per template beam, the side of its quad it splits to: the sign of its port's azimuth
-# from the quad's mean port (0 for a beam level with it, and for a quad held as one
-# beam), and its aim's tangential offset (along the quad's φ̂, `radial`'s second vector)
-# from the mean aim of its quad's beams.
+# Returns, per template beam, the side of its quad that it splits to and its tangential
+# offset. The side is the sign of the beam port azimuth measured from the mean port of
+# the quad. It is 0 for a beam level with that port and for a quad held as one beam. The
+# offset is that of the beam aim from the mean aim of the quad beams, along the quad φ̂
+# (the second vector of `radial`).
 function _quad_split(tmpl, radial)
     qsum, asum, n = Dict{String,Vec3}(), Dict{String,Vec3}(), Dict{String,Int}()
     for b in tmpl
@@ -179,8 +183,9 @@ function _quad_split(tmpl, radial)
     end
 end
 
-# The tangential offsets of `aims` (one per template beam, or their shifts from the
-# template's) from the mean of their quad's, along each quad's φ̂.
+# Returns the tangential offset of each entry of `aims` from the mean of its quad, along
+# the quad φ̂. `aims` contains one aim per template beam, or the shifts of the template
+# aims.
 function _split_offsets(p::GroupPointing, aims::AbstractVector{Vec3})
     asum, n = Dict{String,Vec3}(), Dict{String,Int}()
     for (b, a) in zip(p.template, aims)
@@ -190,17 +195,19 @@ function _split_offsets(p::GroupPointing, aims::AbstractVector{Vec3})
     return [dot(a - asum[b.quad] / n[b.quad], p.radial[i][2]) for (i, (b, a)) in enumerate(zip(p.template, aims))]
 end
 
-# A group's split value from its members' tangential offsets `d` from their quads' mean
-# aims: Σ side × d over the members with a side, over their number (0 without one).
+# Returns the split value of a group from the tangential offsets `d` of its members from
+# the mean aims of their quads. The value is Σ side × d over the members with a side,
+# divided by their number. It is 0 when no member has a side.
 function _group_split(p::GroupPointing, mem, d)
     k = count(bi -> p.split[bi][1] != 0, mem)
     k == 0 && return 0.0
     return sum(p.split[bi][1] * d[bi] for bi in mem if p.split[bi][1] != 0) / k
 end
 
-# Per template beam, the radial and tangential directions of its quad's port: of the mean
-# port of the beams that share its quad name (a quad held as one beam: its port,
-# exactly); a beam without a quad name keeps its port directions.
+# Returns, per template beam, the radial and tangential directions of its quad port. The
+# quad port is the mean port of the beams that share the quad name. For a quad held as
+# one beam, it is exactly the port of that beam. For a beam without a quad name, the
+# directions of its port are used.
 function _quad_radial(tmpl)
     qsum = Dict{String,Vec3}()
     for b in tmpl
@@ -209,9 +216,11 @@ function _quad_radial(tmpl)
     return [isempty(b.quad) ? _radial(b) : _radial(qsum[b.quad]) for b in tmpl]
 end
 
-# Per template beam: the polar angle θ' (degrees; from the pole of its hemisphere when mirrored)
-# and the azimuth offset Δφ from its port of the first point where its axis meets the
-# sphere, its split signs (sθ, sφ) relative to its quad's mean port, and its port azimuth.
+# Returns five values per template beam. The first two locate the first point where the
+# beam axis meets the sphere: its polar angle θ' in degrees, counted from the pole of the
+# beam hemisphere when mirrored, and its azimuth offset Δφ from the beam port. The others
+# are the split signs (sθ, sφ) of the beam relative to the mean port of its quad, and the
+# port azimuth.
 function _sphere_angles(tmpl, R, c, mirror)
     qsum = Dict{String,Vec3}()
     for b in tmpl
@@ -240,8 +249,8 @@ function _sphere_angles(tmpl, R, c, mirror)
     end
 end
 
-# A group's initial spherical values: mean θ' and Δφ, and the mean split
-# Σ s (x - x̄) / #(s ≠ 0) (zero without split members).
+# Returns the initial spherical values of a group: the mean θ' and Δφ, and the mean
+# split Σ s (x - x̄) / #(s ≠ 0), which is zero without split members.
 function _sphere_group0(sph, mem)
     θm = sum(sph[i][1] for i in mem) / length(mem)
     φm = sum(sph[i][2] for i in mem) / length(mem)
@@ -278,7 +287,8 @@ function initial_parameters(p::GroupPointing)
             p.relative || (x[_pidx(p, g, fi)] = p.sph0[g][findfirst(==(f), _SPH_FIELDS)])
             continue
         end
-        # the group's split: each beam's offset from its quad's mean, by its side
+        # The group split averages the offset of each beam from its quad mean, signed by
+        # its side.
         sg = :split in p.fields ? _group_split(p, mem, last.(p.split)) : 0.0
         if f === :split
             x[_pidx(p, g, fi)] = sg
@@ -317,8 +327,9 @@ x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), outer50 = (z = 5.01,)
 """
 parameters(p::GroupPointing, values::Pair...; kwargs...) = _with_named(p, (values..., pairs(kwargs)...))
 
-# The initial parameters of `p` with the named values `kv` (`key => (; field = value)`
-# pairs) set; `_named_values` (parameterizations.jl) resolves them to indices.
+# Returns the initial parameters of `p` with the named values `kv` set, given as
+# `key => (; field = value)` pairs. `_named_values` (parameterizations.jl) resolves the
+# names to indices.
 function _with_named(p, kv)
     x = initial_parameters(p)
     for (i, v) in _named_values(p, kv)
@@ -331,18 +342,21 @@ end
     parameters(p::GroupPointing, beams::AbstractVector{<:Beam}) -> Vector{Float64}
 
 The parameter vector of `p` that reproduces `beams`, such as the result of an
-optimization in another parameterization of the same beams: each template beam of `p`
-takes the beam of its name in `beams` (an `ArgumentError` when there is none; extra
-beams are ignored), and each group's value of a field is the mean over its members of
-what `apply` would need for that beam. For the aim fields that is the aim's axial
-coordinate (`:z`, mirrored as in `apply`) and its components along the beam's radial
-and tangential directions (`:r`, `:phi`, in the frame of `unit`), or, for a `relative`
-parameterization, the same components of the shift from the template beam's aim
-(`:split`: the group's mean of each beam's signed tangential offset from its quad's
-mean, as in `initial_parameters`);
-`:defocus`, `:power` and `:dlambda` are the beams' values and `:spot` the ratio of
-the beam's spot semi-axis `a` to the template's. Spherical fields are not supported (an
-`ArgumentError`).
+optimization in another parameterization of the same beams. Each template beam of `p`
+is matched to the beam of its name in `beams`. An `ArgumentError` is thrown for a
+missing name, and extra beams are ignored. The value of a field for each group is the mean
+over its members of what `apply` would need for that beam:
+
+- For the aim fields, it is the axial coordinate of the aim (`:z`, mirrored as in
+  `apply`) and the components of the aim along the radial and tangential directions of
+  the beam (`:r`, `:phi`, in the frame of `unit`). For a `relative` parameterization, it
+  is the same components of the shift from the template aim.
+- For `:split`, it is the group mean of the signed tangential offset of each beam from
+  the mean of its quad, as in `initial_parameters`.
+- For `:defocus`, `:power` and `:dlambda`, it is the value of the beam. For `:spot`, it
+  is the ratio of the spot semi-axis `a` of the beam to that of the template.
+
+Spherical fields are not supported and throw an `ArgumentError`.
 
 `apply(p, parameters(p, beams))` reproduces the beams exactly when `p` can express
 them, as when the groups of `p` split those of the parameterization that produced
@@ -367,7 +381,8 @@ function parameters(p::GroupPointing, beams::AbstractVector{<:Beam})
     for t in p.template
         haskey(byname, t.name) || throw(ArgumentError("no beam named $(t.name) among the beams"))
     end
-    # the beams' tangential offsets from their quads' mean aims (or of their shifts)
+    # These are the tangential offsets of the beam aims, or of their shifts, from the mean
+    # aims of their quads.
     d = :split in p.fields ?
         _split_offsets(p, [Vec3(ForwardDiff.value.(byname[t.name].aim)) - (p.relative ? t.aim : zero(Vec3))
                            for t in p.template]) : Float64[]
@@ -409,7 +424,8 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
         val(f) = (fi = findfirst(==(f), p.fields); fi === nothing ? nothing : x[_pidx(p, g, fi)])
         z, r, ϕ, dfc, pw, sp = val(:z), val(:r), val(:phi), val(:defocus), val(:power), val(:spot)
         dl, spl = val(:dlambda), val(:split)
-        # spherical values as concrete types (whether each is a parameter, and its value)
+        # The spherical values are held as concrete types: a flag for whether each is a
+        # parameter, and its value.
         sv = (val(:theta_s), val(:dphi_s), val(:split_theta), val(:split_phi))
         has = map(!isnothing, sv)
         vals = map(v -> v === nothing ? zero(T) : v, sv)
@@ -430,8 +446,9 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
                     tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
                     zz = z === nothing ? aim0[3] : _zsign(p, b) * z
                     if spl !== nothing
-                        # the split sets the beam's offset from its quad's mean: the
-                        # template offset out where the aim is the template's
+                        # The split sets the offset of the beam from the mean of its
+                        # quad. Where the aim is the template aim, the template offset
+                        # is taken out first.
                         side, d0 = p.split[bi]
                         tt = (ϕ === nothing ? tt - d0 : tt) + side * spl
                     end
@@ -444,9 +461,10 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
     return out
 end
 
-# Template beam `b` with aim `aim` and the parameterizations' non-aim fields: spot scale
-# `sp`, power `pw`, defocus `dfc` and detuning `dl` (`nothing`: the template's value),
-# in element type `T`. Shared by `GroupPointing` and `FramePointing`.
+# Returns template beam `b` in element type `T` with aim `aim` and the non-aim fields of a
+# parameterization: spot scale `sp`, power `pw`, defocus `dfc` and detuning `dl`. For a
+# field given as `nothing`, the template value is used. `GroupPointing` and
+# `FramePointing` both call this function.
 @inline function _pointed(b::Beam, aim, ::Type{T}, sp, pw, dfc, dl) where {T}
     spot = sp === nothing ? _retype(b.spot, T) :
            _retype(with_axes(b.spot, sp * b.spot.a, sp * b.spot.b), T)
@@ -456,11 +474,12 @@ end
                   dlambda = dl === nothing ? T(b.dlambda) : dl)
 end
 
-# The surface aim of template beam `bi` in group `g`: `has` tells which of
-# (:theta_s, :dphi_s, :split_theta, :split_phi) are parameters and `v` holds their values.
-# The polar angle in the beam's mirrored frame and the azimuth offset from its port are
-# each a group value plus the beam's split, or the template beam value when neither of
-# the two is a parameter (`relative`: shifts of the template beam value).
+# Returns the surface aim of template beam `bi` in group `g`. `has` flags which of
+# `:theta_s`, `:dphi_s`, `:split_theta` and `:split_phi` are parameters, and `v` contains
+# their values. The polar angle in the mirrored frame of the beam is a group value plus the
+# beam split, and so is the azimuth offset from the beam port. When neither of the two
+# fields for an angle is a parameter, the template value of the angle is used. With
+# `relative`, the values are shifts of the template value.
 function _sphere_aim(p::GroupPointing, g, bi, has::NTuple{4,Bool}, v::NTuple{4,T}) where {T}
     θb, Δφb, sθ, sφ, φp = p.sph[bi]
     Θ0, Φ0, Sθ0, Sφ0 = p.sph0[g]
@@ -488,11 +507,11 @@ end
 
 Box bounds around `x0`: `±z`, `±r`, `±phi`, `±split`, `±defocus` mm, relative `±power`, `±spot`
 fractions, `±dlambda` Å, and `±theta_s`, `±dphi_s`, `±split_theta`, `±split_phi`
-degrees (engineering defaults, not facility limits). Power bounds are further clipped to
-the absolute limits `power_min ≤ P ≤ power_max` (TW per beam, e.g. a facility's per-quad
-capability). A group at zero power in `x0` (a dropped quad) gets `±power` of the mean
-of the groups' nonzero powers, `[0, power · P̄]` before the clipping, so that it can
-come back; with every group at zero the upper bound is `power_max`, which must then be
+degrees (engineering defaults that are not facility limits). Power bounds are further
+clipped to the absolute limits `power_min ≤ P ≤ power_max` (TW per beam, e.g. the per-quad
+capability of a facility). A group at zero power in `x0` (a dropped quad) gets `±power` of
+the mean of the groups' nonzero powers, `[0, power · P̄]` before the clipping, so that it
+can come back; with every group at zero the upper bound is `power_max`, which must then be
 finite.
 """
 bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
@@ -502,12 +521,13 @@ bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0
     _box_bounds(p, x0, (; z, r, phi, split, defocus, dlambda, theta_s, dphi_s, split_theta, split_phi),
                 power, spot, power_min, power_max)
 
-# The box of `bounds` for a parameterization with groups `p.members`, fields `p.fields`
-# and `_pidx`: additive half-widths `widths` by field name; `power` and `spot` relative.
+# Returns the box of `bounds` for a parameterization with groups `p.members`, fields
+# `p.fields` and `_pidx`. The half-widths `widths` are additive and given by field name;
+# `power` and `spot` are relative.
 function _box_bounds(p, x0::AbstractVector, widths::NamedTuple, power, spot, power_min, power_max)
     lo, hi = copy(x0), copy(x0)
     fp = findfirst(==(:power), p.fields)
-    # the scale of a group at zero power: the mean of the nonzero ones
+    # A group at zero power is scaled by the mean of the nonzero powers.
     P = fp === nothing ? Float64[] : [x0[_pidx(p, g, fp)] for g in eachindex(p.members)]
     Pbar = any(>(0), P) ? sum(filter(>(0), P)) / count(>(0), P) : NaN
     for g in eachindex(p.members), (fi, f) in enumerate(p.fields)
@@ -555,62 +575,74 @@ abstract type _AbstractScenario end
     Scenario(target, beams; kwargs...)
     Scenario(target, parameterization; kwargs...)
 
-The parameterization (`scenario.param`) maps the parameter vectors of `evaluate` and
-`optimize_pointing` to beams. The first form builds the deposition operator for the
-template beams of `pointing` (a [`FramePointing`](@ref) too); the second is `Scenario(target, GroupPointing(beams))`
-(fields `:z`, `:r`, `:defocus` per group). The third takes any other parameterization
-with methods of `apply(parameterization, x)` and `initial_parameters(parameterization)`,
-and builds the operator for the beams at its initial parameters. The operator resolves
-the beams' footprints where those beams aim (`reach`, `DepositionOperator`).
+A scenario contains everything precomputed for fast repeated evaluation of a pointing
+design. Its parameterization (`scenario.param`) maps the parameter vectors of `evaluate`
+and `optimize_pointing` to beams. The three forms differ in the parameterization:
 
-Everything precomputed for fast repeated evaluation of a pointing design:
-the `DepositionOperator`, and — when `radiation` and `observe` (component names whose
-incident x-ray flux is the figure of merit, e.g. `:capsule`) are given — the view
-factors and the linear flux response of the observed elements. `lpi` is a laser–plasma
-model (`Backscatter`, `CalibratedTransfer`, `CBET`, or a tuple of them) applied at `time`
-between the setup beams and deposition.
+- The first form builds the deposition operator for the template beams of `pointing`,
+  which may also be a [`FramePointing`](@ref).
+- The second form is `Scenario(target, GroupPointing(beams))`, with fields `:z`, `:r`
+  and `:defocus` per group.
+- The third form takes any other parameterization with methods of
+  `apply(parameterization, x)` and `initial_parameters(parameterization)`, and builds
+  the operator for the beams at its initial parameters.
 
-The flux response is linear in the laser source at fixed albedos: the materials' at
-`time` (temperature-dependent ones at their reference temperatures, thin foils
-intact), or an explicit per-element `albedo`, such as the converged `sol.albedo` of a
-solution at the design point (e.g. a drive history's peak, windows burned through).
-For a time partway through a shaped pulse (a phase), the materials' albedos at `time`
-are not the wall's: a `WallLossAlbedo`'s follows each element's temperature history,
-which neither the reference temperature nor a standalone `solve` at `time` knows. Pass
-the history albedos, `st = history_state(target, history, τ)` as `st.time, st.albedo`
-([`history_state`](@ref)). A scenario with a response (`observe` and a model) built
-without `albedo` on a target whose materials include a [`WallLossAlbedo`](@ref) (or a
-[`BurnthroughAlbedo`](@ref) whose `before` is one) warns at construction: its loss is
-taken at the reference temperature (250 eV by default), which mid-pulse overstated the
-drive against a drive history by up to 1.64 times on a public mock-up (research notes,
-"Drive histories: sliver steps and the albedo of a phase"). `albedo = :reference`
-marks the reference temperature as intended: the same scenario, without the warning.
+The operator resolves the beam footprints where those beams aim (`reach`,
+`DepositionOperator`). Besides the `DepositionOperator`, the scenario contains the view
+factors and the linear flux response of the observed elements when `radiation` and
+`observe` are given. `observe` names the components whose incident x-ray flux is the
+figure of merit, e.g. `:capsule`. `lpi` is a laser–plasma model (`Backscatter`,
+`CalibratedTransfer`, `CBET`, or a tuple of them), applied at `time` between the setup
+beams and deposition.
 
-Objectives need only the moments of the observed flux, so the scenario keeps the
-response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`)
-weights: per evaluation a 13 × n and a 49 × n product, and a 62-column solve at setup.
-The full observed × n response `scenario.response` (and an evaluation's `flux`) is
-computed when first read; on a large (iterative) model an evaluation's `flux` is one
-solve instead, until the response has been read.
+The flux response is linear in the laser source at fixed albedos. By default these are
+the albedos of the materials at `time`, with temperature-dependent ones at their
+reference temperatures and thin foils intact. An explicit per-element `albedo` replaces
+them, such as the converged `sol.albedo` of a solution at the design point (e.g. the
+peak of a drive history, with windows burned through). For a time partway through a
+shaped pulse (a phase), the material albedos at `time` differ from those of the wall.
+The albedo of a `WallLossAlbedo` depends on the temperature history of each element,
+and neither the reference temperature nor a standalone `solve` at `time` includes that
+history. Pass the history albedos as `st.time, st.albedo`, with
+`st = history_state(target, history, τ)` ([`history_state`](@ref)).
+
+A scenario with a response (`observe` and a model) warns at construction when it is
+built without `albedo` on a target whose materials include a [`WallLossAlbedo`](@ref),
+or a [`BurnthroughAlbedo`](@ref) whose `before` is one. The loss is then taken at the
+reference temperature (250 eV by default). Mid-pulse, this overstated the drive against
+a drive history by up to 1.64 times on a public mock-up (research notes, "Drive
+histories: sliver steps and the albedo of a phase"). `albedo = :reference` marks the
+reference temperature as intended and builds the same scenario without the warning.
+
+Objectives need only the moments of the observed flux, so the response is stored
+contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`) weights. Each
+evaluation then costs a 13 × n and a 49 × n product, and the setup costs a 62-column solve.
+The full observed × n response `scenario.response`, and with it the `flux` of an evaluation,
+is computed when first read. On a large (iterative) model, the `flux` of an evaluation is
+one solve instead, until the response has been read.
 
 Options of the operators pass through two named tuples:
-- `deposition_kw` to [`DepositionOperator`](@ref): `profile` (a
-  [`VisRadProfile`](@ref): VisRad's beam model instead of the f-cone superposition),
-  `ncone` (f-cone directions, 13), `reach` (the aim motion, in mm, that the operator
-  stays accurate for, 2.0), `resolution`, `level`, `maxlevel` and `shadow` (the
-  quadrature's refinement);
-- `viewfactor_kw` to [`RadiationModel`](@ref) and through it to
-  [`view_factors`](@ref): `closed` (the closure correction; by default the declaration
-  of the target, which `hohlraum` makes), `F` (given view factors, e.g. those of a target
-  that differs only in its materials), `storage` (`Float64`, `Float32` or `:hmatrix`),
-  `solver`, `visibility` (`:centroid` or `:sampled`), `visibility_grid`, `level` and
-  `near`.
 
-`model`, a `RadiationModel` of the target, is used instead of building one; it excludes
-`viewfactor_kw` (an `ArgumentError`).
+- `deposition_kw` is passed to [`DepositionOperator`](@ref). Its options are:
+  - `profile`, a [`VisRadProfile`](@ref) that selects the VisRad beam model instead of
+    the f-cone superposition;
+  - `ncone`, the number of f-cone directions (13);
+  - `reach`, the aim motion in mm over which the operator stays accurate (2.0);
+  - `resolution`, `level`, `maxlevel` and `shadow`, the quadrature refinement.
+- `viewfactor_kw` is passed to [`RadiationModel`](@ref) and through it to
+  [`view_factors`](@ref). Its options are:
+  - `closed`, the closure correction, by default the declaration of the target that
+    `hohlraum` makes;
+  - `F`, given view factors, e.g. those of a target that differs only in its materials;
+  - `storage`, one of `Float64`, `Float32` or `:hmatrix`;
+  - `solver`, `visibility` (`:centroid` or `:sampled`), `visibility_grid`, `level` and
+    `near`.
+
+`model`, a `RadiationModel` of the target, is used instead of building one. It excludes
+`viewfactor_kw`, and giving both throws an `ArgumentError`.
 
 [`remake`](@ref)`(scenario; ...)` replaces the laser–plasma model, the parameterization,
-the deposition options or the response's observed elements, time and albedos, and
+the deposition options or the observed elements, time and albedos of the response, and
 rebuilds only what depends on them.
 """
 struct Scenario{P} <: _AbstractScenario
@@ -627,10 +659,11 @@ struct Scenario{P} <: _AbstractScenario
     time::Float64
     _response::_LazyResponse          # the full response, once read (shared by subsets)
     albedo::Union{Nothing,Vector{Float64}}   # explicit albedos of the response
-    _split::Vector{Vector{Symbol}}    # beam-group sets whose element powers `evaluate` keeps
+    _split::Vector{Vector{Symbol}}    # group sets whose element powers `evaluate` records
 end
 
-# A scenario whose evaluations keep no group sets' powers (`_with_split` sets them).
+# Builds a scenario whose evaluations record the powers of no group sets. `_with_split`
+# adds the sets.
 Scenario(t::Target, param, op::DepositionOperator, model, obs, W, Y, WR, YR, lpi, time, response::_LazyResponse,
          albedo) = Scenario(t, param, op, model, obs, W, Y, WR, YR, lpi, time, response, albedo, Vector{Symbol}[])
 
@@ -667,7 +700,7 @@ function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
         throw(ArgumentError("model is a radiation model of another target"))
     model === nothing || isempty(viewfactor_kw) ||
         throw(ArgumentError("give a model or viewfactor_kw, not both (the model's view factors are fixed)"))
-    # `:reference`: the material albedos at `time`, stated as intended
+    # `:reference` selects the material albedos at `time` and marks them as intended.
     meant = albedo === :reference
     albedo isa Symbol && !meant &&
         throw(ArgumentError("albedo takes albedos per element, `nothing` or `:reference`, got :$albedo"))
@@ -681,11 +714,12 @@ function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
                     _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
 end
 
-# A scenario's response without albedos on a target whose wall loss follows a
-# temperature history in a drive history (a `WallLossAlbedo`, or a thin foil's
-# `BurnthroughAlbedo` over one): the loss is taken at the model's reference temperature,
-# which mid-pulse overstates the drive against the history (research notes, "Drive
-# histories: sliver steps and the albedo of a phase"). One warning per construction.
+# Without albedos, the loss in a scenario response on a target whose wall loss depends on
+# a temperature history is taken at the reference temperature of the model. Such a loss is a
+# `WallLossAlbedo`, or the `BurnthroughAlbedo` of a thin foil over one. Mid-pulse, the
+# reference loss overstates the drive against the history (research notes, "Drive
+# histories: sliver steps and the albedo of a phase"). `_history_albedo` flags these
+# albedos, and the scenario warns once per construction.
 _history_albedo(a) = a isa WallLossAlbedo || a isa BurnthroughAlbedo && a.before isa WallLossAlbedo
 
 function _warn_reference_albedo(t::Target, time)
@@ -703,12 +737,13 @@ function _warn_reference_albedo(t::Target, time)
     return nothing
 end
 
-# The observed elements of `observe` (component or part names; `nothing`: none).
+# Returns the observed elements of `observe`, a set of component or part names. `nothing`
+# gives none.
 _observed(t::Target, observe) =
     observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
 
-# The mode weights of the observed elements and, with a model, their responses: one
-# flux-response solve for all weights.
+# Returns the mode weights of the observed elements and, with a model, their responses.
+# One flux-response solve covers all weights.
 function _moment_responses(t::Target, model, obs, time, albedo)
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)
     Y = isempty(obs) ? zeros(0, 0) : ylm_weights(t, obs; lmax = _CACHED_YLM_LMAX)
@@ -720,7 +755,8 @@ function _moment_responses(t::Target, model, obs, time, albedo)
     return W, Y, WR, YR
 end
 
-# The beams a scenario's deposition operator is built for, from its parameterization.
+# Returns the beams that the deposition operator of a scenario is built for, from its
+# parameterization.
 _scenario_beams(p::GroupPointing) = p.template
 _scenario_beams(p) = apply(p, initial_parameters(p))
 
@@ -733,35 +769,38 @@ const _UNCHANGED = _Unchanged()
            history) -> Scenario
 
 Copy of `scenario` with the given parts replaced. What depends on a replaced part is
-rebuilt and everything else is shared:
+rebuilt, and everything else is shared:
 
 - `lpi` (a laser–plasma model or `nothing`): nothing is rebuilt.
-- `parameterization`: the deposition operator is kept when the new parameterization's
-  beams (a `GroupPointing`'s or `FramePointing`'s template, another's beams at its
-  initial parameters) enter through the operator's ports in the same order with the same
-  f-cone directions (and, under a [`VisRadProfile`](@ref), the same envelope ratios);
-  otherwise the change is refused with an `ArgumentError`, unless `deposition_kw` is
-  given too. A kept operator resolves the footprints where the original beams aimed
-  (its `reach`), as for [`subset`](@ref).
-- `deposition_kw`: the operator is rebuilt for the parameterization's beams with these
-  options. Options not given take their defaults: a scenario does not record the
-  options its operator was built with, so pass all that differ from the defaults (a
-  `profile`, `reach`, `resolution`).
+- `parameterization`: the deposition operator is kept when the beams of the new
+  parameterization enter through the ports of the operator in the same order with the
+  same f-cone directions, and, under a [`VisRadProfile`](@ref), with the same envelope
+  ratios. These beams are the template of a `GroupPointing` or `FramePointing`, or the
+  beams of any other parameterization at its initial parameters. Otherwise the change is
+  refused with an `ArgumentError`, unless `deposition_kw` is given too. A kept operator
+  resolves the footprints where the original beams aimed (its `reach`), as for
+  [`subset`](@ref).
+- `deposition_kw`: the operator is rebuilt for the beams of the parameterization with
+  these options. Options not given take their defaults, because a scenario does not
+  record the options its operator was built with. Pass all options that differ from the
+  defaults, such as `profile`, `reach` and `resolution`.
 - `observe`, `time`, `albedo` and `model` (a `RadiationModel` of the same target, or
-  `nothing` for none): the mode weights and moment responses are recomputed (one
-  flux-response solve), and the full `response` is computed again when read. `albedo =
-  nothing` or `:reference` takes the material albedos at `time` (no warning:
-  the warning, if any, came at the scenario's construction).
+  `nothing` for none): the mode weights and moment responses are recomputed with one
+  flux-response solve, and the full `response` is computed again when read.
+  With `albedo = nothing` or `:reference`, the material albedos at `time` are used
+  without a warning; any warning was issued when the scenario was constructed.
 
-The target, `radiation` and `viewfactor_kw` do not change through `remake` (an
-`ArgumentError`): they need a new `Scenario`, or a `model` built for the purpose.
+The target, `radiation` and `viewfactor_kw` do not change through `remake`, and giving
+them throws an `ArgumentError`. They need a new `Scenario`, or a `model` built for the
+purpose.
 
-`history` (a [`drive_history`](@ref) of the scenario's target run with `keep_albedo =
-true`) with `time` sets the albedos and time of the history's state at `time`:
-`remake(scenario; history = h, time = τ)` is `st = `[`history_state`](@ref)`(scenario.target,
-h, τ)` and `remake(scenario; st.time, st.albedo)`, bitwise. Remade so, a design's
-phase and its reference at the same time carry the same `time`, which the reference
-checks of [`mode_gate`](@ref) and [`drive_floor`](@ref) compare.
+`history`, a [`drive_history`](@ref) of the scenario target run with
+`keep_albedo = true`, sets with `time` the albedos and time of the history state at
+`time`. `remake(scenario; history = h, time = τ)` is exactly
+`st = `[`history_state`](@ref)`(scenario.target, h, τ)` followed by
+`remake(scenario; st.time, st.albedo)`. Remade so, a phase of a design and its reference
+at the same time have the same `time`, which the reference checks of
+[`mode_gate`](@ref) and [`drive_floor`](@ref) compare.
 """
 function remake(s::Scenario; parameterization = _UNCHANGED, lpi = _UNCHANGED,
                 deposition_kw = _UNCHANGED, observe = _UNCHANGED, time = _UNCHANGED,
@@ -802,8 +841,9 @@ function remake(s::Scenario; parameterization = _UNCHANGED, lpi = _UNCHANGED,
     return Scenario(t, param, op, m, obs, W, Y, WR, YR, lp, tm, _LazyResponse(), alb)
 end
 
-# Whether the operator `op` serves `beams`: their ports and f-cone directions in order,
-# and their envelope ratios under VisRad's profile (an `ArgumentError` otherwise).
+# Checks that the operator `op` is valid for `beams`. Their ports and f-cone directions must
+# match in order, and so must their envelope ratios under the VisRad profile. A mismatch
+# throws an `ArgumentError`.
 function _check_operator(op::DepositionOperator, beams)
     fail(why) = throw(ArgumentError("the parameterization's beams $why the deposition operator's: " *
                                     "give deposition_kw to rebuild it"))
@@ -817,26 +857,32 @@ function _check_operator(op::DepositionOperator, beams)
 end
 
 """
-    subset(scenario, keep; parameterization = the scenario's, restricted to the kept beams)
+    subset(scenario, keep; parameterization = restricted to the kept beams)
 
-Scenario for the beams `keep` (indices into the scenario's beams) — e.g. after
-dropping a bundle — reusing the view factors, flux response and mode weights; only the
-deposition operator is restricted. The kept beams' template values (pointing, power)
-come from the scenario's parameterization. The default new parameterization keeps the
-groups of the scenario's: a [`GroupPointing`](@ref)'s groups that keep a beam keep their
-keys, so the parameter names of the subset are those of the full pointing, with its
-fields, mirroring, `relative`, `unit` and sphere (with `unit = :quad`, the default, a
-quad's azimuth and split are those of its kept beams); pass a parameterization to group
-the kept beams otherwise. For a [`FramePointing`](@ref) scenario, the default keeps the
-kept beams' frames, groups, fields and `relative`.
+Scenario for the beams `keep` (indices into the scenario beams), e.g. after dropping a
+bundle. The subset reuses the view factors, flux response and mode weights, and only
+the deposition operator is restricted. The template values (pointing, power) of the
+kept beams come from the scenario parameterization.
 
-For a [`HeldParameters`](@ref) or [`PowerScales`](@ref) scenario the default wraps the
-inner parameterization's subset, so the kept parameters keep their names, and is what
-the wrappers built by hand on the kept beams give: a parameter whose group keeps some of
-its beams keeps its value and stays held or free (the value applies to the kept beams as
-it applied to all, an absolute aim or a shift); one whose group keeps none is dropped,
-held or free, and so is the power scale of a group with no kept beam. Any other
-parameterization needs one.
+By default, the new parameterization has the groups of the scenario. For a
+[`GroupPointing`](@ref), the keys of the groups that still contain a beam are kept, so the
+parameter names of the subset are those of the full pointing. The fields, mirroring,
+`relative`, `unit` and sphere carry over. With `unit = :quad`, the default, the azimuth and
+split of a quad are those of its kept beams. Pass a parameterization to group the kept beams
+otherwise. For a [`FramePointing`](@ref) scenario, the frames, groups, fields and
+`relative` of the kept beams are kept by default.
+
+For a [`HeldParameters`](@ref) or [`PowerScales`](@ref) scenario, the default wraps the
+subset of the inner parameterization, so the kept parameters keep their names. The
+result equals the wrappers built by hand on the kept beams:
+
+- For a parameter whose group still contains some of its beams, the value and the held
+  or free state are kept. The value applies to the kept beams as it applied to all, as an
+  absolute aim or a shift.
+- A parameter whose group contains none of the kept beams is dropped, held or free.
+- The power scale of a group with no kept beam is dropped too.
+
+Any other parameterization needs an explicit `parameterization`.
 """
 function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)
     param = parameterization === nothing ? _subset_param(s.param, keep) : parameterization
@@ -845,9 +891,9 @@ function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization =
                     s.lpi, s.time, getfield(s, :_response), s.albedo)
 end
 
-# The beams `keep` of `p` in their own groups (the groups that keep a beam keep their
-# keys, so their parameter names), with its fields, mirroring, `relative`, `unit` and
-# sphere.
+# Restricts `p` to the beams `keep`. The keys of the groups that still contain a beam are
+# kept, and so are their parameter names. The fields, mirroring, `relative`, `unit` and
+# sphere of `p` carry over.
 function _subset_param(p::GroupPointing, keep)
     key = similar(p.keys, length(p.template))
     for (g, mem) in enumerate(p.members), bi in mem
@@ -872,9 +918,9 @@ end
 """
     Evaluation
 
-Result of `evaluate`: the setup `beams`, the `effective` beams after the scenario's
-laser–plasma model, their `deposition`, and `flux` — incident x-ray flux on the
-scenario's observed elements (TW/mm²; `nothing` without radiation). Deposition
+Result of `evaluate`: the setup `beams`, the `effective` beams after the laser–plasma
+model of the scenario, their `deposition`, and `flux` — incident x-ray flux on the
+observed elements of the scenario (TW/mm²; `nothing` without radiation). Deposition
 fractions are relative to effective (post-LPI) power. The flux is computed when first
 read; `flux_moments` and `flux_ylm` do not need it.
 """
@@ -884,7 +930,7 @@ struct Evaluation{T,B,E}
     effective::Vector{E}
     deposition::Deposition{T}
     _flux::Base.RefValue{Union{Nothing,Vector{T}}}   # observed flux, once computed
-    _split::Union{Nothing,_GroupSplit{T}}            # the scenario's group sets' powers
+    _split::Union{Nothing,_GroupSplit{T}}            # powers of the scenario group sets
     _moments::Base.RefValue{Union{Nothing,Vector{T}}}  # cached Legendre moments, once computed
     _ylm::Base.RefValue{Union{Nothing,Vector{T}}}      # cached Y_lm coefficients, once computed
 end
@@ -894,9 +940,10 @@ Evaluation(s::Scenario, beams::Vector, effective::Vector, d::Deposition{T},
     Evaluation(s, beams, effective, d, flux, split, Ref{Union{Nothing,Vector{T}}}(nothing),
                Ref{Union{Nothing,Vector{T}}}(nothing))
 
-# The scenario's cached moment (`moment_response`) or Y_lm (`ylm_response`) products with
-# the deposition, each computed once per evaluation: a gate, a drive floor and a ceiling
-# and the objective on one phase read them alike.
+# Returns the cached product of the moment (`moment_response`) or Y_lm (`ylm_response`)
+# response of the scenario with the deposition. Each product is computed once per
+# evaluation, and a gate, a drive floor, a ceiling and the objective on one phase all
+# read the same copy.
 function _cached_product(c::Base.RefValue{Union{Nothing,Vector{T}}}, R::Matrix{Float64},
                          P::Vector{T}) where {T}
     v = c[]
@@ -918,9 +965,9 @@ function _flux(ev::Evaluation)
     return c[]
 end
 
-# The observed flux for absorbed laser power P: the full response times P, or on a large
-# model whose response has not been read, one iterative solve (the response would take
-# a solve per observed element).
+# Returns the observed flux for absorbed laser power P. The flux is the full response
+# times P. On a large model whose response has not been read, it is one iterative solve
+# instead, since the response would take a solve per observed element.
 function _observed_flux(s::Scenario, P)
     m = s.model
     (m.iterative && getfield(s, :_response).R === nothing) || return _mul(s.response, P)
@@ -938,12 +985,12 @@ evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x)
 
 evaluate(s::Scenario, beams::AbstractVector{<:Beam}) = _evaluate(s, beams, apply_lpi(s.lpi, beams, s.time))
 
-# `evaluate` of the setup `beams` and their effective beams `eff`.
+# Computes `evaluate` for the setup `beams` and their effective beams `eff`.
 function _evaluate(s::Scenario, beams::AbstractVector{<:Beam}, eff)
     sets = getfield(s, :_split)
     (isempty(sets) || !_plain_deposit(s.lpi)) && return _evaluation(s, beams, eff, lpi_deposit(s.lpi, s.deposition, eff, s.time), nothing)
-    # the element powers of the group sets the run's constraints read (`_with_split`), in
-    # the same pass
+    # The element powers of the group sets that the constraints of the run read
+    # (`_with_split`) are computed in the same pass.
     T = mapreduce(b -> typeof(b.power), promote_type, eff)
     split = _GroupSplit(sets, eff, nelements(s.target), T)
     return _evaluation(s, beams, eff, _deposit(s.deposition, eff, split), split)
@@ -952,14 +999,15 @@ end
 _evaluation(s, beams, eff, dep::Deposition{T}, split) where {T} =
     Evaluation(s, beams, eff, dep, Ref{Union{Nothing,Vector{T}}}(nothing), split)
 
-# Whether the laser–plasma model deposits the effective beams as `deposit` does (no model
-# that deposits light off the operator, `_deposits`).
+# Returns whether the effective beams of the laser–plasma model are deposited as
+# `deposit` deposits them. This holds when no model deposits light off the operator
+# (`_deposits`).
 _plain_deposit(m) = !_deposits(m)
 _plain_deposit(ms::Union{Tuple,AbstractVector}) = !any(_deposits, ms)
 
-# `A * x` for a Float64 matrix and a vector of duals through BLAS: the values and each
-# partial are the columns of one matrix product (a generic dual mat-vec runs ~10×
-# slower). Other element types use the generic product.
+# Computes `A * x` for a Float64 matrix and a vector of duals through BLAS. The values and
+# each partial are the columns of one matrix product; a generic dual mat-vec runs about
+# 10 times slower. Other element types use the generic product.
 _mul(A::AbstractMatrix, x::AbstractVector) = A * x
 function _mul(A::Matrix{Float64}, x::Vector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
     X = Matrix{Float64}(undef, length(x), N + 1)
@@ -986,8 +1034,8 @@ power_fraction(ev::Evaluation, names::Symbol...) =
 """
     flux_moments(ev; lmax = 8, axis = ẑ, center = mode_center(target, observed)) -> Vector
 
-Legendre moments `aₗ` of the observed incident flux (index `l+1`), about the observed
-capsule's center by default (`mode_center`).
+Legendre moments `aₗ` of the observed incident flux (index `l+1`), about the center of
+the observed capsule by default (`mode_center`).
 """
 function flux_moments(ev::Evaluation; lmax::Integer = 8, axis = Vec3(0, 0, 1),
                       center = nothing)
@@ -1006,7 +1054,8 @@ end
 Mean incident x-ray flux on the observed elements (TW/mm²): the solid-angle mean seen
 from the mode center, `flux_moments(ev)[1]`. It is the drive level that the `drive`
 keyword of [`symmetry_objective`](@ref) and [`asymmetry_objective`](@ref) holds, so
-`drive = mean_flux(evaluate(scenario, x0))` keeps the drive of the starting design.
+With `drive = mean_flux(evaluate(scenario, x0))`, the drive of the starting design is
+held.
 """
 mean_flux(ev::Evaluation) = flux_moments(ev; lmax = 0)[1]
 
@@ -1023,26 +1072,33 @@ end
                        drive = nothing, drive_weight = 1.0, center = nothing, keepout = nothing,
                        uncertainty = nothing)
 
-Objective for indirect-drive symmetry: `Σ wₗ (aₗ/a₀)²` over `modes`, plus `odd ×` the
-sum of squared odd moments (top/bottom imbalance), plus `clip`, `missed` and `direct`
-times the squared fractions of laser power clipped on the outside of the target,
-missing it, or hitting the observed elements directly (the scenario's `observe`, the
-capsule whose drive is measured), or with `direct_names` the named parts or components
-instead (a name that is not in the target is an error). When `drive`
-(TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`, with `a₀` the
-[`mean_flux`](@ref): `drive = mean_flux(evaluate(scenario, x0))` holds the drive of the
-design `x0`. A `keepout` (an
-`ApertureKeepOut` for the entrance-hole rims, a `SphereKeepOut` for the capsule, or a
-tuple of them) adds its penalty on the beams' worst-case clearance. The `direct`
-penalty only sees power already on the capsule; keep a margin with a `SphereKeepOut`.
+Objective for indirect-drive symmetry. The objective is the sum of these terms:
 
-With `uncertainty = (; pointing, power)` (rms beam-to-beam pointing in mm and relative
-power, as in `mode_uncertainty`) the mode terms are their expected values over those
-errors, linearized: each `(aₗ/a₀)²` gains the variance the errors give it, so the
-optimum also makes the drive shape insensitive to them (robust design). This costs
-about three gradients per evaluation. The shared errors of `mode_uncertainty`
-(`group_pointing`, `group_power`, `groups`, `positioning`) are accepted too; they add
-a fourth per-beam sensitivity (about four gradients per evaluation).
+- `Σ wₗ (aₗ/a₀)²` over `modes`;
+- `odd ×` the sum of squared odd moments, which measures the top/bottom imbalance;
+- `clip`, `missed` and `direct` times the squared fractions of laser power clipped on
+  the outside of the target, missing it, or hitting the observed elements directly.
+  The observed elements are those named by the scenario `observe`, the capsule whose
+  drive is measured. With `direct_names`, the `direct` term counts the named parts or
+  components instead, and a name that is not in the target is an error;
+- with `drive` (TW/mm²) given, `drive_weight × (a₀/drive - 1)²`, with `a₀` the
+  [`mean_flux`](@ref). With `drive = mean_flux(evaluate(scenario, x0))`, the objective holds
+  the drive of the design `x0`;
+- with a `keepout`, its penalty on the worst-case clearance of the beams. A keep-out is
+  an `ApertureKeepOut` for the entrance-hole rims, a `SphereKeepOut` for the capsule, or
+  a tuple of them.
+
+The `direct` penalty counts only power already on the capsule, so keep a margin with a
+`SphereKeepOut`.
+
+With `uncertainty = (; pointing, power)`, the mode terms are their expected values over
+those errors, linearized. The errors are the rms beam-to-beam pointing in mm and the
+relative power, as in `mode_uncertainty`. Each `(aₗ/a₀)²` gains the variance due to the
+errors, so the optimum also makes the drive shape insensitive to them (robust design).
+This costs about three gradients per evaluation. The shared errors of
+`mode_uncertainty` (`group_pointing`, `group_power`, `groups`, `positioning`) are
+accepted too. They add a fourth per-beam sensitivity, for about four gradients per
+evaluation.
 """
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
@@ -1067,8 +1123,8 @@ function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Int
     end
 end
 
-# The errors of an objective's `uncertainty` keyword (`mode_uncertainty`'s keywords), or
-# nothing.
+# Returns the errors of the `uncertainty` keyword of an objective, which takes the
+# keywords of `mode_uncertainty`, or `nothing`.
 _uncertainty_spec(::Nothing) = nothing
 function _uncertainty_spec(u)
     e = (; pointing = Float64(get(u, :pointing, 0.0)), power = Float64(get(u, :power, 0.0)),
@@ -1088,8 +1144,8 @@ function _penalties(ev::Evaluation; clip, missed, direct, direct_names)
     return J
 end
 
-# The fraction of the delivered laser power absorbed by the observed elements, or by the
-# named parts or components (a fitted CAD capsule is the part of its pieces).
+# Returns the fraction of the delivered laser power absorbed by the observed elements, or
+# by the named parts or components. A fitted CAD capsule is the part of its pieces.
 _direct_fraction(ev::Evaluation, ::Nothing) =
     sum(ev.deposition.element[e] for e in ev.scenario.observed; init = zero(ev.deposition.delivered)) /
     ev.deposition.delivered
@@ -1107,9 +1163,10 @@ end
     flux_ylm(ev; lmax = 6) -> Vector
 
 Real spherical-harmonic coefficients of the observed incident flux in the flat
-`mode_index` order (polar axis ẑ, azimuth from +x, about the observed capsule's center:
-`mode_center`, TCC unless the capsule is offset), from the scenario's cached
-`ylm_weights`. Use `ylm_matrix(c, lmax)` for the `C[l+1, lmax+1+m]` layout.
+`mode_index` order, from the cached `ylm_weights` of the scenario. The polar axis is ẑ,
+and the azimuth is measured from +x about the center of the observed capsule
+(`mode_center`, which is TCC unless the capsule is offset). Use `ylm_matrix(c, lmax)`
+for the `C[l+1, lmax+1+m]` layout.
 """
 function flux_ylm(ev::Evaluation; lmax::Integer = _CACHED_YLM_LMAX)
     _radiative(ev.scenario) || throw(ArgumentError("scenario has no radiation response"))
@@ -1134,7 +1191,7 @@ the mean flux `c_00/√(4π)`.
 
 With `reference` (a coefficient vector from `flux_ylm`, e.g. of a tuned design before a
 change to the target or the beams), the modes and components measure the departure of
-`c_lm/c_00` from the reference's `c_lm/c_00` instead of from zero, so the objective
+`c_lm/c_00` from `c_lm/c_00` of the reference instead of from zero, so the objective
 restores a known-good drive shape.
 
 With `uncertainty = (; pointing, power)` the mode and component terms are their
@@ -1183,13 +1240,13 @@ end
     influence_matrix(scenario, beams; lmax = 6) -> Matrix
 
 Mode response of the observed flux to each beam: column `b` is the real-harmonic
-coefficient vector (`mode_index` order) produced by beam `b` alone at 1 TW, with the
-beam's pointing, spot and focus. Without a laser–plasma model the flux is linear in
+coefficient vector (`mode_index` order) produced by beam `b` by itself at 1 TW, with the
+pointing, spot and focus of the beam. Without a laser–plasma model the flux is linear in
 beam powers, so the coefficients of any power assignment `P` are `M * P` — the basis of
 power-rebalancing solves and of tables of what losing each beam costs. `beams` are the
 effective beams (after `apply_lpi`); a laser–plasma model that deposits light itself
-(the ridge stop of `BubbleAbsorption`, linear in each beam's power) is included through
-`lpi_deposit` at the scenario's time.
+(the ridge stop of `BubbleAbsorption`, linear in the power of each beam) is included
+through `lpi_deposit` at the scenario time.
 """
 function influence_matrix(s::Scenario, beams::AbstractVector{<:Beam};
                           lmax::Integer = _CACHED_YLM_LMAX)
@@ -1210,11 +1267,11 @@ end
     irradiance_objective(name; center, radius, intensity = nothing, uniformity = 1.0,
                          spill = 1.0, intensity_weight = 1.0, side = 1)
 
-Objective for a laser-irradiated foil (e.g. a backlighter): RMS nonuniformity of the
-absorbed laser intensity over the elements of component `name` within `radius` of
-`center` (on side `side`: 1 front, -1 back), plus `spill ×` the squared fraction of
-delivered power landing outside that region, plus — if `intensity` (TW/mm²) is given —
-`intensity_weight × (mean/intensity - 1)²`.
+Objective for a laser-irradiated foil such as a backlighter. The region is the set of
+elements of component `name` within `radius` of `center`, on side `side` (1 front, -1
+back). The objective is the RMS nonuniformity of the absorbed laser intensity over the
+region, plus `spill ×` the squared fraction of delivered power landing outside it. With
+`intensity` (TW/mm²) given, the objective adds `intensity_weight × (mean/intensity - 1)²`.
 """
 function irradiance_objective(name::Symbol; center, radius, intensity = nothing,
                               uniformity = 1.0, spill = 1.0, intensity_weight = 1.0, side = 1)
@@ -1238,11 +1295,11 @@ end
 """
     face_flux(ev) -> Vector
 
-Incident x-ray flux `H_e` (TW/mm²) on each of the scenario's observed elements: the
+Incident x-ray flux `H_e` (TW/mm²) on each observed element of the scenario: the
 full linear flux response (`scenario.response`, computed when first read) times the
-absorbed laser power, generic in the number type (the optimizer's duals). On a dense
-model, the same numbers as the evaluation's `flux`; on a large (iterative) model it
-builds the response (a solve per observed element) instead of one iterative solve, so
+absorbed laser power, generic in the number type (the duals of the optimizer). On a
+dense model, the same numbers as the `flux` of the evaluation; on a large (iterative) model
+it builds the response (a solve per observed element) instead of one iterative solve, so
 meant for an observed face of moderate size.
 """
 function face_flux(ev::Evaluation)
@@ -1254,10 +1311,11 @@ end
 """
     face_mean_flux(ev) -> Real
 
-Area mean `H̄ = Σ A_e H_e / Σ A_e` (TW/mm²) of the incident x-ray flux on the scenario's
-observed elements ([`face_flux`](@ref)): the level of [`FaceFlux`](@ref) and the level
-that the `flux` keyword of [`face_flux_objective`](@ref) holds, so
-`flux = face_mean_flux(evaluate(scenario, x0))` keeps the drive of the design `x0`.
+Area mean `H̄ = Σ A_e H_e / Σ A_e` (TW/mm²) of the incident x-ray flux on the observed
+elements of the scenario ([`face_flux`](@ref)): the level of [`FaceFlux`](@ref) and the
+level that the `flux` keyword of [`face_flux_objective`](@ref) holds, so
+With `flux = face_mean_flux(evaluate(scenario, x0))`, the drive of the design `x0` is
+held.
 """
 face_mean_flux(ev::Evaluation) = _face_terms(ev)[1]
 
@@ -1265,10 +1323,10 @@ face_mean_flux(ev::Evaluation) = _face_terms(ev)[1]
     face_nonuniformity(ev) -> Real
 
 Area-weighted RMS nonuniformity `σ = rms_nonuniformity(H, A)` (relative to the mean) of
-the incident x-ray flux on the scenario's observed elements ([`face_flux`](@ref)): the
-shape term of [`face_flux_objective`](@ref), and the scale of its `rms_scale` keyword,
-so `rms_scale = face_nonuniformity(evaluate(scenario, x0))` weighs the start's
-nonuniformity as 1.
+the incident x-ray flux on the observed elements of the scenario ([`face_flux`](@ref)):
+the shape term of [`face_flux_objective`](@ref), and the scale of its `rms_scale`
+keyword, so `rms_scale = face_nonuniformity(evaluate(scenario, x0))` weighs the
+nonuniformity at the start as 1.
 """
 face_nonuniformity(ev::Evaluation) = _face_terms(ev)[2]
 
@@ -1284,24 +1342,26 @@ end
                         flux_weight = 1.0, clip = 10.0, missed = 10.0, direct = 10.0,
                         direct_names = nothing, keepout = nothing)
 
-Objective for the x-ray drive of a flat observed face (a package's face in a halfraum,
-an opacity sample), which has no capsule modes: `uniformity × (σ/σ₀)²` with `σ =
-rms_nonuniformity(H, A)` the area-weighted RMS nonuniformity of the incident flux on
-the scenario's observed elements ([`face_nonuniformity`](@ref), through the scenario's
-linear flux response, so differentiable), the shape term of [`FaceFlux`](@ref) for a
-uniform target, and `σ₀ = rms_scale` (`nothing`: 1, the absolute `σ²`). When `flux`
-(TW/mm²) is given, adds `flux_weight × (H̄/flux - 1)²` with `H̄` the
-[`face_mean_flux`](@ref). The `clip`, `missed` and `direct` penalties (`direct`: laser
-light on the face itself, or with `direct_names` on the named parts or components) and
-the `keepout` penalty are as in [`symmetry_objective`](@ref).
+Objective for the x-ray drive of a flat observed face, such as a package face in a
+halfraum or an opacity sample, which has no capsule modes. The shape term is
+`uniformity × (σ/σ₀)²`. Here `σ = rms_nonuniformity(H, A)` is the area-weighted RMS
+nonuniformity of the incident flux on the observed elements of the scenario
+([`face_nonuniformity`](@ref)). It is computed through the linear flux response of the
+scenario, so it is differentiable, and it is the shape term of [`FaceFlux`](@ref) for a
+uniform target. `σ₀ = rms_scale`, and `nothing` sets it to 1, which gives the absolute
+`σ²`. With `flux` (TW/mm²) given, the objective adds `flux_weight × (H̄/flux - 1)²`,
+with `H̄` the [`face_mean_flux`](@ref). The `clip`, `missed`, `direct` and `keepout`
+penalties are as in [`symmetry_objective`](@ref). Here `direct` counts laser light on
+the face itself, or with `direct_names` on the named parts or components.
 
-`rms_scale = face_nonuniformity(evaluate(scenario, x0))` makes the term 1 at the design
-`x0` (times `uniformity`), so `uniformity = 1` balances the shape against the penalties
-on any face. Without it the term is the absolute `σ²`, which is as small as the face is
-uniform: on a uniform 1 mm sample (σ ~ 1e-4, σ² ~ 1e-8) the penalties (10 × a squared
-light fraction, ~1e-2) set the optimum, while a capsule's modes (`(Pₗ/P₀)²` ~ 1e-2
-before tuning) are of their size. The scale is a number fixed at construction, so the
-objective stays a function of the beams alone (thread-safe, differentiable).
+`rms_scale = face_nonuniformity(evaluate(scenario, x0))` makes the term equal to
+`uniformity` at the design `x0`, so `uniformity = 1` balances the shape against the
+penalties on any face. Without it, the term is the absolute `σ²`, which is as small as
+the face is uniform. On a uniform 1 mm sample, σ ~ 1e-4 and σ² ~ 1e-8, so the penalties
+(10 × a squared light fraction, ~1e-2) set the optimum. The modes of a capsule, by
+contrast, have `(Pₗ/P₀)²` ~ 1e-2 before tuning, the same size as the penalties. The
+scale is a number fixed at construction, so the objective remains a function of only the
+beams, thread-safe and differentiable.
 """
 function face_flux_objective(; uniformity = 1.0, rms_scale = nothing, flux = nothing,
                              flux_weight = 1.0, clip = 10.0, missed = 10.0, direct = 10.0,
@@ -1336,169 +1396,199 @@ L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamp
 the box). Returns a [`PointingResult`](@ref), whose display lists the parameters that
 end at a bound.
 
-The default box is `bounds(scenario.param, x0)` with its default widths: aims within
-±1 mm of `x0` (`z`, `r`, `phi`), defocus ±2 mm, power and spot scale ±50%, Δλ ±2 Å and
-the spherical angles ±5–10° (engineering defaults, not facility limits). A parameter at
-its bound usually means the box, not the objective, set it: widen it with keywords of
-[`bounds`](@ref), e.g. `lower, upper = bounds(pointing, x0; z = 1.5, power = 0.4,
-power_max = 12.0)`, or pass any `lower` and `upper` vectors. A parameterization other
-than `GroupPointing` and [`FramePointing`](@ref) has no `bounds` method and needs
-`lower` and `upper`.
+The default box is `bounds(scenario.param, x0)` with its default widths. These are aims
+within ±1 mm of `x0` (`z`, `r`, `phi`), defocus ±2 mm, power and spot scale ±50%,
+Δλ ±2 Å and the spherical angles ±5–10°. They are engineering defaults and are not
+facility limits. A parameter at its bound usually means that the box set its value and
+the objective without the box would have moved it further. To widen the box, pass keywords
+of [`bounds`](@ref), e.g.
+`lower, upper = bounds(pointing, x0; z = 1.5, power = 0.4, power_max = 12.0)`, or pass
+any `lower` and `upper` vectors. A parameterization other than `GroupPointing` and
+[`FramePointing`](@ref) has no `bounds` method and needs `lower` and `upper`.
 
-`scenario` may be a [`PhasedScenario`](@ref): one pointing over several phases of a
-pulse, with power scales per (group, phase). The objective and every constraint then
-receive the [`PerPhase`](@ref) of the phases' evaluations at each parameter vector,
-evaluated once, and the result's `beams` are a `PerPhase` of beam vectors; everything
-else (constraints, `from`, `phase1`, `relaxation`, the time limit) is the same.
+`scenario` may be a [`PhasedScenario`](@ref), which contains one pointing over several
+phases of a pulse with power scales per (group, phase). The objective and every
+constraint then receive the [`PerPhase`](@ref) of the evaluations of the phases at each
+parameter vector, evaluated once. The `beams` of the result are a `PerPhase` of beam
+vectors. Everything else is the same, including constraints, `from`, `phase1`,
+`relaxation` and the time limit.
 
 The run ends after `iterations` L-BFGS-B iterations or `evaluations` objective
-evaluations (each gradient counts one), whichever comes first: a line search may take
-many evaluations in one iteration, on a kinked objective (keep-out hinges, a coarse
-mesh) dozens, so the iteration limit alone does not bound the run time. `time_limit`
-(seconds of wall time, default none) ends the run at the first evaluation after it has
-passed. `reason` is `:converged` (projected gradient below `g_tol`, or no further
-progress), `:iterations`, `:evaluations`, `:time_limit` or `:callback`. On
-`:evaluations`, `:time_limit` and `:callback` the result is the best design evaluated
-so far, with `stopped = true` and `result = nothing`; `iterations` is the number of
-iterations completed in every case.
+evaluations, whichever comes first; each gradient counts as one evaluation. A line
+search may take many evaluations in one iteration, and dozens on a kinked objective
+such as keep-out hinges or a coarse mesh, so the iteration limit alone does not bound
+the run time. `time_limit`, in seconds of wall time (default none), ends the run at the
+first evaluation after it has passed. `reason` is one of:
+
+- `:converged`: the projected gradient fell below `g_tol`, or the run made no further
+  progress;
+- `:iterations`, `:evaluations`, `:time_limit` or `:callback`: that limit or the
+  callback ended the run.
+
+On `:evaluations`, `:time_limit` and `:callback`, the result is the best design
+evaluated before the stop, with `stopped = true` and `result = nothing`. `iterations` is
+the number of iterations completed in every case.
 
 `callback`, if given, is called after every (non-derivative) objective evaluation with
 `(; evaluations, iteration, value, best_value, best_x)`; returning `true` stops the
 optimization. Use it for progress reports and cancellation.
 
-**Constraints.** `constraints`, a tuple or vector of [`Constraint`](@ref)s (ceilings
+**Constraints.** `constraints` is a tuple or vector of [`Constraint`](@ref)s: ceilings
 `f(ev) ≤ limit` and floors `f(ev) ≥ limit`, such as [`irradiance_ceiling`](@ref) and
-[`mode_gate`](@ref)), are handled as constraints rather than as penalty terms of the
-objective: by an augmented Lagrangian, whose inner problems are box-constrained
-L-BFGS-B runs on `objective + Σ μ/2 [max(0, gᵢ + λᵢ/μ)² - (λᵢ/μ)²]` (`gᵢ` the
-normalized violations, `±(value - limit)/scale`), each started from the last, with
-the multipliers `λ` and the penalty `μ` updated between them (ALGENCAN's rules,
-Andreani et al., SIAM J. Optim. 18, 1286, 2008). The run converges when every
-violation is at most `feasibility` (in the constraints' scaled units: 1e-3 is 0.1% of
-a limit by default), the multipliers are complementary to the same tolerance, and the
-last inner run has converged at the final tolerance: the inner runs' tolerance on the
-projected gradient tightens tenfold per outer iteration from 1e-3 to `g_tol`, and the
-run ends only once an inner run at `g_tol` has converged (its projected gradient below
-it, or its value changing by less than `inner_reltol` relative per iteration: a drive
-objective is flat along the limits), so a start that already meets the limits, as on a
-restart or a hand-off to a finer parameterization, is still optimized. A constraint that cannot
-be met ends the run at phase 1's verdict (below), or with `phase1 = false` once the
-penalty has grown by 10⁸ without progress. `outer` caps the outer
-iterations, `iterations` caps each inner run and `evaluations` is the budget of the
-whole run (the result counts both over all inner runs). The multipliers change only
-between inner runs, so the cap sets how long the run works with each set of them. An
-inner run ended by its cap has not solved its subproblem, which the penalty's test
-(has the infeasibility–complementarity measure halved?) presumes: after one that ends
-above the limits the multipliers are updated, while the penalty, the inner tolerance
-and the test's reference are held, so that a cap never grows the penalty toward the
-infeasible verdict; one that ends within the limits takes the usual test (the result's
-`capped` counts both; research notes, "Least violation, capped inner runs and phase
-1's budget"). A run that ends above its limits (infeasible, or stopped
-by a budget, the time limit or the callback) returns its iterate of least violation,
-not its last ([`PointingResult`](@ref): `least_violation`, `last_feasible`). The
-public cases of up to about a hundred parameters converge with a large cap (the
-dropped-bundle tutorial passes 1,000) in about a thousand evaluations; small early
-caps, measured as an alternative, saved evaluations on some of them and cost drive on
-others. On a problem with hundreds of parameters, whose evaluations take seconds and
-whose start is far from the limits, a cap of about 100 updates the multipliers sooner
-(a 276-parameter study with `iterations = 1000` completed one outer iteration in an
-hour, with 100 six in 40 minutes; research notes, "The inner budget"). The cap on
-iterations does not bound an inner run's evaluations (line searches); an inner run can
-spend hundreds of them on 1e-4 of the objective while limits stay violated.
-`inner_evaluations` (default none) caps the evaluations of each inner run: one that
-reaches it ends as one ended by `iterations` does, at its best design, and the outer
-loop updates the multipliers and the penalty from there (phase 1 is not capped; the
-relaxations' runs are). A capped inner run never counts as converged, so the run
-still ends only after an inner run converges within the cap at the final tolerance,
-and a small cap needs a larger `outer`: on a coarse version of the dropped-bundle
-tutorial's run within limits (92 parameters), whose default run spent 795 of its 1,044
-evaluations in one inner run, a cap of 100 converged in 10 outer iterations and 766
-evaluations at 0.06% less drive, and a cap of 30
-ended at `outer = 30` unconverged (research notes, "Inner-run options, a wall-loss
-scenario warning and laser delivery figures").
-`inner_reltol` (default 1e-10; 0 turns it off) is the inner runs' relative value
-tolerance above, also phase 1's. The default ends a drive objective's inner runs where
-the objective is flat along the limits, short of stationarity (the result's
-`stationarity` shows how far); a tighter one costs evaluations: on the dropped-bundle
-tutorial's run within limits, 1e-12 reaches a stationarity of 1.9e-5 against 1.2e-3 for
-2.1 times the evaluations, the drive the same within the flat family's 1e-4 (research
-notes, "Multipliers from the converged active set"). A result whose multipliers or
-bound sensitivities matter continues tighter through `from` with a smaller
-`inner_reltol`. The result's
-`constraints` and `outcome` report each constraint against its limit, with the
-multipliers that best satisfy stationarity at the final design, and whether the box,
-the constraints or the budget ended the run ([`PointingResult`](@ref)). The
-callback's named tuple then also carries `outer`, and its `value` is the inner
-problem's (the objective with the constraint terms). Without constraints the run is
-the plain L-BFGS-B above.
+[`mode_gate`](@ref). They are handled as constraints by an augmented Lagrangian; they are
+not penalty terms of the objective. Its inner problems are box-constrained L-BFGS-B
+runs on `objective + Σ μ/2 [max(0, gᵢ + λᵢ/μ)² - (λᵢ/μ)²]`, where `gᵢ` are the
+normalized violations `±(value - limit)/scale`. Each inner run starts from the last, and
+the multipliers `λ` and the penalty `μ` are updated between them by the rules of
+ALGENCAN (Andreani et al., SIAM J. Optim. 18, 1286, 2008).
 
-**Infeasible constraints.** `phase1 = true` (the default) first minimizes, from a start that violates
-a constraint, the infeasibility `½ Σ max(0, gᵢ)²` over every component's normalized
-violation (the augmented Lagrangian's limit as its penalty grows), ignoring the
-objective, by the same L-BFGS-B. It stops at the first design where every violation is
-within `feasibility`, and the main run starts there. If it converges, or stalls (its
-least infeasibility falls by less than 1% over 100 evaluations, an engineering
-default), with a violation above `feasibility` instead, the run ends there with
-`outcome` `:infeasible` (or
-`:infeasible_box`, parameters at a bound) and no outer iteration: that design is the
-least infeasible one the search reached from this start (a local verdict), and its
-`constraints` rows show each constraint's violation there. `relaxation = true` (which
-implies `phase1`) adds, after such a verdict, one constrained run per constraint
-violated or active there: the smallest largest violation of its components with every
-other constraint met, which is how far that constraint alone must be relaxed
-([`Relaxation`](@ref), in `PointingResult.relaxations`); these runs share the budget
-and the time limit. `phase1` is on by default and `relaxation` off: a run whose start
-violates a constraint starts its main run from phase 1's design and can end at another
-design of a flat family than one started at `x0`; `phase1 = false` starts the main run
-at `x0`. A start that already meets every constraint, and a restart with `from`, skip
-phase 1. The
-callback's `outer` is 0 during phase 1. Phase 1's L-BFGS-B run is not capped by
-`iterations` (which caps the augmented Lagrangian's subproblems): it ends on its
-convergence, its stall rule, the run's `evaluations`, the time limit or the callback,
-and a stop before a verdict is named in the result (`phase1.reason`) and its display.
-On the dropped-bundle test case made
-infeasible, phase 1 reached the verdict in 577 evaluations where the augmented
-Lagrangian had none after 2,195, and on feasible starts it cost 8% fewer to 29% more
-evaluations (research notes, "A verdict on conflicting constraints"); on the test
-suite's constrained cases that start outside their limits, −23% to +54%, with drive
-designs 3e-4 apart on a flat family (research notes, "Defaults changed (2026-11-19)").
+The run converges when three conditions hold:
 
-**VisRad's hard cut.** On a scenario whose deposition uses [`VisRadProfile`](@ref)
-with its hard cut (`taper = 0`, its default), every deposition-derived quantity jumps
-where an operator point crosses the cut, and line searches park on the jumps. With
-`smooth_cut = true` (the default) the run optimizes the same scenario with the profile
-tapered over one e-fold below the cut (`taper = 1`: the operator's points and screens
-and the scenario's responses are shared, nothing is rebuilt) and reports the design
-under the hard cut of the scenario: the result's `value`, `initial_value`, `constraints` and
-`outcome` are the hard cut's at the run's design and start, and `tapered_value` holds
-the objective the tapered run reached. The taper moves wall elements by at most 7e-5 of
-the wall's peak on NIF hohlraums, well inside `feasibility`'s default 1e-3, so a
-design within its limits under the taper is normally within them under the cut; where
-it is not, its row reads `:violated` and `outcome` `:infeasible`. The multipliers
-(fitted under the taper), stationarity, bound sensitivities, phase 1, relaxations and
-`state` are the tapered run's; a restart with `from` continues it. `smooth_cut = false`
-optimizes the scenario profile; other scenarios (the f-cone model, a profile
-already tapered) are optimized as they are. A [`PhasedScenario`](@ref) is tapered
-phase by phase.
+- every violation is at most `feasibility`, in the scaled units of the constraints
+  (1e-3, or 0.1% of a limit, by default);
+- the multipliers are complementary to the same tolerance;
+- the last inner run has converged at the final tolerance.
 
-**Restarts.** `from`, a previous run's [`PointingResult`](@ref), continues that run:
-`x0`, `lower` and `upper` default to its last iterate (`state.x` of a constrained run,
-its `x` otherwise and whenever the run returned its last iterate) and box, and a constrained run starts from
-its multipliers, penalty parameter, inner tolerance and working limits (`result.state`)
-instead of learning them again from zero. A run cut short by `evaluations` (or by the
-callback) and continued with `from` resumes the interrupted inner problem; the counts of
-the new result (`iterations`, `evaluations`, `outer`) count that run alone, and its
-`initial_value` is the objective at its start. The constraints must have the same
-components as the previous run's (a `DimensionMismatch` otherwise). An unconstrained
-`from` result only sets the start and the box.
+The tolerance of the inner runs on the projected gradient tightens tenfold per outer
+iteration, from 1e-3 to `g_tol`. The run ends only once an inner run at `g_tol` has
+converged. An inner run converges when its projected gradient falls below the tolerance,
+or when its value changes by less than `inner_reltol` relative per iteration, since a
+drive objective is flat along the limits. A start already within the limits, as on a
+restart or a hand-off to a finer parameterization, is therefore still optimized. A
+constraint that cannot be met ends the run at the verdict of phase 1 (below). With
+`phase1 = false`, it ends the run once the penalty has grown by 10⁸ without progress.
 
-Compared with penalty terms at fixed weights, the multipliers carry the constraints'
-weights from one inner run to the next: the limits are met without stiff weights
-(which stall the line search), without stages of loosened limits set by hand, and the
-design ends at its limits rather than where the penalty terms balance the objective
-(on the dropped-bundle tutorial, 0.35% more drive in a comparable number of
-evaluations, 997 against the penalty form's 1,072: research notes, "Constrained
-re-pointing").
+`outer` caps the outer iterations, `iterations` caps each inner run, and `evaluations`
+is the budget of the whole run. The `iterations` and `evaluations` of the result count
+over all inner runs. The multipliers change only between inner runs, so the cap sets
+the number of iterations spent on each set of multipliers. An inner run ended by its
+cap has not solved its subproblem, and the penalty test (has the
+infeasibility–complementarity measure halved?) requires a solved one. After a capped
+run that ends above the limits, the multipliers are updated, while the penalty, the
+inner tolerance and the reference of the test are held. A cap therefore never grows the
+penalty toward the infeasible verdict. The usual test is applied to a capped run that
+ends within the limits. `capped` in the result counts both kinds (research notes, "Least
+violation, capped inner runs and phase 1's budget"). A run that ends above its limits,
+infeasible or stopped by a budget, the time limit or the callback, returns its iterate
+of least violation instead of its last (the `least_violation` and `last_feasible` fields
+of [`PointingResult`](@ref)).
+
+The public cases of up to about a hundred parameters converge with a large cap in about
+a thousand evaluations; the dropped-bundle tutorial passes 1,000. Small early caps were
+measured as an alternative: they saved evaluations on some of these cases and cost drive
+on others. A problem with hundreds of parameters, whose evaluations take seconds and
+whose start is far from the limits, gains from a cap of about 100, which updates the
+multipliers sooner. A 276-parameter study completed one outer iteration in an hour with
+`iterations = 1000`, and six in 40 minutes with 100 (research notes, "The inner
+budget").
+
+The cap on iterations does not bound the evaluations of an inner run, which line
+searches consume. An inner run can spend hundreds of them on 1e-4 of the objective
+while limits stay violated. `inner_evaluations` (default none) caps the evaluations of
+each inner run. An inner run that reaches it ends at its best design, as one ended by
+`iterations` does, and the outer loop updates the multipliers and the penalty from
+there. Phase 1 is not capped; the runs of the relaxations are. A capped inner run never
+counts as converged, so the run still ends only after an inner run converges within
+the cap at the final tolerance, and a small cap needs a larger `outer`. A coarse version
+of the run within limits in the dropped-bundle tutorial has 92 parameters, and its
+default run spent 795 of its 1,044 evaluations in one inner run. With a cap of 100, it
+converged in 10 outer iterations and 766 evaluations at 0.06% less drive. With a cap of
+30, it ended at `outer = 30` unconverged (research notes, "Inner-run options, a
+wall-loss scenario warning and laser delivery figures").
+
+`inner_reltol` (default 1e-10; 0 turns it off) is the relative value tolerance of the
+inner runs above, also used by phase 1. The default ends the inner runs of a drive
+objective where the objective is flat along the limits, short of stationarity; the
+distance is recorded in the `stationarity` of the result. A tighter tolerance costs
+evaluations. On the run within limits in the dropped-bundle tutorial, a tolerance of 1e-12
+gives a stationarity of 1.9e-5 against 1.2e-3 for 2.1 times the evaluations, with the drive
+the same within the 1e-4 spread of the flat family (research notes, "Multipliers from the
+converged active set"). When the multipliers or bound sensitivities of a result matter,
+continue it tighter through `from` with a smaller `inner_reltol`.
+
+The `constraints` and `outcome` of the result report each constraint against its limit,
+with the multipliers that best satisfy stationarity at the final design. They also
+report whether the box, the constraints or the budget ended the run
+([`PointingResult`](@ref)). The named tuple of the callback then also contains `outer`,
+and its `value` is that of the inner problem, the objective with the constraint terms.
+Without constraints, the run is the plain L-BFGS-B above.
+
+**Infeasible constraints.** With `phase1 = true` (the default), a start that violates a
+constraint first goes through phase 1. Phase 1 minimizes the infeasibility
+`½ Σ max(0, gᵢ)²` over the normalized violation of every component, without the
+objective, by the same L-BFGS-B. This infeasibility is the limit of the augmented
+Lagrangian as its penalty grows. Phase 1 stops at the first design where every
+violation is within `feasibility`, and the main run starts at that design. Phase 1 can
+instead converge or stall with a violation above `feasibility`; it stalls when its least
+infeasibility falls by less than 1% over 100 evaluations, an engineering default. The
+run then ends there with `outcome` `:infeasible`, or `:infeasible_box` when parameters
+are at a bound, and no outer iteration. That design is the least infeasible one the
+search reached from this start, a local verdict, and its `constraints` rows show the
+violation of each constraint at that design.
+
+`relaxation = true` implies `phase1`. After such a verdict, it adds one constrained run
+per constraint violated or active at that design. Each run computes the smallest largest
+violation
+of the components of its constraint with every other constraint met, which is how far
+that one constraint must be relaxed ([`Relaxation`](@ref), in
+`PointingResult.relaxations`). These runs share the budget and the time limit.
+
+`phase1` is on by default and `relaxation` off. A run whose start violates a constraint
+starts its main run from the design of phase 1, and it can end at another design of a
+flat family than a run started at `x0`. `phase1 = false` starts the main run at `x0`. A
+start at which every constraint is met, and a restart with `from`, skip phase 1. The
+`outer` of the callback is 0 during phase 1. Phase 1's L-BFGS-B run is not capped by
+`iterations`, which caps the subproblems of the augmented Lagrangian. It ends on its
+convergence, its stall rule, the `evaluations` of the run, the time limit or the
+callback. A stop before a verdict is named in the result (`phase1.reason`) and its
+display.
+
+On the dropped-bundle test case made infeasible, phase 1 reached the verdict in 577
+evaluations, where the augmented Lagrangian had none after 2,195. On feasible starts,
+phase 1 cost 8% fewer to 29% more evaluations (research notes, "A verdict on
+conflicting constraints"). On the constrained cases of the test suite that start
+outside their limits, it cost −23% to +54%, with drive designs 3e-4 apart on a flat
+family (research notes, "Defaults changed (2026-11-19)").
+
+**VisRad's hard cut.** A scenario can deposit with a [`VisRadProfile`](@ref) at its
+hard cut (`taper = 0`, its default). Every deposition-derived quantity then jumps where
+an operator point crosses the cut, and line searches stall on the jumps. With
+`smooth_cut = true` (the default), the run optimizes the same scenario with the profile
+tapered over one e-fold below the cut (`taper = 1`). The points and screens of the
+operator and the responses of the scenario are shared, and nothing is rebuilt. The run
+then reports the design under the hard cut of the scenario. The `value`,
+`initial_value`, `constraints` and `outcome` of the result are those of the hard cut at
+the design and start of the run, and `tapered_value` contains the objective the tapered
+run reached.
+
+The taper moves wall elements by at most 7e-5 of the wall peak on NIF hohlraums, well
+inside the default `feasibility` of 1e-3. A design within its limits under the taper is
+therefore normally within them under the cut. Where it is not, its row shows `:violated`
+and `outcome` is `:infeasible`. The multipliers (fitted under the taper), stationarity,
+bound sensitivities, phase 1, relaxations and `state` are those of the tapered run, and
+a restart with `from` continues it. `smooth_cut = false` optimizes the scenario profile
+as it is. Other scenarios, such as the f-cone model or a profile already tapered, are
+optimized as they are. Each phase of a [`PhasedScenario`](@ref) is tapered separately.
+
+**Restarts.** `from`, the [`PointingResult`](@ref) of a previous run, continues that
+run. `x0`, `lower` and `upper` default to its last iterate and box. The last iterate is
+`state.x` of a constrained run, and `x` otherwise or whenever the run returned its last
+iterate. A constrained run starts from the multipliers, penalty parameter, inner
+tolerance and working limits of the previous run (`result.state`) instead of starting
+them again from zero. A run cut short by `evaluations` or by the callback and continued
+with `from` resumes the interrupted inner problem. The counts of the new result
+(`iterations`, `evaluations`, `outer`) cover only that run, and its `initial_value` is
+the objective at its start. The constraints must have the same components as those of
+the previous run, or a `DimensionMismatch` is thrown. An unconstrained `from` result
+only sets the start and the box.
+
+Compared with penalty terms at fixed weights, the weights of the constraints are carried
+by the multipliers from one inner run to the next. The limits are met without stiff weights,
+which stall the line search, and without stages of loosened limits set by hand. The
+design also ends at its limits. With penalty terms, it ends where the terms balance the
+objective. On the dropped-bundle tutorial, this gave 0.35% more drive in a comparable
+number of evaluations, 997 against 1,072 for the penalty form (research notes,
+"Constrained re-pointing").
 """
 Base.@nospecializeinfer function optimize_pointing(
                            s::_AbstractScenario, @nospecialize(objective);
@@ -1512,13 +1602,13 @@ Base.@nospecializeinfer function optimize_pointing(
                            outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = true,
                            relaxation::Bool = false, inner_reltol::Real = 1e-10,
                            @nospecialize(inner_evaluations = nothing), smooth_cut::Bool = true)
-    # Inferred and compiled once for every objective and callback (each objective
-    # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
-    # is reached by dynamic dispatch once per evaluation.
+    # This body is inferred and compiled once for every objective and callback. Each
+    # objective closure type used to recompile it and the L-BFGS-B of Optim, at about 1 s
+    # each. The objective is reached by dynamic dispatch once per evaluation.
     deadline = time() + Float64(time_limit)
     time_limit > 0 || throw(ArgumentError("time_limit must be positive (seconds)"))
-    # VisRad's hard cut: the run on the profile tapered below the cut, reported under the
-    # scenario cut
+    # Under the VisRad hard cut, the run uses the profile tapered below the cut, and the
+    # result is reported under the cut of the scenario.
     st = smooth_cut ? _tapered(s) : nothing
     if st !== nothing
         r = optimize_pointing(st, objective; from, x0, lower, upper, iterations, evaluations,
@@ -1550,18 +1640,19 @@ Base.@nospecializeinfer function optimize_pointing(
                             r.stopped, r.reason, r.result, lower, upper; objective)
 end
 
-# A restart's start: the iterate whose multipliers the result's `state` holds (`state.x`;
-# the result's `x` unless the run ended above its limits and returned its iterate of
-# least violation), else the result's `x`.
-# Declared `Vector{Float64}`: `from` is not specialized on, and an inferred `Any` here would
-# compile `optimize_pointing`'s body a second time.
+# Returns the start of a restart. It is the iterate that the multipliers in the `state` of
+# the result belong to (`state.x`), or else the `x` of the result. The two differ only
+# when the run ended above its limits and returned its iterate of least violation.
+# The return type is declared `Vector{Float64}` because `from` is not specialized on. An
+# inferred `Any` would compile the body of `optimize_pointing` a second time.
 function _restart_x(r)::Vector{Float64}
     st = r.state
     return st isa NamedTuple && haskey(st, :x) ? st.x : r.x
 end
 
-# The gradient of `F(evaluate(s, x))` at `x`, through the optimizer's dual tag and chunks
-# (bitwise ForwardDiff's chunk-mode gradient; see `_pointing_gradient!`).
+# Returns the gradient of `F(evaluate(s, x))` at `x`, through the dual tag and chunks of
+# the optimizer. It is identical to the chunk-mode gradient of ForwardDiff (see
+# `_pointing_gradient!`).
 Base.@nospecializeinfer function _scenario_gradient(s::_AbstractScenario, @nospecialize(F), x::Vector{Float64})
     J(x) = F(evaluate(s, x))
     cfg = ForwardDiff.GradientConfig(J, x, ForwardDiff.Chunk(min(length(x), 12)),
@@ -1570,11 +1661,11 @@ Base.@nospecializeinfer function _scenario_gradient(s::_AbstractScenario, @nospe
     return copy(ForwardDiff.DiffResults.gradient(_pointing_gradient!(out, J, x, cfg)))
 end
 
-# The Jacobian of the vector `F(evaluate(s, x))` at `x` (one row per entry), through the
-# optimizer's dual tag and chunks: each chunk's dual pass carries every entry, so the
-# Jacobian costs one gradient whatever its number of rows. The passes run concurrently
-# as in `_pointing_gradient!`; each row is bitwise ForwardDiff's chunk-mode gradient of
-# that entry.
+# Returns the Jacobian of the vector `F(evaluate(s, x))` at `x`, with one row per entry,
+# through the dual tag and chunks of the optimizer. The dual pass of each chunk computes
+# every entry, so the Jacobian costs one gradient whatever its number of rows. The passes
+# run concurrently as in `_pointing_gradient!`. Each row is identical to the chunk-mode
+# gradient of that entry from ForwardDiff.
 Base.@nospecializeinfer function _scenario_jacobian(s::_AbstractScenario, @nospecialize(F), x::Vector{Float64})
     J(x) = F(evaluate(s, x))
     cfg = ForwardDiff.GradientConfig(J, x, ForwardDiff.Chunk(min(length(x), 12)),
@@ -1599,7 +1690,8 @@ function _pointing_jacobian(f, x::Vector{Float64}, cfg::ForwardDiff.GradientConf
     return reduce(hcat, blocks)
 end
 
-# Dual pass `c` of `_pointing_jacobian`: the columns of its parameters.
+# Runs dual pass `c` of `_pointing_jacobian`, which computes the columns of its
+# parameters.
 function _jacobian_chunk(f, x, seeds::NTuple{N,ForwardDiff.Partials{N,Float64}}, ::Type{T}, c) where {N,T}
     lo = (c - 1) * N
     zp = zero(ForwardDiff.Partials{N,Float64})
@@ -1610,11 +1702,12 @@ function _jacobian_chunk(f, x, seeds::NTuple{N,ForwardDiff.Partials{N,Float64}},
                    for r in eachindex(y), j in 1:k]
 end
 
-# One L-BFGS-B run of `objective(evaluate(s, x))` in the box from `xs` (`x0` sizes the
-# gradient's configuration): the parameters, objective value, iterations, evaluations
-# and stop of `optimize_pointing`, and Optim's result (`nothing` when stopped).
-# `f_reltol` (Optim's; 0, its default, off) ends the run on a small relative change of
-# the value, for the inner runs of the constrained path.
+# Runs L-BFGS-B once on `objective(evaluate(s, x))` in the box, from `xs`; `x0` sizes the
+# gradient configuration. The run returns the parameters, objective value, iterations,
+# evaluations and stop of `optimize_pointing`, and the result of Optim, which is
+# `nothing` when stopped. `f_reltol`, an Optim option that is off at its default of 0,
+# ends the run on a small relative change of the value. The inner runs of the
+# constrained path use it.
 Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(objective), x0, xs, lower,
                                          upper; iterations::Integer, evaluations::Integer,
                                          show_trace::Bool, g_tol, @nospecialize(callback),
@@ -1622,7 +1715,8 @@ Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(obj
                                          cap::Int = typemax(Int))
     best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
     J(x) = objective(evaluate(s, x))
-    # every objective value the optimizer sees (bookkeeping, callback, budget)
+    # Every objective value passed to the optimizer goes through `seen` for the
+    # bookkeeping, the callback and the budget.
     function seen(x, v)
         count[] += 1
         v < best_value && ((best_value, best_x) = (v, copy(x)))
@@ -1635,20 +1729,21 @@ Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(obj
         return v
     end
     f(x) = seen(x, J(x))
-    # One dual tag for every objective, so the compiled deposition and objective code
-    # (and the package's precompiled copy) serve any objective, not only the first.
-    # ForwardDiff's tag check (`Val(false)` in `_pointing_gradient!`) compares the tag's
-    # function with `J` and would refuse this shared tag; it guards against a config
-    # reused for another function, not against nesting. An objective that differentiates
-    # internally makes a separate tag, which `_PointingTag`'s ordering (`≺`) nests inside
-    # this one whatever the tags' counts (test/nested_gradient.jl).
+    # One dual tag is used for every objective, so the compiled deposition and objective
+    # code, including the precompiled copy in the package, works for any objective. The
+    # tag check of ForwardDiff (`Val(false)` in `_pointing_gradient!`) compares the
+    # function of the tag with `J` and would refuse this shared tag. That check guards
+    # against a config reused for another function; nesting is a separate matter. An
+    # objective that differentiates internally makes a separate tag. The ordering of
+    # `_PointingTag` (`≺`) nests that tag inside this one, whatever the tag counts
+    # (test/nested_gradient.jl).
     cfg = ForwardDiff.GradientConfig(J, x0, ForwardDiff.Chunk(min(length(x0), 12)),
                                      ForwardDiff.Tag(_PointingTag(), Float64))
-    # The chunks' dual passes run concurrently (`_pointing_gradient!`); the result is
-    # bitwise ForwardDiff's serial chunk-mode gradient.
+    # The dual passes of the chunks run concurrently (`_pointing_gradient!`), and the
+    # result is identical to the serial chunk-mode gradient of ForwardDiff.
     out = ForwardDiff.DiffResults.GradientResult(similar(xs))
     g!(G, x) = copyto!(G, ForwardDiff.DiffResults.gradient(_pointing_gradient!(out, J, x, cfg)))
-    # L-BFGS-B asks for value and gradient together: the dual pass carries the value
+    # L-BFGS-B evaluates the value and gradient together, and the dual pass computes both.
     function fg!(G, x)
         _pointing_gradient!(out, J, x, cfg)
         copyto!(G, ForwardDiff.DiffResults.gradient(out))
@@ -1666,8 +1761,8 @@ Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(obj
         err
     end
     if res isa _OptimizationStop
-        # the cap on one run's evaluations ends it as the iteration limit does: not a stop
-        # of the whole optimization
+        # The cap on the evaluations of one run ends that run as the iteration limit does.
+        # It does not stop the whole optimization.
         capped = res.reason === :cap
         return (; x = best_x, value = best_value, initial_value, iterations = iter[],
                 evaluations = count[], stopped = !capped, reason = capped ? :iterations : res.reason,
@@ -1684,18 +1779,22 @@ end
     ConstraintRow
 
 One component of a [`Constraint`](@ref) at a design, from [`check_constraints`](@ref) or
-in `PointingResult.constraints`. Fields: `name` (the constraint's name, with the
-component's label for a vector constraint, e.g. `"mode_gate[l = 2]"`), `value` and
-`limit` (in the constraint's units), `upper` (`true` for a ceiling `value ≤ limit`,
-`false` for a floor), `violation` (`±(value - limit)/scale`, the normalized excess:
-positive when violated, negative inside), `multiplier` (the component's Lagrange
-multiplier at the design, in the normalized units: in a constrained run's result, the
-nonnegative least-squares solution of the stationarity condition on the parameters
-inside the box, over the components within `feasibility` of their limits or beyond
-them, zero for the other components ([`PointingResult`](@ref)); 0 when not computed,
-as in [`check_constraints`](@ref)) and `status`:
-`:violated` (`violation > feasibility`), `:active` (within `feasibility` of the limit)
-or `:satisfied`.
+in `PointingResult.constraints`. Fields:
+
+- `name` — the name of the constraint, with the label of the component for a vector
+  constraint, e.g. `"mode_gate[l = 2]"`.
+- `value`, `limit` — in the units of the constraint.
+- `upper` — `true` for a ceiling `value ≤ limit`, `false` for a floor.
+- `violation` — the normalized excess `±(value - limit)/scale`, positive when violated
+  and negative inside.
+- `multiplier` — the Lagrange multiplier of the component at the design, in the
+  normalized units. In the result of a constrained run, it is the nonnegative
+  least-squares solution of the stationarity condition on the parameters inside the box
+  ([`PointingResult`](@ref)). The fit covers the components within `feasibility` of
+  their limits or beyond them, and the other components get zero. It is 0 when not
+  computed, as in [`check_constraints`](@ref).
+- `status` — `:violated` (`violation > feasibility`), `:active` (within `feasibility`
+  of the limit) or `:satisfied`.
 """
 struct ConstraintRow
     name::String
@@ -1710,24 +1809,33 @@ end
 """
     Relaxation
 
-How far one constraint must be relaxed, alone, for the others to hold: an entry of
-`PointingResult.relaxations` after a run that [`optimize_pointing`](@ref) found
-infeasible with `relaxation = true`. Fields: `name` (the constraint's), `violation`
-(the largest normalized violation of its components at a design that meets every
-other constraint: the relaxation in units of its `scale`, so a multiple `1 +
-violation` of the limit where the scale is the limit, the default), `limit` and
-`relaxed_limit` (one per component, in the constraint's units: a ceiling raised and a
-floor lowered by `violation × scale`), `upper`, `status`, `x` (that design),
-`constraints` (every constraint's [`ConstraintRow`](@ref) at `x`) and `evaluations`.
-`status` is `:relaxed` (the others met at `x`), `:others_conflict` (the other
-constraints cannot all be met either, so relaxing this one alone does not suffice;
-`violation` is `NaN`) or `:stopped` (the budget, the time limit or the callback ended
-the search first; `violation` is the best design's, the others possibly unmet).
+How far a single constraint must be relaxed for the others to be met. A relaxation is
+an entry of `PointingResult.relaxations` after a run that [`optimize_pointing`](@ref)
+found infeasible with `relaxation = true`. Fields:
 
-The relaxation is achievable (the design `x` meets the others with this one at
-`relaxed_limit`) and the least one only locally: the run that finds it minimizes a
-smooth stand-in for the largest violation (a 64-norm of the positive violations) from
-the infeasible design, a local search.
+- `name` — the name of the constraint.
+- `violation` — the largest normalized violation of its components at a design where
+  every other constraint is met. This is the relaxation in units of its `scale`; where
+  the scale is the limit (the default), the relaxed limit is `1 + violation` times the
+  limit.
+- `limit`, `relaxed_limit` — one per component, in the units of the constraint. The
+  relaxed limit is a ceiling raised, or a floor lowered, by `violation × scale`.
+- `upper` — `true` for a ceiling.
+- `status` — `:relaxed`, `:others_conflict` or `:stopped` (below).
+- `x` — that design.
+- `constraints` — the [`ConstraintRow`](@ref) of every constraint at `x`.
+- `evaluations` — the objective evaluations of the search.
+
+`status` is `:relaxed` when the others are met at `x`. It is `:others_conflict` when the
+other constraints cannot all be met either, so relaxing only this one does not
+suffice; `violation` is then `NaN`. It is `:stopped` when the budget, the time limit or
+the callback ended the search first; `violation` is then that of the best design, and
+the others are possibly unmet.
+
+The relaxation is achievable, since the others are met at the design `x` with this one at
+`relaxed_limit`. It is the least one only locally. The run that finds it minimizes a
+smooth stand-in for the largest violation, a 64-norm of the positive violations, from
+the infeasible design, which is a local search.
 """
 struct Relaxation
     name::String
@@ -1744,138 +1852,173 @@ end
 """
     PointingResult
 
-Result of [`optimize_pointing`](@ref). Fields: `x` (the best parameters), `beams`
-(`apply(scenario.param, x)`; a [`PerPhase`](@ref) of beam vectors for a phased
-scenario), `value` and `initial_value` (the objective at `x` and at
-the clamped `x0`), `iterations` (L-BFGS-B iterations completed), `evaluations`
-(objective evaluations, each gradient counting one), `reason` (`:converged`,
-`:iterations`, `:evaluations`, `:time_limit` or `:callback`), `stopped` (`true` for the
-last three, which
-return the best design evaluated so far), `result` (Optim's result, `nothing` when
-`stopped`), `names` (`parameter_names` of the parameterization, `x[i]` for one without
-a method), the box `lower`, `upper`, and `at_bounds`: the names of the parameters at a
-bound (within 1e-8 of the box width; parameters fixed by `lower == upper` excluded). Its
-display lists those parameters with their values and bounds.
+Result of [`optimize_pointing`](@ref). Fields:
 
-Two more fields record what ended the run. `constraints` holds one [`ConstraintRow`](@ref)
-per constraint component at `x` (empty without `constraints`; the display shows a
-constraint of more than eight components, such as a keep-out per beam, as its worst row
-and a count by status), and `outcome` is one of
-- `:interior`: converged with every constraint met and no parameter at a bound;
-- `:box`: converged with every constraint met and parameters at a bound (the box is
-  active: a wider box may lower the objective);
-- `:infeasible_box`: a constraint is still violated and parameters are at a bound (the
-  box keeps the run from meeting it);
-- `:infeasible`: a constraint is still violated and no parameter is at a bound (a local
-  point where the constraints cannot be met; another start may help);
+- `x` — the best parameters.
+- `beams` — `apply(scenario.param, x)`, a [`PerPhase`](@ref) of beam vectors for a
+  phased scenario.
+- `value`, `initial_value` — the objective at `x` and at the clamped `x0`.
+- `iterations` — the L-BFGS-B iterations completed.
+- `evaluations` — the objective evaluations, each gradient counting as one.
+- `reason` — `:converged`, `:iterations`, `:evaluations`, `:time_limit` or `:callback`.
+- `stopped` — `true` for the last three reasons, which return the best design evaluated
+  before the stop.
+- `result` — the result of Optim, `nothing` when `stopped`.
+- `names` — the `parameter_names` of the parameterization, or `x[i]` for one without a
+  method.
+- `lower`, `upper` — the box.
+- `at_bounds` — the names of the parameters at a bound, within 1e-8 of the box width.
+  Parameters fixed by `lower == upper` are excluded.
+
+The display lists the parameters at a bound with their values and bounds.
+
+What ended the run is recorded in two more fields. `constraints` holds one
+[`ConstraintRow`](@ref) per constraint component at `x`, and it is empty without
+`constraints`. The display shows a constraint of more than eight components, such as a
+keep-out per beam, as its worst row and a count by status. `outcome` is one of:
+
+- `:interior`: the run converged with every constraint met and no parameter at a bound;
+- `:box`: the run converged with every constraint met and parameters at a bound. The box
+  is active, and a wider box may lower the objective;
+- `:infeasible_box`: a constraint is still violated and parameters are at a bound, so the
+  constraint cannot be met within the box;
+- `:infeasible`: a constraint is still violated and no parameter is at a bound. The
+  design is a local point where the constraints cannot be met, and another start may
+  help;
 - `:iterations`, `:evaluations`, `:time_limit` or `:callback`: the budget, the time
-  limit or the callback ended the run first (its constraints, if any, are in
-  `constraints`).
-`reason` reads `:converged` for the first four. `outer` is the number of outer
-(multiplier) iterations of a constrained run, 0 without constraints; `iterations` and
-`evaluations` are then totals over them, and `value` and `initial_value` are the
-values of the objective, without the constraint terms.
+  limit or the callback ended the run first. Its constraints, if any, are in
+  `constraints`.
 
-`state` is what `optimize_pointing(...; from = result)` continues from: for a
-constrained run, a named tuple of the multipliers `λ` (normalized units, one per
-constraint component in the order of `constraints`), the penalty parameter `μ` and its
-ceiling `μmax`, the inner runs' tolerance `tol`, the last infeasibility–complementarity
-measure `Vold`, the working limits `limits` (an exact ceiling's lowered stand-in
-limit; see [`irradiance_ceiling`](@ref)) and the iterate `x` they belong to (the
-result's `x` unless the run returned its iterate of least violation, below); `nothing`
-without constraints. A run ended by
-its budget, time limit or callback keeps the state of the interrupted inner problem,
-so that the restart resumes it.
+`reason` is `:converged` for the first four. `outer` is the number of outer
+(multiplier) iterations of a constrained run, and 0 without constraints. `iterations`
+and `evaluations` are then totals over them, and `value` and `initial_value` are the
+values of the objective without the constraint terms.
 
-**Multipliers.** The multipliers in `constraints` are not the iteration's `state.λ`
-but those that best satisfy stationarity at `x`: the nonnegative least-squares
-solution of `∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0` over the parameters inside the box (`gⱼ` the
-normalized violations, with an exact ceiling's stand-in at its working limit) and the
-components within `feasibility` of their limits or beyond them, zero for the other
-components (complementary). The iterated estimate, `λ ← max(0, λ + μ g)`
-after each inner run, is exact only when the inner run ended at a stationary point; a
-drive objective's inner runs end on their value tolerance instead, and at a large
-penalty `μ` the update then zeroes the multipliers of active limits at which the design
-ends a few 1e-5 inside (research notes, "Multipliers from the converged active set").
-The fit costs one Jacobian of the objective and the constraints after the run (a
-gradient's cost, not counted in `evaluations`). Where several sets of multipliers fit
-equally (components with the same gradient, such as the clearances of beams related
-by the ports' symmetry) the fit returns the one of least norm. `stationarity` is what
-the fit leaves: the largest `|∂L/∂xᵢ|` over the parameters inside the box with
-`L = f + Σⱼ λⱼ gⱼ` (objective units per parameter unit, the measure the inner runs
-compare with `g_tol`; `NaN` without constraints or when phase 1 ended the run). Near
-zero, the design is a Karush–Kuhn–Tucker point with these multipliers; a
-drive run whose inner runs ended on their value tolerance can end with it a sizable
-fraction of the objective's gradient, and the multipliers and bound sensitivities are
-then estimates at a design short of stationarity (on the dropped-bundle tutorial's
-case, 1.2e-3 against the drive objective's largest derivative of 3.0e-3 per mm).
-An exact ceiling ([`irradiance_ceiling`](@ref), [`picket_ceiling`](@ref) with `exact =
-true`) reports the exact value in its row but takes part in the fit through its smooth
-stand-in at the working limit: its row can read `:satisfied` (the exact value inside
-the limit by more than `feasibility`) with a positive multiplier (the stand-in active).
-The display notes such rows; the multiplier is the stand-in's.
+`state` is what `optimize_pointing(...; from = result)` continues from. It is `nothing`
+without constraints. For a constrained run, it is a named tuple of:
 
-**Bound sensitivities.** For each parameter in `at_bounds` (same order),
-`bound_gradient` holds the objective's derivative `∂f/∂xᵢ` at `x` and
-`bound_sensitivity` the Lagrangian's, `∂L/∂xᵢ` with `L = f + Σⱼ λⱼ gⱼ` (the
-multipliers of `constraints`, above; without constraints the two are equal). By the
-envelope theorem `bound_sensitivity` is the derivative of the optimal objective with
-respect to the bound's value, the active set held: positive at a lower bound and
-negative at an upper bound when the run has converged, so widening the box by δ in
-that parameter (lowering a lower bound, raising an upper one) lowers the optimum by
-about `|bound_sensitivity| δ` (to first order, in the objective's units per parameter
-unit). `bound_gradient` is what the objective alone would gain, before the constraints
-take their share. Without constraints they cost one gradient after the run; with
-constraints they come from the multipliers' Jacobian (neither counted in
-`evaluations`); they are meaningful at convergence. Where the active constraints and
-bounds leave a flat family of designs (a drive objective under several active gates),
-and where the run ended short of stationarity (its inner runs on their value
-tolerance), the derivative can differ from what a wider box gains by its whole size: a
-sign that would move the parameter inward shows a bound that does not hold it
-(research notes, "Multipliers from the converged active set"). A restart with `from`
-in the wider box measures it.
+- the multipliers `λ`, in normalized units, one per constraint component in the order
+  of `constraints`;
+- the penalty parameter `μ` and its ceiling `μmax`;
+- the tolerance `tol` of the inner runs;
+- the last infeasibility–complementarity measure `Vold`;
+- the working limits `limits`, which contain the lowered stand-in limit of an exact
+  ceiling (see [`irradiance_ceiling`](@ref));
+- the iterate `x` they belong to. It is the `x` of the result unless the run returned
+  its iterate of least violation (below).
 
-**VisRad's hard cut.** `tapered_value` is the objective that a run on VisRad's
-profile tapered below its cut reached, when `optimize_pointing` optimized a scenario
-with the hard cut that way (`smooth_cut`, its default); `value`, `initial_value`,
-`constraints` and `outcome` are then those of the scenario, under its hard cut. `NaN`
-otherwise.
+For a run ended by its budget, time limit or callback, the state of the interrupted
+inner problem is kept, so that the restart resumes it.
+
+**Multipliers.** The multipliers in `constraints` are those that best satisfy
+stationarity at `x`, which differ from the iterated `state.λ`. They are the nonnegative
+least-squares solution of `∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0` over the parameters inside the
+box. Here `gⱼ` are the normalized violations, with the stand-in of an exact ceiling at
+its working limit. The fit covers the components within `feasibility` of their limits
+or beyond them, and the other components get zero (complementarity). The iterated
+estimate `λ ← max(0, λ + μ g)` after each inner run is exact only when the inner run
+ended at a stationary point. The inner runs of a drive objective end on their value
+tolerance instead. At a large penalty `μ`, the update then zeroes the multipliers of
+active limits at which the design ends a few 1e-5 inside (research notes, "Multipliers
+from the converged active set").
+
+The fit costs one Jacobian of the objective and the constraints after the run, the
+cost of a gradient, which is not counted in `evaluations`. Several sets of multipliers
+can fit equally, as for components with the same gradient, such as the clearances of
+beams related by the port symmetry. The fit then returns the one of least norm.
+`stationarity` is the residual of the fit: the largest `|∂L/∂xᵢ|` over the parameters
+inside the box, with `L = f + Σⱼ λⱼ gⱼ`. It is in objective units per parameter unit,
+the measure that the inner runs compare with `g_tol`, and it is `NaN` without
+constraints or when phase 1 ended the run. Near zero, the design is a
+Karush–Kuhn–Tucker point with these multipliers. A drive run whose inner runs ended on
+their value tolerance can end with a stationarity that is a sizable fraction of the
+objective gradient. The multipliers and bound sensitivities are then estimates at a
+design short of stationarity. On the case of the dropped-bundle tutorial, the
+stationarity is 1.2e-3, against 3.0e-3 per mm for the largest derivative of the drive
+objective.
+
+An exact ceiling, such as [`irradiance_ceiling`](@ref) or [`picket_ceiling`](@ref) with
+`exact = true`, reports the exact value in its row. It is included in the fit through
+its smooth stand-in at the working limit. Its row can therefore show `:satisfied`, with
+the exact value inside the limit by more than `feasibility`, together with a positive
+multiplier from the active stand-in. The display notes such rows; the multiplier is
+that of the stand-in.
+
+**Bound sensitivities.** For each parameter in `at_bounds`, in the same order,
+`bound_gradient` contains the derivative `∂f/∂xᵢ` of the objective at `x`.
+`bound_sensitivity` contains that of the Lagrangian, `∂L/∂xᵢ` with `L = f + Σⱼ λⱼ gⱼ`,
+using the multipliers of `constraints` above. Without constraints the two are equal. By
+the envelope theorem, `bound_sensitivity` is the derivative of the optimal objective
+with respect to the bound value, with the active set held. When the run has converged,
+it is positive at a lower bound and negative at an upper bound. Widening the box by δ in
+that parameter, by lowering a lower bound or raising an upper one, then lowers the
+optimum by about `|bound_sensitivity| δ`, to first order. The unit is objective units
+per parameter unit. `bound_gradient` is the gain of the objective without the constraint
+terms, before the constraints take their share.
+
+Without constraints, the sensitivities cost one gradient after the run. With
+constraints, they come from the Jacobian of the multiplier fit. Neither cost is counted
+in `evaluations`. The sensitivities are meaningful at convergence. The active
+constraints and bounds can leave a flat family of designs, as for a drive objective
+under several active gates, and the run can end short of stationarity when its inner
+runs end on their value tolerance. In both cases the derivative can differ from the
+gain of a wider box by its whole size. A sign that would move the parameter inward
+marks a bound that does not hold it (research notes, "Multipliers from the converged
+active set"). A restart with `from` in the wider box measures the gain.
+
+**VisRad's hard cut.** When `optimize_pointing` optimized a scenario with the hard cut
+on a profile tapered below its cut (`smooth_cut`, its default), `tapered_value` is the
+objective that the tapered run reached. `value`, `initial_value`, `constraints` and
+`outcome` are then those of the scenario under its hard cut. Otherwise `tapered_value`
+is `NaN`.
 
 **Phase 1 and relaxations** (`phase1 = true`, `relaxation = true`). `phase1` is
-`nothing` when phase 1 did not run, else a named tuple of its `evaluations` and
-`iterations` (included in the totals), `feasible` (it reached a design within the
-limits, where the main run started), `verdict` (it converged or stalled above
-`feasibility`: the run ended there, `outer` 0), its design `x` and `reason`, what ended
-it: `:feasible`, `:converged` or `:stalled` (a verdict, or within the limits), or the
-stop that came first, `:evaluations`, `:time_limit` or `:callback` (no verdict; the run
-ends there with its design of least violation). `relaxations` holds one
-[`Relaxation`](@ref) per constraint violated or active at a verdict's design, with
-`relaxation = true` (empty otherwise); their evaluations count in `evaluations`. The
-display lists them under the constraints.
+`nothing` when phase 1 did not run. Otherwise it is a named tuple of:
 
-**Least violation and the last design within the limits** (constrained runs; `nothing`
-without constraints). The run records each iterate's largest normalized violation over
-the reported rows, `max(0, maxⱼ violation)` of [`ConstraintRow`](@ref) (an exact
-ceiling's exact value against its limit; zero when every component holds), at the
-start, at phase 1's design and after every inner run. `least_violation` is the iterate
-of least violation, violations within `feasibility` counting as equal and the lower
-objective then preferred, and `last_feasible` the latest iterate with every violation
-within `feasibility` (`nothing` when none had), each a named tuple `(; x, violation,
-value, outer)`: its parameters, its largest violation, its objective and its outer
-iteration (0 for the start or phase 1's design). A run that ends with a violation above
-`feasibility` (`outcome` `:infeasible` or `:infeasible_box`, or a budget, time limit or
-callback stop above the limits) returns `least_violation` as `x`, its beams, value and
-rows, rather than its last iterate, which can be worse than the start on the limits it
-met; `state.x` is then the last iterate, the one the multipliers of `state` belong to,
-where a restart with `from` continues. When an earlier iterate met the limits, the
-returned design meets them and a run that ended at the penalty's ceiling reads `reason`
-and `outcome` `:iterations`. Under VisRad's hard cut (`tapered_value` finite) the
-records are the tapered run's.
+- `evaluations` and `iterations`, which are included in the totals;
+- `feasible`, `true` when phase 1 reached a design within the limits, where the main run
+  started;
+- `verdict`, `true` when phase 1 converged or stalled above `feasibility`. The run then
+  ended at that design, with `outer` 0;
+- its design `x`;
+- `reason`, the cause of the end of phase 1. It is `:feasible`, `:converged` or
+  `:stalled` for a verdict or a design within the limits. Otherwise it is the stop that
+  came first, `:evaluations`, `:time_limit` or `:callback`. No verdict is reached on such
+  a stop, and the run ends with its design of least violation.
 
-`capped` counts the outer iterations whose inner run ended on its cap (`iterations`, or
-`inner_evaluations`) instead of converging: after each that ended above the limits the
-multipliers were updated and the penalty, the inner tolerance and the penalty test's
-reference held ([`optimize_pointing`](@ref)); the display gives the count.
+With `relaxation = true`, `relaxations` contains one [`Relaxation`](@ref) per constraint
+violated or active at the design of a verdict; otherwise it is empty. Their evaluations
+count in `evaluations`. The display lists them under the constraints.
+
+**Least violation and the last design within the limits.** These fields apply to
+constrained runs and are `nothing` without constraints. The run records the largest
+normalized violation of each iterate over the reported rows, `max(0, maxⱼ violation)`
+of [`ConstraintRow`](@ref). For an exact ceiling, the row contains the exact value
+against its limit, and the violation is zero when the constraint is met for every
+component. The record is taken
+at the start, at the design of phase 1 and after every inner run. `least_violation` is
+the iterate of least violation, with violations within `feasibility` counted as equal
+and the lower objective then preferred. `last_feasible` is the latest iterate with every
+violation within `feasibility`, or `nothing` when none had. Each is a named tuple
+`(; x, violation, value, outer)` that contains the parameters, the largest violation, the
+objective and the outer iteration of that iterate. The outer iteration is 0 for the
+start and for the design of phase 1.
+
+A run can end with a violation above `feasibility`: with `outcome` `:infeasible` or
+`:infeasible_box`, or after a budget, time-limit or callback stop above the limits. It
+then returns `least_violation` as `x`, with its beams, value and rows. The last iterate
+is not returned, since it can be worse than the start on the limits that the start
+met. `state.x` is then the last iterate, to which the multipliers of `state` belong and
+from which a restart with `from` continues. When an earlier iterate met the limits, the
+limits are met at the returned design, and a run that ended at the penalty ceiling has
+`reason` and `outcome` `:iterations`. Under VisRad's hard cut (`tapered_value` finite), the
+records are those of the tapered run.
+
+`capped` counts the outer iterations whose inner run ended on its cap (`iterations` or
+`inner_evaluations`) instead of converging. After each such run that ended above the
+limits, the multipliers were updated, and the penalty, the inner tolerance and the
+reference of the penalty test were held ([`optimize_pointing`](@ref)). The count is
+shown in the display.
 """
 struct PointingResult{B}
     x::Vector{Float64}
@@ -1910,16 +2053,17 @@ _names(p::GroupPointing, n) = parameter_names(p)
 _names(p, n) = hasmethod(parameter_names, Tuple{typeof(p)}) ?
                collect(String, parameter_names(p)) : ["x[$i]" for i in 1:n]
 
-# 0: inside the box, -1 at the lower bound, 1 at the upper (within 1e-8 of the width;
-# a parameter fixed by lower == upper is inside)
+# Returns 0 inside the box, -1 at the lower bound and 1 at the upper bound, within 1e-8
+# of the width. A parameter fixed by lower == upper counts as inside.
 function _bound_side(x, lo, hi)
     lo < hi || return 0
     tol = isfinite(hi - lo) ? 1e-8 * (hi - lo) : 0.0
     return x - lo <= tol ? -1 : hi - x <= tol ? 1 : 0
 end
 
-# (`x`, the values and Optim's `result` unspecialized: the calls from the constrained run's
-# several exits, whose argument types are inferred differently, share one body)
+# `x`, the values and the Optim `result` are left unspecialized. The argument types of the
+# calls from the several exits of the constrained run are inferred differently, and the
+# calls share one body.
 Base.@nospecializeinfer function _pointing_result(
         s::_AbstractScenario, @nospecialize(x), @nospecialize(value), @nospecialize(initial_value),
         iterations, evaluations, stopped, reason, @nospecialize(result),
@@ -1933,9 +2077,9 @@ Base.@nospecializeinfer function _pointing_result(
     side = map(_bound_side, x, lower, upper)
     atb = names[side .!= 0]
     outcome = _outcome(reason, constraints, atb)
-    # the derivatives at the bound parameters: from the constrained run's gradients of the
-    # objective and the Lagrangian at `x`, else one gradient of the objective, only when
-    # a parameter is at a bound
+    # The derivatives at the bound parameters are computed only when a parameter is at a
+    # bound. A constrained run supplies its gradients of the objective and the Lagrangian
+    # at `x`; otherwise one gradient of the objective is computed.
     gf, gL = Float64[], Float64[]
     at = findall(!=(0), side)
     if gradients !== nothing
@@ -1951,19 +2095,20 @@ Base.@nospecializeinfer function _pointing_result(
                           NaN, least_violation, last_feasible, capped)
 end
 
-# What ended a run: the stop's reason, or at convergence whether the constraints are met
-# and parameters at a bound (`atb`, their names).
+# Returns what ended a run. This is the reason of the stop or, at convergence, whether the
+# constraints are met and whether parameters are at a bound (`atb` holds their names).
 function _outcome(reason::Symbol, rows::Vector{ConstraintRow}, atb)
     reason !== :converged && return reason
     met = all(r -> r.status !== :violated, rows)
     return met ? (isempty(atb) ? :interior : :box) : (isempty(atb) ? :infeasible : :infeasible_box)
 end
 
-# The optimizer's view of a scenario on VisRad's profile with its hard cut: the same
-# operator (points, normals, visibility, work plan, envelope ratios) with the cut
-# tapered over `_OPT_TAPER` e-folds, the responses and caches shared; `nothing` for any
-# other scenario. The taper keeps the profile's support, so the operator's points and
-# the screens that skip points outside it serve both.
+# Returns the scenario that the optimizer runs on for a scenario with the VisRad profile
+# at its hard cut. The operator is the same, with its points, normals, visibility, work
+# plan and envelope ratios, but the cut is tapered over `_OPT_TAPER` e-folds. The
+# responses and caches are shared. For any other scenario, the result is `nothing`. The
+# taper does not change the support of the profile, so the operator points and the
+# screens that skip points outside the support are valid for both.
 const _OPT_TAPER = 1.0
 
 function _tapered(op::DepositionOperator)
@@ -1983,11 +2128,13 @@ function _tapered(s::Scenario)
                     getfield(s, :_split))
 end
 
-# The optimizer's view of a scenario whose constraints read the element powers of sets of
-# beam groups (a picket ceiling's outer cones, `_split_sets`): the same scenario, its
-# evaluations keeping those powers from their own deposition (`evaluate`), which the
-# constraints then read instead of depositing the groups again. `req` pairs a phase
-# (`nothing`: the scenario itself) with a group set; `s` itself when none applies.
+# Some constraints read the element powers of sets of beam groups (`_split_sets`), such as
+# the outer cones of a picket ceiling. For such constraints, the optimizer runs on the
+# same scenario with those sets recorded. Its evaluations then keep the powers of the sets
+# from the deposition of the evaluation (`evaluate`), and the constraints read them
+# instead of depositing the groups again. Each entry of `req` pairs a phase with a group
+# set, and the phase `nothing` stands for the scenario itself. `_with_split` returns `s`
+# unchanged when no set applies.
 const _SplitRequest = Vector{Pair{Union{Nothing,Symbol},Vector{Symbol}}}
 
 _split_sets(f) = _SplitRequest()
@@ -2013,10 +2160,11 @@ function _with_split(s::Scenario, req)
                     s.moment_response, s.ylm_response, s.lpi, s.time, getfield(s, :_response), s.albedo, sets)
 end
 
-# A run on the tapered profile (`_tapered`) reported under the scenario `s`'s hard cut:
-# the objective at the run's design and at its start `xs`, the constraint rows there
-# (with the run's multipliers) and the outcome, the tapered run's value kept as
-# `tapered_value`; everything else is the run's.
+# Reports a run on the tapered profile (`_tapered`) under the hard cut of the scenario `s`.
+# The objective is evaluated at the design of the run and at its start `xs`, with the
+# constraint rows there and the outcome. The rows contain the multipliers of the run. The
+# value of the tapered run is kept as `tapered_value`, and every other field is taken
+# from the run.
 Base.@nospecializeinfer function _hard_cut_result(s::_AbstractScenario, r::PointingResult,
                                                   @nospecialize(objective), @nospecialize(constraints),
                                                   xs::AbstractVector, feasibility::Float64)
@@ -2105,8 +2253,8 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
                 lf.outer == 0 ? "the start or phase 1's design" : "outer iteration $(lf.outer)", lf.value)
     end
     _show_constraint_rows(io, r.constraints)
-    # an exact ceiling's row reads the exact value (inside its limit) while its multiplier
-    # is the stand-in's, active at its working limit
+    # The row of an exact ceiling shows the exact value, inside its limit, while its
+    # multiplier is that of the stand-in, which is active at its working limit.
     stand = unique(first(split(x.name, '[')) for x in r.constraints if x.status === :satisfied && x.multiplier > 0)
     isempty(stand) ||
         print(io, "\n  ", join(stand, ", "), ": :satisfied with a positive multiplier, the smooth stand-in's at its ",
@@ -2119,18 +2267,20 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
     return nothing
 end
 
-# What stopped a phase 1 short of a verdict, in words.
+# Describes in words what stopped a phase 1 short of a verdict.
 _phase1_stop_text(why::Symbol) = why === :evaluations ? "the evaluation budget" :
                                  why === :time_limit ? "the time limit" : why === :callback ? "the callback" :
                                  string(why)
 
-# A relaxation in words: the relaxed limits in the constraint's units, and as a multiple
-# of the limit where the scale is the limit's magnitude.
+# Describes a relaxation in words. The relaxed limits are given in the units of the
+# constraint, and as a multiple of the limit where the scale is the magnitude of the
+# limit.
 function _relaxation_text(x::Relaxation)
     x.status === :others_conflict && return "not enough alone: the others conflict too"
     v = x.violation
     s = x.status === :stopped ? " (stopped first: the others possibly unmet)" : ""
-    # relative: the scale is the limit's magnitude, so each limit moves by the same multiple
+    # The relaxation is relative when the scale is the magnitude of the limit, so each
+    # limit moves by the same multiple.
     m = x.relaxed_limit ./ x.limit
     rel = all(l -> l != 0, x.limit) &&
           all(i -> isapprox(abs(x.relaxed_limit[i] - x.limit[i]), v * abs(x.limit[i]); rtol = 1e-9),
@@ -2141,13 +2291,14 @@ function _relaxation_text(x::Relaxation)
                     rel ? @sprintf(" (the limit × %.4g)", m[1]) : "", lims, s, x.evaluations)
 end
 
-# A constraint's rows (its components) in a display: all of them up to this many, beyond
-# it the worst (largest violation) and a count by status (a keep-out per beam has
-# hundreds; the rows themselves stay in the vector).
+# A display lists all the rows (components) of a constraint up to this many. Beyond it,
+# the display shows the worst row, the one of largest violation, and a count by status.
+# A keep-out per beam has hundreds of rows, and all of them stay in the vector.
 const _ROWS_SHOWN = 8
 
 function _show_constraint_rows(io::IO, rows::AbstractVector{ConstraintRow}; indent = "\n    ")
-    # consecutive rows of one constraint: the name before the component's label
+    # Consecutive rows of one constraint share the name before the label of the
+    # component.
     stem(r) = first(split(r.name, '['))
     groups = Vector{ConstraintRow}[]
     for r in rows
@@ -2189,13 +2340,13 @@ ForwardDiff.:≺(::Type{_PTAG}, ::Type{ForwardDiff.Tag{F,V}}) where {F,V} = true
 ForwardDiff.:≺(::Type{ForwardDiff.Tag{F,V}}, ::Type{_PTAG}) where {F,V} = false
 ForwardDiff.:≺(::Type{_PTAG}, ::Type{_PTAG}) = false
 
-# ForwardDiff's chunk-mode `gradient!(out, f, x, cfg)` with the chunks' dual passes run
-# concurrently, one task each (their inner threaded loops nest on the same pool). A
-# pass is seeded exactly as ForwardDiff seeds it (the last chunk carries N partials, its
-# trailing seeds zero) and every pass is deterministic, so the gradient and value are
-# bitwise those of the serial `ForwardDiff.gradient!`; the value is taken from the last
-# chunk, as ForwardDiff takes it. Serial on one thread, for a single chunk, or with
-# `_PARALLEL_CHUNKS[] = false` (the reference path).
+# Computes the chunk-mode `gradient!(out, f, x, cfg)` of ForwardDiff with the dual passes
+# of the chunks run concurrently, one task each. Their inner threaded loops nest on the
+# same pool. Each pass is seeded exactly as ForwardDiff seeds it: the last chunk has N
+# partials, with its trailing seeds zero. Every pass is deterministic, so the gradient and
+# value are bitwise those of the serial `ForwardDiff.gradient!`. The value is taken from
+# the last chunk, as ForwardDiff takes it. The passes run serially on one thread, for a
+# single chunk, or with `_PARALLEL_CHUNKS[] = false`, the reference path.
 const _PARALLEL_CHUNKS = Ref(true)
 
 function _pointing_gradient!(out, f, x::AbstractVector{Float64},
@@ -2217,7 +2368,8 @@ function _pointing_gradient!(out, f, x::AbstractVector{Float64},
     return ForwardDiff.DiffResults.value!(out, vals[nc])
 end
 
-# Dual pass `c` of `_pointing_gradient!`: writes only its gradient slots and value.
+# Runs dual pass `c` of `_pointing_gradient!`. The pass writes only its gradient slots
+# and the value.
 function _gradient_chunk!(G, vals, f, x, seeds::NTuple{N,ForwardDiff.Partials{N,Float64}},
                           ::Type{T}, c) where {N,T}
     lo = (c - 1) * N
@@ -2234,18 +2386,20 @@ end
 """
     report([io = stdout,] ev; lmax = 6, minor = 1e-3) -> nothing
 
-Print a power accounting and flux-moment summary of an evaluation: the setup and
-effective power per group when the scenario has a laser–plasma model; the delivered
-laser power and its split over the parts (`component_power`), with the parts below
-`minor` × the delivered power summed on one line; the residual, if not below that
-fraction; and the observed flux's mean ([`mean_flux`](@ref)), radiation temperature and
-Legendre moments `Pₗ/P₀` up to `lmax`.
+Print a power accounting and flux-moment summary of an evaluation. The summary lists:
 
-The residual is the delivered power minus the power absorbed and clipped: light that
-strikes no surface plus the deposition quadrature's error (`DepositionOperator`
-conserves each beam's power to 1e-4 when nothing clips). It prints as `missed` when
-positive and as `quadrature excess` when negative (the quadrature counts more power
-than the beams deliver).
+- the setup and effective power per group, when the scenario has a laser–plasma model;
+- the delivered laser power and its split over the parts (`component_power`). The parts
+  below `minor` × the delivered power are summed on one line;
+- the residual, unless it is below that fraction;
+- the mean of the observed flux ([`mean_flux`](@ref)), its radiation temperature and
+  its Legendre moments `Pₗ/P₀` up to `lmax`.
+
+The residual is the delivered power minus the power absorbed and clipped. It is the
+light that does not strike a surface plus the error of the deposition quadrature;
+`DepositionOperator` conserves the power of each beam to 1e-4 when nothing clips. The
+residual prints as `missed` when positive and as `quadrature excess` when negative,
+where the quadrature counts more power than the beams deliver.
 """
 function report(io::IO, ev::Evaluation; lmax::Integer = 6, minor::Real = 1e-3)
     d = ev.deposition

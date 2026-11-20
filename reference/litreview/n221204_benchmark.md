@@ -16,7 +16,7 @@ Figs. 1, 9 and 10 of K24E were rendered and read by eye.
   - Fractions of incident laser energy: 54.1% heats the wall (4.4% Au lining, 49.7% DU), 25.2% leaves as radiation through the LEHs, 4.5% heats the He, 16.2% is absorbed by the capsule.
   - The laser energy had to be degraded by 9–13% to match data.
   - Downstream: 246 kJ (~12%) is coupled to the implosion, fuel kinetic energy 15.33 kJ, 20 kJ of work on the DT, 8.2 kJ to the hot spot.
-- **Capsule absorbed energy:** 258 kJ for N221204 (H24 Table I caption: Y/G_cap), and 19.4 kJ into the DT fuel.
+- **Capsule absorbed energy:** 258 kJ for N221204 (Y/G_cap, from the caption of H24 Table I), and 19.4 kJ into the DT fuel.
   - H24's generic low-fill accounting: ~50% wall, 30–35% out the LEHs, 10–15% capsule, ~5% gas plus LEH windows.
   - H24: f₂ ≈ 0.07 asymmetry roll-up for N221204.
 - **Modeling settings:** CBET clamp δn/n = 0.0075 after the start of the rise (K24E). The PoP rounds it to 0.008.
@@ -133,7 +133,7 @@ against "Specified", right axis in TW, read by eye, **L**):
 - "Rise CF" at ≈4 ns (H, R26 Tables I, III):
   - 0.21 for N210808 and for the N221204 keyhole N230110.
   - 0.17 on the N221204 2DConA surrogate N240304.
-- Peak CF ≈0.33 (L), then →1 as the outers droop.
+- Peak CF ≈0.33 (L), then rising to 1 as the outers droop.
 - K22 Figs. 1(e) and 3(a) show the same shape for N210808, incident and post-CBET.
   - Incident CF (L): ≈1 at t≈0, ≈0.1 at 1–3 ns, a bump to ≈0.17 at ≈2.3 ns, ≈0.2 at 5 ns, 0.33 over 6–8 ns, back to 1 at ≈9 ns.
   - Post-CBET CF (L): ≈0.2 in the foot, ≈0.5–0.6 at peak.
@@ -161,7 +161,7 @@ Times are in ns, powers in TW per whole cone.
 - Peak input per cone sums to ≈64 + 64 + 125 + 128 ≈ 380 TW (L), below the 440 TW delivered. HYDRA plots appear to carry the 9–13% laser degradation that K24E App. 3 says is needed.
   - DN24's measured split at peak is 146 TW inner and 296 TW outer, i.e. 73 TW per inner cone and 148 TW per outer cone.
   - Use DN24 for absolute powers and K24E for the design CF shape.
-- K24E text (H): the cone fraction "in the peak (33%)". The outers "droop" late while the inners are held, so CF → 1 at ≈9.2 ns.
+- K24E text (H): the cone fraction "in the peak (33%)". The outers "droop" late while the inners are held, so CF reaches 1 at ≈9.2 ns.
 - Foot CF for N221204 was *raised* relative to N220919 (≈0.13 vs 0.09 at ≈3.4 ns in Fig. 9b, L). This followed keyhole N221106, which showed less foot asymmetry than modeled; N230110 verified it.
 - Fig. 1e (L): N221204 input CF lies within ≈0.02 of N210808 through the foot and peak. The N221204 droop (CF rise) is ≈0.3 ns later. Its post-transfer CF in the peak is ≈0.05 higher (≈0.6 vs ≈0.55).
 
@@ -216,7 +216,7 @@ Times are in ns, powers in TW per whole cone.
 | N230827 (N210808) | 1.80 | 0.24 | — | 9.240 ± 0.190 | 27.5 ± 2.37 (25.8) | 3.76 ± 3.19 | 65.3 / 25.4 ± 0.93 / 6.14 |
 | N240304 (N221204) | 2.90 | 0.17 | 355 ± 5 (344) | 9.876 ± 0.090 | 21.7 ± 1.31 (19.5) | 4.16 ± 1.04 | 71.0 / 7.39 ± 1.85 / 0.07 |
 
-- R26 Fig. 9 (N240304 P2 vs time, L): shell P2 ≈22–24 µm at 9.15 ns falling to ≈16 µm at 9.45 ns, at shell P0 270→160 µm.
+- R26 Fig. 9 (N240304 P2 vs time, L): shell P2 ≈22–24 µm at 9.15 ns falling to ≈16 µm at 9.45 ns, as shell P0 falls from 270 to 160 µm.
 - R26: matching these data needs HYDRA peak-power multipliers of 0.825–0.86 and peak CBET clamps of 0.005–0.007, varying "5% and 30%" shot to shot.
 - **Shock timing, keyhole** (R26 Table II, H), N230110 = the N221204 design: 85.6 µm, Δλ 2.75 Å, rise CF 0.21.
   - Equator: shock-1 breakout 3.864 ± 0.012 ns, 1–2 merge 4.847 ± 0.003 ns, 1–2–3 merge 5.972 ± 0.008 ns; velocities 32.74 and 50.30 km/s.
@@ -231,8 +231,8 @@ Times are in ns, powers in TW per whole cone.
 - **Sensitivities.**
   - 40–50 µm hot-spot P2 per Å (K21, H; already in research notes).
   - K22 Fig. 3b (N210808-class): ΔP2 vs model at Δλ = 0 is ≈27 µm at 1.25 Å, 43–48 µm at 1.55 Å and ≈56 µm at 1.75–1.8 Å (L).
-  - N220919→N221204: +0.25 Å with re-tuned powers moved hot-spot P2 from −10.8 to +0.3 µm (P24, H). That is ≈44 µm/Å, confounded by the power changes (L).
-  - Rise CF (R26 Fig. 10, H): 0.21→0.24 raised the shell P2 from 9.1 to 27.5 µm (≈6 µm per 0.01 CF). 0.21→0.16 left it unchanged (10.9 µm); HYDRA had predicted −10 µm.
+  - From N220919 to N221204, +0.25 Å with re-tuned powers moved hot-spot P2 from −10.8 to +0.3 µm (P24, H). That is ≈44 µm/Å, confounded by the power changes (L).
+  - Rise CF (R26 Fig. 10, H): raising the rise CF from 0.21 to 0.24 raised the shell P2 from 9.1 to 27.5 µm (≈6 µm per 0.01 CF). Lowering it from 0.21 to 0.16 left it unchanged (10.9 µm); HYDRA had predicted −10 µm.
   - Outer pointing (B23, frustum, H): 7–12 µm hot-spot P2 per 100 µm of outer z-pointing; 44 µm/Å.
 
 ## 4. Shot-to-shot deltas
@@ -272,7 +272,8 @@ total = outer .+ inner;  fraction = inner ./ max.(total, eps())
 pulses = cone_fraction_pulses(beams, times, total, fraction)    # per-beam TW
 # Absolute powers follow DN24 (measured). The CF shape agrees with K24E Fig. 9b, the design input (L):
 #   0.07–0.08 picket, 0.15 at 2 ns, 0.12 at 3.3 ns, 0.17–0.20 at 4–4.5 ns, 0.33 for 5.5–8.0 ns, then → 1 by 9.2 ns.
-# Split inner power equally over 23°/30° and outer equally over 44°/50° (K24E Fig. 9a: within a few TW).
+# Split inner power equally over 23°/30° and outer equally over 44°/50°
+# (K24E Fig. 9a has them within a few TW).
 # [N210808: same picket/trough, peak ≈430–441 TW ending ≈0.45 ns earlier (P24 Fig. 1); CF from K22 Fig. 1e / K24E Fig. 1e,
 #  within ≈0.02 of N221204 until the droop, which starts ≈0.3 ns earlier.]
 # Validation clock: bang 9.53 ± 0.07 ns [9.28 ± 0.07]; compare flux moments before ≈9.3 ns (reheating after).
@@ -327,7 +328,7 @@ through a transfer function, and the Trad and capsule-energy rows for absolute e
      - K24E Fig. 1(b, d, e): total, outer and inner power; 23° input vs post-transfer; CF; N221204 vs N210808. Digitized in §2.
      - K24E Fig. 9(a, b): all four cones, input vs post-transfer, and CF, N221204 vs N220919.
      - K24E Fig. 10: simulated flux P2/P0(t) with scaled power and CF.
-2. **PRE 109, 025204** is now read. It gives no per-cone Δλ split, pointing, defocus or CPP. Its per-cone "input" powers sum to ≈380 TW at peak against 440 TW delivered. They are probably HYDRA-degraded, but the paper does not say so explicitly.
+2. **PRE 109, 025204** is now read. It does not give a per-cone Δλ split, pointing, defocus or CPP. Its per-cone "input" powers sum to ≈380 TW at peak against 440 TW delivered. They are probably HYDRA-degraded, but the paper does not say so explicitly.
 3. **Windows.** No public sizes, azimuths or materials for the three equatorial diagnostic windows; K24E and H24 do not add any. H24 adds "manufacturing gaps on the waist of the hohlraum" as a mode-1 source. Look in MacGowan HEDP 40, 100944 and Milovich PPCF 63 (2021).
 4. **Hohlraum details.** Corner and lip geometry, Au liner and DU thicknesses, LEH washer dimensions: unpublished in what I read. The SW25 Fig. 3 CAD (BAH hohlraum, 5.75 mm) shows the LEH hardware layout only.
 5. **Per-cone Δλ splits** (23.5°/30°, 44.5°/50°) for N221204: unknown. The 4-color capability existed (DN24).

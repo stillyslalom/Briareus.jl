@@ -13,7 +13,8 @@
 # deposition); collision 2.0-3.0 (wall and ablator plasma meet, rays cross it); outer
 # 3.0-3.6 (outer-beam rays drawn over the plasma: the edge is hidden, values near 2.9 mark the rays);
 # bubble 3.6-4.8 (Au bubble under the outer spots); lip > 4.8 (LEH lip plasma). Two
-# isolated rows hit by text or ray strokes are NaN. A schematic of a simulation, not data.
+# isolated rows hit by text or ray strokes are NaN. The figure is a schematic of a
+# simulation; it is not data.
 # Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)".
 # Columns: z (mm from the waist); r_n210808, r_n221204 (edge radius, mm; initial wall 3.2);
 # region

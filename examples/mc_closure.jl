@@ -1,13 +1,13 @@
-# Does view-factor balancing (`closed = true`, the `hohlraum()` default) bias the
-# capsule drive on the default curved path? A continuum reference by Monte Carlo
-# (`montecarlo_incident`, `reemit = :hit`) on a finely faceted flat copy of the
-# hohlraum (wall h = 0.1 mm, capsule_h = 0.05 mm), against the radiosity model on the
-# standard meshes (curved and flat elements, raw and balanced view factors). Source:
-# 48 NIF quads at 8 TW at the example cone aims (examples/mesh_convergence.jl's
-# nominal design), deposited on each mesh by a separate `DepositionOperator` and scaled to
-# the reference mesh's total; wall η = 0.8, α = 0.925 and 0.85. Departure: one outer
-# quad off (by linearity, the Monte Carlo traces that quad's source alone). Results are
-# cached in the temp directory.
+# Does view-factor balancing (`closed = true`, the `hohlraum()` default) bias the capsule
+# drive on the default curved path? A continuum reference by Monte Carlo
+# (`montecarlo_incident`, `reemit = :hit`) on a finely faceted flat copy of the hohlraum
+# (wall h = 0.1 mm, capsule_h = 0.05 mm) is compared with the radiosity model on the
+# standard meshes, with curved and flat elements and raw and balanced view factors. The
+# source is 48 NIF quads at 8 TW at the example cone aims, the nominal design of
+# examples/mesh_convergence.jl. It is deposited on each mesh by a separate
+# `DepositionOperator` and scaled to the total of the reference mesh, with wall η = 0.8 and
+# α = 0.925 and 0.85. The departure turns one outer quad off; by linearity, the Monte Carlo
+# traces only the source of that quad. Results are cached in the temp directory.
 #
 #     julia --project=. -t auto examples/mc_closure.jl [paths per capsule element at α = 0.925]
 
@@ -45,7 +45,7 @@ end
 cached(f, key) = (path = joinpath(CACHE, "$key.jls");
                   isfile(path) ? deserialize(path) : (x = f(); serialize(path, x); x))
 
-# element laser power of the design and of the dropped quad alone
+# element laser power of the design and of only the dropped quad
 sources(h, ch; curved = true) = cached("src_$(h)_$(ch)_$(curved)") do
     op = DepositionOperator(target(h, ch, 0.9; curved), BEAMS)
     (deposit(op, BEAMS).element,

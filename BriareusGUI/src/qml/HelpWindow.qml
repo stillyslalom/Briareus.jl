@@ -1,8 +1,8 @@
-// The Help window: a separate window (it resizes, moves and stays open beside the
-// design) with the pages of common/help.js on the left and the page's topics on the
-// right; a filter above the list shows the topics of every page that contain its words.
-// `openAt(topic)` shows the topic's page with the topic marked, as an ⓘ does when
-// clicked.
+// The Help window is a separate window that resizes, moves and stays open beside the
+// design. It shows the pages of common/help.js on the left and the topics of the page on
+// the right, and a filter above the list shows the topics of every page that contain its
+// words. `openAt(topic)` shows the page of the topic with the topic marked, as a click on
+// an ⓘ does.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

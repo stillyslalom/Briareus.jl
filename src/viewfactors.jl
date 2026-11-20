@@ -1,80 +1,88 @@
-# Element-to-element view factors with occlusion.
+# This file computes element-to-element view factors with occlusion.
 
 """
     view_factors(target; near = 3.0, level = 1, visibility = target.visibility, visibility_grid = 4,
                  storage = Float64, tol, eta, leaf, maxrank) -> Matrix{Float64}, Float32Matrix or HMatrix
 
-Dense view-factor matrix `F[i, j]`: the fraction of diffuse radiation leaving element
+Dense view-factor matrix `F[i, j]`, the fraction of diffuse radiation leaving element
 `i` that arrives at element `j`. Reciprocity `Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ` holds exactly by
 construction, and rows sum to one for a closed enclosure (counting apertures); see
-`closure_error`. `storage = Float32` assembles into a [`Float32Matrix`](@ref) instead
-(half the memory; each factor rounded to single precision, products in Float64).
-`storage = :hmatrix` assembles a hierarchical [`HMatrix`](@ref): near cluster pairs
-dense, far ones of uniform visibility low rank (keywords `tol`, `eta`, `leaf`,
-`maxrank`; `Briareus.HMATRIX_DEFAULTS`); on a hohlraum its assembly and storage grow as
-N^1.3–1.6 instead of N² (2–3× faster, 5–8× smaller at 17–29k elements).
+`closure_error`. `storage = Float32` assembles into a [`Float32Matrix`](@ref) instead,
+with half the memory, each factor rounded to single precision and products in Float64.
+`storage = :hmatrix` assembles a hierarchical [`HMatrix`](@ref), with near cluster
+pairs dense and far ones of uniform visibility low rank (keywords `tol`, `eta`, `leaf`,
+`maxrank`; `Briareus.HMATRIX_DEFAULTS`). On a hohlraum its assembly and storage grow as
+N^1.3–1.6 instead of N², and at 17–29k elements it is 2–3× faster and 5–8× smaller.
 
 Flat elements use the exact differential-area-to-polygon view factor onto the other
-element, integrated over the emitter: over `4^level` sub-triangle points for pairs
-closer than `near` element sizes (√2 × the largest centroid-to-vertex distance, the side
-of a square element), which stays accurate for elements sharing an edge such as the
-wall–cap corner of a hohlraum, and from the centroid beyond that, averaged over the two
-directions. A near pair of flat elements (not on a curved surface) that lie wholly in
-front of each other takes their exact exchange instead, the double contour integral
-``A_i F_{ij} = \\frac{1}{2π}\\oint_i\\oint_j \\ln r\\, d\\mathbf{l}_i\\cdot d\\mathbf{l}_j`` over
-their outlines (to ~1e-13; for an element folded across several facets, of the facets
-themselves): elements sharing an edge cost ~100× less than by the point rule, which
-also leaves ~5e-4 on them.
+element, integrated over the emitter. For pairs closer than `near` element sizes, the
+integral uses `4^level` sub-triangle points; the element size is √2 × the largest
+centroid-to-vertex distance, the side of a square element. This rule stays accurate for
+elements that share an edge, such as at the wall–cap corner of a hohlraum. Beyond that
+distance the integral uses the centroid, averaged over the two directions. A near pair
+of flat elements (not on a curved surface) that lie wholly in front of each other takes
+their exact exchange instead, the double contour integral
+``A_i F_{ij} = \\frac{1}{2π}\\oint_i\\oint_j \\ln r\\, d\\mathbf{l}_i\\cdot d\\mathbf{l}_j``
+over their outlines, to about 1e-13. For an element folded across several facets, the
+outlines are those of the facets themselves. Elements that share an edge then cost
+about 100× less than by the point rule, which also leaves an error of about 5e-4 on
+them.
 
-Elements of a component with a `CurvedSurface` are integrated over the curved patch:
-quadrature points on the true surface with its normals and areas, point to point
-between two curved elements (`4^level` sub-triangle points per triangle when near, one
-per triangle out to three times that distance, the projected centroid beyond), and onto
-the exact polygon of a planar partner. Elements of a `DiskSurface` are exact polar
-sectors, planar receivers whose arcs are divided finely. A near pair of a sector and
-another sector or a chord rectangle of a cylinder seen from inside, all about one axis
-and wholly in front of each other (an end cap and the wall at its corner, a waist gap's
-annuli and its slot, an LEH disk and its bore), takes the double contour above with the
-arcs exact (to ~1e-12; the point rule left 1e-3 to 4e-2 there). A curved concave element also
-sees itself, which gives the diagonal `Fᵢᵢ`. Flat facets standing in for a curved wall misrepresent the
-exchange between nearby elements by an amount of order one relative to its size, which
-matters next to a concentrated source such as a laser spot.
+Elements of a component with a `CurvedSurface` are integrated over the curved patch,
+with quadrature points on the true surface with its normals and areas. Between two
+curved elements the integral is point to point: `4^level` sub-triangle points per
+triangle when near, one per triangle out to three times that distance, and the projected
+centroid beyond. Onto a planar partner the integral uses the exact polygon. Elements of a
+`DiskSurface` are exact polar sectors, planar receivers whose arcs are divided finely.
+Some near pairs lie about one axis and wholly in front of each other: a sector with
+another sector or with a chord rectangle of a cylinder seen from inside. Examples are an
+end cap and the wall at its corner, the annuli and slot of a waist gap, and an LEH disk
+and its bore. Such a pair takes the double contour above with the arcs exact, to about
+1e-12, where the point rule left 1e-3 to 4e-2. A curved concave element also has a
+view of itself, which gives the diagonal `Fᵢᵢ`. Flat facets standing in for a curved wall
+misrepresent the exchange between nearby elements by an amount of order one relative to
+its size, which matters next to a concentrated source such as a laser spot.
 
 Elements of more than two facets (remeshed CAD, `remesh_mesh`) are not integrated facet
-by facet: a flat one receives through its outline (exactly the sum over its facets, to
-round-off; piece by piece, each piece its facets in one plane, where the point's tangent
-plane cuts it), and near pairs integrate over cells that lump the emitter's facets (side
-size / (2^(level+2) √2) before refining toward the receiver, 2^(level+1) on a curved
-surface), so a pair costs a few times a two-facet pair whatever the facet count — as
-long as the receiver is: each point's factor sums its outline, or its pieces when the
-point's tangent plane cuts it, so an element on a finely faceted curved wall (hundreds
-of sliver facets, tens of pieces and a jagged outline of hundreds of edges) costs tens
-of times more per near pair. Give such parts their fitted surface
-(`curved_components`): they are then integrated on the curved surface instead.
+by facet. A flat element receives through its outline, which gives exactly the sum over
+its facets within round-off. Where the tangent plane of the point cuts the element, it
+receives piece by piece, each piece being its facets in one plane. Near pairs integrate
+over cells that lump the facets of the emitter, of side size / (2^(level+2) √2) before
+refining toward the receiver, or 2^(level+1) on a curved surface. A pair then costs a few
+times a two-facet pair whatever the facet count of the emitter. The facet count of the
+receiver still matters, since the factor of each point sums its outline, or its pieces
+when the tangent plane of the point cuts it. An element on a finely faceted curved wall,
+with hundreds of sliver facets, tens of pieces and a jagged outline of hundreds of
+edges, therefore costs tens of times more per near pair. Such parts should be given
+their fitted surface (`curved_components`), and they are then integrated on the curved
+surface instead.
 
-Visibility is a single centroid-to-centroid ray between the flat facets; the facets of
-a curved surface (cylinder, sphere or cone) do not block a ray between two points inside it,
-since the true surface cannot. On curved elements the centroid facing test is relaxed
-by the spread of the true normals across the flat facet, so pairs the curved patches
-exchange across are kept (a general triangle on a cylinder has its plane tilted axially
-by about its size over 2R), and the point kernels apply the exact facing per point.
+Visibility is a single centroid-to-centroid ray between the flat facets. The facets of
+a curved surface (cylinder, sphere or cone) do not block a ray between two points inside
+it, since the true surface cannot. On curved elements the centroid facing test is
+relaxed by the spread of the true normals across the flat facet. Pairs that the curved
+patches exchange across are therefore kept, since a general triangle on a cylinder has
+its plane tilted axially by about its size over 2R. The point kernels apply the exact
+facing per point.
 
-A pair that sees each other only partly, past the rim of an entrance-hole bore or a gap
-or around the capsule, is all or nothing by its centroid ray. `visibility = :sampled`
-(the default for targets with rims: `cad_target`, `visrad_target`) estimates the visible fraction instead: up to four probe rays per element (from points
-near its extremes to the other's centroid) test whether the pair straddles an occluder;
-if they all agree with the centroid ray, the factor is bitwise the `:centroid` one,
-and otherwise rays between the `visibility_grid²` sample points of each element (its
-area lumped into a g × g grid of its tangent plane) give the kernel-weighted visible
-fraction, which scales the unobstructed factor (reciprocity is kept). On an element
-folded across more than two facets (remeshed CAD) the samples are put on its facets, and
-its facets do not occlude them. On a hohlraum with
-0.1 mm LEH bores and a 20 µm waist gap at 0.5 mm, it brings the largest row-sum error
-before balancing from 1.0% to 0.19% on the walls and from 5.9% to 0.7% on the LEH
-apertures, for 2–4× the time; features narrower than a sample cell (the gap's slot) are
-not resolved (research notes, "Partial visibility"). Against a Monte Carlo radiosity on
-the same facets, it cuts the balanced capsule a₂/a₀ error there (0.51 → 0.31 pp at
-0.5 mm, 0.30 → 0.14 pp at 0.25 mm; research notes, "Monte Carlo radiosity reference").
+A pair with only a partial view of each other, past the rim of an entrance-hole bore or a
+gap or around the capsule, is all or nothing by its centroid ray. `visibility = :sampled`
+estimates the visible fraction instead; it is the default for targets with rims
+(`cad_target`, `visrad_target`). Up to four probe rays per element, from points near its
+extremes to the centroid of the other element, test whether the pair straddles an
+occluder. If they all agree with the centroid ray, the factor is identical to the
+`:centroid` one. Otherwise, rays between the `visibility_grid²` sample points of each
+element give the kernel-weighted visible fraction, which scales the unobstructed factor
+and keeps reciprocity. The samples lump the area of the element into a g × g grid of its
+tangent plane. On an element folded across more than two facets (remeshed CAD), the
+samples are put on its facets, and its facets do not occlude them. On a hohlraum with
+0.1 mm LEH bores and a 20 µm waist gap at 0.5 mm, the sampling brings the largest
+row-sum error before balancing from 1.0% to 0.19% on the walls and from 5.9% to 0.7% on
+the LEH apertures, for 2–4× the time. Features narrower than a sample cell, such as the
+slot of the gap, are not resolved (research notes, "Partial visibility"). Against a
+Monte Carlo radiosity on the same facets, it reduces the balanced capsule a₂/a₀ error
+there from 0.51 to 0.31 pp at 0.5 mm, and from 0.30 to 0.14 pp at 0.25 mm (research
+notes, "Monte Carlo radiosity reference").
 """
 function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true,
                       visibility::Symbol = t.visibility, visibility_grid::Integer = 4,
@@ -90,8 +98,8 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
     storage === :hmatrix && return _hmatrix_view_factors(ctx; hmatrix...)
     N = nelements(t)
     F = storage === Float32 ? Float32Matrix(zeros(Float32, N, N)) : zeros(N, N)
-    # rows have i:N pairs, so they are handed out one at a time, longest first, rather
-    # than in equal contiguous chunks (the first chunk would carry most of the work)
+    # Rows have i:N pairs, so they are handed out one at a time, longest first. Equal
+    # contiguous chunks would leave most of the work in the first chunk.
     next = Threads.Atomic{Int}(1)
     @sync for _ in 1:min(Threads.nthreads(), N)
         Threads.@spawn while (i = Threads.atomic_add!(next, 1)) <= N
@@ -101,13 +109,13 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
     return F
 end
 
-# Everything the pair kernel `_vf_pair` reads.
+# Returns everything that the pair kernel `_vf_pair` uses.
 function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibility_grid)
     N = nelements(t)
     C, Nrm, A = t.elem_centroid, t.elem_normal, t.elem_area
     curved = t.elem_curved .!= 0
-    # planar elements (flat facets and polar sectors) receive through the exact
-    # point-to-polygon kernel; sectors are polygons with finely divided arcs
+    # Planar elements (flat facets and polar sectors) receive through the exact
+    # point-to-polygon kernel, and sectors are polygons with finely divided arcs.
     sector = [curved[e] && t.components[t.elem_comp[e]].surface isa DiskSurface for e in 1:N]
     planar = .!curved .| sector
     # elements of more than two facets (imported CAD) receive through their outline and
@@ -115,32 +123,35 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
     multi = [length(t.elem_tris[e]) > 2 && !sector[e] for e in 1:N]
     offset = cumsum([0; [length(c.mesh.triangles) for c in t.components]])
     recv = Union{_Receiver,_PolyReceiver}[_receiver(t, e, sector[e], multi[e] && planar[e], offset) for e in 1:N]
-    # (curved elements at the resolution of their point rule `qnear`, flat ones finer: see
-    # `_CellEmitter`)
+    # (Curved elements are at the resolution of their point rule `qnear`, and flat ones
+    # finer; see `_CellEmitter`.)
     cells = Any[multi[e] ? _cell_emitter(t, e, curved[e] ? level + 1 : level + 2) : nothing for e in 1:N]
     concave = curved .& .!sector
-    # point-to-point quadrature on curved surfaces carries an O((h/r)²) bias that does not
-    # cancel between pairs, so curved elements keep several points per triangle at every
-    # distance: level + 1 near, level out to `mid` element sizes, one per triangle beyond
+    # Point-to-point quadrature on curved surfaces carries an O((h/r)²) bias that does not
+    # cancel between pairs. Curved elements therefore keep several points per triangle at
+    # every distance: level + 1 near, level out to `mid` element sizes, and one per
+    # triangle beyond.
     qnear = [element_quadrature(t, e, curved[e] && !sector[e] ? level + 1 : level) for e in 1:N]
     qmid = [element_quadrature(t, e, curved[e] ? level : 0) for e in 1:N]
     qfar = [curved[e] ? element_quadrature(t, e, 0) : ([C[e]], [A[e]], [Nrm[e]]) for e in 1:N]
     qself = [concave[e] ? qnear[e] : nothing for e in 1:N]      # same level + 1 rule
     ε = _ray_eps(t)
-    # element size: largest distance from the centroid to a vertex, so a long sliver
-    # counts as large even when its area is small (√2 × half-diagonal = side for a square)
+    # The element size is the largest distance from the centroid to a vertex, so a long
+    # sliver counts as large even when its area is small (√2 × half-diagonal = side for a
+    # square).
     size = [sqrt(2) * maximum(max(norm(t.tri_v0[k] - C[e]), norm(t.tri_v0[k] + t.tri_e1[k] - C[e]),
                                   norm(t.tri_v0[k] + t.tri_e2[k] - C[e])) for k in t.elem_tris[e])
             for e in 1:N]
-    # a flat facet standing in for a curved patch has a normal that departs from the true
-    # surface normals across the patch: by Δφ/2 at the edges of a chord rectangle, and
-    # also axially for a general triangle on a cylinder (its plane is tilted by ~h/2R).
-    # The centroid facing test is relaxed by that spread (`slack`, a sine), so a pair the
-    # curved patches exchange across is not culled; the point kernels then apply the
-    # exact per-point facing. A visibility ray admitted only by the slack (heading behind
-    # the plane of its facet) starts that much farther off the facet, so it clears the
-    # facet; every other ray starts ε off it, as for flat elements (lifting all origins
-    # would bias them toward the middle of a cavity, and into the capsule's shadow).
+    # A flat facet standing in for a curved patch has a normal that departs from the true
+    # surface normals across the patch. The departure is Δφ/2 at the edges of a chord
+    # rectangle, and also axial for a general triangle on a cylinder, whose plane is tilted
+    # by about h/2R. The centroid facing test is relaxed by that spread (`slack`, a sine),
+    # so a pair that the curved patches exchange across is not culled, and the point
+    # kernels then apply the exact per-point facing. A visibility ray admitted only by the
+    # slack, which heads behind the plane of its facet, starts that much farther off the
+    # facet, so it clears the facet. Every other ray starts ε off the facet, as for flat
+    # elements. Lifting all origins would bias them toward the middle of a cavity and into
+    # the shadow of the capsule.
     slack = zeros(N)
     for e in 1:N
         curved[e] && !sector[e] || continue
@@ -150,9 +161,9 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
         end
     end
     # A segment between two points inside a convex curved surface (cylinder, sphere, cone)
-    # cannot cross the surface, so its facets do not occlude such a pair: they would only
-    # by faceting (a ray grazing the wall from a small facet is blocked by a larger
-    # neighbor, which sits deeper inside the true surface).
+    # cannot cross the surface, so its facets do not occlude such a pair. They would
+    # occlude it only through faceting, as when a ray grazing the wall from a small facet
+    # is blocked by a larger neighbor that lies deeper inside the true surface.
     surfs = unique(c.surface for c in t.components if c.surface isa Union{CylinderSurface,SphereSurface,ConeSurface})
     comp_surf = [something(findfirst(==(c.surface), surfs), 0) for c in t.components]
     tri_surf = Int32[comp_surf[c] for c in t.tri_comp]
@@ -160,7 +171,8 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
     for e in 1:N, (k, s) in enumerate(surfs)
         inside[k, e] = _inside(s, C[e])
     end
-    # partial visibility (`visibility = :sampled`): each element's ray samples and probes
+    # for partial visibility (`visibility = :sampled`), the ray samples and probes of each
+    # element
     vis = visibility === :sampled ? [_visibility_samples(t, e, visibility_grid) for e in 1:N] : nothing
     # outlines of flat elements, for near flat pairs (`_contour_pair_vf`)
     outl = Union{Nothing,_Outline}[curved[e] ? nothing : _outline(t, e, offset, size[e]) for e in 1:N]
@@ -171,8 +183,8 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
            size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi, outl, arcs)
 end
 
-# Row i of the view-factor matrix (pairs i < j), behind a function barrier so the
-# threaded loop is specialized on the concrete types in `ctx`.
+# Computes row i of the view-factor matrix (pairs i < j), behind a function barrier so
+# that the threaded loop is specialized on the concrete types in `ctx`.
 function _vf_row!(F, ctx, i)
     A = ctx.A
     N = length(A)
@@ -188,14 +200,15 @@ function _vf_row!(F, ctx, i)
     return nothing
 end
 
-# Exchange factor G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ of the pair i < j (zero if they do not face or
-# see each other); `_vf_exchange` takes any order and the diagonal.
+# Returns the exchange factor G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ of the pair i < j, zero if they do not
+# face each other or are hidden from each other. `_vf_exchange` takes any order and the
+# diagonal.
 _vf_exchange(ctx, i, j) = i == j ? (ctx.concave[i] ? _self_kernel(ctx.qself[i]) : 0.0) :
                           i < j ? _vf_pair(ctx, i, j) : _vf_pair(ctx, j, i)
 
-# Visibility of the pair i < j: -1 if they do not face each other (or coincide), else
-# the visible fraction (0 or 1 by the centroid ray, between with `:sampled`); and the
-# centroid separation `d` with its square.
+# Returns the visibility of the pair i < j, which is -1 if they do not face each other
+# (or coincide), and otherwise the visible fraction (0 or 1 by the centroid ray, and
+# between with `:sampled`). It also returns the centroid separation `d` and its square.
 function _vf_visible(ctx, i, j)
     (; t, bvh, C, Nrm, size, slack, ε, tri_surf, inside, vis, multi) = ctx
     facing, d, r2, _, _, oi, oj = _vf_ends(C, Nrm, size, slack, ε, i, j)
@@ -203,10 +216,10 @@ function _vf_visible(ctx, i, j)
     skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
     blocked = any_hit(bvh, oi, oj - oi, 1 - 1e-9, skip)
     vis === nothing && return blocked ? 0.0 : 1.0, d, r2
-    # the facets of a folded element do not occlude its samples: the element model
-    # radiates from its mean plane, and on a convex part each sample's rays toward
-    # the horizon of its facet would be blocked by that facet or its fold
-    # neighbors (all of the reduced capsule rows on a remeshed CAD sphere)
+    # The facets of a folded element do not occlude its samples. The element model
+    # radiates from its mean plane, and on a convex part the rays of each sample toward
+    # the horizon of its facet would be blocked by that facet or its fold neighbors. That
+    # happened for all of the reduced capsule rows on a remeshed CAD sphere.
     own(k, e) = multi[e] && (t.tri_front[k] == e || t.tri_back[k] == e)
     skipv = multi[i] || multi[j] ? (k -> skip(k) || own(k, i) || own(k, j)) : skip
     seen = _RaySeen(bvh, skipv)
@@ -214,12 +227,13 @@ function _vf_visible(ctx, i, j)
     return frac, d, r2
 end
 
-# The ray ends of the pair i < j: whether the elements face each other (centroid test,
-# relaxed on curved surfaces), the centroid separation `d`, its square, the facing
-# cosines and the ends lifted off the facets (by ε, and by the facing slack used). One
-# compiled instance for every caller (`@noinline`, concrete arguments): StaticArrays'
-# `dot` is an `@simd` reduction, rounded as its caller is compiled, and the H-matrix's
-# certificates (`_hvis_bundle`) must start from bitwise identical ends.
+# Returns the ray ends of the pair i < j. These are whether the elements face each other
+# (centroid test, relaxed on curved surfaces), the centroid separation `d`, its square,
+# the facing cosines and the ends lifted off the facets (by ε, and by the facing slack
+# used). There is one compiled instance for every caller (`@noinline`, concrete
+# arguments). The `dot` of StaticArrays is an `@simd` reduction, rounded as its caller
+# is compiled, and the certificates of the H-matrix (`_hvis_bundle`) must start from
+# identical ends.
 @noinline function _vf_ends(C::Vector{Vec3}, Nrm::Vector{Vec3}, size::Vector{Float64}, slack::Vector{Float64},
                             ε::Float64, i::Int, j::Int)
     d = C[j] - C[i]
@@ -234,7 +248,8 @@ end
     return true, d, r2, ci, cj, oi, oj
 end
 
-# Whether the segment p → q is unobstructed, by the visibility ray (`any_hit` to 1 - 1e-9).
+# Whether the segment from p to q is unobstructed, by the visibility ray (`any_hit` to
+# 1 - 1e-9).
 struct _RaySeen{S}
     bvh::BVH
     skip::S
@@ -247,27 +262,28 @@ function _vf_pair(ctx, i, j)
     return _vf_kernel(ctx, i, j, frac, d, r2)
 end
 
-# The quadrature tier of the pair i, j at centroid distance² r2 (`_vf_kernel`): within
-# `near` element sizes (the larger of the two), within `mid`, or beyond. G jumps where a
-# pair crosses a tier boundary (by the rules' difference: 0.5% on a capsule's polar
-# sliver at the far boundary).
+# Returns the quadrature tier of the pair i, j at centroid distance² r2 (`_vf_kernel`):
+# within `near` element sizes (the larger of the two), within `mid`, or beyond. G jumps
+# where a pair crosses a tier boundary, by the difference of the rules, which is 0.5% on
+# a polar sliver of a capsule at the far boundary.
 function _vf_tier(ctx, i, j, r2)
     s2 = max(ctx.size[i], ctx.size[j])^2
     return r2 < ctx.near2 * s2 ? :near : r2 < ctx.mid2 * s2 ? :mid : :far
 end
 
-# G of the pair i < j that faces and sees itself by the fraction `frac` > 0.
+# Returns G of the pair i < j that faces itself and is visible by the fraction `frac` > 0.
 function _vf_kernel(ctx, i, j, frac, d, r2)
     (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, level, exact_far, outl, arcs) = ctx
-    # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
+    # (`cells` is untyped, so the type of the kernel is asserted; otherwise the factor of
+    # every pair is boxed.)
     near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
                           _cell_kernel(cells[e], rc))::Float64
     tier = _vf_tier(ctx, i, j, r2)
     # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
     if planar[i] && planar[j]
         if tier === :near
-            # flat pairs wholly in front of each other: the exact double contour
-            # (and coaxial sectors, with their arcs)
+            # Flat pairs wholly in front of each other take the exact double contour, as do
+            # coaxial sectors, with their arcs.
             oi, oj = outl[i], outl[j]
             G = oi === nothing || oj === nothing ? _arc_pair_vf(arcs[i], arcs[j]) : _contour_pair_vf(oi, oj)
             isnan(G) && (G = (near_kernel(i, recv[j]) + near_kernel(j, recv[i])) / 2)
@@ -278,7 +294,7 @@ function _vf_kernel(ctx, i, j, frac, d, r2)
         end
     else
         q = tier === :near ? qnear : tier === :mid ? qmid : qfar
-        # a near sector and cylinder patch about one axis: the double contour with arcs
+        # a near sector and cylinder patch about one axis take the double contour with arcs
         G = tier === :near && planar[i] != planar[j] ? _arc_pair_vf(arcs[i], arcs[j]) : NaN
         isnan(G) || return (frac == 1 ? G : G * frac)::Float64
         G = !planar[i] && !planar[j] ? _point_kernel(q[i], q[j]) :
@@ -292,16 +308,17 @@ end
 # ------------------------------------------------------------ partial visibility
 #
 # `visibility = :sampled`. The centroid ray decides a pair that is wholly visible or
-# wholly hidden, but a pair that sees past a rim (an LEH bore's, a gap's) is partly
-# both. Each element carries ray samples, its facets lumped into a g × g grid of its
-# tangent plane (area-weighted mean point and area per cell), and up to four probes, the
-# samples farthest along ±e₁ and ±e₂. Probe rays go from each probe of one element to
-# the other's centroid. A pair whose probes all agree with its centroid ray keeps the
-# centroid's verdict, so the factor is bitwise the `:centroid` one; otherwise rays
-# between every pair of samples give the visible fraction, weighted by the point kernel
-# cosθᵢ cosθⱼ / r² (by area / r² if no sample pair faces), and the factor of the
-# unobstructed pair is scaled by it. The fraction is computed once per unordered pair
-# from segments that do not depend on the direction, so reciprocity holds exactly.
+# wholly hidden, but a pair with a view past a rim, such as the rim of an LEH bore or a
+# gap, is partly both. Each element carries ray samples, with its facets lumped into a
+# g × g grid of its tangent plane (area-weighted mean point and area per cell). It also
+# carries up to four probes, the samples farthest along ±e₁ and ±e₂. Probe rays go from
+# each probe of one element to the centroid of the other. A pair whose probes all agree
+# with its centroid ray keeps the verdict of the centroid, so the factor is identical to
+# the `:centroid` one. Otherwise rays between every pair of samples give the visible
+# fraction, weighted by the point kernel cosθᵢ cosθⱼ / r² (by area / r² if no sample pair
+# faces), and the factor of the unobstructed pair is scaled by it. The fraction is
+# computed once per unordered pair from segments that do not depend on the direction, so
+# reciprocity holds exactly.
 
 struct _VisSamples
     points::Vector{Vec3}
@@ -334,13 +351,14 @@ function _visibility_samples(t::Target, e, g)
     keep = findall(>(0), vec(W))
     points = [vec(P)[c] / vec(W)[c] for c in keep]
     weights = vec(W)[keep]
-    # A folded element (remeshed CAD: facets within a few degrees of one plane) has its
-    # cell means off its facets, behind them on a convex part (a capsule), where their
-    # rays start inside the solid and are blocked by the facets of the element. Each is
-    # moved along the normal onto the facet that line meets, as `Target` moves the
-    # centroid (`_onto_patch`), or, if it meets none (a cell mean outside a non-convex
-    # outline), to the nearest sub-triangle point of its cell. Planar elements, and those
-    # of one or two facets (every primitive), keep bitwise identical samples.
+    # A folded element, with facets within a few degrees of one plane as in remeshed CAD,
+    # has its cell means off its facets. On a convex part such as a capsule they lie behind
+    # the facets, where their rays start inside the solid and are blocked by the facets of
+    # the element. Each cell mean is moved along the normal onto the facet that its line
+    # meets, as `Target` moves the centroid (`_onto_patch`). If the line meets none, as for
+    # a cell mean outside a non-convex outline, the mean moves to the nearest sub-triangle
+    # point of its cell. Planar elements, and those of one or two facets (every primitive),
+    # keep identical samples.
     tris = t.elem_tris[e]
     if length(tris) > 2
         h = maximum(norm(p - C) for p in pts)
@@ -361,8 +379,9 @@ function _visibility_samples(t::Target, e, g)
     return _VisSamples(points, weights, probes)
 end
 
-# `p` moved along `n` onto the nearest of the facets `tris` the line through it meets
-# (the rule of `_onto_patch`), and whether it meets one; a move under 1e-9 h is dropped.
+# Returns `p` moved along `n` onto the nearest of the facets `tris` that the line through
+# it meets (the rule of `_onto_patch`), and whether it meets one. A move under 1e-9 h is
+# dropped.
 function _onto_facets(t::Target, tris, p, n, h)
     best = Inf
     for k in tris
@@ -380,16 +399,17 @@ function _onto_facets(t::Target, tris, p, n, h)
     return abs(best) > 1e-9 * h ? p + best * n : p, true
 end
 
-# Visible fraction of a pair whose centroid ray (from `oi` to `oj`) is `blocked` or not;
-# `li`, `lj` lift the samples off their facets as the centroid ray's ends are lifted.
-# `seen(p, q)`: whether the segment p → q is unobstructed (the ray, `_RaySeen`, or the
-# H-matrix's certificates with the ray as fallback, `_HSeen`).
+# Returns the visible fraction of a pair whose centroid ray (from `oi` to `oj`) is
+# `blocked` or not. `li`, `lj` lift the samples off their facets as the ends of the
+# centroid ray are lifted. `seen(p, q)` tells whether the segment from p to q is
+# unobstructed, by the ray (`_RaySeen`) or by the certificates of the H-matrix with the
+# ray as fallback (`_HSeen`).
 function _visible_fraction(seen::F, si::_VisSamples, sj::_VisSamples, oi, oj, li, lj, ni, nj, blocked) where {F}
     agree = all(k -> seen(si.points[k] + li, oj) != blocked, si.probes) &&
             all(k -> seen(oi, sj.points[k] + lj) != blocked, sj.probes)
     agree && return blocked ? 0.0 : 1.0
-    # (a pair of zero kernel weight, facing away at an end, adds nothing to either sum, so
-    # its segment is tested only if no pair faces: then the area weights decide)
+    # (A pair of zero kernel weight, facing away at an end, adds nothing to either sum,
+    # so its segment is tested only if no pair faces. The area weights then decide.)
     vis, tot = 0.0, 0.0
     for a in eachindex(si.points), b in eachindex(sj.points)
         p, q = si.points[a] + li, sj.points[b] + lj
@@ -410,9 +430,10 @@ function _visible_fraction(seen::F, si::_VisSamples, sj::_VisSamples, oi, oj, li
     return tota > 0 ? visa / tota : 0.0
 end
 
-# The kernel and area weights of the sample pair p, q (weights wp, wq), unless they
-# coincide. One compiled instance for every `seen` (`@noinline`, concrete arguments: see
-# `_vf_ends`), so `_visible_fraction` is bitwise identical whichever decides the segments.
+# Returns the kernel and area weights of the sample pair p, q (weights wp, wq), unless
+# they coincide. There is one compiled instance for every `seen` (`@noinline`, concrete
+# arguments; see `_vf_ends`), so `_visible_fraction` gives identical results whichever
+# function decides the segments.
 @noinline function _vis_weight(p::Vec3, q::Vec3, wp::Float64, wq::Float64, ni::Vec3, nj::Vec3)
     d = q - p
     r2 = dot(d, d)
@@ -421,27 +442,29 @@ end
     return true, wa * max(dot(ni, d), 0.0) * max(-dot(nj, d), 0.0) / r2, wa
 end
 
-# Whether `p` lies inside the (convex) curved surface, to round-off.
+# Whether `p` lies inside the (convex) curved surface, within round-off.
 _inside(s::CylinderSurface, p) =
     (d = p - s.origin; norm(d - dot(d, s.axis) * s.axis) <= s.radius * (1 + 1e-12))
 _inside(s::SphereSurface, p) = norm(p - s.center) <= s.radius * (1 + 1e-12)
-# (a cone's nappe bounds a convex solid: points within the half-angle of the axis)
+# (The nappe of a cone bounds a convex solid, the points within the half-angle of the axis.)
 function _inside(s::ConeSurface, p)
     sα, cα = sincosd(s.half_angle)
     z, ρ, _ = _cone_coordinates(s, p)
     return ρ * cα - z * sα <= 1e-12 * norm(p - s.apex)
 end
 
-# One-point rule of a curved element: the projected centroid, its normal and the area.
+# Returns the one-point rule of a curved element: the projected centroid, its normal and
+# the area.
 function _one_point(t::Target, e)
     p, n = surface_point(t.components[t.elem_comp[e]].surface, t.elem_centroid[e])
     return [p], [t.elem_area[e]], [t.elem_curved[e] * n]
 end
 
-# Receiving polygon of a planar element: its triangles, and for a polar sector also the
-# boundary loop of those triangles (same vertices, same orientation), with the loop in
-# 2-D coordinates of its plane for `_closer_than` (origin o, unit normal nr, in-plane axes
-# e1, e2; closed u, v arrays and the inverse squared edge lengths w).
+# The receiving polygon of a planar element, with its triangles. For a polar sector it
+# also holds the boundary loop of those triangles (same vertices, same orientation), with
+# the loop in 2-D coordinates of its plane for `_closer_than`. These are origin o, unit
+# normal nr, in-plane axes e1, e2, closed u, v arrays and the inverse squared edge lengths
+# w.
 struct _Receiver
     tris::Vector{NTuple{3,Vec3}}
     loop::Vector{Vec3}
@@ -477,20 +500,20 @@ function _receiver(t::Target, e, sector::Bool, poly::Bool, offset)
                       for k in t.elem_tris[e]], Vec3[])
 end
 
-# Boundary of `_sector_triangles(s, sector; m)`, with the same vertices and orientation:
-# the outer arc, then the inner arc back (or the center). Interior edges of the triangles
-# cancel pairwise, so the contour over this loop is the sum over the triangles whenever
-# none of them is clipped.
+# Returns the boundary of `_sector_triangles(s, sector; m)`, with the same vertices and
+# orientation: the outer arc, then the inner arc back (or the center). Interior edges of
+# the triangles cancel pairwise, so the contour over this loop is the sum over the
+# triangles whenever none of them is clipped.
 function _sector_loop(s::DiskSurface, (r0, r1, a, b); m = 16)
     φs = range(a, b; length = m + 1)
     r0 == 0 && return pushfirst!([_sector_point(s, r1, φ) for φ in φs], s.center)
     return [[_sector_point(s, r1, φ) for φ in φs]; [_sector_point(s, r0, φs[k]) for k in m+1:-1:1]]
 end
 
-# F(dA at p → receiver). A sector lying entirely in front of p takes the contour over
-# its boundary loop (about a third of the edges of its triangles, which would all be
-# unclipped and of one orientation, so |Σ| = Σ|·|); otherwise the triangles are summed
-# one by one. The two agree to round-off.
+# Returns F(dA at p → receiver). A sector lying entirely in front of p takes the contour
+# over its boundary loop, about a third of the edges of its triangles. The triangles
+# would all be unclipped and of one orientation, so |Σ| = Σ|·|. Otherwise the triangles
+# are summed one by one. The two results agree within round-off.
 function _receiver_vf(p, n, r::_Receiver)
     loop = r.loop
     if !isempty(loop)
@@ -506,28 +529,30 @@ end
 
 # ------------------------------------------------- elements of many facets (CAD)
 #
-# A remeshed CAD element carries 10–25 facets (slivers of the CAD faces, cut by the
-# element's outline), and summing the point-to-polygon factor over each of them made a
-# pair cost tens of times a primitive pair. The receiving side uses the element's outline
-# instead, and the emitting side lumps its facets into cells; both reduce exactly (the
-# receiver to round-off) or in point count to what a two-facet element costs.
+# A remeshed CAD element carries 10–25 facets, slivers of the CAD faces cut by the
+# outline of the element. Summing the point-to-polygon factor over each of them made a
+# pair cost tens of times a primitive pair. The receiving side therefore uses the
+# outline of the element, and the emitting side lumps its facets into cells. Both reduce
+# the cost to that of a two-facet element, exactly (the receiver within round-off) or in
+# point count.
 #
-# Receiver. The contour formula integrates a divergence-free field, so for a point that
-# sees the whole element from in front (every vertex in front of its tangent plane, every
-# facet facing the same way) the sum over the facets' contours equals the contour over
-# the element's boundary edges: the interior edges cancel pairwise. That holds for a
-# folded element as well as a planar one. A point whose tangent plane cuts the element
-# takes the element piece by piece, a piece being its facets in one plane (to round-off):
-# a planar piece cut by the plane is bounded by its edges in front plus one segment on
-# the cutting line, whose multiplicities follow from the crossings (with two crossings, the
-# segment joins them). That is again the sum over the clipped facets, to round-off; more
-# than two crossings fall back to the facets. Straight runs of the outline (vertices
-# that neighbors' facets need) are merged into single edges.
+# Receiver. The contour formula integrates a divergence-free field. For a point with a
+# view of the whole element from in front, with every vertex in front of its tangent
+# plane and every facet facing the same way, the sum over the contours of the facets
+# therefore equals the contour over the boundary edges of the element, since the interior
+# edges cancel pairwise. That holds for a folded element as well as a planar one. A point
+# whose tangent plane cuts the element takes the element piece by piece, a piece being
+# its facets in one plane within round-off. A planar piece cut by the plane is bounded by
+# its edges in front plus one segment on the cutting line, whose multiplicities follow
+# from the crossings; with two crossings, the segment joins them. That is again the sum
+# over the clipped facets within round-off, and more than two crossings fall back to the
+# facets. Straight runs of the outline, with vertices that the facets of neighbors need,
+# are merged into single edges.
 
 struct _Piece
-    edges::Vector{NTuple{2,Vec3}}   # boundary edges of the piece's facets
+    edges::Vector{NTuple{2,Vec3}}   # boundary edges of the facets of the piece
     verts::Vector{Vec3}             # their end points
-    normal::Vec3                    # the facets' normal
+    normal::Vec3                    # normal of the facets
     point::Vec3                     # a vertex
     radius::Float64                 # largest distance of a vertex from `point`
     tris::Vector{NTuple{3,Vec3}}
@@ -542,8 +567,8 @@ struct _PolyReceiver
     radius::Float64
 end
 
-# Receiver of flat element `e` of more than two facets; `offset[c]` is the index of the
-# component's first triangle in the target, less one.
+# Returns the receiver of flat element `e` of more than two facets. `offset[c]` is the
+# index of the first triangle of the component in the target, less one.
 function _poly_receiver(t::Target, e, offset)
     c = t.elem_comp[e]
     m = t.components[c].mesh
@@ -554,7 +579,7 @@ function _poly_receiver(t::Target, e, offset)
     T = [map(i -> vid(m.vertices[i]), m.triangles[k - offset[c]]) for k in ks]
     center = t.elem_centroid[e]
     radius = maximum(v -> norm(v - center), P)
-    # pieces: facets with every vertex within round-off of one plane, facing one way
+    # pieces are facets with every vertex within round-off of one plane, facing one way
     tol = 1e-12 * (radius + norm(center))
     groups, gnormal, gpoint = Vector{Int}[], Vec3[], Vec3[]
     for (f, k) in enumerate(ks)
@@ -579,8 +604,8 @@ function _poly_receiver(t::Target, e, offset)
                          [(P[a], P[b], P[d]) for (a, b, d) in T], center, radius)
 end
 
-# Directed boundary edges (vertex ids, sorted) of facets `fs` of `T`: edges not canceled
-# by an opposite edge of another facet.
+# Returns the directed boundary edges (vertex ids, sorted) of facets `fs` of `T`, which
+# are the edges not canceled by an opposite edge of another facet.
 function _boundary_edges(T, fs)
     count = Dict{NTuple{2,Int},Int}()
     for f in fs
@@ -596,9 +621,9 @@ function _boundary_edges(T, fs)
     return sort!([k for (k, n) in count for _ in 1:n])
 end
 
-# Boundary edges with straight runs merged: u→v→w becomes u→w where v is the only edge
-# out of and into v and lies on the segment uw to round-off. The contour terms of
-# collinear edges add, so the sum is unchanged.
+# Returns boundary edges with straight runs merged. The edges u→v→w become u→w where v has
+# only one edge out and one edge in and lies on the segment uw within round-off. The
+# contour terms of collinear edges add, so the sum is unchanged.
 function _merge_straight(P, edges)
     outs, ins = Dict{Int,Vector{Int}}(), Dict{Int,Vector{Int}}()
     for (a, b) in edges
@@ -623,7 +648,7 @@ function _merge_straight(P, edges)
     return sort!([(a, b) for (a, bs) in outs for b in bs])
 end
 
-# Whether v lies on the segment ab, to round-off.
+# Whether v lies on the segment ab, within round-off.
 function _straight(a, v, b)
     d = b - a
     s = dot(v - a, d)
@@ -631,7 +656,7 @@ function _straight(a, v, b)
 end
 
 function _receiver_vf(p, n, r::_PolyReceiver)
-    # the bounding sphere wholly in front or behind decides it without the vertices
+    # a bounding sphere wholly in front or behind decides the test without the vertices
     hc = dot(n, r.center - p)
     hc < -1.000001 * r.radius && return 0.0
     front, behind = hc > 1.000001 * r.radius, false
@@ -672,16 +697,18 @@ function _piece_vf(p, n, pc::_Piece)
     end
     behind && return 0.0
     front && return _edges_vf(p, n, pc.edges)
-    # p's tangent plane parallel to the piece (a coplanar neighbor), or p in the piece's
-    # plane (on a neighbor cut from the same CAD facet): the piece is seen edge-on, its
-    # factor is zero, and the cutting line is ill-defined or passes through p
+    # With the tangent plane of p parallel to the piece (a coplanar neighbor), or with p
+    # in the plane of the piece (on a neighbor cut from the same CAD facet), the piece is
+    # seen edge-on. Its factor is zero, and the cutting line is ill-defined or passes
+    # through p.
     (hmax <= 1e-6 * pc.radius || abs(dot(pc.normal, p - pc.point)) <= 1e-10 * pc.radius) && return 0.0
     return _clipped_vf(p, n, pc)
 end
 
-# The piece clipped to the half-space in front of p: its edges in front, cut where they
-# cross, and the segment joining the two crossings (exit to entry). Other crossing
-# counts (a piece whose outline crosses the line more than twice) sum the facets.
+# Returns the factor of the piece clipped to the half-space in front of p, from its edges
+# in front, cut where they cross, and the segment joining the two crossings (exit to
+# entry). With other crossing counts, for a piece whose outline crosses the line more
+# than twice, the facets are summed.
 function _clipped_vf(p, n, pc::_Piece)
     s = 0.0
     nx, sx = 0, 0
@@ -715,7 +742,7 @@ function _clipped_vf(p, n, pc::_Piece)
     return abs(s) / (2π)
 end
 
-# Σ over directed edges of the contour terms, |·|/2π.
+# Returns the sum over directed edges of the contour terms, |·|/2π.
 function _edges_vf(p, n, edges)
     s = 0.0
     for (a, b) in edges
@@ -724,9 +751,9 @@ function _edges_vf(p, n, edges)
     return abs(s) / (2π)
 end
 
-# Contour term of the edge a→b (relative to the point): its subtended angle times the
-# normal component of the unit normal of the plane through the point and the edge.
-# @noinline for the reason given at `_contour_vf`.
+# Returns the contour term of the edge a→b (relative to the point), which is its
+# subtended angle times the normal component of the unit normal of the plane through the
+# point and the edge. @noinline for the reason given at `_contour_vf`.
 @noinline function _edge_term(n, a, b)
     c = cross(a, b)
     nc = norm(c)
@@ -736,26 +763,30 @@ end
 
 _distance_to(p, r::_PolyReceiver) = minimum(_point_triangle_distance(p, tri...) for tri in r.tris)
 
-# Whether p lies within d of the receiver (the bounding sphere first).
+# Whether p lies within d of the receiver, testing the bounding sphere first.
 _closer_than(p, r::_PolyReceiver, d) = norm(p - r.center) - r.radius < d && _distance_to(p, r) < d
 
 # Emitter. The adaptive near-pair rule refines toward the receiver from cells of the
-# element's tangent plane rather than from its facets: the facets are bisected along
-# their longest edges into pieces under half a cell, the pieces lumped by cell (one
-# point per cell: the area-weighted mean of the pieces' centroids, with their total area;
-# on a curved surface the pieces' exact curved areas, the mean projected onto it), and a
-# cell within `ratio` cell sizes of the receiver (a cell's size taken as 2× its side, the
-# longest edge of a right triangle of its area) is split into four, as `_adapt_tri` does
-# with a triangle, down to cells of side size / (2^maxdepth √2); when splitting, the
-# pieces are bisected only to under a child's side (under half, as at the root, cost 70%
-# more and changed nothing at 1e-6 on the reference cases). The root cells have side
-# size / (2^depth √2): 2·4^depth of them on a square element, whatever the facets'
-# number and shape. `view_factors` roots flat elements one level below the two-facet rule
-# (depth = level + 2): at the two-facet resolution the one-point cells carry the same
-# +2e-4 bias as primitive elements on perpendicular plates (all pairs near); one level
-# finer brings it to the 1e-5 of the per-facet rule on CAD elements, for 10-20% more
-# time (research notes, "Flat CAD elements"). Curved elements stay at level + 1, the
-# resolution of their lumped point rule (`element_quadrature`) for curved partners.
+# tangent plane of the element, and the facets serve only to fill the cells. The steps
+# are:
+# - The facets are bisected along their longest edges into pieces under half a cell.
+# - The pieces are lumped by cell, with one point per cell at the area-weighted mean of
+#   the centroids of the pieces, with their total area. On a curved surface the cells use
+#   the exact curved areas of the pieces, and the mean is projected onto the surface.
+# - A cell within `ratio` cell sizes of the receiver is split into four, as `_adapt_tri`
+#   splits a triangle, down to cells of side size / (2^maxdepth √2). The size of a cell
+#   is taken as 2× its side, the longest edge of a right triangle of its area. When a
+#   cell splits, its pieces are bisected only to under the side of a child. Bisecting
+#   them to under half, as at the root, cost 70% more and changed nothing at 1e-6 on the
+#   reference cases.
+# The root cells have side size / (2^depth √2), with 2·4^depth of them on a square
+# element, whatever the number and shape of the facets. `view_factors` roots flat
+# elements one level below the two-facet rule (depth = level + 2). At the two-facet
+# resolution the one-point cells carry the same +2e-4 bias as primitive elements on
+# perpendicular plates (all pairs near). One level finer brings the bias to the 1e-5 of
+# the per-facet rule on CAD elements, for 10-20% more time (research notes, "Flat CAD
+# elements"). Curved elements stay at level + 1, the resolution of their lumped point
+# rule (`element_quadrature`) for curved partners.
 const _Cell = Tuple{Float64,Vec3,Vec3,Vector{NTuple{3,Vec3}},Int,Int}   # weight, point, normal, pieces, key
 
 struct _CellEmitter{S}
@@ -799,7 +830,7 @@ function _cell_emitter(t::Target, e, depth)
     return em
 end
 
-# A cell from its pieces' total weight and weighted point sum.
+# Returns a cell from the total weight and weighted point sum of its pieces.
 function _cell(em::_CellEmitter, w, wq, ps, i, j)
     em.s === nothing && return (w, wq / w, em.n, ps, i, j)
     q, nq = surface_point(em.s, wq / w)
@@ -814,18 +845,19 @@ function _cell_kernel(em::_CellEmitter, rc; maxdepth::Integer = 8, ratio = 2.0)
     return total
 end
 
-# h = 2 hq: the longest edge of a right isosceles triangle of the cell's area
+# h = 2 hq, the longest edge of a right isosceles triangle of the area of the cell
 function _adapt_cell(em, (w, p, n, ps, i, j), hq, rc, depth, maxdepth, ratio)
     depth < maxdepth && _closer_than(p, rc, 2ratio * hq) &&
         return _refine_cell(em, ps, i, j, hq / 2, rc, depth + 1, maxdepth, ratio)
     return w * _receiver_vf(p, n, rc)
 end
 
-# Σ over the four children (side hq, depth `depth`) of cell (i, j), refined further
-# where they are close to the receiver. The cell's pieces are bisected to under a child's
-# side and go to the child their centroid lies in (or the nearest one, for a part beyond
-# the cell). A first pass gives each child's weight and point; only the children that
-# are refined again collect their pieces, in a second.
+# Returns the sum over the four children (side hq, depth `depth`) of cell (i, j), refined
+# further where they are close to the receiver. The pieces of the cell are bisected to
+# under the side of a child and go to the child in which their centroid lies, or to the
+# nearest child for a part beyond the cell. A first pass gives the weight and point of
+# each child, and only the children that are refined again collect their pieces, in a
+# second pass.
 function _refine_cell(em::_CellEmitter, ps, i, j, hq, rc, depth, maxdepth, ratio)
     child((ki, kj)) = 1 + clamp(ki - 2i, 0, 1) + 2clamp(kj - 2j, 0, 1)
     ws = zeros(4)
@@ -869,10 +901,10 @@ function _collect_pieces(em, ps, i, j, hq, mask)
     return pcs
 end
 
-# Bisect the piece (a, b, c) along its longest edge until that is under lmax, and hand
-# each part to `f(key, weight, point, part)`: its cell (side hq, relative to the
-# element's centroid), and, with `weights`, its area (curved on a surface) and its
-# centroid (projected).
+# Bisects the piece (a, b, c) along its longest edge until that edge is under lmax, and
+# hands each part to `f(key, weight, point, part)`. The key is the cell of the part
+# (side hq, relative to the centroid of the element). With `weights`, the weight is its
+# area (curved on a surface) and the point its centroid (projected).
 function _bin_piece!(f, em::_CellEmitter, hq, lmax, a, b, c, weights::Bool = true)
     lab, lbc, lca = sum(abs2, b - a), sum(abs2, c - b), sum(abs2, a - c)
     if max(lab, lbc, lca) > lmax^2
@@ -904,8 +936,8 @@ function _bin_piece!(f, em::_CellEmitter, hq, lmax, a, b, c, weights::Bool = tru
     return
 end
 
-# Σₚ wₚ F(dAₚ → element j) with the exact point-to-polygon view factor, so only the
-# (bounded, continuous) outer integral is done numerically.
+# Returns Σₚ wₚ F(dAₚ → element j) with the exact point-to-polygon view factor, so that
+# only the bounded, continuous outer integral is done numerically.
 function _pair_kernel((pi, wi, ni), r)
     s = 0.0
     for p in eachindex(pi)
@@ -914,7 +946,7 @@ function _pair_kernel((pi, wi, ni), r)
     return s
 end
 
-# Point-to-point kernel ∫∫ cosθᵢ cosθⱼ / (π r²) over two quadratures.
+# Returns the point-to-point kernel ∫∫ cosθᵢ cosθⱼ / (π r²) over two quadratures.
 function _point_kernel((pi, wi, ni), (pj, wj, nj))
     s = 0.0
     for p in eachindex(pi), q in eachindex(pj)
@@ -928,9 +960,9 @@ function _point_kernel((pi, wi, ni), (pj, wj, nj))
     return s
 end
 
-# Self-exchange of a curved concave element, ∫∫ over the patch with itself. Coincident
-# points are skipped and the sum rescaled by A²/(A² − Σw²), which is exact for a
-# constant kernel (the sphere) and accurate for the bounded kernel of a cylinder.
+# Returns the self-exchange of a curved concave element, ∫∫ over the patch with itself.
+# Coincident points are skipped and the sum is rescaled by A²/(A² − Σw²), which is exact
+# for a constant kernel (the sphere) and accurate for the bounded kernel of a cylinder.
 function _self_kernel((p, w, n))
     s = 0.0
     for a in eachindex(p), b in eachindex(p)
@@ -958,7 +990,7 @@ function _point_polygon_vf(p::Vec3, n::Vec3, tri)
     h = map(v -> dot(n, v - p), tri)
     all(<=(0), h) && return 0.0
     all(>(0), h) && return _contour_vf(p, n, tri, 3)
-    # clipped polygon as an immutable tuple (an MVector here escaped to the heap, one
+    # clipped polygon as an immutable tuple (an MVector here escaped to the heap, with one
     # allocation per call)
     z = zero(Vec3)
     poly = (z, z, z, z)
@@ -976,10 +1008,12 @@ function _point_polygon_vf(p::Vec3, n::Vec3, tri)
     return _contour_vf(p, n, poly, m)
 end
 
-# Contour sum over the first `m` vertices of `poly`, each relative vertex formed once.
-# @noinline: when inlined into `_point_polygon_vf`, LLVM's x86 register coalescer can drop
-# the upper lane of a vectorized vertex around the `atan` call (wrong view factors seen
-# under --code-coverage on Julia 1.13 and --track-allocation on 1.12-1.14). No measurable cost.
+# Returns the contour sum over the first `m` vertices of `poly`, with each relative vertex
+# formed once. The function is @noinline, since when it is inlined into
+# `_point_polygon_vf`, the x86 register coalescer of LLVM can drop the upper lane of a
+# vectorized vertex around the `atan` call. Wrong view factors were seen under
+# --code-coverage on Julia 1.13 and --track-allocation on 1.12-1.14. The cost is not
+# measurable.
 @noinline function _contour_vf(p, n, poly, m)
     s = 0.0
     a1 = poly[1] - p
@@ -998,13 +1032,14 @@ end
 
 # ---------------------------------------------- vectorized sector contour (H-matrix)
 #
-# A polar sector's boundary loop has 2m + 2 = 34 edges, and its contour (one `atan` per
-# edge, which does not vectorize) took ~45% of an H-matrix assembly of a hohlraum (wall
-# and capsule points onto the end caps' sectors). The H-matrix assembly gives sector
-# receivers their loop as component arrays and takes the contour in one `@simd` loop
-# with a branch-free `atan`: 2.4× faster per contour. The terms are summed in another
-# order and the `atan` is within 2 ulp of `Base.atan`, so its factors differ from
-# those of `_contour_vf` by rounding error only; `view_factors` itself keeps `_Receiver`.
+# The boundary loop of a polar sector has 2m + 2 = 34 edges. Its contour, with one
+# `atan` per edge, does not vectorize, and it took about 45% of an H-matrix assembly of a
+# hohlraum, for wall and capsule points onto the sectors of the end caps. The H-matrix
+# assembly therefore gives sector receivers their loop as component arrays and takes the
+# contour in one `@simd` loop with a branch-free `atan`, which is 2.4× faster per
+# contour. The terms are summed in another order, and the `atan` is within 2 ulp of
+# `Base.atan`, so the factors differ from those of `_contour_vf` only by rounding error.
+# `view_factors` itself keeps `_Receiver`.
 
 # A sector receiver with its loop as x, y, z arrays, closed (the first vertex repeated).
 struct _SoAReceiver
@@ -1021,10 +1056,11 @@ _soa_receiver(r) = r
 _closer_than(p, r::_SoAReceiver, d) = _closer_than(p, r.r, d)
 _distance_to(p, r::_SoAReceiver) = _distance_to(p, r.r)
 
-# `_receiver_vf(p, n, r.r)` to round-off, with the contour of `_contour_soa`, which also
-# counts the loop's vertices on or behind p's tangent plane: the side test rides in the
-# same vectorized loop (a separate scalar pass over the vertices cost about a third as
-# much as the contour). A loop the plane cuts takes `_clipped_loop_vf`.
+# Equals `_receiver_vf(p, n, r.r)` within round-off, with the contour of `_contour_soa`.
+# That function also counts the vertices of the loop on or behind the tangent plane of p,
+# so the side test runs in the same vectorized loop. A separate scalar pass over the
+# vertices cost about a third as much as the contour. A loop that the plane cuts takes
+# `_clipped_loop_vf`.
 function _receiver_vf(p, n, r::_SoAReceiver)
     f, nb = _contour_soa(p, n, r.x, r.y, r.z)
     nb == 0 && return f
@@ -1032,11 +1068,12 @@ function _receiver_vf(p, n, r::_SoAReceiver)
     return _clipped_loop_vf(p, n, r.r.loop)
 end
 
-# The contour over the loop clipped to the half-space in front of p (Sutherland–Hodgman,
-# streamed: no vertex list). On a nonconvex loop (an annular sector) the clipped boundary
-# may run along the cutting line in coincident pairs of opposite edges, whose terms
-# cancel, so this is the sum over the clipped triangles (`_point_polygon_vf`) to
-# round-off, at one term per edge instead of three per triangle.
+# Returns the contour over the loop clipped to the half-space in front of p, by
+# Sutherland–Hodgman streamed without a vertex list. On a nonconvex loop (an annular
+# sector) the clipped boundary may run along the cutting line in coincident pairs of
+# opposite edges, whose terms cancel. The result is therefore the sum over the clipped
+# triangles (`_point_polygon_vf`) within round-off, at one term per edge instead of
+# three per triangle.
 function _clipped_loop_vf(p, n, loop)
     s = 0.0
     m = length(loop)
@@ -1047,7 +1084,7 @@ function _clipped_loop_vf(p, n, loop)
     for k in 1:m
         b = loop[k] - p
         hb = dot(n, loop[k] - p)
-        # the edge a → b: its crossing of the plane, then b if in front
+        # for the edge from a to b, its crossing of the plane, then b if in front
         for (emit, x) in (((ha > 0) != (hb > 0) && ha != hb, a + ha / (ha - hb) * (b - a)), (hb > 0, b))
             emit || continue
             started ? (s += _edge_term(n, prev, x)) : (first = x; started = true)
@@ -1059,9 +1096,9 @@ function _clipped_loop_vf(p, n, loop)
     return abs(s) / (2π)
 end
 
-# `_contour_vf` over the closed loop x, y, z (@noinline as `_contour_vf` is), and the
-# number of its vertices with n·(v - p) ≤ 0 (an integer sum, which vectorizes where a
-# floating-point min does not).
+# Returns `_contour_vf` over the closed loop x, y, z (@noinline as `_contour_vf` is) and
+# the number of its vertices with n·(v - p) ≤ 0. The count is an integer sum, which
+# vectorizes where a floating-point min does not.
 @noinline function _contour_soa(p, n, X, Y, Z)
     px, py, pz = p
     nx, ny, nz = n
@@ -1080,10 +1117,11 @@ end
     return abs(s) / (2π), nb
 end
 
-# atan(y, x) for y ≥ 0 without branches (so it vectorizes): the ratio of the smaller to
-# the larger of y, |x| is reduced to |u| ≤ tan(π/8), where fdlibm's polynomial (s_atan.c,
-# which `Base.atan` also uses, valid to |u| < 7/16) applies; π/4, π/2 and π are added
-# in two parts. Within 2 ulp of `Base.atan` (10⁶ random arguments over 12 decades).
+# Returns atan(y, x) for y ≥ 0 without branches, so that it vectorizes. The ratio of the
+# smaller to the larger of y, |x| is reduced to |u| ≤ tan(π/8), where the polynomial of
+# fdlibm applies (s_atan.c, which `Base.atan` also uses, valid to |u| < 7/16). π/4, π/2
+# and π are added in two parts. The result is within 2 ulp of `Base.atan` (10⁶ random
+# arguments over 12 decades).
 @inline function _atan_nb(y::Float64, x::Float64)
     ax = abs(x)
     lo, hi = min(y, ax), max(y, ax)
@@ -1104,27 +1142,28 @@ end
 
 # --------------------------------------------- near flat pairs: double contour
 #
-# The cell rule of a near pair refines toward the receiver down to maxdepth, so a pair
-# sharing an edge costs the edge's length over the finest cell (10³–10⁴ point-to-polygon
-# factors: 60–90% of the view-factor time of boxes, remeshed CAD and sliver tubes), and
-# its one-point cells away from the edge still leave ~5e-4. Two flat surfaces that see
-# each other wholly from in front exchange exactly
+# The cell rule of a near pair refines toward the receiver down to maxdepth. A pair that
+# shares an edge therefore costs the length of the edge over the finest cell, 10³–10⁴
+# point-to-polygon factors, which is 60–90% of the view-factor time of boxes, remeshed CAD
+# and sliver tubes. Its one-point cells away from the edge still leave about 5e-4. Two
+# flat surfaces with a full view of each other from in front exchange exactly
 #
 #     G = A_i F_ij = (1/2π) Σ_a Σ_b (â·b̂) ∫_a ∫_b ln r ds dt
 #
-# over the directed edges a of i's outline and b of j's (Stokes twice: the contour form
-# of the point-to-polygon factor, then of its integral over i; Sparrow 1963, Mitalas &
-# Stephenson 1966), which holds for a folded element as well as a planar one (interior
-# edges cancel) as long as no facet hides another: every facet lies in front of the
-# plane of every other facet, of its element and of the partner. The inner integral is
-# closed form and the outer one adaptive Gauss–Kronrod, with the s ln s of two edges
-# meeting at a point subtracted, edges on one line in closed form, an edge split where
-# the other ends on it, and product Gauss–Legendre for edges far apart for their lengths.
-# The constant part of ln r integrates to zero over closed outlines, so coordinates are
-# scaled to the pair's size (no large logarithms to cancel). Exact for the facets, where
-# the cell rule emits from the element's mean plane: on remeshed CAD walls, neighbors
-# folded by a few degrees exchanged 10–70% off (research notes, "Near flat pairs by the
-# double contour").
+# over the directed edges a of the outline of i and b of the outline of j. The formula
+# follows from Stokes twice, for the contour form of the point-to-polygon factor and then
+# for its integral over i (Sparrow 1963, Mitalas & Stephenson 1966). It holds for a folded
+# element as well as a planar one, since interior edges cancel, as long as no facet hides
+# another. Every facet must lie in front of the plane of every other facet, of its
+# element and of the partner. The inner integral is closed form and the outer one
+# adaptive Gauss–Kronrod. The s ln s of two edges meeting at a point is subtracted, edges
+# on one line are integrated in closed form, an edge is split where the other ends on it,
+# and edges far apart for their lengths take product Gauss–Legendre. The constant part of
+# ln r integrates to zero over closed outlines, so coordinates are scaled to the size of
+# the pair, and no large logarithms need to cancel. The formula is exact for the facets,
+# whereas the cell rule emits from the mean plane of the element. On remeshed CAD walls,
+# neighbors folded by a few degrees exchanged 10–70% off with the cell rule (research
+# notes, "Near flat pairs by the double contour").
 
 struct _Outline
     edges::Vector{NTuple{2,Vec3}}   # directed outline (counterclockwise about the front)
@@ -1134,8 +1173,9 @@ struct _Outline
     size::Float64
 end
 
-# Outline of flat element `e` (not curved): its facets' boundary from the component mesh's
-# vertex ids (exact cancellation of interior edges), straight runs merged.
+# Returns the outline of flat element `e` (not curved), the boundary of its facets from
+# the vertex ids of the component mesh, with exact cancellation of interior edges and
+# straight runs merged.
 function _outline(t::Target, e, offset, size)
     c = t.elem_comp[e]
     m = t.components[c].mesh
@@ -1157,8 +1197,9 @@ end
 
 _in_front((n, o), vs, tol) = all(v -> dot(n, v - o) >= -tol, vs)
 
-# G of the flat pair (i, j) by the double contour when each lies wholly in front of the
-# other's planes (to 1e-9 of their size) and neither hides part of itself; else NaN.
+# Returns G of the flat pair (i, j) by the double contour when each lies wholly in front
+# of the planes of the other (to 1e-9 of their size) and neither hides part of itself, or
+# else NaN.
 function _contour_pair_vf(oi::_Outline, oj::_Outline)
     oi.concave && oj.concave || return NaN
     L = max(oi.size, oj.size)
@@ -1190,7 +1231,7 @@ _lnr_line(x) = x == 0 ? 0.0 : x^2 * log(abs(x)) / 2 - 3x^2 / 4
 function _lnr_edges(P0, P1, Q0, Q1)
     La, Lb = norm(P1 - P0), norm(Q1 - Q0)
     (La == 0 || Lb == 0) && return 0.0
-    # far apart for their lengths: ln r is analytic over both, product Gauss–Legendre
+    # far apart for their lengths, ln r is analytic over both and product Gauss–Legendre applies
     ρ = 4norm(P0 + P1 - Q0 - Q1) / 2(La + Lb)
     ρ >= _FAR_RHO[1] && return _lnr_gauss(P0, P1, Q0, Q1, ρ)
     â, b̂ = (P1 - P0) / La, (Q1 - Q0) / Lb
@@ -1201,7 +1242,7 @@ function _lnr_edges(P0, P1, Q0, Q1)
         b1, b2 = minmax(tQ0, tQ1)
         return _lnr_line(La - b1) - _lnr_line(-b1) - _lnr_line(La - b2) + _lnr_line(-b2)
     end
-    # an end of one edge inside the other: split there
+    # an end of one edge inside the other splits the edge there
     for (d, t, X) in ((dQ0, tQ0, Q0), (dQ1, tQ1, Q1))
         d <= ε && ε < t < La - ε && return _lnr_edges(P0, X, Q0, Q1) + _lnr_edges(X, P1, Q0, Q1)
     end
@@ -1210,11 +1251,11 @@ function _lnr_edges(P0, P1, Q0, Q1)
         d <= ε && ε < t < Lb - ε && return _lnr_edges(P0, P1, Q0, X) + _lnr_edges(P0, P1, X, Q1)
     end
     tol = 1e-14 * La * Lb
-    # size of the terms of the inner integral (τ ln q at |τ| ≤ R, the farthest distance)
+    # size of the terms of the inner integral (τ ln q at |τ| ≤ R, with R the farthest distance)
     R = max(norm(P0 - Q0), norm(P0 - Q1), norm(P1 - Q0), norm(P1 - Q1))
     mag = (R + Lb) * (abs(2log(R)) + 4)
-    # meeting at an end: from the common point A along both, the inner integral is
-    # H(Lb − s c; s sθ) − H(−s c; s sθ), and the second term is s(c − c ln s − sθ atan(c/sθ))
+    # For edges meeting at an end, from the common point A along both, the inner integral is
+    # H(Lb − s c; s sθ) − H(−s c; s sθ), and the second term is s(c − c ln s − sθ atan(c/sθ)).
     for (A, B) in ((P0, P1), (P1, P0)), (C, D) in ((Q0, Q1), (Q1, Q0))
         norm(A - C) <= ε || continue
         a, b = (B - A) / La, (D - A) / Lb
@@ -1233,11 +1274,12 @@ const _GLR = ntuple(8) do n
     (; x = (F.values .+ 1) ./ 2, w = F.vectors[1, :] .^ 2)
 end
 
-# Thresholds of ρ = 2|mid_a − mid_b| / (La + Lb) (twice the separation over the summed
-# half-lengths, about the Bernstein-ellipse parameter of ln r's nearest singularity)
-# above which n × n points take ∫∫ ln r to 1e-13 of La Lb (its round-off), for n = 6, 5,
-# 4, 3, 2: calibrated on 3000 random segment pairs against 40-point product Gauss on 4 × 4
-# panels (research notes, "Near flat pairs by the double contour").
+# Thresholds of ρ = 2|mid_a − mid_b| / (La + Lb) above which n × n points give ∫∫ ln r to
+# 1e-13 of La Lb, its round-off, for n = 6, 5, 4, 3, 2. ρ is twice the separation over
+# the summed half-lengths, about the Bernstein-ellipse parameter of the nearest
+# singularity of ln r. The thresholds were calibrated on 3000 random segment pairs against
+# 40-point product Gauss on 4 × 4 panels (research notes, "Near flat pairs by the double
+# contour").
 const _FAR_RHO = (16.0, 24.0, 40.0, 120.0, 2000.0)
 
 function _lnr_gauss(P0, P1, Q0, Q1, ρ)
@@ -1261,7 +1303,7 @@ function _lnr_gauss_n(P0, P1, Q0, Q1, n)
     return s * norm(a) * norm(b) / 2
 end
 
-# Gauss–Kronrod 7–15 (QUADPACK's qk15) on [a, b], bisected until the Gauss–Kronrod
+# Gauss–Kronrod 7–15 (qk15 of QUADPACK) on [a, b], bisected until the Gauss–Kronrod
 # difference is under tol.
 const _XK15 = (0.991455371120812639206854697526329, 0.949107912342758524526189684047851,
                0.864864423359769072789712788640926, 0.741531185599394439863864773280788,
@@ -1284,8 +1326,8 @@ function _gk_adapt(f::F, a, b, tol, mag, depth = 0) where {F}
         Kabs += _WK15[k] * (abs(y1) + abs(y2))
         iseven(k) && (G += _WG7[k ÷ 2] * (y1 + y2))
     end
-    # converged, or at the round-off of f, whose terms are of size `mag` (a tolerance
-    # under it would bisect every interval down to the depth limit)
+    # The integral is converged, or at the round-off of f, whose terms are of size `mag`.
+    # A tolerance under it would bisect every interval down to the depth limit.
     E = abs(K - G)
     (!(E * h > tol && E > 100eps() * (Kabs + mag)) || depth >= 40) && return K * h   # (NaN stops)
     return _gk_adapt(f, a, c, tol / 2, mag, depth + 1) + _gk_adapt(f, c, b, tol / 2, mag, depth + 1)
@@ -1294,27 +1336,27 @@ end
 # ------------------------------------- near coaxial pairs: the double contour with arcs
 #
 # Polar sectors and chord rectangles of a cylinder have outlines of circular arcs about an
-# axis and straight edges. Two such elements about one axis (an end cap's sector and the
-# wall next to it, a gap's annulus and the slot's aperture, the annuli across a gap) that
-# lie wholly in front of each other exchange G = (1/2π) ∮∮ ln r dl_i·dl_j over their
-# outlines with the arcs taken exactly (the surface spanning an outline does not enter,
-# so a cylinder patch takes it as a flat pair does). The cell rule refined such pairs
-# toward the shared arc down to maxdepth onto 34-edge sector receivers whose chords leave
-# a slit along it: 2.3 ms per pair of a 20 µm gap's aperture and annulus (~half of a bored
-# cavity's view-factor time) and 1e-3 to 4e-2 off a converged quadrature. Arc × arc terms
-# reduce to one integral over the azimuth difference; arc × line terms take the line's
-# integral in closed form (research notes, "Near sector pairs by the double contour with
-# arcs").
+# axis and straight edges. Two such elements about one axis that lie wholly in front of
+# each other exchange G = (1/2π) ∮∮ ln r dl_i·dl_j over their outlines, with the arcs
+# taken exactly. Examples are the sector of an end cap and the wall next to it, the
+# annulus of a gap and the aperture of the slot, and the annuli across a gap. The surface
+# spanning an outline does not enter, so a cylinder patch takes the formula as a flat
+# pair does. The cell rule refined such pairs toward the shared arc down to maxdepth onto
+# 34-edge sector receivers whose chords leave a slit along the arc. For the aperture and
+# annulus of a 20 µm gap, this took about half of the view-factor time of a bored cavity
+# and was 1e-3 to 4e-2 off a converged quadrature. Arc × arc terms reduce to one integral
+# over the azimuth difference, and arc × line terms take the integral of the line in
+# closed form (research notes, "Near sector pairs by the double contour with arcs").
 
 struct _ArcOutline
     axis::Vec3                          # the axis (sign canonical) and its frame
     origin::Vec3
     e1::Vec3
     e2::Vec3
-    arcs::Vector{NTuple{4,Float64}}     # (ρ, z, φ0, φ1) in the frame, directed φ0 → φ1
+    arcs::Vector{NTuple{4,Float64}}     # (ρ, z, φ0, φ1) in the frame, directed from φ0 to φ1
     segs::Vector{NTuple{2,Vec3}}        # straight edges in frame coordinates (x, y, z)
-    plane::Int8                         # sector: ±1, front along ±axis; 0: inward cylinder patch
-    h::Float64                          # the sector's height z, or the cylinder's radius
+    plane::Int8                         # ±1, a sector with front along ±axis; 0, an inward cylinder patch
+    h::Float64                          # height z of the sector, or radius of the cylinder
     zlo::Float64
     zhi::Float64
     rhi::Float64
@@ -1353,7 +1395,7 @@ function _arc_outline(t::Target, e, s::DiskSurface, size)
     return _ArcOutline(ax, o, e1, e2, arcs, segs, front, z, z, z, r1, size)
 end
 
-# a chord rectangle of a cylinder seen from inside: two azimuths × two heights
+# a chord rectangle of a cylinder seen from inside, with two azimuths × two heights
 function _arc_outline(t::Target, e, s::CylinderSurface, size)
     t.elem_curved[e] < 0 || return nothing
     ax, o, e1, e2 = _axis_frame(s.axis, s.origin)
@@ -1383,8 +1425,8 @@ function _arc_outline(t::Target, e, s::CylinderSurface, size)
     return _ArcOutline(ax, o, e1, e2, arcs, segs, Int8(0), R, zlo, zhi, R, size)
 end
 
-# G of a near pair of arc outlines about one axis, each wholly in front of the other (to
-# 1e-9 of their size); else NaN.
+# Returns G of a near pair of arc outlines about one axis, each wholly in front of the
+# other (to 1e-9 of their size), or else NaN.
 function _arc_pair_vf(oi::_ArcOutline, oj::_ArcOutline)
     L = max(oi.size, oj.size)
     δ = 1e-9 * L
@@ -1421,12 +1463,13 @@ function _arc_front(self::_ArcOutline, o::_ArcOutline, δ)
     return self.plane * (o.zlo - self.h) >= -δ && self.plane * (o.zhi - self.h) >= -δ
 end
 
-# ∫∫ cos(φ − ψ) ln r ρ1 ρ2 dφ dψ over two arcs about one axis (directed a → b): one
-# integral over u = φ − ψ, weighted by the overlap w(u) of the two ranges (linear between
-# breakpoints). r² = c + 4ρ1ρ2 sin²(u/2) with c = (ρ1 − ρ2)² + Δz², whose logarithm is
-# singular (coincident circles) or sharply peaked (circles 20 µm apart) at u = 0: its
-# part ½ ln(c + ρ1ρ2 u²) times w is integrated in closed form on each piece, and the
-# smooth rest by Gauss–Kronrod.
+# Returns ∫∫ cos(φ − ψ) ln r ρ1 ρ2 dφ dψ over two arcs about one axis, each directed from
+# a to b. It is one integral over u = φ − ψ, weighted by the overlap w(u) of the two
+# ranges (linear between breakpoints). r² = c + 4ρ1ρ2 sin²(u/2) with
+# c = (ρ1 − ρ2)² + Δz², and its logarithm is singular at u = 0 for coincident circles or
+# sharply peaked there for circles 20 µm apart. The part ½ ln(c + ρ1ρ2 u²) times w is
+# therefore integrated in closed form on each piece, and the smooth rest by
+# Gauss–Kronrod.
 function _lnr_arcs(ρ1, z1, a1, b1, ρ2, z2, a2, b2)
     σ = (b1 > a1) == (b2 > a2) ? 1.0 : -1.0
     Alo, Ahi = minmax(a1, b1)
@@ -1486,9 +1529,9 @@ function _lnq1(u, c, κ)
     return (s2 * log(s2) - κ * u * u) / 4κ
 end
 
-# ∫_arc ∫_seg (t̂_arc·b̂) ln r over the arc (ρ, z, a → b) and the segment Q0 → Q1 (frame
-# coordinates): inner integral closed form, outer adaptive, split at the azimuths of the
-# segment's ends.
+# Returns ∫_arc ∫_seg (t̂_arc·b̂) ln r over the arc (ρ, z, from a to b) and the segment from
+# Q0 to Q1 (frame coordinates). The inner integral is in closed form, and the outer one
+# adaptive, split at the azimuths of the ends of the segment.
 function _lnr_arc_seg(ρ, z, a, b, Q0, Q1)
     Lb = norm(Q1 - Q0)
     Lb == 0 && return 0.0
@@ -1535,16 +1578,16 @@ end
 """
     closure_error(F) -> Vector
 
-`1 - Σⱼ Fᵢⱼ` per element: the fraction of each element's emission that leaves the
-geometry entirely (zero for every element of a closed enclosure, up to discretization
-error).
+`1 - Σⱼ Fᵢⱼ` per element, the fraction of the emission of each element that leaves the
+geometry entirely. It is zero for every element of a closed enclosure, up to
+discretization error.
 """
 closure_error(F::AbstractMatrix) = 1 .- _rowsums(F)
 
-# Adaptive outer quadrature for near pairs: emitter cells are subdivided while they lie
+# Adaptive outer quadrature for near pairs. Emitter cells are subdivided while they lie
 # within `ratio` cell sizes of the receiver, so the points concentrate along a shared
-# edge, where the point-to-polygon factor has a logarithmic slope (it tends to ½ at the
-# edge of two perpendicular faces). Uniform refinement converges slowly there from the
+# edge, where the point-to-polygon factor has a logarithmic slope; it tends to ½ at the
+# edge of two perpendicular faces. Uniform refinement converges slowly there from the
 # side of the element that is long across the edge.
 function _adaptive_kernel(t::Target, e, rc; mindepth::Integer = 2, maxdepth::Integer = 8, ratio = 2.0)
     s = t.components[t.elem_comp[e]].surface
@@ -1581,21 +1624,22 @@ function _adapt_tri(s, sgn, nflat, a, b, c, rc, depth, mindepth, maxdepth, ratio
     return w * _receiver_vf(p, n, rc)
 end
 
-# Slivers. The midpoint split keeps a triangle's shape, so a sliver (a 20 µm gap's
-# chord rectangle, a bore one element tall) stays one at every depth, and the test
-# `distance < ratio × longest edge` holds for every thin row of it near a receiver: such
-# an element took tens of times the cells of a square one. A triangle whose longest edge
-# h has h² > `_SLIVER` × twice its area (a chord rectangle more than ~4:1; primitive
-# walls are ≤ 2.5, geodesic capsules 1.5, latitude-longitude polar caps 5.2) is instead
-# cut across its length, which halves h as the midpoint split does, until its pieces are
-# no longer slivers. Triangles under the bound split as before into children similar to
-# them, so their factors are bitwise unchanged.
+# Slivers. The midpoint split keeps the shape of a triangle, so a sliver stays a sliver
+# at every depth. Examples are the chord rectangle of a 20 µm gap and a bore one element
+# tall. The test `distance < ratio × longest edge` then holds for every thin row of it
+# near a receiver, and such an element took tens of times the cells of a square one. A
+# triangle whose longest edge h has h² > `_SLIVER` × twice its area is instead cut across
+# its length, which halves h as the midpoint split does, until its pieces are no longer
+# slivers. The bound corresponds to a chord rectangle of more than about 4:1. Primitive
+# walls are ≤ 2.5, geodesic capsules 1.5 and latitude-longitude polar caps 5.2. Triangles
+# under the bound split as before into children similar to them, so their factors are
+# unchanged.
 const _SLIVER = 4.5
 
-# `f` summed over the pieces of the sliver (a, b, c): a needle (one edge under half the
-# longest) is cut parallel to that short edge through the midpoints of the long ones
-# (the tip, similar to it, and the two halves of the base trapezoid); a flat one (an
-# angle near 180°) is bisected at its longest edge.
+# Returns `f` summed over the pieces of the sliver (a, b, c). A needle, with one edge
+# under half the longest, is cut parallel to that short edge through the midpoints of
+# the long ones, into the tip, which is similar to the needle, and the two halves of the
+# base trapezoid. A flat sliver, with an angle near 180°, is bisected at its longest edge.
 function _split_sliver(f, a, b, c)
     lab, lbc, lca = norm(b - a), norm(c - b), norm(a - c)
     h = max(lab, lbc, lca)
@@ -1606,7 +1650,7 @@ function _split_sliver(f, a, b, c)
         m1, m2 = (v + s1) / 2, (v + s2) / 2
         return f(v, m1, m2) + f(m1, s1, s2) + f(m1, s2, m2)
     end
-    # p–q the longest edge, o opposite it
+    # p–q is the longest edge, and o lies opposite it
     p, q, o = lab >= lbc && lab >= lca ? (a, b, c) : lbc >= lca ? (b, c, a) : (c, a, b)
     m = (p + q) / 2
     return f(p, m, o) + f(m, q, o)
@@ -1618,7 +1662,7 @@ function _adapt_sector(s, n, r0, r1, a, b, rc, depth, mindepth, maxdepth, ratio)
     h = max(r1 - r0, r1 * (b - a))
     if depth < mindepth || (depth < maxdepth && _within(p, rc, ratio * h))
         φm = (a + b) / 2
-        # a sector long one way (a gap's annulus) is halved across that way only (`_SLIVER`)
+        # a sector long one way (the annulus of a gap) is halved only across that way (`_SLIVER`)
         if r1 * (b - a) > _SLIVER_SECTOR * (r1 - r0)
             return _adapt_sector(s, n, r0, r1, a, φm, rc, depth + 1, mindepth, maxdepth, ratio) +
                    _adapt_sector(s, n, r0, r1, φm, b, rc, depth + 1, mindepth, maxdepth, ratio)
@@ -1640,12 +1684,13 @@ const _SLIVER_SECTOR = 4.0
 
 _distance_to(p, r::_Receiver) = minimum(_point_triangle_distance(p, tri...) for tri in r.tris)
 
-# `_distance_to(p, r) < d`, decided the same way. A sector's 32 triangles made the
-# distance about half the cost of its near pairs (the adaptive rule asks it at every
-# cell); its loop in plane coordinates gives the distance in one pass (inside the
-# polygon: the height over its plane; else the nearest edge), which agrees with the
-# triangles' to round-off. Only a verdict within 1e-9 (relative) of d is left to the
-# triangles, so the refinement, and every factor, is bitwise unchanged.
+# `_distance_to(p, r) < d`, decided the same way. The 32 triangles of a sector made the
+# distance about half the cost of its near pairs, since the adaptive rule computes it at
+# every cell. The loop of the sector in plane coordinates gives the distance in one
+# pass, as the height over its plane inside the polygon and as the distance to the
+# nearest edge otherwise. That distance agrees with the triangles within round-off. Only
+# a verdict within 1e-9 (relative) of d is left to the triangles, so the refinement and
+# every factor are unchanged.
 function _closer_than(p, r::_Receiver, d)
     isempty(r.loop) && return _distance_to(p, r) < d
     x = p - r.o
@@ -1674,7 +1719,8 @@ end
 _within(p, r::Union{_Receiver,_SoAReceiver}, d) = _closer_than(p, r, d)
 _within(p, r, d) = _distance_to(p, r) < d
 
-# Distance from p to the triangle (a, b, c) (Ericson, Real-Time Collision Detection 5.1.5).
+# Returns the distance from p to the triangle (a, b, c) (Ericson, Real-Time Collision
+# Detection 5.1.5).
 function _point_triangle_distance(p, a, b, c)
     ab, ac, ap = b - a, c - a, p - a
     d1, d2 = dot(ab, ap), dot(ac, ap)

@@ -10,8 +10,8 @@
     wall = gold()
     core(prof) = hohlraum(; profile = prof, leh_radius = 1.55, capsule_radius = 0.0, wall, h,
                           leh_open_radius = 0.84 * 1.55)
-    # a frustraum: the end radius filled in on the switch (60% of the waist radius, at
-    # least 1.2 times the LEH radius)
+    # Switching to a frustraum fills in the end radius, 60% of the waist radius and at
+    # least 1.2 times the LEH radius.
     @test edit_part!(ts, i, :profile, "1")
     p = ts.parts[][i]
     @test p.values[:end_radius] == 1.86                    # 1.2 times the LEH radius here
@@ -29,7 +29,8 @@
     @test !edit_part!(ts, i, :end_radius, "1.5") && occursin("narrower than the end", ts.error[])
     @test !edit_part!(ts, i, :profile, "3")
 
-    # sections: from the frustraum's breaks; a cylinder starts as four equal sections
+    # The sections come from the breaks of the frustraum, and a cylinder starts as four
+    # equal sections.
     @test edit_part!(ts, i, :profile, "2")
     p = ts.parts[][i]
     @test p.sections == [(-5.05, 2.0), (0.0, 2.875), (5.05, 1.86)]
@@ -41,7 +42,8 @@
     @test hohlraum_pieces(q)[1:4] == [:wall_1, :wall_2, :wall_3, :wall_4]
     t = ts2.target[]
     @test sum(t.elem_area[elements(t, (Symbol(:hohlraum_wall_, k) for k in 1:4)...)]) ≈ 2π * 2.875 * 10.1 rtol = 1e-12
-    # the table: a radius, an inner height, a break added (the shape kept) and removed
+    # The table edits a radius and an inner height, and a break is added, with the shape
+    # unchanged, and removed.
     @test edit_hohlraum_break!(ts2, 1, 3, :r, "3.1")
     @test edit_hohlraum_break!(ts2, 1, 2, :z, "-3.0")
     @test ts2.parts[][1].sections[2:3] == [(-3.0, 2.875), (0.0, 3.1)]
@@ -87,8 +89,8 @@ end
     # the keep-out sees the two entrance holes
     @test ApertureKeepOut(sess.drive.scenario[].target).names == [:frustraum_leh_top, :frustraum_leh_bottom]
 
-    # sessions: a frustraum and a section list round trip; a session saved before
-    # profiles (no profile values, no sections) loads as before
+    # In sessions a frustraum and a section list round-trip. A session saved before
+    # profiles, without profile values or sections, loads as before.
     s = DesignSession(resolution = :coarse)
     @test edit_part!(s.target, 1, :profile, "2") && edit_hohlraum_break!(s.target, 1, 3, :r, "3.0")
     path = joinpath(mktempdir(), "profile.briar.toml")
@@ -115,7 +117,8 @@ end
     quads = nif_quads(power = 8.0)
     cone = Controllers._cone_pointing(quads, Controllers.NIF_CONE_POINTING)
     fz = Controllers._cone_pointing(quads, Controllers.FRUSTRAUM_CONE_POINTING)
-    # the starter at TCC: the aims of the frustraum pointing, in its holes' frames
+    # The starter at TCC takes the aims of the frustraum pointing, in the frames of its
+    # holes.
     s = DesignSession(starter = :frustraum, resolution = :coarse)
     @test s.beams.beams[] == fz && all(s.beams.enabled[])
     # File ▸ New target from the default design loads the preset again for the frustraum
@@ -156,10 +159,11 @@ end
     @test abs(ff[:outer44][1] - fc[:outer44][1]) < 6e-3       # 0.4492 against 0.4544
     # the inner cones land farther past the waist than on the cylinder (the hole limits them)
     @test isapprox(ff[:inner23][1], -0.3715; atol = 2e-3) && isapprox(ff[:inner30][1], -0.1542; atol = 2e-3)
-    # clearance from the entrance holes: every quad and every beam of the presets positive,
-    # the clamped cones at the cylinder pointing's smallest (its 23.5° cone's, 0.0656 mm).
-    # The presets were clamped on the exact minimum over the rim (`softness = 0`); the
-    # keep-out's default smooth minimum reads up to 0.2 µm below it (0.13 µm here).
+    # The clearance from the entrance holes is positive for every quad and every beam of the
+    # presets, and the clamped cones are at the smallest clearance of the cylinder pointing,
+    # 0.0656 mm for its 23.5° cone. The presets were clamped on the exact minimum over the
+    # rim (`softness = 0`). The default smooth minimum of the keep-out is up to 0.2 µm below
+    # it, 0.13 µm in this case.
     kc, kf = ApertureKeepOut(cyl; softness = 0), ApertureKeepOut(fr; softness = 0)
     m = minimum(aperture_clearance(kc, cone))
     cf = aperture_clearance(kf, fz)
@@ -187,9 +191,9 @@ end
     @test hohlraum_pieces(p)[1:3] == [:wall_1, :wall_2, :wall_3]
     @test wall(ts) ≈ A0 rtol = 1e-12
     @test hohlraum_profile(p).r[3] ≈ (2.875 + 1.86) / 2
-    # again: now the lower section is the longest
+    # After the second change the lower section is the longest.
     @test add_hohlraum_break!(ts, i)
     @test ts.parts[][i].sections[2] == (-2.525, (2.0 + 2.875) / 2) && isapprox(wall(ts), A0; rtol = 1e-12)
-    # a part that is not a hohlraum has no sections
+    # A part that is not a hohlraum does not have sections.
     @test !add_hohlraum_break!(ts, part_index(ts, :capsule)) && !isempty(ts.error[])
 end

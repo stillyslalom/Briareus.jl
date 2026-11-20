@@ -1,16 +1,17 @@
-# Corona absorption operator (polar direct drive, Stage 1; ROADMAP "Polar direct drive",
-# reference/litreview/polar_direct_drive.md decision 3 (b); research notes "Corona
-# absorption operator"). References, all independent of the operator's kernels, lattice
-# and rotations:
-# - closed forms: the radial ray (b = 0) of the truncated exponential corona absorbs
-#   1 - exp(-2(ν_c L/c)(2√w - (2/3)w^{3/2})), w = 1 - e^{-(R - r_c)/L} (Kruer's planar
-#   cos³ law at normal incidence, (8/3)ν_c L/c, as R → ∞); in n_e/n_c = a/r² a ray turns
-#   at r_t = √(a + b²), sweeps 2(b/r_t) arccos(r_t/R) and has optical depth
-#   2(ν_c/c)a²[√(R² - r_t²)/(2r_t²R²) + arcsec(R/r_t)/(2r_t³)] inside radius R;
-# - the thin-corona limit L/r_c → 0: a hard sphere at r_c absorbing η_a(ψ) I cos ψ
-#   (Murakami & Nishi 2017, Eq. 29), by 1-D quadrature about the beam axis;
-# - 3-D ray tracing by RK4 through the same corona (test/corona_raytrace.jl, the
-#   prototype's model (c));
+# This file tests the corona absorption operator for polar direct drive, Stage 1. The
+# sources are the ROADMAP item "Polar direct drive", decision 3 (b) in
+# reference/litreview/polar_direct_drive.md, and the research notes section "Corona
+# absorption operator". The references are all independent of the kernels, lattice and
+# rotations of the operator:
+# - Closed forms. The radial ray (b = 0) of the truncated exponential corona absorbs 1 -
+#   exp(-2(ν_c L/c)(2√w - (2/3)w^{3/2})), with w = 1 - e^{-(R - r_c)/L}. As R → ∞ this tends
+#   to the planar cos³ law of Kruer at normal incidence, (8/3)ν_c L/c. In n_e/n_c = a/r², a
+#   ray turns at r_t = √(a + b²), sweeps 2(b/r_t) arccos(r_t/R) and has optical depth
+#   2(ν_c/c)a²[√(R² - r_t²)/(2r_t²R²) + arcsec(R/r_t)/(2r_t³)] inside radius R.
+# - The thin-corona limit L/r_c → 0. A hard sphere at r_c absorbs η_a(ψ) I cos ψ (Murakami &
+#   Nishi 2017, Eq. 29), computed by 1-D quadrature about the beam axis.
+# - 3-D ray tracing by RK4 through the same corona, in test/corona_raytrace.jl, which is
+#   model (c) of the prototype.
 # - ForwardDiff against central differences.
 
 include("corona_raytrace.jl")
@@ -42,7 +43,8 @@ end
         α, f, esc, θ = Briareus._ray_deposits(prof, 0.0, 200)
         @test isapprox(1 - esc, 1 - exp(-2νc * L * (2sqrt(w) - 2 / 3 * w^1.5)); rtol = 1e-12)
         @test θ == 0 && all(==(0), α)
-        # n_e/n_c = a/r² (functions, not a table): swept angle and depth at every b
+        # For n_e/n_c = a/r², given as functions instead of a table, the swept angle and
+        # depth are checked at every b.
         a, ν, Ra = 0.04, 2.0, 2.0
         ne(r) = r > Ra ? 0.0 : a / r^2
         rate(r) = ν * ne(r)^2
@@ -87,11 +89,12 @@ end
     @testset "against 3-D ray tracing" begin
         c, absorbed, _ = _rt_corona(beams, (rc, L, νc, R); ncone = 3, hlat = 0.04, hτ = 0.008,
                                     nθ = 720)
-        # measured: absorbed 5e-7 relative, max |Δc_lm|/c₀₀ 2.9e-5 (l ≤ 30; the ray
-        # trace's angular grid; 1.3e-5 at half its lattice spacing)
+        # The measured differences are 5e-7 relative in absorbed power and 2.9e-5 in max
+        # |Δc_lm|/c₀₀ (l ≤ 30, set by the angular grid of the ray trace). The harmonic
+        # difference falls to 1.3e-5 at half the lattice spacing.
         @test isapprox(sum(dep.per_beam), absorbed; rtol = 5e-6)
         @test maximum(abs, c ./ c[1] .- dep.ylm ./ dep.ylm[1]) < 1e-4
-        # energy: the harmonics carry the absorbed power, which is below the delivered
+        # The harmonics carry the absorbed power, which is below the delivered power.
         @test isapprox(sqrt(4π) * dep.ylm[1], sum(dep.per_beam); rtol = 1e-12)
         @test all(0 .< dep.per_beam .< 1) && dep.delivered == 3
     end
@@ -122,8 +125,8 @@ end
         h = 1e-6
         fd = [(fσ(Δ0 .+ h .* (1:3 .== i)) - fσ(Δ0 .- h .* (1:3 .== i))) / 2h for i in 1:3]
         @test isapprox(g, fd; rtol = 1e-6)                  # 1.1e-8 measured
-        # dual beams give the Float64 values (to round-off: CI CPUs fuse the dual
-        # arithmetic differently, ~1e-16 of the norm)
+        # Dual beams give the Float64 values within round-off, ~1e-16 of the norm, since CI
+        # CPUs fuse the dual arithmetic differently.
         dd = deposit(op, pdd(ForwardDiff.Dual.(Δ0, 1.0)))
         @test isapprox(ForwardDiff.value.(dd.ylm), dep.ylm; rtol = 1e-12)
         @test_throws ArgumentError deposit(op, [remake(beams[1]; port = beams[2].port), beams[2:3]...])
@@ -131,9 +134,9 @@ end
     end
 
     @testset "deposition per radius" begin
-        # radial ray of the truncated exponential corona: per shell, from the one-pass
-        # depth outside radius r, τ(r) = (ν_c L/c)(H(x(r)) - H(x(R))), x = n_e/n_c,
-        # H(x) = -2√(1-x) + (2/3)(1-x)^{3/2} (∫ x/√(1-x) dx, with dr = -L dx/x)
+        # The radial ray of the truncated exponential corona is checked per shell from the
+        # one-pass depth outside radius r, τ(r) = (ν_c L/c)(H(x(r)) - H(x(R))). Here x =
+        # n_e/n_c and H(x) = -2√(1-x) + (2/3)(1-x)^{3/2} is ∫ x/√(1-x) dx with dr = -L dx/x.
         H(x) = -2sqrt(1 - x) + 2 / 3 * (1 - x)^1.5
         τin(r) = νc * L * (H(exp(-(clamp(r, rc, R) - rc) / L)) - H(exp(-(R - rc) / L)))
         T = τin(rc)
@@ -158,14 +161,15 @@ end
             maximum(abs, [sum(f[sh .== s]) for s in eachindex(r1)] .- r1)
         end
         @test maximum(errs) < 1e-12                          # 3.9e-14 measured
-        # the operator: shells partition the totals
+        # The shells of the operator partition the totals.
         ops = CoronaOperator(prof, beams; ncone = 3, shells = [rc - L; rc .+ L .* (-0.5:0.5:4); R])
         ds = deposit(ops, beams)
         @test isapprox(sum(ds.radial), sum(ds.per_beam); rtol = 1e-12)
         @test maximum(abs, sum(eachcol(ds.shell_ylm)) .- ds.ylm) < 1e-12 * ds.ylm[1]
         @test isapprox(sqrt(4π) .* ds.shell_ylm[1, :], ds.radial; rtol = 1e-12)
-        # against the operator without shells: absorbed power to round-off, harmonics to
-        # the refined panels' angular placement (2.2e-7 of c₀₀ measured)
+        # Against the operator without shells, the absorbed power agrees within round-off,
+        # and the harmonics agree up to the angular placement of the refined panels (2.2e-7
+        # of c₀₀ measured).
         @test isapprox(sum(ds.per_beam), sum(dep.per_beam); rtol = 1e-12)
         @test maximum(abs, ds.ylm .- dep.ylm) < 1e-6 * dep.ylm[1]
         @test isempty(dep.radial) && size(dep.shell_ylm) == (31^2, 0)
@@ -212,8 +216,9 @@ end
         # an axisymmetric E gives d = d̄ (here 1)
         d0 = shell_displacement_proxy(E(0.0), 8)
         @test isapprox(d0[1], sqrt(4π); rtol = 1e-13) && maximum(abs, d0[2:end]) < 1e-13
-        # lmax filters the result, not the field: with l = 6 content in the deposition, the
-        # l ≤ 4 output is the leading 25 coefficients of the full-degree (l ≤ 8) output
+        # lmax filters the result; the field is not filtered. With l = 6 content in the
+        # deposition, the l ≤ 4 output is the leading 25 coefficients of the full-degree (l
+        # ≤ 8) output.
         S6 = S(0.2)
         S6[mode_index(6, 0), :] .= (0.08, 0.1, 0.02)
         S6[mode_index(6, 3), :] .= (0.05, -0.04, 0.01)
@@ -231,7 +236,8 @@ end
         fd(t) = mode_rms(shell_displacement_proxy(E(t), 8; mean_displacement = dbar), 8; m = :nonzero)
         @test all(isapprox(ForwardDiff.derivative(g, 0.2), (g(0.2 + 1e-6) - g(0.2 - 1e-6)) / 2e-6;
                            rtol = 1e-7) for g in (fP, fd))      # 5e-11, 3e-11 measured
-        # errors: no shells; a deposition that leaves part of the sphere dark
+        # Errors are raised without shells and for a deposition that leaves part of the
+        # sphere dark.
         @test_throws ArgumentError ablation_pressure_proxy(op, dep)
         @test_throws ArgumentError ablation_pressure_proxy(o3, deposit(o3, beams))
         @test_throws ArgumentError shell_displacement_proxy(dep.ylm, 30)

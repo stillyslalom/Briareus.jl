@@ -1,25 +1,30 @@
-# Drive uncertainty from beam-to-beam errors (pointing and power), by linear propagation
-# through exact per-beam sensitivities, with a Monte Carlo check, and robust objectives
-# that add the expected mode power the errors cause.
+# This file propagates beam-to-beam errors in pointing and power to the drive shape. The
+# propagation is linear, through exact per-beam sensitivities, and a Monte Carlo
+# evaluation checks it. Robust objectives add the expected mode power that the errors
+# cause.
 
 struct _ErrorTag end
 
 """
     mode_sensitivity(scenario, beams; lmax = 4) -> NamedTuple
 
-Sensitivity of the observed flux's real spherical-harmonic shape `c_lm/c_00`
-(`mode_index` order, through `lmax ≤ 6`) to the errors of each beam: a pointing
-displacement of its aim transverse to the beam (mm, along the spot's `a` and `b` axes)
-and a relative power error. Returns `(; J, c, names)`: `J` is `(lmax+1)² × 3nb`,
-column `3(b-1) + k` the derivative with respect to error `k` of beam `b` (`k` = 1, 2
-the two transverse directions, 3 the relative power), `c` the nominal `c_lm/c_00`, and
-`names` the column labels.
+Computes the sensitivity of the real spherical-harmonic shape `c_lm/c_00` of the observed
+flux to the errors of each beam. The coefficients are in `mode_index` order, through
+`lmax ≤ 6`. Each beam has two kinds of error. One is a pointing displacement of its aim
+transverse to the beam, in mm along the spot `a` and `b` axes. The other is a relative
+power error. Returns `(; J, c, names)`:
 
-Each beam's deposition depends on its errors only, so the derivatives come from
-one forward-mode pass per beam with three dual partials: exact (to round-off), and
-about the cost of one gradient of an objective. The beams are the scenario's setup
-beams; a laser–plasma model is applied before the errors (the errors are in the
-delivered beams). Errors move the aim; the beam direction (the port) is fixed.
+- `J` is `(lmax+1)² × 3nb`, and column `3(b-1) + k` is the derivative with respect to
+  error `k` of beam `b`. Errors `k` = 1 and 2 are the two transverse directions, and
+  `k` = 3 is the relative power.
+- `c` is the nominal `c_lm/c_00`.
+- `names` contains the column labels.
+
+The deposition of each beam depends on its errors only, so the derivatives come from
+one forward-mode pass per beam with three dual partials: exact (within round-off), and
+about the cost of one gradient of an objective. The beams are the setup beams of the
+scenario. A laser–plasma model is applied before the errors, since the errors are in the
+delivered beams. Errors move the aim, and the beam direction, set by the port, is fixed.
 """
 function mode_sensitivity(s::Scenario, beams::AbstractVector{<:Beam}; lmax::Integer = 4)
     _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
@@ -30,17 +35,18 @@ function mode_sensitivity(s::Scenario, beams::AbstractVector{<:Beam}; lmax::Inte
     return (; J = dc, c, names)
 end
 
-# Derivatives of the shape c_i/c_1 (first `nm` coefficients of the contracted response
-# `R`: the scenario's `ylm_response` or `moment_response`) with respect to each beam's
-# three errors, and the shape, generic in the beams' number type (nested duals for
-# robust objectives).
-# With `axial`, a fourth column per beam: the aim moved along the beam (its focus moves
-# with it), which shared displacements (a quad's, the target's) have.
+# Returns the derivatives of the shape c_i/c_1 with respect to the three errors of each
+# beam, and the shape. The shape holds the first `nm` coefficients of the contracted
+# response `R`, which is the `ylm_response` or `moment_response` of the scenario. The
+# function is generic in the number type of the beams, so robust objectives can pass
+# nested duals. With `axial`, each beam gets a fourth column for the aim moved along the
+# beam, with the focus moving too. Shared displacements of a quad or of the target have
+# this component.
 function _beam_mode_derivatives(s::Scenario, beams, R::Matrix{Float64}, nm; axial::Bool = false)
     T = mapreduce(b -> typeof(b.power), promote_type, beams)
     nb = length(beams)
     N = axial ? 4 : 3
-    # the nominal coefficients, from all beams together
+    # Compute the nominal coefficients from all beams together.
     dep = lpi_deposit(s.lpi, s.deposition, beams, s.time)
     craw = _ylm_product(R, dep.element, nm)
     dcraw = Array{T}(undef, nm, N, nb)
@@ -61,8 +67,8 @@ function _beam_mode_derivatives(s::Scenario, beams, R::Matrix{Float64}, nm; axia
     return J, c
 end
 
-# Coefficients (first `nm`) of an element deposition through a contracted response:
-# Σₑ R[:, e] Pₑ, over the elements it reaches.
+# Returns the first `nm` coefficients of an element deposition through a contracted
+# response, Σₑ R[:, e] Pₑ over the elements that the deposition reaches.
 function _ylm_product(YR, P::AbstractVector{T}, nm) where {T}
     out = zeros(T, nm)
     @inbounds for e in eachindex(P)
@@ -75,9 +81,9 @@ function _ylm_product(YR, P::AbstractVector{T}, nm) where {T}
     return out
 end
 
-# ∂c/∂(errors of one beam), nm × N, from a pass of that beam alone with N dual
-# partials: the aim moved along the spot axes, the power scaled, and (N = 4) the aim
-# moved along the beam.
+# Returns ∂c/∂(errors of one beam), nm × N, from a pass over only that beam with N dual
+# partials. The partials move the aim along the spot axes and scale the power. With
+# N = 4, the fourth partial moves the aim along the beam.
 function _beam_coefficient_partials(s::Scenario, b::Beam{V}, bi, R, nm, ::Val{N} = Val(3)) where {V,N}
     op = s.deposition
     D = ForwardDiff.Dual{ForwardDiff.Tag{_ErrorTag,V},V,N}
@@ -87,13 +93,14 @@ function _beam_coefficient_partials(s::Scenario, b::Beam{V}, bi, R, nm, ::Val{N}
     N == 4 && (aim += one3(4) * _beam_k(b))
     bd = remake(b; aim, power = b.power * (one(V) + one3(3)), defocus = D(b.defocus),
                 spot = _retype(b.spot, D), dlambda = D(b.dlambda))
-    # a laser–plasma model's ridge stop (`lpi_deposit`) takes g of the beam off the operator
+    # With a ridge stop in the laser–plasma model (`lpi_deposit`), a fraction g of the beam
+    # is deposited directly on the ridge elements, and the rest goes through the operator.
     rs = _ridge_split(s.lpi, op, bd, s.time)
     Pr = rs === nothing ? zero(bd.power) : bd.power * rs.g
     rs === nothing || (bd = remake(bd; power = bd.power * (1 - rs.g)))
     f = BeamFrame(bd)
-    # the coefficients accumulated point by point (an element vector per beam, of nested
-    # duals in a robust objective, is most of the cost)
+    # Accumulate the coefficients point by point. An element vector per beam, of nested
+    # duals in a robust objective, would be most of the cost.
     craw = zeros(D, nm)
     _sum_points(op, bi, f, _screen_frame(f, bd), _cone_slopes(op.dirs[bi], f),
                 eachindex(op.w[bi]), D) do d, val
@@ -118,37 +125,45 @@ _beam_k(b::Beam) = -normalize(Vec3(b.port...))
                      group_pointing = 0.0, group_power = 0.0, groups = :quad,
                      positioning = 0.0) -> NamedTuple
 
-Expected spread of the observed drive shape from beam errors, by linear propagation
-through exact per-beam sensitivities (`mode_sensitivity`).
+Computes the expected spread of the observed drive shape from beam errors. The errors are
+propagated linearly through exact per-beam sensitivities (`mode_sensitivity`).
 
-Independent beam-to-beam errors: each beam's aim is displaced at random transverse to
-the beam with rms `pointing` mm (the rms of the displacement's length, `pointing/√2`
-along each axis; NIF specifies 50 µm), and its power by an rms fraction `power`.
+Independent beam-to-beam errors displace the aim of each beam at random transverse to the
+beam, with rms `pointing` mm. That rms is of the displacement length, so each axis gets
+`pointing/√2`; NIF specifies 50 µm. The power of each beam is scaled by an rms fraction
+`power`.
 
-Correlated errors (zero by default):
-- `group_pointing`: every beam of a group (`groups`: a `Beam` field such as `:quad`, or
-  a function of the beam, e.g. its bundle, or its cone in one hemisphere,
-  `b -> (b.group, b.port[3] > 0)`) is displaced by one shared vector transverse to the
-  group's mean beam direction, rms length `group_pointing` mm. Beams at an angle to that
-  mean also move along themselves (their focus moves with the aim). A group whose beams
-  have no common direction (`:group`, a cone over both hemispheres) is refused.
-- `group_power`: one shared relative power error per group, rms `group_power`.
-- `positioning`: the target is displaced from chamber center, which moves every aim by
-  the same vector relative to the target: rms length `positioning` mm, isotropic, or a
-  3-tuple of rms values along x, y, z.
+Correlated errors are zero by default:
 
-Each source adds to the covariance independently. Returns `(; c, sigma, covariance,
-rms_mode, floor, rms_by, J)`: the nominal `c_lm/c_00`, the rms of each coefficient, their
-covariance, and for each degree `l = 1:lmax` the rms of the mode's amplitude over the
-errors, `√E[Σ_m (δc_lm/c_00)²]` (the expected mode-`l` budget the errors use: compare
-`mode_amplitude`, which is `√(2l+1)` times the nominal one). `floor[l]` is
-`√(2l+1) × rms_mode[l]`, the same spread in the units of [`mode_departure`](@ref) (for
-an axisymmetric change `|Δaₗ/a₀|`): the noise floor of a drive shape under these
-errors, the gate [`mode_gate`](@ref) takes from this result (`fraction` a multiple of
-it, one number or one per degree). `rms_by` splits `rms_mode` by source (`beam`,
-`group`, `positioning`; they add in quadrature), and `J` is `mode_sensitivity`'s.
-Linear in the errors: check large errors with `sample_modes`, which takes the same
-keywords.
+- `group_pointing` displaces every beam of a group by one shared vector transverse to the
+  mean beam direction of the group, with rms length `group_pointing` mm. `groups` is a
+  `Beam` field such as `:quad` or a function of the beam, which can select bundles or the
+  cone in one hemisphere, `b -> (b.group, b.port[3] > 0)`. Beams at an angle to that mean
+  also move along their axes, with the focus moving with the aim. A group whose beams have
+  no common direction, such as `:group` for a cone over both hemispheres, is refused.
+- `group_power` gives one shared relative power error per group, with rms `group_power`.
+- `positioning` displaces the target from chamber center, which moves every aim by the
+  same vector relative to the target. It is an isotropic rms length in mm or a 3-tuple of
+  rms values along x, y and z.
+
+Each source adds to the covariance independently. Returns
+`(; c, sigma, covariance, rms_mode, floor, rms_by, J)`:
+
+- `c` is the nominal `c_lm/c_00`, `sigma` the rms of each coefficient and `covariance`
+  their covariance.
+- `rms_mode[l]`, for each degree `l = 1:lmax`, is the rms of the mode amplitude over the
+  errors, `√E[Σ_m (δc_lm/c_00)²]`. It is the expected mode-`l` budget used by the errors.
+  `mode_amplitude` gives `√(2l+1)` times the nominal amplitude for comparison.
+- `floor[l]` is `√(2l+1) × rms_mode[l]`, the same spread in the units of
+  [`mode_departure`](@ref), which is `|Δaₗ/a₀|` for an axisymmetric change. It is the
+  noise floor of a drive shape under these errors. [`mode_gate`](@ref) takes its gate
+  from this result, with `fraction` a multiple of the floor, one number or one per degree.
+- `rms_by` splits `rms_mode` by source into `beam`, `group` and `positioning`, which add in
+  quadrature.
+- `J` is the matrix of `mode_sensitivity`.
+
+The propagation is linear in the errors. Large errors can be checked with `sample_modes`,
+which takes the same keywords.
 """
 function mode_uncertainty(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real = 0.05,
                           power::Real = 0.0, lmax::Integer = 4, group_pointing::Real = 0.0,
@@ -176,8 +191,8 @@ function mode_uncertainty(s::Scenario, beams::AbstractVector{<:Beam}; pointing::
     return (; c, sigma, covariance = C, rms_mode = rms, floor = _mode_floor(rms), rms_by, J)
 end
 
-# The noise floor per degree in the units of `mode_departure`: √(2l+1) × the rms of the
-# mode-l budget.
+# Converts the rms of each mode-l budget to the noise floor per degree in the units of
+# `mode_departure`, √(2l+1) times that rms.
 _mode_floor(rms_mode::AbstractVector{<:Real}) = [sqrt(2l + 1) * r for (l, r) in enumerate(rms_mode)]
 
 _error_variances(nb, pointing, power) =
@@ -193,14 +208,15 @@ end
 _group_key(b::Beam, groups::Symbol) = getfield(b, groups)
 _group_key(b::Beam, groups) = groups(b)
 
-# the unit transverse basis of a group's mean beam direction k
+# Returns a unit transverse basis for the mean beam direction k of a group.
 function _transverse_basis(k)
     u1 = normalize(cross(abs(k[3]) < 0.9 ? Vec3(0, 0, 1) : Vec3(1, 0, 0), k))
     return u1, cross(k, u1)
 end
 
-# The transverse basis of a group's shared displacement: its beams' mean direction must be
-# well defined (a cone's beams from both hemispheres nearly cancel and have none).
+# Builds the transverse basis of the shared displacement of a group. The mean direction
+# of its beams must be well defined; the beams of a cone from both hemispheres nearly
+# cancel and have none.
 function _group_basis(beams, idx, g)
     k = sum(_beam_k(beams[i]) for i in idx)
     norm(k) >= length(idx) / 2 ||
@@ -211,15 +227,16 @@ function _group_basis(beams, idx, g)
     return _transverse_basis(normalize(k))
 end
 
-# δc when beam bi's aim moves by the vector d (columns a, b and axial of J4)
+# Returns δc when the aim of beam bi moves by the vector d, from the a, b and axial
+# columns of J4.
 function _displaced(J4, N, bi, b, d)
     e1, e2 = spot_axes(b)
     o = N * (bi - 1)
     return J4[:, o+1] .* dot(d, e1) .+ J4[:, o+2] .* dot(d, e2) .+ J4[:, o+4] .* dot(d, _beam_k(b))
 end
 
-# Shared group errors as (δc columns, variances): per group two transverse
-# displacements and one power scale
+# Returns the shared group errors as δc columns and their variances. Each group has two
+# transverse displacements and one power scale.
 function _group_sources(J4, N, beams, groups, pointing, power)
     cols = Vector{eltype(J4)}[]
     σ2 = Float64[]
@@ -240,7 +257,8 @@ function _group_sources(J4, N, beams, groups, pointing, power)
     return isempty(cols) ? zeros(eltype(J4), size(J4, 1), 0) : reduce(hcat, cols), σ2
 end
 
-# Target positioning: every aim moves by one vector (its x, y, z components)
+# Returns the target positioning errors, which move every aim by one vector, as columns
+# for its x, y and z components.
 function _positioning_sources(J4, N, beams, σ)
     any(>(0), σ) || return zeros(eltype(J4), size(J4, 1), 0), Float64[]
     cols = [sum(_displaced(J4, N, i, beams[i], u) for i in eachindex(beams))
@@ -253,12 +271,13 @@ end
                  rng = Random.default_rng(), lmax = 4, group_pointing = 0.0,
                  group_power = 0.0, groups = :quad, positioning = 0.0) -> Matrix
 
-Monte Carlo of the drive shape under the errors of `mode_uncertainty` (same keywords):
-`n` samples of `c_lm/c_00` (columns), each from a full evaluation with every beam's aim
-displaced along its spot axes by normal errors of rms `pointing/√2` each and its power
-by a normal fraction of rms `power`, plus the shared group and target-positioning
-errors. The independent check of the linear propagation, and the answer when errors
-are large enough for the drive to respond nonlinearly.
+Runs a Monte Carlo of the drive shape under the errors of `mode_uncertainty`, with the
+same keywords. Returns `n` samples of `c_lm/c_00` as columns. Each sample comes from a
+full evaluation with the shared group and target-positioning errors and with the
+independent errors of every beam. The aim of each beam is displaced along its spot axes
+by normal errors of rms `pointing/√2` each, and its power is scaled by a normal fraction
+of rms `power`. The samples check the linear propagation independently. They also give
+the answer when the errors are large enough for the drive to respond nonlinearly.
 """
 function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real = 0.05,
                       power::Real = 0.0, n::Integer = 100, rng = Random.default_rng(),
@@ -274,7 +293,8 @@ function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real
                  for g in gs)
     out = zeros(nm, n)
     for k in 1:n
-        # shared errors (drawn only when present, so independent-only runs keep their sequence)
+        # Draw the shared errors only when present, so that runs with only independent
+        # errors keep the same random sequence.
         D = any(>(0), σpos) ? Vec3(σpos[1] * randn(rng), σpos[2] * randn(rng), σpos[3] * randn(rng)) : zero(Vec3)
         gd = Dict(g => group_pointing > 0 ?
                        group_pointing / sqrt(2) * (randn(rng) * basis[g][1] + randn(rng) * basis[g][2]) : zero(Vec3)
@@ -298,54 +318,58 @@ end
                  group_pointing = 0.0, group_power = 0.0, groups = :quad,
                  positioning = 0.0) -> NamedTuple
 
-The most probable beam errors behind a measured drive-shape departure: the inverse of
-`mode_uncertainty`, which takes the same error priors. A measured low mode that trends
-from shot to shot (MacGowan et al., HEDP 2021, trend mode 1 of NIF implosions against
-beam and target data) raises the question of which errors could have caused it; this
-answers it for one
-shot, linearly.
+Infers the most probable beam errors behind a measured drive-shape departure. This
+function is the inverse of `mode_uncertainty` and takes the same error priors. A measured
+low mode can trend from shot to shot; MacGowan et al. (HEDP 2021) trend mode 1 of NIF
+implosions against beam and target data. Such a trend raises the question of which errors
+could have caused it, and `infer_errors` gives a linear answer for one shot.
 
-`measured` holds the departures `Δc = (c_lm/c_00)_measured − (c_lm/c_00)_nominal` as
-pairs: `(l, m) => Δc` for a component, `l => [Δc_l,-l, …, Δc_l,l]` for a whole degree
-(`mode_index` order). `sigma` is the measurement's rms error, one number or one per
-component (in the order `measured` expands to). The nominal shape is the scenario's
-for `beams`; components through `l = 6` (the cached ``Y_{lm}`` weights).
+`measured` contains the departures `Δc = (c_lm/c_00)_measured − (c_lm/c_00)_nominal` as
+pairs. A pair `(l, m) => Δc` gives one component, and `l => [Δc_l,-l, …, Δc_l,l]` gives a
+whole degree in `mode_index` order. `sigma` is the rms error of the measurement, one
+number or one per component in the order that `measured` expands to. The nominal shape
+is that of the scenario for `beams`. Components are allowed through `l = 6`, the limit of
+the cached ``Y_{lm}`` weights.
 
-Model: `Δc = J x + ε`, with `x` the errors (zero-mean normal, the variances of
-`mode_uncertainty`: per beam its aim along the spot axes `a`, `b` and its relative
-power; per group a shared displacement and power; the target positioning) and `J`
-their exact sensitivities (`mode_sensitivity`, with the shared columns). The posterior
-mean, which is also the most probable `x`, and its covariance come from the data-space
-(Woodbury) form, a solve the size of the measurement:
+The model is `Δc = J x + ε`, with `x` the errors and `J` their exact sensitivities
+(`mode_sensitivity`, with the shared columns). The errors are zero-mean normal with the
+variances of `mode_uncertainty`: per beam, its aim along the spot axes `a`, `b` and its
+relative power; per group, a shared displacement and power; and the target positioning.
+The posterior mean, which is also the most probable `x`, and its covariance come from the
+data-space (Woodbury) form, a solve the size of the measurement:
 
     x̂ = Σₚ Jᵀ (J Σₚ Jᵀ + Σₘ)⁻¹ Δc,   Σ = Σₚ − Σₚ Jᵀ (J Σₚ Jᵀ + Σₘ)⁻¹ J Σₚ.
 
 Returns `(; beam, group, positioning, x, sigma, prior_sigma, covariance, names,
 components, measured, predicted, residual, sources, resolved, beams, J, c)`:
-- `beam`: `nb × 3`, each beam's inferred `a`, `b` displacement (mm) and relative power;
-- `group`: a `Dict` from group key to `(; displacement, power)` (a `Vec3` in mm);
-- `positioning`: the inferred common displacement of every aim relative to the target
-  (the target sits at minus this from where the beams are aimed);
-- `x`, `sigma`, `prior_sigma`, `covariance`, `names`: all errors as one vector (beams'
-  `a`, `b`, `power`, then the groups', then x, y, z), their posterior and prior rms,
-  the posterior covariance, and labels;
-- `predicted = J x̂` and `residual = Δc − J x̂`, over `components` (the `(l, m)` list);
-- `sources`: per error source (a beam's pointing, a beam's power, a group's pointing or
-  power, the positioning), the `fraction` of `Δc` reproduced by its share of `J x̂`,
-  `dot(J_s x̂_s, Δc)/|Δc|²`, sorted descending (the fractions sum to
-  `dot(predicted, Δc)/|Δc|²`): the few sources that best explain the measurement;
-- `resolved`: Σⱼ (1 − Σⱼⱼ/σⱼ²), the number of error combinations the data determine
-  (at most the number of components);
-- `beams`: `beams` with `x̂` applied, for a full `evaluate` (the nonlinear check; the
-  errors are applied before a laser–plasma model, which the sensitivities follow).
+- `beam`: `nb × 3`, the inferred `a`, `b` displacement (mm) and relative power of each
+  beam;
+- `group`: a `Dict` from group key to `(; displacement, power)`, with the displacement a
+  `Vec3` in mm;
+- `positioning`: the inferred common displacement of every aim relative to the target.
+  The target therefore lies at minus this vector from where the beams are aimed.
+- `x`, `sigma`, `prior_sigma`, `covariance`, `names`: all errors as one vector, with
+  their posterior and prior rms, the posterior covariance and labels. The vector holds
+  the beam `a`, `b` and `power`, then the group errors, then x, y and z.
+- `predicted = J x̂` and `residual = Δc − J x̂`, over the `(l, m)` list `components`;
+- `sources`: the `fraction` of `Δc` reproduced by the share of `J x̂` from each error
+  source, `dot(J_s x̂_s, Δc)/|Δc|²`, sorted descending. A source is the pointing or power
+  of a beam or of a group, or the positioning. The fractions sum to
+  `dot(predicted, Δc)/|Δc|²`, and the first entries are the sources that best explain
+  the measurement.
+- `resolved`: Σⱼ (1 − Σⱼⱼ/σⱼ²), the number of error combinations that the data
+  determine, at most the number of components;
+- `beams`: `beams` with `x̂` applied, for a full `evaluate` as the nonlinear check. The
+  errors are applied before a laser–plasma model, as in the sensitivities.
 
-The name reflects what comes back: errors, under a prior, not a unique explanation. Many
-errors map to a few modes, so a handful of combinations are determined and every other
-direction keeps its prior: `sigma ./ prior_sigma` stays near 1 for most errors, and
-`resolved` counts what was learned. What the inverse reports is only as good as the
-prior: an error left out of it (`group_pointing = 0`, say) cannot be blamed, and its
-effect is attributed to the sources that are allowed. Linear in the errors.
-[`infer_velocity_errors`](@ref) is the same inverse for a measured hot-spot velocity.
+The name describes the result: the errors that are most probable under a prior, which are
+not a unique explanation. Many errors map to a few modes, so a handful of combinations are
+determined and every other direction stays at its prior. `sigma ./ prior_sigma` therefore
+stays near 1 for most errors, and `resolved` gives the number of determined combinations.
+The result is only as good as the prior. An error left out of it, such as
+`group_pointing = 0`, cannot be blamed, and its effect is attributed to the sources that are
+allowed. The inference is linear in the errors. [`infer_velocity_errors`](@ref) is the same
+inverse for a measured hot-spot velocity.
 """
 function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigma, kwargs...)
     comps, Δc = _measured_components(measured)
@@ -355,10 +379,10 @@ function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigm
     return _infer_errors(s, beams, comps, Δc, Matrix(Diagonal(σm .^ 2)); kwargs...)
 end
 
-# The inverse for measured departures Δc of the components `comps`, with measurement
-# covariance Σm. A `nuisance` (; columns, variances, names, label) adds error sources
-# that act on the measured components directly (columns: their δc per unit error),
-# after the positioning.
+# Computes the inverse for measured departures Δc of the components `comps`, with
+# measurement covariance Σm. A `nuisance` of the form (; columns, variances, names, label)
+# adds error sources after the positioning. These sources act on the measured components
+# directly, and `columns` holds their δc per unit error.
 function _infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, comps, Δc, Σm;
                        pointing::Real = 0.05, power::Real = 0.0, group_pointing::Real = 0.0,
                        group_power::Real = 0.0, groups = :quad, positioning = 0.0,
@@ -386,7 +410,7 @@ function _infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, comps, Δc, �
         A = hcat(A, nuisance.columns)
         v = vcat(v, nuisance.variances)
     end
-    # data space: S = A Σₚ Aᵀ + Σₘ (k × k)
+    # Form the data-space matrix S = A Σₚ Aᵀ + Σₘ, of size k × k.
     F = cholesky(Symmetric(A * (v .* transpose(A)) + Σm); check = false)
     issuccess(F) || throw(ArgumentError("the measured components are not constrained: " *
                                         "give a measurement sigma or a prior that moves them"))
@@ -397,7 +421,7 @@ function _infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, comps, Δc, �
     sd = sqrt.(max.(diag(post), 0.0))
     resolved = sum((1 - post[j, j] / v[j] for j in eachindex(v) if v[j] > 0); init = 0.0)
     predicted = A * x
-    # the error sources: column ranges and labels
+    # Collect the column ranges and labels of the error sources.
     srcs = Tuple{String,UnitRange{Int}}[]
     for (bi, b) in enumerate(eff)
         push!(srcs, (string(b.name, " pointing"), 3bi-2:3bi-1), (string(b.name, " power"), 3bi:3bi))
@@ -446,7 +470,8 @@ function _infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, comps, Δc, �
             residual = Δc - predicted, sources, resolved, beams = applied, J = A, c = c[rows])
 end
 
-# The measured departures as ((l, m) list, values): pairs (l, m) => Δc or l => vector
+# Expands the measured departures, pairs (l, m) => Δc or l => vector, into an (l, m)
+# list and its values.
 function _measured_components(measured)
     comps = Tuple{Int,Int}[]
     vals = Float64[]
@@ -467,7 +492,8 @@ function _measured_components(measured)
     return comps, vals
 end
 
-# The order of `_group_sources`' columns: (group, :u1 | :u2 | :power, displacement unit)
+# Lists the columns of `_group_sources` in order, each as (group, :u1 | :u2 | :power,
+# displacement unit).
 function _group_layout(beams, groups, pointing, power)
     out = Tuple{Any,Symbol,Vec3}[]
     keys = [_group_key(b, groups) for b in beams]
@@ -482,8 +508,8 @@ function _group_layout(beams, groups, pointing, power)
     return out
 end
 
-# The expected squared departure the errors add to each shape coefficient (first `nm`
-# of the response `R`): Σ_j σ_j² (∂(c_i/c_1)/∂e_j)², linearized.
+# Returns the expected squared departure that the errors add to each of the first `nm`
+# shape coefficients of the response `R`, linearized as Σ_j σ_j² (∂(c_i/c_1)/∂e_j)².
 function _error_variance(s::Scenario, beams, R, nm, e)
     shared = e.group_pointing > 0 || e.group_power > 0 || any(>(0), e.positioning)
     N = shared ? 4 : 3

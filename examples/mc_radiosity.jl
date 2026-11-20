@@ -1,13 +1,13 @@
-# Partial visibility against a Monte Carlo radiosity: the capsule's incident flux, a₂/a₀
-# and a₄/a₀ from the radiosity solve with centroid and sampled visibility
-# (`view_factors(...; visibility = :sampled)`), raw and balanced (`closed`), against
-# `montecarlo_incident`, which traces diffuse transport on the same facets with
-# no view factors. Targets: the bored-LEH cavity of test/partial_visibility.jl (0.1 mm
-# LEH bores, 20 µm waist gap) at 0.5 and 0.25 mm, and the flush-LEH `hohlraum()` as a
-# control. The source is the CAD tutorial's two Gaussian wall rings, integrated over
-# each element. The comparison uses flat elements (the meshes without their curved
-# surfaces), the geometry the Monte Carlo traces; the curved models are listed for
-# reference. Results are cached in the temp directory (a rerun only prints them).
+# This example checks partial visibility against a Monte Carlo radiosity. The incident flux,
+# a₂/a₀ and a₄/a₀ of the capsule come from the radiosity solve with centroid and sampled
+# visibility (`view_factors(...; visibility = :sampled)`), raw and balanced (`closed`). They
+# are compared with `montecarlo_incident`, which traces diffuse transport on the same facets
+# without view factors. The targets are the bored-LEH cavity of test/partial_visibility.jl
+# (0.1 mm LEH bores, 20 µm waist gap) at 0.5 and 0.25 mm, and the flush-LEH `hohlraum()` as
+# a control. The source is the two Gaussian wall rings of the CAD tutorial, integrated over
+# each element. The comparison uses flat elements, the meshes without their curved surfaces,
+# since that is the geometry the Monte Carlo traces; the curved models are listed for
+# reference. Results are cached in the temp directory, and a rerun only prints them.
 #
 #     julia --project=. -t auto examples/mc_radiosity.jl [paths per capsule element]
 

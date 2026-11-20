@@ -2,24 +2,25 @@
 #
 # NIF's beams enter through ports within 50° of the poles, built for indirect drive. To
 # drive a bare capsule directly, polar direct drive (PDD) re-points the beams toward the
-# equator and balances the cones' powers, so that the illumination of the sphere is as
-# uniform as the port layout allows. Barlow et al. (PRL 133, 175101, 2024; Ba24 below)
-# optimized such a pointing with a genetic algorithm and published it as their
-# "Optimized Config" (OC): per cone, the surface point the beams aim at, a defocus and a
-# power (their Table I). One term of their fitness is σ₁, the rms of the vacuum
+# equator and balances the powers of the cones, so that the illumination of the sphere is
+# as uniform as the port layout allows. Barlow et al. (PRL 133, 175101, 2024; Ba24 below)
+# optimized such a pointing with a genetic algorithm and published it as their "Optimized
+# Config" (OC). The OC gives, per cone, the surface point the beams aim at, a defocus and
+# a power (their Table I). One term of their fitness is σ₁, the rms of the vacuum
 # illumination of the 1.1 mm sphere relative to its mean over the spherical-harmonic
-# degrees l ≤ 30: 6.03% for the OC (their Table II).
+# degrees l ≤ 30, which is 6.03% for the OC (their Table II).
 #
 # This tutorial builds the OC on a bare sphere, computes σ₁, its mode spectrum and its
 # m = 0 / m ≠ 0 split with Briareus, and compares them with Ba24. The comparison is a
-# documented example, not a test: Ba24's best-focus spots are internal models of their
-# ray tracer (Ifriit), not published, and Briareus uses the public LMF-measured fits
-# instead; its defocus model differs from theirs; and the illumination is CBET-free, as
-# σ₁ is. It settles how Ba24's Table I angles are read, measures how much the spot model
-# moves σ₁, and checks Briareus on this facility case against an independent quadrature.
-# It introduces the spherical fields of [`GroupPointing`](@ref) and the capsule-frame
-# metrics [`mode_rms`](@ref) and [`mode_power`](@ref). A pointing optimization from the
-# OC is the example `examples/ba24_pdd_optimization.jl`.
+# documented example and is not used as a test, for three reasons. Ba24's best-focus spots
+# are unpublished internal models of their ray tracer (Ifriit), and Briareus uses the
+# public LMF-measured fits instead. The defocus model of Briareus differs from theirs. And
+# the illumination is CBET-free, as σ₁ is. The tutorial settles how Ba24's Table I angles
+# are read, measures how much the spot model moves σ₁, and checks Briareus on this
+# facility case against an independent quadrature. It introduces the spherical fields of
+# [`GroupPointing`](@ref) and the capsule-frame metrics [`mode_rms`](@ref) and
+# [`mode_power`](@ref). A pointing optimization from the OC is the example
+# `examples/ba24_pdd_optimization.jl`.
 
 using Briareus
 using CairoMakie
@@ -48,13 +49,13 @@ end
 target = meshes[2].t
 @printf("%d and %d elements\n", nelements(meshes[1].t), nelements(target))
 
-# A deposition on the sphere is hard-sphere illumination: straight rays, the incident
-# intensity times the cosine of the incidence angle, ``I\cos\psi``, absorbed where each
-# ray first lands. Its rms relative to the mean over ``1 \le l \le 30`` is
-# [`mode_rms`](@ref) of the flux's coefficients, and [`mode_power`](@ref) is the
-# spectrum ``σ_l``; both split into the zonal part m = 0 (the azimuthal average, set by the
-# cones' polar angles and powers) and the rest, m ≠ 0 (the beams' discreteness in
-# azimuth).
+# A deposition on the sphere is hard-sphere illumination: rays travel straight, and the
+# incident intensity times the cosine of the incidence angle, ``I\cos\psi``, is absorbed
+# where each ray first meets the sphere. Its rms relative to the mean over
+# ``1 \le l \le 30`` is [`mode_rms`](@ref) of the flux coefficients, and
+# [`mode_power`](@ref) is the spectrum ``σ_l``. Both split into the zonal part m = 0, the
+# azimuthal average set by the polar angles and powers of the cones, and the rest, m ≠ 0,
+# which comes from the discreteness of the beams in azimuth.
 
 function modes(m, op, beams; kw...)
     dep = deposit(op, beams; kw...)
@@ -69,9 +70,9 @@ richardson(a, b) = ((30 / 20)^2 * b - a) / ((30 / 20)^2 - 1)
 #
 # Ba24's Table I gives, per cone pair, a polar angle and an azimuthal offset of the aim
 # point on the 1.1 mm sphere, a defocus and a power in percent of 4 TW per quad. The
-# caption reads the polar angle from the pole and the offset from the port's azimuth.
-# That is `GroupPointing`'s `:theta_s` and `:dphi_s` with `radius = R`: the aim is the
-# point of the sphere at those angles, mirrored to ``180° - \theta_s`` in the lower
+# caption measures the polar angle from the pole and the offset from the azimuth of the
+# port. That is `GroupPointing`'s `:theta_s` and `:dphi_s` with `radius = R`: the aim is
+# the point of the sphere at those angles, mirrored to ``180° - \theta_s`` in the lower
 # hemisphere with the offset in the same sense (Ba24 chose offsets that turn the same way
 # in both hemispheres).
 
@@ -88,8 +89,8 @@ for k in p.keys
 end
 
 # Ba24 assume that the four beams of a quad overlap exactly at the aim point, repointed
-# after defocusing. Briareus therefore uses NIF's 192 beams, each from its port
-# direction, with its quad's aim, defocus and a quarter of its power:
+# after defocusing. Briareus therefore uses NIF's 192 beams, each from its port direction,
+# with the aim and defocus of its quad and a quarter of its power:
 
 quad_of = Dict(q.quad => q for q in quads)
 function oc_beams(; spot = b -> b.spot, defocus = q -> q.defocus, aims = Dict(q.quad => q.aim for q in quads))
@@ -118,8 +119,8 @@ length(beams)
 grown(b) = (g = 1 + κ[b.group] * quad_of[b.quad].defocus; with_axes(b.spot, g * b.spot.a, g * b.spot.b))
 emulated = oc_beams(; spot = grown, defocus = q -> 0.0)
 
-# A [`DepositionOperator`](@ref) depends on the target and the ports only, so one
-# operator per mesh and beam model serves every pointing below.
+# A [`DepositionOperator`](@ref) depends on the target and the ports only, so one operator
+# per mesh and beam model is used for every pointing below.
 
 ops = [(; native = DepositionOperator(m.t, beams), plane = DepositionOperator(m.t, beams; ncone = 1))
        for m in meshes]
@@ -131,18 +132,18 @@ for (name, r) in (("Briareus beams", native), ("Ba24 emulated", plane))
             100richardson(r[1].zero, r[2].zero), 100richardson(r[1].nonzero, r[2].nonzero), r[2].absorbed)
 end
 
-# The two models give σ₁ ≈ 6.6% and 7.9% against Ba24's 6.03%. Both are dominated by
-# the zonal part. The absorbed fraction, 0.92–0.94, is the light that meets the sphere
-# (the rest passes beside it): no plasma absorbs anything here.
+# The two models give σ₁ ≈ 6.6% and 7.9% against Ba24's 6.03%. Both are dominated by the
+# zonal part. The absorbed fraction, 0.92–0.94, is the light that meets the sphere; the
+# rest passes beside it, because no plasma is modeled.
 
 # ## An independent check
 #
-# For collimated beams the illumination has a closed form at every point of the sphere:
-# a point ``\hat s`` is lit by each beam whose port it faces, with the beam's
-# super-Gaussian at the point's distance from the beam axis, times ``\hat s \cdot
-# \hat U`` for the projected intensity. The coefficients to l = 30 follow from a
-# Gauss–Legendre rule in ``\mu = \cos\theta`` (256 nodes) and the trapezoid rule in φ
-# (512 points), with the normalized associated Legendre functions by their recurrence.
+# For collimated beams the illumination has a closed form at every point of the sphere. A
+# point ``\hat s`` is lit by each beam whose port it faces, with the super-Gaussian of the
+# beam evaluated at the distance of the point from the beam axis and multiplied by
+# ``\hat s \cdot \hat U`` for the projected intensity. The coefficients to l = 30 follow
+# from a Gauss–Legendre rule in ``\mu = \cos\theta`` (256 nodes) and the trapezoid rule in
+# φ (512 points), with the normalized associated Legendre functions by their recurrence.
 # This code shares nothing with the operator or the mode weights. It also gives the
 # *incident* intensity ``I`` (no cosine), which `deposit` does not.
 
@@ -240,12 +241,13 @@ incident = plane_wave_modes(emulated; incident = true)
 
 # ## Which azimuth reading
 #
-# Ba24's method text describes the pointing differently from the caption: relative to
-# the point of the sphere nearest the quad's port, as an angle away from it and a
-# direction about it (in their code, Polaris, a rotation of the port's surface point by
-# the angle, then about the port axis by the offset, defined for the lower hemisphere and
-# mirrored to the upper). Read that way, Table I's 85.62° for the 50° cone would aim
-# those beams 85.6° from their own ports, near the limb they can see.
+# Ba24's method text describes the pointing differently from the caption. It measures the
+# pointing relative to the point of the sphere nearest the port of the quad, as an angle
+# away from that point and a direction about it. Their code, Polaris, rotates the surface
+# point of the port by the angle and then about the port axis by the offset; the rotation
+# is defined for the lower hemisphere and mirrored to the upper. Read that way, the 85.62°
+# of Table I for the 50° cone would aim those beams 85.6° from their ports, near the edge
+# of the sphere as seen from those ports.
 
 function about_port(q)
     θp, φp = port_angles(q)
@@ -262,23 +264,23 @@ reading_b = (; native = modes(meshes[2], ops[2].native, oc_beams(; aims = aims_b
 @printf("about the port: σ₁ = %.0f%% (Briareus beams), %.0f%% (Ba24 emulated), n = 30\n",
         100reading_b.native.σ, 100reading_b.plane.σ)
 
-# The outer beams then graze the sphere and σ₁ exceeds 100%. Two variants of that
-# reading (Polaris's other hemisphere convention, or the direction counted from the
-# toward-equator side) give 145% and 30% with the emulated spots (research notes).
-# The caption's reading, polar angle from the pole and azimuth offset from the port, is
-# the only one within reach of 6.03%, and it puts the four cones where a PDD design
-# puts them (near the pole, at mid-latitude and near the equator): it is the published
-# design, and the reading `:theta_s`/`:dphi_s` implement. Reversing the offset's sense
-# in the lower hemisphere moves σ₁ by 0.3 points, all of it in the m ≠ 0 part, so that
-# detail is not settled by σ₁; Ba24's statement that the offsets turn the same way in
-# both hemispheres is.
+# The outer beams then graze the sphere and σ₁ exceeds 100%. Two variants of that reading
+# (Polaris's other hemisphere convention, or the direction counted from the toward-equator
+# side) give 145% and 30% with the emulated spots (research notes). The reading of the
+# caption, with the polar angle from the pole and the azimuth offset from the port, is the
+# only one within reach of 6.03%. It places the four cones where a PDD design places them:
+# near the pole, at mid-latitude and near the equator. It is therefore the published
+# design, and it is the reading that `:theta_s` and `:dphi_s` implement. Reversing the
+# sense of the offset in the lower hemisphere moves σ₁ by 0.3 points, all of it in the m ≠
+# 0 part, so σ₁ does not settle that detail; Ba24's statement that the offsets turn the
+# same way in both hemispheres settles it.
 
 # ## How much the spots matter
 #
 # Ba24's best-focus spots are not published, so the comparison rests on how far σ₁ moves
-# when the spots change within what one could reasonably substitute. Scaling all the
-# emulated spots by ±10%, or replacing their orders by a common one with the same 1/e
-# radii:
+# when the spots change within what could reasonably be substituted. Below, all the
+# emulated spots are scaled by ±10%, or their orders are replaced by a common one with the
+# same 1/e radii:
 
 for s in (0.9, 1.1)
     r = modes(meshes[2], ops[2].plane, oc_beams(; spot = b -> (g = grown(b); with_axes(g, s * g.a, s * g.b)),
@@ -293,16 +295,16 @@ for n in (3.0, 4.0)
 end
 
 # Ten percent on the spot size raises σ₁ by 0.9 to 1.4 points either way: the LMF spot
-# size sits near the bottom of the OC's σ₁, which suggests Ba24's spots are of about
-# that size. The profile's steepness matters more: order-3 spots with the same 1/e radii
-# bring the emulation to Ba24's value. The OC was optimized for the Ba24 spots, so
-# their σ₁ sits at an optimum that other spots need not share; Briareus's 6.6–7.9% is
-# within the spread the unpublished spots allow.
+# size is near the minimum of σ₁ for the OC, which suggests Ba24's spots are of about that
+# size. The steepness of the profile matters more: order-3 spots with the same 1/e radii
+# bring the emulation to Ba24's value. The OC was optimized for the Ba24 spots, so their
+# σ₁ is at an optimum that other spots need not share; the 6.6–7.9% of Briareus is within
+# the spread the unpublished spots allow.
 #
-# The convention of absorption matters more still. With the thin-corona absorption
-# weight ``\eta_a(\psi) = 1 - (1 - \eta_\perp)^{\cos^3\psi}`` of `deposit`'s
-# `absorption` keyword (Murakami and Nishi 2017; η⊥ = 0.9 is their value, not Ba24's),
-# the oblique light near the equator counts for less:
+# The convention of absorption matters more still. With the thin-corona absorption weight
+# ``\eta_a(\psi) = 1 - (1 - \eta_\perp)^{\cos^3\psi}`` of the `absorption` keyword of
+# `deposit` (Murakami and Nishi 2017; η⊥ = 0.9 is their value and does not come from
+# Ba24), the oblique light near the equator counts for less:
 
 ηa = modes(meshes[2], ops[2].native, beams; absorption = 0.9)
 @printf("absorbed with η⊥ = 0.9: σ₁ = %.2f%%, absorbed fraction %.3f\n", 100ηa.σ, ηa.absorbed)
@@ -314,10 +316,11 @@ end
 
 # ## The illumination
 #
-# The two models side by side on equal-area maps (the field relative to its mean, the
-# north pole at the top), and their spectra against the plane-wave quadrature. The
-# discrete spots of the outer cones near the equator are the m ≠ 0 part; the f-cone
-# blur of Briareus's defocus smooths them more than Ba24's linear growth does.
+# The two models are shown side by side on equal-area maps, with the field relative to its
+# mean and the north pole at the top, together with their spectra against the plane-wave
+# quadrature. The discrete spots of the outer cones near the equator are the m ≠ 0 part;
+# the f-cone blur of the Briareus defocus smooths them more than the linear growth of Ba24
+# does.
 
 fig = Figure(size = (900, 640))
 for (j, (title, r)) in enumerate((("Briareus beams (f-cone defocus)", native[2]),
@@ -336,25 +339,25 @@ scatter!(ax, 1:L, 100 .* max.(reference.σl[2:end], 1e-4); marker = :xcross, col
 axislegend(ax; position = :rt)
 fig
 
-# The zonal part of the odd degrees vanishes: cone by cone, the polar angles and powers
-# are mirrored about the equator. The odd degrees that remain (l = 9, 11, 13 near 1%)
-# are m ≠ 0: NIF's lower ports are the upper ones turned about a horizontal axis, not
-# mirrored, so the two hemispheres' spots do not sit at the same azimuths.
+# The zonal part of the odd degrees vanishes: for every cone, the polar angles and powers
+# are mirrored about the equator. The odd degrees that remain (l = 9, 11, 13 near 1%) are
+# m ≠ 0. NIF's lower ports are the upper ones turned about a horizontal axis, and they are
+# not mirrored, so the spots of the two hemispheres are not at the same azimuths.
 
 # ## Optimizing from the OC
 #
-# The OC is not an optimum of σ₁ alone: Ba24's fitness also rewards a uniform ablation
+# The OC does not minimize σ₁ by itself: Ba24's fitness also rewards a uniform ablation
 # pressure in a 4-ns plasma with CBET and a high mean pressure, which Briareus cannot yet
-# compute. The example `examples/ba24_pdd_optimization.jl` minimizes σ₁ alone over Ba24's
-# 16 parameters and bounds (``θ_s``, ``Δφ_s``, defocus 0–10 mm, power 2–4 TW/quad per cone),
-# with Briareus's beams on the n = 20 sphere. L-BFGS-B with ForwardDiff gradients through
-# `deposit` (one gradient costs about four evaluations) goes from 6.49% to 2.61% in 50
-# evaluations and 2.11% in 229 (four minutes on 8 threads); Nelder–Mead needs about 700
-# evaluations to reach 2.1% and a particle swarm 2.5% in 1 200; four random starts
-# reach 2.4–5.3% in 75 evaluations each, so σ₁ has several optima. Ba24 report that
-# their genetic algorithm with coordinate descent needs more than 10 000 evaluations to
-# settle on σ₁ alone. The research notes have the table ("Ba24 σ₁ comparison and
-# optimization").
+# compute. The example `examples/ba24_pdd_optimization.jl` minimizes only σ₁ over Ba24's
+# 16 parameters and bounds (``θ_s``, ``Δφ_s``, defocus 0–10 mm, power 2–4 TW/quad per
+# cone), with the Briareus beams on the n = 20 sphere. L-BFGS-B with ForwardDiff gradients
+# through `deposit` (one gradient costs about four evaluations) takes σ₁ from 6.49% to
+# 2.61% in 50 evaluations and to 2.11% in 229 (four minutes on 8 threads). Nelder–Mead
+# needs about 700 evaluations to reach 2.1% and a particle swarm reaches 2.5% in 1 200;
+# four random starts reach 2.4–5.3% in 75 evaluations each, so σ₁ has several optima. Ba24
+# report that their genetic algorithm with coordinate descent needs more than 10 000
+# evaluations to converge with σ₁ as the only objective. The research notes have the table
+# ("Ba24 σ₁ comparison and optimization").
 
 # ## Briareus against Ba24
 #
@@ -366,18 +369,19 @@ fig
 # | dominant modes | Fig. 2a (figure only) | l = 8, 6, 4 | l = 4, 10, 6 | defocus convention: f-cone blur vs linear radius growth |
 # | absorbed fraction | 77% (3-D, with plasma and CBET) | 93.6% (vacuum, light meeting the sphere) | 92.4% | no plasma, no CBET here |
 #
-# Briareus values extrapolated from n = 20 and 30. With σ₁ within 0.5 points (own
-# beams) and 1.8 points (emulated) and the measured spot sensitivity larger than both,
-# the comparison supports the caption's reading of Table I and Briareus's hard-sphere
-# deposition; it cannot calibrate either model, and is not used to.
+# The Briareus values are extrapolated from n = 20 and 30. With σ₁ within 0.5 points
+# (Briareus beams) and 1.8 points (emulated) and the measured spot sensitivity larger than
+# both, the comparison supports reading Table I as the caption states, and the hard-sphere
+# deposition of Briareus. It cannot calibrate either model and is not used to.
 
 # ## What this checks
 #
-# - Ba24's Table I read as the caption states (polar angle from the pole, azimuth offset
-#   from the port's) gives σ₁ = 6.57% with Briareus's beams and 7.87% with Ba24's
-#   defocus emulated, against their 6.03%; read about the port, as their method text
-#   and code describe the search parameters, 30–150%. The caption's reading is the
-#   published design; `GroupPointing`'s `:theta_s`/`:dphi_s` implement it.
+# - Ba24's Table I, read as the caption states with the polar angle from the pole and the
+#   azimuth offset from that of the port, gives σ₁ = 6.57% with the Briareus beams and
+#   7.87% with Ba24's defocus emulated, against their 6.03%. Read about the port, as their
+#   method text and code describe the search parameters, it gives 30–150%. The reading of
+#   the caption is the published design; `GroupPointing`'s `:theta_s`/`:dphi_s` implement
+#   it.
 # - On the emulated (collimated) beams, Briareus's ``σ_l`` (l ≤ 30) matches an independent
 #   plane-wave quadrature to 3.3e-4 of the mean at n = 30 and to 4e-6 extrapolated, at
 #   second order in the element size, as on the analytic cases of the test suite

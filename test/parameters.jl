@@ -35,7 +35,8 @@ Briareus.initial_parameters(s::_Shift) = zeros(length(s.x0))
     b = Scenario(t, quads)
     @test a.param === p
     @test evaluate(a, x).deposition.element == evaluate(b, apply(p, x)).deposition.element
-    # any other parameterization: the operator for its beams at the initial parameters
+    # Any other parameterization gets the operator for its beams at the initial
+    # parameters.
     c = Scenario(t, _Shift(p, x))
     @test evaluate(c, zeros(nparams(p))).deposition.element ==
           evaluate(Scenario(t, apply(p, x)), apply(p, x)).deposition.element
@@ -49,13 +50,14 @@ end
     vals = (inner23 = (z = 3.09, r = -1.09, phi = 0.2), inner30 = (z = 3.63, r = -0.6, phi = -0.1),
             outer44 = (z = 5.2, r = 0.4, phi = 0.0), outer50 = (z = 5.01, r = 0.0, phi = 0.3))
     fields = (:z, :r, :phi)
-    # quads held as one beam: bitwise identical either way
+    # Quads held as one beam give identical results either way.
     pb, pq = GroupPointing(quads; fields, unit = :beam), GroupPointing(quads; fields)
     x = parameters(pb; vals...)
     @test initial_parameters(pb) == initial_parameters(pq) && pq.radial == pb.radial
     @test [b.aim for b in apply(pq, x)] == [b.aim for b in apply(pb, x)]
-    # four beams per quad: each quad's beams at one point, where its quad beam aims (the mean
-    # of a quad's four ports is its port to 0.004°: under a micron here)
+    # With four beams per quad, the beams of each quad aim at one point, the aim of its quad
+    # beam. The mean of the four ports of a quad is its port to 0.004°, which is under a
+    # micron in this geometry.
     p4 = GroupPointing(beams; fields, unit = :quad)
     x4 = parameters(p4; vals...)
     b4 = apply(p4, x4)
@@ -66,7 +68,7 @@ end
     @test length(byquad) == 48 && all(v -> length(v) == 4, values(byquad))
     @test all(idx -> spread(b4, idx) < 1e-12, values(byquad))
     @test maximum(norm(b4[idx[1]].aim - qaim[q]) for (q, idx) in byquad) < 1e-3
-    # and the values read back: the applied beams give the parameters again
+    # The applied beams give the parameters again.
     @test initial_parameters(GroupPointing(b4; fields, unit = :quad)) ≈ x4 rtol = 1e-12 atol = 1e-12
     # per beam (`unit = :beam`) the same values put a quad's aims r sin Δφ apart: the 23.5°
     # cone's beams are up to 5.73° from their quad's azimuth (closed form, to the last digit
@@ -79,7 +81,8 @@ end
     @test all(idx -> spread(b1, idx) > 0.1, inner)
     @test maximum(δ, inner) ≈ 5.73 atol = 0.01
     idx = inner[argmax(δ.(inner))]
-    # (two beams at ±δ from the quad's azimuth, both offsets turned by δ: 2 |(r, phi)| sin δ)
+    # Two beams lie at ±δ from the quad azimuth, with both offsets turned by δ, so the
+    # spread is 2 |(r, phi)| sin δ.
     @test spread(b1, idx) ≈ 2 * hypot(1.09, 0.2) * sind(δ(idx)) rtol = 0.02
     # per quad and per beam rows, and a rigid shift (`relative`), keep a quad's beams together
     for by in (:quad, :beam)
@@ -114,7 +117,7 @@ end
     eφ(b) = Vec3(-sin(φq[b.quad]), cos(φq[b.quad]), 0.0)
     er(b) = Vec3(cos(φq[b.quad]), sin(φq[b.quad]), 0.0)
     @test all(b -> side(b) != 0, beams)
-    # absolute: one (z, r, phi, split) per quad
+    # The absolute parameterization has one (z, r, phi, split) per quad.
     p = GroupPointing(beams; by = :quad, fields = (:z, :r, :phi, :split))
     x = [(4.5, -0.5, 0.2, 0.35)[mod1(i, 4)] + 0.01 * sin(i) for i in 1:nparams(p)]
     at(q, f) = x[findfirst(==(string(q, '.', f)), parameter_names(p))]
@@ -136,7 +139,8 @@ end
     # moved in z keep their ±s
     xz = initial_parameters(ph) .+ [f == "z" ? 0.1 : 0.0 for f in last.(split.(parameter_names(ph), '.'))]
     @test maximum(norm(a.aim - b.aim - Vec3(0, 0, 0.1 * sign(b.port[3]))) for (a, b) in zip(apply(ph, xz), hyb)) < 1e-12
-    # relative: a shift of the split of each beam, the members' differences kept
+    # The relative parameterization shifts the split of each beam and keeps the
+    # differences between the members.
     pr = GroupPointing(hyb; by = :quad, fields = (:phi, :split), relative = true)
     δ = [0.02 * cos(i) for i in 1:nparams(pr)]
     atr(q, f) = δ[findfirst(==(string(q, '.', f)), parameter_names(pr))]
@@ -144,12 +148,13 @@ end
     @test maximum(norm(a.aim - (b.aim + (atr(b.quad, "phi") + side(b) * atr(b.quad, "split")) * eφ(b)))
                   for (a, b) in zip(apply(pr, δ), hyb)) < 1e-12
     @test maximum(abs.(parameters(pr, apply(pr, δ)) .- δ)) < 1e-12
-    # differentiable: d aim / d split is the beam's side along its quad's φ̂, exactly
+    # The aim is differentiable, and d aim / d split is exactly the side of the beam along
+    # the φ̂ of its quad.
     @test parameter_names(p)[4] == beams[1].quad * ".split"
     J = ForwardDiff.jacobian(s -> apply(p, [i == 4 ? s[1] : oftype(s[1], x[i]) for i in eachindex(x)])[1].aim, [x[4]])
     @test J[:, 1] ≈ side(beams[1]) * eφ(beams[1]) rtol = 1e-14
-    # a quad held as one beam gets no split; a split per beam, without quads or in the
-    # beam frame is refused, and spherical fields exclude it
+    # A quad held as one beam is not split. A split per beam, without quads or in the
+    # beam frame, is refused, and spherical fields exclude it.
     q = nif_quads()
     pq = GroupPointing(q; by = :quad, fields = (:z, :split))
     @test [b.aim for b in apply(pq, fill(0.3, nparams(pq)))] == [b.aim for b in apply(pq, repeat([0.3, 0.0], 48))]
@@ -175,14 +180,15 @@ end
     @test maximum(abs.(xb .- want)) < 1e-12
     @test maximum(norm(a.aim - b.aim) for (a, b) in zip(apply(per, xb), bq)) < 1e-12
     @test parameters(per, reverse(bq)) == xb
-    # per-beam shifts read by quad: each quad's mean shift
+    # Per-beam shifts taken by quad give the mean shift of each quad.
     δ = [0.05 * cos(2.3i) for i in eachindex(xb)]
     xm = parameters(quad, apply(per, xb .+ δ))
     mean_by_quad = [sum(at(per, xb .+ δ, string(tmpl[i].name, '.', split(n, '.')[2]))
                         for i in findall(b -> b.quad == split(n, '.')[1], tmpl)) / 4
                     for n in parameter_names(quad)]
     @test maximum(abs.(xm .- mean_by_quad)) < 1e-12
-    # absolute fields: the template gives the initial parameters, an applied vector itself
+    # With absolute fields the template gives the initial parameters, and an applied
+    # vector gives itself.
     p = GroupPointing(tmpl; fields = (:z, :r, :defocus, :power, :spot))
     x0 = initial_parameters(p)
     @test maximum(abs.(parameters(p, tmpl) .- x0)) < 1e-12
@@ -205,7 +211,8 @@ end
     @test_throws ArgumentError Scenario(t, p; observe = :capsule, model = s.model,
                                         viewfactor_kw = (; closed = false))
 
-    # report: one line per part above `minor` of the delivered power, the rest summed
+    # The report has one line per part above `minor` of the delivered power and sums the
+    # rest.
     lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))
     out = sprint(report, evaluate(Scenario(t, p; observe = :capsule, lpi), x0))
     lines = split(out, '\n')

@@ -13,7 +13,7 @@
     @test hole(t, :leh_top) ≈ π * (0.84 * 1.55)^2 rtol = 0.02
     @test_throws ArgumentError hohlraum(; kw..., leh_closure = lip, leh_open_radius = 1.6)
 
-    # laser light passes the lip: the same deposition as through the open hole
+    # Laser light passes the lip, so the deposition is the same as through the open hole.
     quads = nif_quads()[1:12]
     d_open = deposit(DepositionOperator(open_t, quads), quads)
     d = deposit(DepositionOperator(t, quads), quads)
@@ -25,7 +25,8 @@
 
     m, m_open = RadiationModel(t), RadiationModel(open_t)
     cap(t) = elements(t, :capsule)
-    # open before closure: the capsule sees what it sees through the open hole
+    # Before closure the hole is open, and the capsule sees what it sees through the open
+    # hole.
     s0 = solve(m, d; time = 0.0)
     s0_open = solve(m_open, d_open; time = 0.0)
     flux(s, t) = sum(s.H[cap(t)] .* t.elem_area[cap(t)]) / sum(t.elem_area[cap(t)])
@@ -34,7 +35,7 @@
     @test b0.escaped[:leh_top_lip] > 0
     @test abs(b0.absorbed[:leh_top_lip]) < 1e-12
 
-    # closed: the lip re-emits like the cap it extends
+    # Once closed, the lip re-emits like the cap it extends.
     s1 = solve(m, d; time = 6.0)
     @test all(s1.albedo[elements(t, :leh_top_lip)] .≈ 0.9)
     b1 = energy_balance(s1)
@@ -43,7 +44,7 @@
     @test b1.absorbed[:leh_top_lip] ≈ 0.1 * lipP rtol = 1e-10
     total = sum(values(b1.absorbed)) + sum(values(b1.escaped)) + sum(values(b1.transmitted)) + b1.lost
     @test total ≈ b1.source rtol = 1e-9
-    # (the same laser power on the wall: the smaller hole would clip the beams)
+    # The laser power on the wall is the same; the smaller hole would clip the beams.
     small = hohlraum(; kw..., leh_radius = 0.84 * 1.55)   # caps reaching the open radius
     w, ws = elements(t, :wall), elements(small, :wall)
     @test t.elem_area[w] == small.elem_area[ws]
@@ -82,7 +83,8 @@ end
     ts = collect(0.0:0.25:4.0)
     d = lip_depth(m, ts, fill(400.0, length(ts)), zeros(length(ts)))
     @test d ≈ 2 * 0.022 .* ts rtol = 1e-12
-    # held: relaxes to `depth` with time constant hold_time, whatever the temperature
+    # A held lip relaxes to `depth` with time constant hold_time, whatever the
+    # temperature.
     d = lip_depth(m, ts, fill(300.0, length(ts)), fill(30.0, length(ts)); depth = 0.4)
     @test d ≈ 0.24 .+ 0.16 .* exp.(-ts ./ 0.4) rtol = 1e-12
     # the floor caps it
@@ -102,7 +104,8 @@ end
     # the prescribed lip keeps its single ring (and 0.84 r₀)
     tg = hohlraum(; kw..., leh_closure = GapClosure(closure = 5.0, after = 0.9))
     @test length(elements(tg, :leh_top_lip)) == length(elements(t, :leh_top_lip)) ÷ 6
-    # rings: the open area at an edge radius r is the chord polygon's at r, exactly
+    # For rings, the open area at an edge radius r is exactly that of the chord polygon
+    # at r.
     L = only(filter(l -> l.name === :leh_top_lip, Briareus._lip_geometry(t)))
     @test L.r0 ≈ 1.55 && L.rin ≈ 0.6 * 1.55
     for r in (1.55, 1.42, 1.31, 1.0, 0.6 * 1.55)
@@ -170,5 +173,5 @@ end
     @test length(res) == 31
     @test sqrt(sum(abs2, res) / length(res)) < 0.035        # 0.033 mm (shot scatter ~0.03)
     @test abs(sum(res) / length(res)) < 0.01
-    @test sqrt(sum(abs2, post) / length(post)) < 0.03       # after laser-off (LASNEX: 0.11)
+    @test sqrt(sum(abs2, post) / length(post)) < 0.03       # after laser-off (LASNEX gives 0.11)
 end

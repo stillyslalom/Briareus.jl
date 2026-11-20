@@ -8,15 +8,16 @@ using Briareus, ForwardDiff, Test
     ins = CBET(leh_z = 4.55, mach = 0.0, clamp = nothing)
     two = TwoZoneCBET(out, ins)
     r(m, dl) = receiver_ratio(m, q, dl; receivers = inner)
-    # no flow and no detuning: no transfer
+    # Without flow or detuning there is no transfer.
     @test r(ins, 0.0) ≈ 1 atol = 1e-12
-    # supersonic outflow alone moves power from the inner to the outer cones; inflow
-    # (negative Mach) the other way
+    # Supersonic outflow by itself moves power from the inner to the outer cones, and inflow
+    # (negative Mach) moves it the other way.
     @test r(out, 0.0) < 0.98
     @test r(CBET(leh_z = 5.55, mach = -2.0, multiplier = 0.1, clamp = nothing), 0.0) > 1.02
     # inside, the red-detuned inner cones gain
     @test r(ins, 0.5) > 1.02
-    # two zones: Δλ = 0 is not zero transfer (net inner → outer), detuning turns it around
+    # With two zones, Δλ = 0 still transfers power, net from inner to outer, and detuning
+    # reverses the transfer.
     @test r(two, 0.0) ≈ r(out, 0.0) rtol = 1e-12
     @test r(two, 0.0) < 0.98
     @test r(two, 1.0) > 1.02
@@ -62,8 +63,8 @@ using Briareus, ForwardDiff, Test
     @test fitted.inside.multiplier == 1.0                     # not fitted
     @test_throws ArgumentError calibrate_cbet(start, beams_at, data; receivers = inner,
                                               fit = ((:outside, :length),))
-    # joint multi-shot calibration: two shots with different powers, detunings and
-    # timing (the second 0.5 ns early) recover one model; the penalty enters the loss
+    # A joint multi-shot calibration on two shots with different powers, detunings and
+    # timing (the second 0.5 ns early) recovers one model. The penalty enters the loss.
     isin2(b) = b.group in inner
     shot2(t) = [remake(b; power = b.power * (1 + 0.15t), dlambda = isin2(b) ? 0.4 : 0.0) for b in shifted]
     frac2(m, t, d) = (e = apply_lpi(m, shot2(t), t - d);
@@ -83,8 +84,9 @@ end
     inner = (:inner23, :inner30)
     P(m) = sum(b.power for b in apply_lpi(m, q, 0.0) if b.group in inner)
     lin = P(CBET(leh_z = 5.05, clamp = nothing))
-    # hard minimum: no effect while δn stays below the clamp (linear theory, bitwise up
-    # to summation order), and never less transfer than the smooth factor
+    # The hard minimum has no effect while δn stays below the clamp, where the result is the
+    # linear theory up to summation order. It never gives less transfer than the smooth
+    # factor.
     @test P(CBET(leh_z = 5.05, clamp = 1.0, saturation = :min)) ≈ lin rtol = 1e-12
     @test P(CBET(leh_z = 5.05, clamp = 1.0)) != lin
     P0 = sum(b.power for b in q if b.group in inner)
@@ -100,9 +102,9 @@ end
     fd = (P(CBET(leh_z = 5.05, clamp = 3e-4 + h, saturation = :min)) -
           P(CBET(leh_z = 5.05, clamp = 3e-4 - h, saturation = :min))) / 2h
     @test g ≈ fd rtol = 1e-4
-    # the pulse-driven clamp schedule: the rise's knee is at 4.1 ns on N221204's
-    # delivered pulse and at 4.0 ns on PRE 109 Fig. 9's (degraded) inputs, where the HYDRA
-    # deck switches 0.002 → 0.0075 (3.9–4.1 ns)
+    # For the pulse-driven clamp schedule, the knee of the rise is at 4.1 ns on the
+    # delivered pulse of N221204 and at 4.0 ns on the degraded inputs of PRE 109 Fig. 9. The
+    # HYDRA deck switches from 0.002 to 0.0075 at 3.9–4.1 ns.
     p = n221204_pulse()
     @test pulse_rise((p.t, p.power)) ≈ 4.11 atol = 0.03
     f9 = n221204_fig9()
@@ -149,7 +151,8 @@ end
     @test sqrt(sum(abs2, res) / length(res)) < 0.02
     @test maximum(abs, res) < 0.045
     @test all(abs(res[findfirst(≈(t), ts)]) < 0.03 for t in (2.0, 3.0, 5.6, 7.0, 8.0))
-    # not fitted: the 44° cone gives up more than the 50° cone at peak, as in Fig. 9a
+    # This is not fitted: the 44° cone gives up more than the 50° cone at peak, as in
+    # Fig. 9a.
     bs = n221204_fig9_beams(base, fig9, fig9.t[k])
     e = apply_lpi(m, bs, fig9.t[k])
     ratio(g) = sum(b.power for b in e if b.group === g) / sum(b.power for b in bs if b.group === g)

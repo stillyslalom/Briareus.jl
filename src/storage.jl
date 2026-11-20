@@ -1,20 +1,22 @@
-# Single-precision storage of large dense matrices (view factors), read as Float64.
+# This file stores large dense matrices (view factors) in single precision, read as
+# Float64.
 
 """
     Float32Matrix(A::AbstractMatrix)
     Float32Matrix(undef, m, n)
 
-A dense matrix stored in Float32 that reads as Float64: indexing returns the stored
-value widened, and products with Float64 vectors and matrices (`*`, `mul!`, also
+A dense matrix stored in Float32 that behaves as a Float64 matrix. Indexing returns the
+stored value widened, and products with Float64 vectors and matrices (`*`, `mul!`, also
 transposed) accumulate in Float64. A product is therefore exactly the Float64 product
-with the matrix `Float64.(A.data)`; the only error against a Float64 original is the
-rounding of each entry (relative ≤ 2⁻²⁴ ≈ 6e-8). It halves the memory of a view-factor
-matrix: `view_factors(target; storage = Float32)`, and `RadiationModel` by default for
-more than `Briareus.LARGE_MODEL[]` elements (research notes, "Large radiation models").
+with the matrix `Float64.(A.data)`, and the only error against a Float64 original is the
+rounding of each entry (relative ≤ 2⁻²⁴ ≈ 6e-8). The type halves the memory of a
+view-factor matrix. It is used by `view_factors(target; storage = Float32)`, and by
+`RadiationModel` by default for more than `Briareus.LARGE_MODEL[]` elements (research
+notes, "Large radiation models").
 
-Matrix–vector products are threaded over row (or, transposed, column) blocks and
-memory-bound; matrix–matrix products widen column panels of the matrix to Float64 and
-hand them to BLAS.
+Matrix–vector products are threaded over row blocks (column blocks when transposed) and
+are memory-bound. Matrix–matrix products widen column panels of the matrix to Float64
+and pass them to BLAS.
 """
 struct Float32Matrix <: AbstractMatrix{Float64}
     data::Matrix{Float32}
@@ -81,11 +83,11 @@ function _f32_cols!(y, D, x, r)
     return nothing
 end
 
-# Fused block products for a few columns (k ≤ `_FUSED_MAX`): one pass over D per chunk
-# of `_CHUNK` columns of X, four columns of D at a time against a row (or, transposed,
-# column) block of the output that stays in cache. Memory-bound like the vector kernels
-# up to k ≈ 8 (3–7× faster than the panels at k = 2–16); past ~50 columns the BLAS
-# panels win.
+# Fused block products for a few columns (k ≤ `_FUSED_MAX`). Each chunk of `_CHUNK`
+# columns of X takes one pass over D, four columns of D at a time, against a row block
+# (column block when transposed) of the output that stays in cache. The products are
+# memory-bound like the vector kernels up to k ≈ 8, and 3–7× faster than the panels at
+# k = 2–16. Past about 50 columns the BLAS panels are faster.
 const _CHUNK = 8
 const _FUSED_MAX = 48
 const _RB = 512           # rows per block of D X
@@ -184,7 +186,7 @@ function _f32_bcols!(Y, D, X, jr, cc)
     return nothing
 end
 
-# Columns `cols` of D widened into the first columns of `P`.
+# Widens columns `cols` of D into the first columns of `P`.
 function _widen!(P::Matrix{Float64}, D::Matrix{Float32}, cols::UnitRange{Int})
     Threads.@threads for c in eachindex(cols)
         j = cols[c]
@@ -195,11 +197,11 @@ function _widen!(P::Matrix{Float64}, D::Matrix{Float32}, cols::UnitRange{Int})
     return P
 end
 
-# Panel width: about 64 MB of Float64 per panel.
+# Panel width, about 64 MB of Float64 per panel.
 _panel(n, m) = clamp(cld(1 << 23, max(n, 1)), 16, max(m, 1))
 
-# Y = op(D) X (β = 0) through Float64 panels of D and BLAS: `tr = false` D X,
-# `tr = true` Dᵀ X, `left = true` X D (X on the left).
+# Computes Y = op(D) X (β = 0) through Float64 panels of D and BLAS, with D X for
+# `tr = false`, Dᵀ X for `tr = true` and X D (X on the left) for `left = true`.
 function _f32_panel_mul!(Y::AbstractMatrix{Float64}, D::Matrix{Float32}, X::AbstractMatrix{Float64};
                          tr::Bool = false, left::Bool = false)
     n, m = size(D)
@@ -291,10 +293,10 @@ function LinearAlgebra.mul!(Y::StridedMatrix{Float64}, X::StridedMatrix{Float64}
     return Y
 end
 
-# Products with strided vectors of first-order Float64 duals (the radiosities of a dual
-# solve): the values and partials as the columns of one matrix product (generic dual
-# products would index element by element). Strided rather than abstract vectors, so
-# FillArrays zero vectors keep their own methods without an ambiguity.
+# Products with strided vectors of first-order Float64 duals, such as the radiosities of a
+# dual solve. The values and partials are the columns of one matrix product, since generic
+# dual products would index element by element. The methods take strided vectors, so that
+# FillArrays zero vectors keep their separate methods without an ambiguity.
 for T in (:Float32Matrix, :_F32T)
     @eval function Base.:*(A::$T, x::StridedVector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
         X = Matrix{Float64}(undef, length(x), N + 1)

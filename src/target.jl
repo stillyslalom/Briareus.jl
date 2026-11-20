@@ -1,4 +1,5 @@
-# Materials, target components, and the assembled `Target` (elements + ray-casting BVH).
+# This file defines materials, target components and the assembled `Target`, which holds
+# the elements and a ray-casting BVH.
 
 """
     AlbedoModel
@@ -72,7 +73,7 @@ temperature `T` drives into a gold wall: at constant `T`,
 
 with the defaults from the self-similar solution of Hammer & Rosen, Phys. Plasmas 10,
 1829 (2003), eq. 112 for a constant drive (q₀ = 0), built on their power-law fits to
-gold's opacity and equation of state. For a drive `T(t)` the front is integrated as
+the opacity and equation of state of gold. For a drive `T(t)` the front is integrated as
 
     m_F(t) = c [∫₀ᵗ (T(t′)/100 eV)^(a/b) dt′]^b,
 
@@ -92,8 +93,8 @@ Base.@kwdef struct HeatFront
     time_exponent::Float64 = 0.5156
 end
 
-# The integrand (T/100 eV)^(a/b) of the front's drive integral, and the areal mass for
-# a value of the integral.
+# `_front_rate` is the integrand (T/100 eV)^(a/b) of the drive integral of the front, and
+# `_front_mass` is the areal mass for a value of the integral.
 _front_rate(f::HeatFront, T) = (max(T, zero(T)) / 100)^(f.temperature_exponent / f.time_exponent)
 _front_mass(f::HeatFront, I) = f.coefficient * max(I, zero(I))^f.time_exponent
 _front_integral(f::HeatFront, m) = (m / f.coefficient)^(1 / f.time_exponent)
@@ -106,50 +107,54 @@ _front_integral(f::HeatFront, m) = (m / f.coefficient)^(1 / f.time_exponent)
 
 Marshak-wave wall-loss albedo, `1 - α = c (T/100 eV)^p (t/1 ns)^q`, with defaults for
 gold from Lindl's scaling (T in heV, t in ns). `t` is clamped below at `t0`, and α to
-`range`. The radiation temperature is each element's incident-flux temperature, so
+`range`. The radiation temperature is the incident-flux temperature of each element, so
 `solve` iterates it to self-consistency; `reference_temperature` (eV) is used where
 no flux is known. The form is Lindl's for a wall held at `T` since `t = 0`;
-[`drive_history`](@ref) evaluates it at each element's effective time instead, from
-its temperature history (`wall_history`).
+[`drive_history`](@ref) evaluates it instead at the effective time of each element, from
+the temperature history of the element (`wall_history`).
 
-**Wall material.** `factor` f and `factor_exponent` δ scale gold's loss to another wall
-material's,
+**Wall material.** `factor` f and `factor_exponent` δ scale the gold loss to that of
+another wall material:
 
-    1 - α = r(T) c (T/100 eV)^p (t/1 ns)^q,    r(T) = f (T / factor_temperature)^δ,
+    1 - α = r(T) c (T/100 eV)^p (t/1 ns)^q,    r(T) = f (T / factor_temperature)^δ.
 
-applied to gold's loss after its `range` clamp (so a DU wall's albedo may exceed gold's
-cap), the ratio of the two materials' Marshak wall losses (Rosen 2005: for U₀.₆Dy₀.₂Au₀.₂
-against Au, `E/A ∝ T^3.1 t^0.57` against `T^3.3 t^0.6`, a ratio ∝ T^-0.22 t^-0.05).
-`du_wall_loss()` is the preset for an Au-lined depleted-uranium wall. A loss above 1 (a
-lossier material, `r > 1`, where gold's loss is already large) leaves albedo 0: the
-wall absorbs all it receives (a `range` reaching below 0, as for the unclamped power law
-of a closure study, lowers that floor to the lower end of the range). The constructor throws an
-`ArgumentError` for a negative `coefficient`, `factor`, `liner` or `release`, a
-nonpositive `t0`, `reference_temperature` or `factor_temperature`, and a `range` with
-`lo > hi` or `hi > 1`.
+The factor `r(T)` is the ratio of the Marshak wall losses of the two materials. Rosen
+(2005) gives `E/A ∝ T^3.1 t^0.57` for U₀.₆Dy₀.₂Au₀.₂ and `T^3.3 t^0.6` for Au, a ratio
+∝ T^-0.22 t^-0.05. The factor applies to the gold loss after its `range` clamp, so the
+albedo of a DU wall may exceed the gold cap. `du_wall_loss()` is the preset for an
+Au-lined depleted-uranium wall. A loss above 1 leaves albedo 0, and the wall then absorbs
+all it receives; such a loss arises for a lossier material (`r > 1`) where the gold loss is
+already large. A `range` reaching below 0, as for the unclamped power law of a closure
+study, lowers that floor to the lower end of the range. The constructor throws an
+`ArgumentError` for a negative `coefficient`, `factor`, `liner` or `release`, a nonpositive
+`t0`, `reference_temperature` or `factor_temperature`, and a `range` with `lo > hi` or
+`hi > 1`.
 
-**Liner.** `liner` (g/cm², 0 for none) of gold on the inside of such a wall: until the
-heat front has crossed it the wall loses like gold. The front's areal mass is the
-constant-temperature similarity form of `front` (a [`HeatFront`](@ref)) at the
-`T` and `t` of the element, `m_F = c_F (T/100 eV)^a t^b` (no history: exact at constant
-`T`, within a few percent of the drive integral for slow ramps), and the ratio becomes
+**Liner.** `liner` is the areal mass (g/cm², 0 for none) of a gold liner on the inside of
+such a wall. Until the heat front has crossed the liner, the wall loses like gold. The
+areal mass of the front is the constant-temperature similarity form of `front` (a
+[`HeatFront`](@ref)) at the `T` and `t` of the element, `m_F = c_F (T/100 eV)^a t^b`.
+This form does not depend on the temperature history. It is exact at constant `T` and
+within a few percent of the drive integral for slow ramps. The ratio becomes
 
     r_eff = w + (1 - w) r(T),    w = min(1, liner / m_F),
 
-the gold liner's share of the heated mass (an energy-content blend, *engineering*:
-continuous in `T` and `t`, so the albedo iteration stays smooth; a sharp front would
-switch the loss rate to the substrate's as soon as `m_F` passes the liner). With the
-defaults (`factor = 1`, no liner) the albedo is bitwise that of gold.
+where `w` is the share of the heated mass in the gold liner. This energy-content blend is
+an *engineering* choice. It is continuous in `T` and `t`, so the albedo iteration stays
+smooth; a sharp front would switch to the loss rate of the substrate as soon as `m_F`
+passes the liner. With the defaults (`factor = 1`, no liner) the albedo is identical to
+that of gold.
 
 **Re-emission.** `release` scales the stored energy that the wall gives back under a falling
-drive in a `drive_history` (`wall_release`): the linear (Duhamel) response of the
-self-similar loss of the wall, times `release`. 1.0 is *calibrated* against 1-D
-Lagrangian radiation hydrodynamics of an ablating gold wall (`examples/late_time_wall.jl`:
-Hammer & Rosen 2003 power laws, `P = 0.25 e/V`, flux-limited diffusion, Marshak
-boundary), with the closure given the constant-T scaling of that wall: drops of 10, 30
-and 50% in the drive temperature after a NIF-like peak need 1.07, 0.99 and 0.91 for the
-energy the wall takes in over the next 1.5 ns, and 0-D hohlraums on three NIF shots'
-pulses 0.92–1.06 (range 0.9–1.07). That wall reproduces Hammer & Rosen's ablative
+drive in a `drive_history` (`wall_release`). The released energy is the linear (Duhamel)
+response of the self-similar loss of the wall, times `release`. The default 1.0 is
+*calibrated* against 1-D Lagrangian radiation hydrodynamics of an ablating gold wall in
+`examples/late_time_wall.jl`. That model uses the Hammer & Rosen 2003 power laws,
+`P = 0.25 e/V`, flux-limited diffusion and a Marshak boundary, and the closure is given the
+constant-T scaling of that wall. Drops of 10, 30 and 50% in the drive temperature after a
+NIF-like peak need 1.07, 0.99 and 0.91 for the energy the wall takes in over the next
+1.5 ns. On the pulses of three NIF shots, 0-D hohlraums need 0.92–1.06 (range
+0.9–1.07). That wall reproduces Hammer & Rosen's ablative
 self-similar solution (Rosen, OSTI 885380 (2005), Lecture 1) to 1–3% in stored energy
 and 3–7% in heated mass at constant and ramped temperature, within the first-order
 accuracy of that solution. A static (non-ablating) wall needs 0.77 (the value before
@@ -195,11 +200,12 @@ function albedo(m::WallLossAlbedo, t, T = nothing)
     α = clamp(1 - _gold_loss(m, Te, tc), m.range...)
     m.factor == 1 && m.factor_exponent == 0 && return α
     a = 1 - _loss_ratio(m, Te, tc) * (1 - α)
-    return max(a, min(m.range[1], zero(a)))     # a loss above 1 absorbs everything
+    return max(a, min(m.range[1], zero(a)))     # with a loss above 1 the wall absorbs all
 end
 
-# Gold's loss (Lindl's form, unclamped) and the material's ratio `r_eff` to it, at the
-# element's temperature `Te` and (clamped) time `tc`.
+# `_gold_loss` returns the loss of gold in Lindl's form, unclamped, and `_loss_ratio`
+# returns the ratio `r_eff` of the loss of the material to it. Both take the element
+# temperature `Te` and the clamped time `tc`.
 _gold_loss(m::WallLossAlbedo, Te, tc) =
     m.coefficient * (Te / 100)^m.temperature_exponent * tc^m.time_exponent
 function _loss_ratio(m::WallLossAlbedo, Te, tc)
@@ -215,9 +221,9 @@ end
 """
     wall_loss_factor(model::WallLossAlbedo, t, T)
 
-The ratio `r_eff` of the model's wall loss to gold's at time `t` (ns) and radiation
-temperature `T` (eV): 1 for gold, `f (T/T_f)^δ` for another material, blended toward 1
-while the heat front is inside a gold `liner`.
+The ratio `r_eff` of the wall loss of the model to that of gold at time `t` (ns) and
+radiation temperature `T` (eV): 1 for gold, `f (T/T_f)^δ` for another material, blended
+toward 1 while the heat front is inside a gold `liner`.
 """
 function wall_loss_factor(m::WallLossAlbedo, t, T)
     m.factor == 1 && m.factor_exponent == 0 && return 1.0
@@ -225,9 +231,10 @@ function wall_loss_factor(m::WallLossAlbedo, t, T)
     return _loss_ratio(m, Te, max(t, m.t0))
 end
 
-# The depleted-uranium loss factor at 300 eV: calibrated so that an Au-lined DU wall is
-# worth 6.5% of peak laser power on a NIF high-foot hohlraum, the wall loss at its
-# effective time (research notes, "Energetics defaults and the capsule share (2026-10-25)").
+# The depleted-uranium loss factor at 300 eV. It is calibrated so that an Au-lined DU wall
+# is worth 6.5% of peak laser power on a NIF high-foot hohlraum, with the wall loss at its
+# effective time. The research notes section "Energetics defaults and the capsule share
+# (2026-10-25)" records the calibration.
 const DU_LOSS_FACTOR = 0.836
 
 "Areal mass (g/cm²) of the 0.7 µm gold liner of Döppner et al., PRL 115, 055001 (2015)."
@@ -236,28 +243,29 @@ const DU_LINER = 19.3 * 0.7e-4
 """
     du_wall_loss(; factor = 0.836, factor_exponent = -0.2, liner = 19.3 × 0.7e-4, kwargs...)
 
-`WallLossAlbedo` for an Au-lined depleted-uranium hohlraum wall: gold's loss times
+`WallLossAlbedo` for an Au-lined depleted-uranium hohlraum wall: the gold loss times
 `r(T) = factor (T/300 eV)^factor_exponent`, gold until the heat front crosses the
-`liner` (g/cm²). `kwargs` pass through (gold's Lindl coefficients by default).
+`liner` (g/cm²). `kwargs` pass through (the Lindl coefficients for gold by default).
 
-- `factor_exponent` −0.2: the cocktail/Au loss ratio's temperature scaling, T^-0.22 from
-  Rosen's Hammer–Rosen fits (M. D. Rosen, "Fundamentals of ICF hohlraums", UCRL-JRNL-
+- `factor_exponent` −0.2: the temperature scaling of the cocktail/Au loss ratio, T^-0.22
+  from Rosen's Hammer–Rosen fits (M. D. Rosen, "Fundamentals of ICF hohlraums", UCRL-JRNL-
   211678 / OSTI 885380 (2005), §VI) and T^-0.19 between LASNEX's 97.6 / 90.8 / 88.6% at
   185 / 275 / 305 eV (Schein et al., PRL 98, 175003 (2007)).
-- `factor` 0.836 at 300 eV is *calibrated* in this model: on the NIF high-foot hohlraum
-  of Döppner et al. 2015 at peak (5.75 × 9.43 mm, 3.1 mm LEHs, 1.125 mm capsule,
-  390 TW × 0.86 coupling, conversion 0.9, wall source in inner/outer bands, the wall
-  loss at the effective time 2.5 ns that `drive_history`'s wall history gives a wall
-  ~3 ns into a NIF peak) the DU wall is then worth 6.5% of laser power against gold at
-  the same capsule radiation temperature, the measured equivalence of the first DU
-  shots (Döppner 2015, citing Kline 2013 and Callahan 2012; Callahan et al., PoP 27,
-  072704 (2020): "in both simulations and experiments ... about 6.5% in drive").
-  Range 0.827–0.838 over effective times 2–4 ns. At equal power it raises the capsule
-  Tr by 4.8 eV against the measured +5 ± 6 eV of Döppner's T-1 pair (N140311 Au 317 eV,
-  N140520 DU 322 eV, 391/393 TW). It agrees with the U:Dy:Au cocktail's ratio, Rosen's
-  "about 0.83" and Schein's 17.5% (0.825). (Calibrated at the 13 ns since the pulse
-  start, the constant-temperature evaluation before 2026-10-24, the factor was 0.785:
-  that wall was too reflective and the loss reduction worth too little.)
+- `factor` 0.836 at 300 eV is *calibrated* in this model. With it the DU wall is worth 6.5%
+  of laser power against gold at the same capsule radiation temperature, the measured
+  equivalence of the first DU shots (Döppner 2015, citing Kline 2013 and Callahan 2012).
+  Callahan et al., PoP 27, 072704 (2020), report a drive benefit of about 6.5% in both
+  simulations and experiments. The calibration case is the NIF high-foot hohlraum of Döppner
+  et al. 2015 at peak, with 5.75 × 9.43 mm, 3.1 mm LEHs, a 1.125 mm capsule, 390 TW × 0.86
+  coupling, conversion 0.9 and the wall source in inner and outer bands. The wall loss is
+  taken at the effective time 2.5 ns, which the wall history of `drive_history` gives a wall
+  about 3 ns into a NIF peak. Over effective times 2–4 ns the factor ranges over
+  0.827–0.838. At equal power it raises the capsule Tr by 4.8 eV against the measured
+  +5 ± 6 eV of Döppner's T-1 pair (N140311 Au 317 eV, N140520 DU 322 eV, 391/393 TW). It
+  agrees with the ratio for the U:Dy:Au cocktail, Rosen's "about 0.83" and Schein's 17.5%
+  (0.825). Before 2026-10-24 the factor was calibrated at 13 ns since the pulse start with
+  the constant-temperature evaluation, and it was 0.785. That wall was too reflective, and
+  the loss reduction was worth too little.
 - `liner` is the 0.7 µm gold of Döppner 2015's DU hohlraums (7 µm DU, 22.3 µm gold
   backing); HYBRID-E's liner thickness is unpublished. The front crosses it in about
   0.4 ns at 150 eV, so it matters only in the picket.
@@ -302,8 +310,8 @@ function eddington_transmission(τ)
     return min(one(T), T)
 end
 
-# The point the default foil optical depth is scaled from: τ ∼ 5 for a gold foil
-# 2.5 µm thick (Lester et al. 2026, after eq. 1), i.e. 19.3 g/cm³ × 2.5 µm of gold.
+# The default foil optical depth is scaled from τ ∼ 5 for a gold foil 2.5 µm thick
+# (Lester et al. 2026, after eq. 1), which is 19.3 g/cm³ × 2.5 µm of gold.
 const _FOIL_REFERENCE_DEPTH = 5.0
 const _FOIL_REFERENCE_AREAL_MASS = 19.3 * 2.5e-4      # g/cm²
 
@@ -314,29 +322,30 @@ _foil_optical_depth(areal_mass) = _FOIL_REFERENCE_DEPTH * areal_mass / _FOIL_REF
 
 Post-burnthrough transmission of a gold foil that follows the radiation temperature
 `T` (eV) of the flux on it, for `BurnthroughAlbedo(; transmission =
-RosselandTransmission())`. The foil's optical depth scales with gold's Rosseland
-opacity,
+RosselandTransmission())`. The optical depth of the foil scales with the Rosseland
+opacity of gold,
 
     τ(T) = τ_ref (T / reference_temperature)^(-exponent),
 
-and the transmission is `eddington_transmission(τ(T))`, where `τ_ref` is the foil's
-`optical_depth` (5 at 2.5 µm). The exponent is that of Hammer & Rosen's power-law fit
-to gold's Rosseland opacity, `1/K = g T^1.5 ρ^-0.2` (Phys. Plasmas 10, 1829 (2003), eq.
-31, fitted over 100–200 eV), so the mean free path grows as `T^1.5`. The reference
+and the transmission is `eddington_transmission(τ(T))`, where `τ_ref` is the `optical_depth`
+of the foil (5 at 2.5 µm). The exponent is that of Hammer & Rosen's power-law fit to the
+Rosseland opacity of gold, `1/K = g T^1.5 ρ^-0.2` (Phys. Plasmas 10, 1829 (2003), eq. 31,
+fitted over 100–200 eV), so the mean free path grows as `T^1.5`. The reference
 temperature is the middle of the 300–350 eV at which Lester et al. (Phys. Rev. E 114,
 L023201 (2026)) evaluate `τ ∼ 5`: at the reference the transmission equals the constant
 default. Hammer & Rosen's fit also reproduces that point: with the as-built areal mass
 of 2.5 µm of gold at Lester's expanded density of 1 g/cm³ it gives `τ = 5.9` at 325 eV
-(*derived*, extrapolating the fit). The density is held at that expansion (`K ∝ ρ^0.2`:
-solid gold would double `τ`). Where no flux is known (`T = nothing`) the reference
-temperature is used.
+(*derived*, extrapolating the fit). The density is held at that expansion; since
+`K ∝ ρ^0.2`, solid gold would double `τ`. Where no flux is known (`T = nothing`) the
+reference temperature is used.
 """
 Base.@kwdef struct RosselandTransmission
     reference_temperature::Float64 = 325.0
     exponent::Float64 = 1.5
 end
 
-# Transmitted fraction of a burned-through foil of optical depth τ_ref at temperature T.
+# Return the transmitted fraction of a burned-through foil of optical depth τ_ref at
+# temperature T.
 _transmission(x::Real, τref, Tr) = x
 function _transmission(m::RosselandTransmission, τref, Tr)
     Te = (Tr === nothing || Tr <= 0) ? m.reference_temperature : Tr
@@ -362,14 +371,14 @@ At `α = 0` this is [`eddington_transmission`](@ref) exactly; for `τ ≫ 1` it 
 eq. 31): the rear of the foil, colder than its front, is more opaque. It is *derived*,
 with no parameter fitted to a measurement, and capped at 1 like the gray estimate.
 
-The front's arrival and the transition's `width` are unchanged by this choice. Against
-the 1-D gold foils of `examples/tamped_foil.jl` (Hammer & Rosen's power laws,
-flux-limited diffusion, hydrodynamics) on a public ignition-scale drive (N221204's Dante
-temperature, ×1 and ×0.95), 1.5–3 µm of gold transmit 0.76–0.79 of the energy this model
-gives over 4–9 ns (0.49–0.54 of the constant default's, 0.59–0.62 of
-`RosselandTransmission`'s); the remainder is the 1-D foil's later onset (research notes,
-"A diffusion transmission for burned-through windows (2026-11-18)"). Generic in the number
-type.
+The arrival of the front and the `width` of the transition are unchanged by this choice.
+`examples/tamped_foil.jl` models 1-D gold foils with Hammer & Rosen's power laws,
+flux-limited diffusion and hydrodynamics. On a public ignition-scale drive, N221204's Dante
+temperature at ×1 and ×0.95, those foils transmit over 4–9 ns 0.76–0.79 of the energy this
+model gives for 1.5–3 µm of gold. They transmit 0.49–0.54 of the energy the constant
+default gives and 0.59–0.62 of that of `RosselandTransmission`. The remainder of the gap
+is the later onset of the 1-D foil. The research notes section "A diffusion transmission
+for burned-through windows (2026-11-18)" gives the comparison. Generic in the number type.
 """
 Base.@kwdef struct DiffusionTransmission
     reference_temperature::Float64 = 325.0
@@ -395,7 +404,7 @@ function diffusion_transmission(τ, α = 1.5)
     τ >= 0 || throw(DomainError(τ, "the optical depth must not be negative"))
     α >= 0 || throw(DomainError(α, "the opacity's temperature exponent must not be negative"))
     k, p = 4 / (4 + α), (4 + α) / 4
-    t = 4 / (3τ + 2)                          # the gray root: g(t) ≥ 0 there, g convex
+    t = 4 / (3τ + 2)                          # gray root, with g(t) ≥ 0 and g convex
     for _ in 1:100
         u = t / 2
         g = 0.75τ * t - k * (1 - u^p)
@@ -412,16 +421,16 @@ end
                       transmission = eddington_transmission(τ), after = nothing,
                       width = 0.4, burnthrough = nothing, front = HeatFront())
 
-Albedo of a thin wall layer (a thin-foil diagnostic window: `thickness` µm of a
-material of `density` g/cm³, gold by default) that re-emits like the wall until the
-Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
-`ρ × thickness`, and then lets part of the flux that reaches it through.
+Albedo of a thin wall layer, such as a thin-foil diagnostic window, that re-emits like
+the wall until the Marshak heat front (`front`, a `HeatFront`) has heated its whole areal
+mass `ρ × thickness`, and then transmits part of the flux that reaches it. The layer
+is `thickness` µm of a material of `density` g/cm³, gold by default.
 
 Once burned through, a fraction `f = transmission` of the incident flux passes through
 the foil and leaves the hohlraum (a number, `RosselandTransmission()` for a fraction
 that follows the radiation temperature, or `DiffusionTransmission()` for one that also
-follows the foil's temperature profile). The rest meets the foil as before and is re-emitted
-with the albedo of `before`. Across the transition
+follows the temperature profile of the foil). The rest meets the foil as before and is
+re-emitted with the albedo of `before`. Across the transition
 
     α(t) = α_before (1 - s f),    transmitted fraction s f,
 
@@ -429,7 +438,7 @@ with `s = s((t - t_b)/width)` the smooth step `3x² - 2x³` on [0, 1] and `t_b` 
 burnthrough time, so the burned-through albedo is `(1 - f) α_before`. Of the flux
 `H A` on the foil, `s f H A` is transmitted and `(1 - s f)(1 - α_before) H A` absorbed
 (`energy_balance`, `drive_history`). `before` is an albedo model or a number, by
-default the wall's Marshak loss (`WallLossAlbedo`).
+default the Marshak loss of the wall (`WallLossAlbedo`).
 
 The default `f` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
 L023201 (2026), doi:10.1103/k8dz-pjdx: `f = 4/(3τ + 2)` (their eq. 2,
@@ -443,10 +452,10 @@ so `f ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitation
 - ``λ_{Au}`` is held at their evaluation, for a hohlraum radiation temperature `T_h` of
   typically 300–350 eV and an assumed gold density of about 1 g/cm³ (the expanded
   foil), so `f` is constant once burned through.
-  `transmission = RosselandTransmission()` lets ``λ_{Au}`` follow the temperature of the
-  flux on the foil instead; its density dependence is not modeled.
-- Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
-  eq. 1 at 1 g/cm³ describes a layer of 0.25 mg/cm², not the foil's 4.8. The scaling
+  With `transmission = RosselandTransmission()`, ``λ_{Au}`` follows the temperature of
+  the flux on the foil instead; its density dependence is not modeled.
+- Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally, eq. 1
+  at 1 g/cm³ describes a layer of 0.25 mg/cm², against 4.8 mg/cm² in the foil. The scaling
   with thickness (areal mass) is derived in Briareus from eq. 1.
 - The estimate is gray, planar and quasi-static, and for gold: pass `transmission`
   for another material. Below `τ = 2/3` (0.33 µm of gold) it is capped at 1.
@@ -459,9 +468,10 @@ the burned-through albedo directly instead,
 
     α(t) = α_before + s (α_after - α_before),
 
-and counts as transmitted only the loss beyond the intact foil's, `(α_before - α) H A`;
-the `(1 - α_before) H A` of the intact foil stays absorbed. `after = 0` is the open-hole
-bound on the loss with this split (the default before `transmission` existed).
+and counts as transmitted only the loss beyond that of the intact foil,
+`(α_before - α) H A`; the `(1 - α_before) H A` of the intact foil stays absorbed.
+`after = 0` is the open-hole bound on the loss with this split (the default before
+`transmission` existed).
 
 The burnthrough time `t_b` is, in order:
 - the per-element time passed to `solve`/`albedos` (`burnthrough = ...`), which
@@ -471,12 +481,12 @@ The burnthrough time `t_b` is, in order:
 - otherwise the foil is intact (`t_b = ∞`): a single solve has no history to estimate
   it from. `burnthrough_time` gives the estimate for a temperature history.
 
-`before` is evaluated at `t` (a standalone `solve` or `albedos`: the time since the
-pulse start, as a wall without history). In a [`drive_history`](@ref) with
+`before` is evaluated at `t`; in a standalone `solve` or `albedos`, `t` is the time since
+the pulse start, as for a wall without history. In a [`drive_history`](@ref) with
 `wall_history` on, a `WallLossAlbedo` `before` instead follows the temperature
-history of the element, as the wall's elements do: an intact foil equals the wall around
-it, and across and after the transition `α_before` is the history's (with the wall's
-re-emission of stored energy scaled by `α/α_before`).
+history of the element, as the wall elements do: an intact foil equals the wall around
+it, and across and after the transition `α_before` follows that history (with the
+re-emission of stored energy from the wall scaled by `α/α_before`).
 
 Before `t_b` the foil loses exactly what a thick wall loses and transmits nothing: in
 the diffusion picture the cold material ahead of a nonlinear heat front does not
@@ -487,17 +497,18 @@ gold foils on a 260 eV hohlraum wall (Nova; Lindl et al., Phys. Plasmas 11, 339
 `t_b + width/2`; see the diagnostic-windows tutorial).
 
 **Caution on an ignition-scale drive.** The onset, the `width` and the constant gray `f`
-come from bare Nova foils and the Letter's estimate. A 1-D gold foil (Hammer & Rosen's
-power laws, flux-limited diffusion, hydrodynamics: `examples/tamped_foil.jl`) on an
-ignition-scale drive (N221204's Dante temperature) starts transmitting about 0.6 ns after
-the front's arrival (0.2–0.45 ns on Nova's drive, where the measured half signal comes
-0.09–0.23 ns after it), rises slowly, and passes 0.49–0.54 of the energy this default
-gives it over 4–9 ns (1.5–3 µm). The one ignition-scale measurement, the window flux
+come from bare Nova foils and the Letter's estimate. `examples/tamped_foil.jl` models a
+1-D gold foil with Hammer & Rosen's power laws, flux-limited diffusion and hydrodynamics.
+On an ignition-scale drive (N221204's Dante temperature) that foil starts transmitting
+about 0.6 ns after the arrival of the front, and its transmission rises slowly. Over
+4–9 ns it passes 0.49–0.54 of the energy this default gives it (1.5–3 µm). On Nova's
+drive the modeled onset comes 0.2–0.45 ns after the arrival, and the measured half signal
+0.09–0.23 ns after it. The one ignition-scale measurement, the window flux
 Lester et al. extracted from Dante (its solid-angle calibration pending), corresponds to
-about 0.18 of the flux on a 2.5 µm window near 8.5 ns, between the 1-D foil's 0.16 and
-this default's 0.235. A study should bracket a window's transmission and start time
+about 0.18 of the flux on a 2.5 µm window near 8.5 ns, between 0.16 for the 1-D foil and
+0.235 for this default. A study should bracket the transmission and start time of a window
 accordingly: `transmission = DiffusionTransmission()` (lower, temperature-following)
-against the default, and the front's arrival against a start up to 0.6 ns later.
+against the default, and the arrival of the front against a start up to 0.6 ns later.
 Research notes, "Backed windows: what delays the emergent flux, and eq. 3 (2026-11-18)"
 and "A diffusion transmission for burned-through windows (2026-11-18)".
 """
@@ -553,7 +564,7 @@ optical_depth(m::BurnthroughAlbedo) = _foil_optical_depth(areal_mass(m))
     foil_transmission(model::BurnthroughAlbedo, T = nothing)
 
 Fraction of the incident flux that a burned-through foil transmits when the flux on it has
-radiation temperature `T` (eV): the model's `transmission`, evaluated at `T` for a
+radiation temperature `T` (eV): the `transmission` of the model, evaluated at `T` for a
 `RosselandTransmission` or `DiffusionTransmission` (at its reference temperature when
 `T` is `nothing`). `NaN`
 for a model with an explicit `after`.
@@ -561,7 +572,7 @@ for a model with an explicit `after`.
 foil_transmission(m::BurnthroughAlbedo, T = nothing) =
     m.after === nothing ? _transmission(m.transmission, optical_depth(m), T) : NaN
 
-# Transmitting fraction of the transition at time t for burnthrough time tb.
+# Return the transmitting fraction of the transition at time t for burnthrough time tb.
 function _burnthrough_step(m::BurnthroughAlbedo, t, tb)
     isfinite(tb) || return 0.0
     m.width == 0 && return t >= tb ? 1.0 : 0.0
@@ -569,8 +580,8 @@ function _burnthrough_step(m::BurnthroughAlbedo, t, tb)
     return x^2 * (3 - 2x)
 end
 
-# The albedo at time t, the intact (`before`) albedo, and the fraction of the incident
-# flux transmitted out of the enclosure.
+# Return the albedo at time t, the intact (`before`) albedo, and the fraction of the
+# incident flux transmitted out of the enclosure.
 function _burnthrough_split(m::BurnthroughAlbedo, t, T, burnthrough)
     tb = burnthrough !== nothing && !isnan(burnthrough) ? burnthrough :
          m.burnthrough !== nothing ? m.burnthrough : Inf
@@ -618,14 +629,14 @@ struct GapClosure <: AlbedoModel
 end
 GapClosure(; closure, width = 0.4, after = WallLossAlbedo()) = GapClosure(closure, width, after)
 
-# Closed fraction of a gap at time t (0 open, 1 closed).
+# Return the closed fraction of a gap at time t, 0 when open and 1 when closed.
 function _closure_step(m::GapClosure, t)
     m.width == 0 && return t >= m.closure ? 1.0 : 0.0
     x = clamp((t - m.closure) / m.width, 0.0, 1.0)
     return x^2 * (3 - 2x)
 end
 
-# The albedo at time t, the closed albedo, and the transmitted fraction.
+# Return the albedo at time t, the closed albedo, and the transmitted fraction.
 function _closure_split(m::GapClosure, t, T)
     αa = albedo(m.after, t, T)
     s = _closure_step(m, t)
@@ -643,37 +654,38 @@ An entrance-hole lip whose closure is computed from the local conditions
 its rim inward; the plasma edge (the radius at which the blow-off turns opaque) sits a
 depth `d(t)` inside the initial radius `r₀` and moves as
 
-    dd/dt = (1 − h) v(T) + h (depth − d)/hold_time,    v(T) = speed (T/100 eV)^exponent,
+    dd/dt = (1 − h) v(T) + h (depth − d)/hold_time,    v(T) = speed (T/100 eV)^exponent.
 
-with `T` the radiation temperature incident on the lip (the sound speed of x-ray-ablated
-gold, `c_s ∝ T^½`, sets the free expansion) and `h ∈ [0, 1]` the laser's hold: the smooth
-step `3x² − 2x³` of the laser intensity through the hole (power of the beams entering it
-over the hole's initial area, TW/mm²) between `hold[1]` and `hold[2]`. While the beams
-pass at high power the blow-off stagnates against the laser-heated plasma in a dense
-ridge `depth` inside the rim (Chen et al., PoP 27, 022702 (2020): the ridge forms on the
-rise to peak where the outer beams cross the lip blow-off, then holds; "heating of the
-plasma inside the LEH region by the lasers keeps the LEH open"); a lip that closed
-further in a long foot is pushed back to it (Schneider et al. 2015: closes in the
-low-power part, reopens at peak). Below `hold[1]` (the foot, and after the laser turns
-off) the edge moves in freely at `v(T)`.
+Here `T` is the radiation temperature incident on the lip; the sound speed of x-ray-ablated
+gold, `c_s ∝ T^½`, sets the free expansion. The laser hold `h ∈ [0, 1]` is the smooth step
+`3x² − 2x³` of the laser intensity through the hole between `hold[1]` and `hold[2]`. That
+intensity is the power of the beams entering the hole over its initial area (TW/mm²). While
+the beams pass at high power, the blow-off stagnates against the laser-heated plasma in a
+dense ridge `depth` inside the rim. Chen et al., PoP 27, 022702 (2020), observe the ridge
+forming on the rise to peak where the outer beams cross the lip blow-off, after which it
+persists. They attribute the open LEH to the laser heating of the plasma inside the LEH
+region. A lip that closed further in a long foot is pushed back to the ridge; Schneider
+et al. 2015 observe closure in the low-power part and reopening at peak. Below `hold[1]`, in
+the foot and after the laser turns off, the edge moves in freely at `v(T)`.
 
 `drive_history` integrates `d(t)` per lip from `times[1]` (open there) and maps it onto
-the lip's elements: a lip meshed in rings between its inner radius and `r₀` (the floor
+the lip elements: a lip meshed in rings between its inner radius and `r₀` (the floor
 of the closure) has each ring the closed fraction `s` of its area outside the edge, so
 the open area is exact at any radial resolution. A closed part re-emits with the albedo
 of `after`, `α = s α_after`, and `1 − s` escapes (as for `GapClosure`). A single
 `solve` treats the lip as open unless given its closed fraction per element as
 `burnthrough`. `lip_depth` integrates the closure for given histories.
 
-Defaults (*calibrated*, research notes "Computed LEH closure (2026-10-24)"): fitted to
-the measured effective LEH radius of five HDC basecamp shots (Chen 2020 Fig. 27, 3.37 mm
-LEHs, `chen2020_leh()`) with the lip temperature the model computes for the basecamp
-history: `speed`, `depth` and `hold_time`; the hold intensities bracket the rise
-(free closure at 110 TW, held from ~300 TW of 400); rms 0.033 mm over 31 points, about
+The defaults are *calibrated*, and the research notes section "Computed LEH closure
+(2026-10-24)" records the fit. `speed`, `depth` and `hold_time` are fitted to the
+measured effective LEH radius of five HDC basecamp shots (Chen 2020 Fig. 27, 3.37 mm
+LEHs, `chen2020_leh()`), with the lip temperature that the model computes for the
+basecamp history. The hold intensities bracket the rise, with free closure at 110 TW and
+the hold from about 300 TW of 400. The fit has an rms of 0.033 mm over 31 points, about
 the shot-to-shot scatter. `depth` 0.24 mm matches the closure at peak of Young et al.
-2020 (SXI: 1.83 → 1.57 mm, 0.26) and Schneider et al. 2015 (0.84 of 1.55 mm, 0.25); on
-3.1–3.64 mm LEHs a common depth and a common fraction of r₀ cannot be told apart, and
-the model takes the depth (the ridge stands where the beams meet the blow-off). After
+2020 (SXI, from 1.83 to 1.57 mm, 0.26) and Schneider et al. 2015 (0.84 of 1.55 mm, 0.25). On
+3.1–3.64 mm LEHs a common depth and a common fraction of r₀ are indistinguishable, and
+the depth is used because the ridge stands where the beams meet the blow-off. After
 the laser turns off the measured edge moves in ≤ 0.02 mm/ns over 1.7 ns (LASNEX
 0.07–0.11), as the fitted free speed gives at the falling temperature.
 """
@@ -695,14 +707,16 @@ end
 LipClosure(; speed = 0.022, exponent = 0.5, depth = 0.24, hold_time = 0.4, hold = (6.0, 17.0),
            after = WallLossAlbedo()) = LipClosure(speed, exponent, depth, hold_time, hold, after)
 
-# The laser's hold on the lip at intensity I (TW/mm² through the hole): 0 free, 1 held.
+# Return the laser hold on the lip at intensity I (TW/mm² through the hole), 0 when the
+# lip is free and 1 when it is held.
 function _lip_hold(m::LipClosure, I)
     x = clamp((I - m.hold[1]) / (m.hold[2] - m.hold[1]), 0.0, 1.0)
     return x^2 * (3 - 2x)
 end
 
-# The depth after a step Δ from d0, with the step's mean free speed v and hold h:
-# exact for constant coefficients (the hold's relaxation is stiff on 0.25 ns steps).
+# Return the depth after a step Δ from d0, with the mean free speed v and hold h of the
+# step. The update is exact for constant coefficients, since the relaxation of the hold is
+# stiff on 0.25 ns steps.
 function _lip_advance(m::LipClosure, d0, Δ, v, h)
     h <= 0 && return d0 + v * Δ
     b = h / m.hold_time
@@ -718,8 +732,8 @@ Closure depth `d` (mm inside the initial LEH radius) of a `LipClosure` lip at `t
 (ns), given the radiation temperature on the lip `Tr` (eV) and the laser intensity
 through the hole `intensity` (TW/mm² over its initial area) at those times: the
 trapezoidal mean of `v(T)` and of the hold over each step, integrated exactly for the
-hold's relaxation (as `drive_history` does). Starts from `depth` at `times[1]`; `floor`
-caps it (the lip's radial extent).
+relaxation of the hold (as `drive_history` does). The integration starts from `depth` at
+`times[1]`, and the depth is capped at `floor` (the radial extent of the lip).
 """
 function lip_depth(m::LipClosure, times, Tr, intensity; depth::Real = 0.0, floor::Real = Inf)
     n = length(times)
@@ -735,8 +749,8 @@ function lip_depth(m::LipClosure, times, Tr, intensity; depth::Real = 0.0, floor
     return d
 end
 
-# The closed fraction of a lip ring [ra, rb] (radii from the hole's center) when the
-# plasma edge is at radius r: the share of its area outside r.
+# Return the closed fraction of a lip ring [ra, rb], with radii from the hole center, when
+# the plasma edge is at radius r. The fraction is the share of the ring area outside r.
 _ring_closed(ra, rb, r) = r <= ra ? 1.0 : r >= rb ? 0.0 : (rb^2 - r^2) / (rb^2 - ra^2)
 
 function _lip_split(m::LipClosure, t, T, s)
@@ -793,11 +807,11 @@ The [`RadiusSchedule`](@ref) `base` stretched in time and radius:
     R(t)/R₀ = radius_scale · base(t / time_scale),
 
 so a feature of `base` at time t₁ (its minimum, say) falls at `time_scale · t₁`. For a
-[`TabulatedRadius`](@ref) base the table's times are scaled once (`base.t .* time_scale`,
+[`TabulatedRadius`](@ref) base the table times are scaled once (`base.t .* time_scale`,
 interpolated as a separate table). A scaled schedule is *derived*: it stands in for a
 shot whose own history is unpublished (e.g. Zylstra's LEH pair on Kritcher 2024's
-N210808 capsule, its minimum at 9.18 ns moved to each shot's bang time). `source`
-defaults to the base's with the factors appended.
+N210808 capsule, its minimum at 9.18 ns moved to the bang time of each shot). `source`
+defaults to the `source` of the base with the factors appended.
 """
 struct ScaledRadius{S} <: RadiusSchedule
     base::S
@@ -824,22 +838,25 @@ end
     TrajectoryRadius(; start, peak_time, peak_radius, velocity, bang, minimum, radius,
                      source = "")
 
-A kinematic [`RadiusSchedule`](@ref) through an implosion's published anchors, for a shot
-without a published radius history: the surface holds its initial radius `radius` (mm)
-until `start` (ns; the first shock reaching it, e.g. a keyhole's shock-1 breakout from the
-ablator), falls along a cubic Hermite segment to `peak_radius` (mm) at `peak_time` with
-the inward speed `velocity` (km/s; at rest at `start`), then along a second one to
-`minimum` (R/R₀) at `bang`, at rest there, and holds it after (the rebound is not
-modeled). `R/R₀` = R/`radius`. The anchors are what HYDRA tables give (peak implosion
-velocity, its time, the limb-minimum radius at peak velocity: Kritcher et al., PRE 106,
-025201 (2022) Table I) with a keyhole breakout and the bang time; both segments must
-stay monotone (speed ≤ 3× the segment's mean, else an `ArgumentError`).
+A kinematic [`RadiusSchedule`](@ref) through the published anchors of an implosion, for a
+shot without a published radius history. The surface stays at its initial radius `radius`
+(mm) until `start` (ns), when the first shock reaches it, as at the shock-1 breakout of a
+keyhole from the ablator. It then falls along a cubic Hermite segment to `peak_radius` (mm)
+at `peak_time`, at rest at `start` and with the inward speed `velocity` (km/s) at
+`peak_time`. A second segment takes it to `minimum` (R/R₀) at `bang`, at rest there, and
+the radius stays at that value after bang; the rebound is not modeled.
+`R/R₀` = R/`radius`. The anchors are a keyhole breakout, the bang time and the values that
+HYDRA tables give: the peak implosion velocity, its time and the limb-minimum radius at
+peak velocity. Kritcher et al., PRE 106, 025201 (2022), list these values in Table I.
+Both segments must stay monotone, with the speed at most 3× the segment mean; otherwise
+the constructor throws an `ArgumentError`.
 
-*Derived*, an interpolant, not a rocket model: it carries no ablation physics. Checked
-against Kritcher 2024 Fig. 1 (not used to build it): N221204's anchors (keyhole start
-3.864 ns, bang 9.53, 383 km/s, peak velocity 0.44 ns before bang at 197 µm, both from
-the N210207/N210307/N210808 HYDRA rows) give R/R₀ within 0.019 of the published history
-(0.029 in R²) from 3 ns to peak velocity. Research notes, "Capsule radius schedules:
+The schedule is *derived*, an interpolant that does not model ablation physics. It is
+checked against Kritcher 2024 Fig. 1, which was not used to build it. N221204's anchors
+are a keyhole start at 3.864 ns, bang at 9.53 ns and 383 km/s, with peak velocity
+0.44 ns before bang at 197 µm; these two values come from the N210207/N210307/N210808
+HYDRA rows. With these anchors, R/R₀ lies within 0.019 of the published history (0.029
+in R²) from 3 ns to peak velocity. Research notes, "Capsule radius schedules:
 published histories and the API (2026-10-26)".
 """
 struct TrajectoryRadius <: RadiusSchedule
@@ -857,8 +874,8 @@ function TrajectoryRadius(; start::Real, peak_time::Real, peak_radius::Real, vel
     radius > 0 && velocity > 0 || throw(ArgumentError("radius and velocity must be positive"))
     rv, v = peak_radius / radius, velocity / 1000 / radius
     1 > rv > minimum >= 0 || throw(ArgumentError("need radius > peak_radius > minimum · radius ≥ 0"))
-    # a cubic Hermite segment with end slopes 0 and the mean slope's β times stays monotone
-    # for β ≤ 3 (Fritsch & Carlson 1980)
+    # A cubic Hermite segment with end slopes 0 and β times the mean slope stays monotone
+    # for β ≤ 3 (Fritsch & Carlson 1980).
     v <= 3 * (1 - rv) / (peak_time - start) && v <= 3 * (rv - minimum) / (bang - peak_time) ||
         throw(ArgumentError("velocity too high for a monotone trajectory through these anchors"))
     return TrajectoryRadius(Float64(start), Float64(peak_time), Float64(rv), Float64(v),
@@ -888,7 +905,7 @@ radius_fraction(s::ScaledRadius{TabulatedRadius}, t) = s.radius_scale * _interp(
 radius_fraction(s::ScaledRadius, t) = s.radius_scale * radius_fraction(s.base, t / s.time_scale)
 radius_fraction(s, t) = _radius_fraction(_radius_schedule(s), t)
 
-# A `(times, R/R₀)` table becomes a `TabulatedRadius`; anything else stays as given.
+# Convert a `(times, R/R₀)` table to a `TabulatedRadius`, and return anything else as given.
 _radius_schedule(r::Tuple) = TabulatedRadius(r[1], r[2])
 _radius_schedule(r) = r
 
@@ -902,19 +919,20 @@ outside that sphere:
     α_eff(t) = 1 - (1 - α_c) s² - a_out (1 - s²),    s = R(t)/R₀,
 
 so that the capsule mesh absorbs `(1 - α_c) H 4πR(t)²`, the absorption of the smaller
-sphere at the same incident flux, plus `a_out H 4π(R₀² - R(t)²)`, and passes the rest
-on (re-emitted from the mesh, an approximation of light crossing the shrunken capsule's
-surroundings). `albedo` ``α_c`` is a number or an `AlbedoModel` (`TabulatedAlbedo` in time,
-`TemperatureAlbedo` in the incident radiation temperature); `radius` is `nothing`
-(R = R₀), a [`RadiusSchedule`](@ref) ([`TabulatedRadius`](@ref), [`ScaledRadius`](@ref)),
-a `(times, R/R₀)` table (ns; linear, held at its ends; stored as a `TabulatedRadius`) or
-a function `t -> R/R₀`. `outside_absorptance` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0)
-is the absorptance of the blow-off between the ablation front and `R₀` for the flux that
-misses the front: an explicit term for absorption outside the front (W-doped ablator plasma),
-unpublished, so 0 unless a study sets it; with the default the model is the front's
-alone, and without a `radius` the term vanishes. `energy_balance` then books the
-capsule's absorbed power at the effective radius plus the outside term, and
-`energy_budget` its integral ``E_{cap}``.
+sphere at the same incident flux, plus `a_out H 4π(R₀² - R(t)²)`. The mesh re-emits the
+rest, which approximates light crossing the surroundings of the shrunken capsule.
+`albedo` ``α_c`` is a number or an `AlbedoModel`, such as `TabulatedAlbedo` in time or
+`TemperatureAlbedo` in the incident radiation temperature. `radius` is `nothing`
+(R = R₀), a [`RadiusSchedule`](@ref) such as [`TabulatedRadius`](@ref) or
+[`ScaledRadius`](@ref), a `(times, R/R₀)` table, or a function `t -> R/R₀`. A table is in
+ns, linear and held at its ends, and it is stored as a `TabulatedRadius`.
+`outside_absorptance` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0) is the absorptance of
+the blow-off between the ablation front and `R₀` for the flux that misses the front. This
+explicit term for absorption outside the front, as by W-doped ablator plasma, is
+unpublished, so it is 0 unless a study sets it. With the default the model is only the
+absorption of the front, and without a `radius` the term vanishes. `energy_balance` then
+books the absorbed capsule power at the effective radius plus the outside term, and
+`energy_budget` books its integral ``E_{cap}``.
 
 The default ``α_c`` = 0.2 is the 0-D value ``f_{cap} = 1 - α_{cap} ≈ 0.8`` of Swadling et
 al., PoP 32, 052707 (2025). For a NIF HDC capsule in a drive history, Young et al.'s
@@ -937,7 +955,7 @@ end
     radius_fraction(m::CapsuleAlbedo, t) -> R(t)/R₀
 
 The effective radius over the mesh radius of a [`CapsuleAlbedo`](@ref) at time `t` (ns):
-its `radius` schedule's, 1 without one.
+that of its `radius` schedule, 1 without one.
 """
 radius_fraction(m::CapsuleAlbedo, t) = _radius_fraction(m.radius, t)
 _radius_fraction(::Nothing, t) = 1.0
@@ -952,41 +970,44 @@ function albedo(m::CapsuleAlbedo, t, T = nothing)
     return 1 - (1 - αc) * s2 - m.outside_absorptance * (1 - s2)
 end
 
-# An albedo model's albedo, the albedo it would have intact (closed), and the fraction of
-# the incident flux it transmits out of the enclosure.
+# Return the albedo of an albedo model, the albedo it would have intact (closed), and the
+# fraction of the incident flux it transmits out of the enclosure.
 _albedo_split(m::AlbedoModel, t, T, burnthrough) = (α = albedo(m, t, T); (α, α, zero(α)))
 _albedo_split(m::BurnthroughAlbedo, t, T, burnthrough) = _burnthrough_split(m, t, T, burnthrough)
 _albedo_split(m::GapClosure, t, T, burnthrough) = _closure_split(m, t, T)
 _albedo_split(m::LipClosure, t, T, closed) = _lip_split(m, t, T, closed)
 
-# The wall-loss history of a `WallLossAlbedo` element through a `drive_history` step.
-# Lindl's wall energy at constant T, E_w ∝ T^a t^b (a = 4 + p = 3.3, b = 1 + q = 0.62),
-# is carried to a varying T(t) as E_w ∝ [∫ r(T) dt]^b, r(T) = (T/100 eV)^(a/b) (the
-# form of `HeatFront`'s drive integral); its rate dE_w/dt is the constant-T loss at the
-# current T and the effective time t_eff = ∫ r(T) dt / r(T): the time the wall would
-# have needed at today's T to hold today's energy. Over a step, with the trapezoidal
-# integral, t_eff = A / r(T) + B (A = I₀ + Δ r₀/2, B = Δ/2; at the first step A = 0,
-# B = max(t, 0), i.e. constant T since t = 0, and no history before a first step at or
-# before t = 0, a prepulse's).
+# `_WallHistory` is the wall-loss history of a `WallLossAlbedo` element through a
+# `drive_history` step.
+# Lindl's wall energy at constant T is E_w ∝ T^a t^b, with a = 4 + p = 3.3 and
+# b = 1 + q = 0.62. For a varying T(t) it is carried over as E_w ∝ [∫ r(T) dt]^b with
+# r(T) = (T/100 eV)^(a/b), the form of `HeatFront`'s drive integral. Its rate dE_w/dt is
+# the constant-T loss at the current T and the effective time t_eff = ∫ r(T) dt / r(T),
+# the time the wall would have needed at today's T to hold today's energy. Over a step,
+# the trapezoidal integral gives t_eff = A / r(T) + B with A = I₀ + Δ r₀/2 and B = Δ/2.
+# At the first step A = 0 and B = max(t, 0), which is constant T since t = 0. No history
+# precedes a first step at or before t = 0, such as the step of a prepulse.
 #
-# Re-emission under a falling drive (`drive_history(...; wall_release = true)`): the
-# loss above is the heating response and is evaluated at the element's highest
-# temperature so far, T_h = max(T_max, T); a drop below T_max is the deficit
-# D(t) = φ(T_max) − φ(T), φ = (T/100 eV)^a, and the wall answers it with the same
-# self-similar kernel, superposed (Duhamel): the net flux into the wall is
+# Re-emission under a falling drive (`drive_history(...; wall_release = true)`) works as
+# follows. The loss above is the heating response. It is evaluated at the highest
+# temperature of the element up to the current time, T_h = max(T_max, T). A drop below
+# T_max is the deficit D(t) = φ(T_max) − φ(T), with φ = (T/100 eV)^a. The wall responds
+# to the deficit with the same self-similar kernel, superposed (Duhamel), so the net flux
+# into the wall is
 #
-#     F = L(T_h, t_eff) − f_r b C ∫ (t − t′)^(b−1) dD(t′),    C = L t_eff^(1−b) / (b φ(T_h)),
+#     F = L(T_h, t_eff) − f_r b C ∫ (t − t′)^(b−1) dD(t′),    C = L t_eff^(1−b) / (b φ(T_h)).
 #
-# where C is the coefficient of the loss (c σ (100 eV)⁴ / b for gold's unclamped Lindl
-# loss, constant), so a constant-T wall's loss is C b φ t^(b−1) and a step down of D
-# releases f_r C D (t − t_d)^b by time t (f_r the model's `release`). D is piecewise
-# linear between the steps (the integral is exact for it): `G` is the earlier steps'
-# part at this step's time, `D` the previous step's deficit, `Δ` this step's length. With no deficit (T never below
-# its running maximum) the albedo is bitwise that of the heating loss alone.
+# Here C is the coefficient of the loss; for gold's unclamped Lindl loss it is the constant
+# c σ (100 eV)⁴ / b. A constant-T wall then loses C b φ t^(b−1), and a step down of D
+# releases f_r C D (t − t_d)^b by time t, with f_r the model's `release`. D is piecewise
+# linear between the steps, and the integral is exact for it. The state contains `G`, the
+# part of the earlier steps at the time of this step; `D`, the deficit of the previous
+# step; and `Δ`, the length of this step. With no deficit (T never below its running
+# maximum) the albedo equals that of the heating loss, with no re-emission term.
 struct _WallHistory
     A::Float64
     B::Float64
-    Tmax::Float64          # highest temperature before this step (0: none tracked)
+    Tmax::Float64          # highest temperature before this step (0 if none)
     G::Float64
     D::Float64
     Δ::Float64
@@ -995,7 +1016,8 @@ _WallHistory(A, B) = _WallHistory(A, B, 0.0, 0.0, 0.0, 0.0)
 
 _loss_rate(m::WallLossAlbedo, T) =
     (max(T, zero(T)) / 100)^((4 + m.temperature_exponent) / (1 + m.time_exponent))
-# The potential φ = (T/100 eV)^a of the wall energy, whose drops the wall re-emits.
+# Return the potential φ = (T/100 eV)^a of the wall energy. When φ drops, the wall
+# re-emits the released energy.
 _wall_potential(m::WallLossAlbedo, T) = (max(T, zero(T)) / 100)^(4 + m.temperature_exponent)
 
 function _effective_time(m::WallLossAlbedo, h::_WallHistory, T)
@@ -1004,18 +1026,19 @@ function _effective_time(m::WallLossAlbedo, h::_WallHistory, T)
     return h.A / _loss_rate(m, Te) + h.B
 end
 
-# A wall-loss element with history `h` at temperature T: its albedo α, an emission E
-# (TW/mm², added to its x-ray source) and the flux Fc it re-emits from stored energy,
-# with the net flux into the wall (1 − α) H − E = L(T_h) − Fc. While T is at or above
-# its running maximum the albedo is the heating loss's and E = Fc. Below it, Fc's
-# implicit part (this step's deficit, C Δ^(b−1) φ(T)) goes into the albedo and the rest,
-# independent of T, into E: the stiff short-time response of the hot surface layer
-# would make a T-dependent emission diverge in `solve`'s albedo iteration, whereas the
-# albedo 1 − C Δ^(b−1) φ(T)/H ∝ T^-0.7 iterates like Lindl's. The radiosity αH + E is
+# The state of a wall-loss element with history `h` at temperature T. The function returns
+# the albedo α, an emission E (TW/mm², added to its x-ray source) and the flux Fc that the
+# element re-emits from stored energy. The net flux into the wall is
+# (1 − α) H − E = L(T_h) − Fc. While T is at or above its running maximum, the albedo is
+# that of the heating loss and E = Fc. Below the maximum, the implicit part of Fc, the
+# term C Δ^(b−1) φ(T) from the deficit of this step, goes into the albedo, and the rest,
+# independent of T, goes into E. The hot surface layer responds stiffly at short times, so
+# a T-dependent emission would diverge in `solve`'s albedo iteration. The albedo
+# 1 − C Δ^(b−1) φ(T)/H ∝ T^-0.7 instead iterates like Lindl's. The radiosity αH + E is
 # kept ≥ 0.
 function _wall_split(m::WallLossAlbedo, h::_WallHistory, T)
-    # a heated wall without flux (a step where nothing fires): started below its running
-    # maximum, where its stored energy re-emits; `solve`'s iteration then finds its T
+    # A heated wall without flux, on a step where no beam fires, starts below its running
+    # maximum, where its stored energy re-emits; `solve`'s iteration then finds its T.
     (T === nothing || T <= 0) && h.Tmax > 0 && (T = h.Tmax / 2)
     Te = (T === nothing || T <= 0) ? m.reference_temperature : T
     if Te >= h.Tmax && h.G == 0 && h.D == 0
@@ -1032,9 +1055,10 @@ function _wall_split(m::WallLossAlbedo, h::_WallHistory, T)
     φ = _wall_potential(m, Te)
     Fc = C * (h.G + (_wall_potential(m, Th) - φ - h.D) * K)
     α, E = Te >= h.Tmax ? (αh, Fc) : (1 - C * K * φ / (SIGMA_SB * Te^4), C * K * φ - (Lh - Fc))
-    # a wall that cooled and is heated again takes its surface layer back (Fc < 0), but
-    # no more than falls on it: the radiosity αH + E stays ≥ 0 (then α = 0, E = 0, and
-    # the re-emitted flux is what makes the net flux into the wall H)
+    # A wall that cooled and is heated again takes its surface layer back (Fc < 0), but
+    # no more than the flux that falls on it, so the radiosity αH + E stays ≥ 0. Where it
+    # would go negative, α = 0 and E = 0, and the re-emitted flux makes the net flux into
+    # the wall equal H.
     H = SIGMA_SB * Te^4
     α * H + E >= 0 && return α, E, Fc
     return zero(α), zero(α), Lh - H
@@ -1043,19 +1067,19 @@ end
 _albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =
     (α = first(_wall_split(m, h, T)); (α, α, zero(α)))
 
-# A thin-foil element's state in a `drive_history` whose `before` is a `WallLossAlbedo`
-# following the temperature history of the element: its burnthrough time (NaN: none
-# known) and that wall history.
+# The state of a thin-foil element in a `drive_history` whose `before` is a
+# `WallLossAlbedo` that follows the temperature history of the element. The state contains
+# the burnthrough time, NaN when none is known, and that wall history.
 struct _FoilHistory
     tb::Float64
     wall::_WallHistory
 end
 
-# The albedo, intact albedo, transmitted fraction and emission of such a foil, and the
-# factor on the wall's emission: intact, exactly the wall's (`_wall_split` of `before`);
-# across the transition the blend of `_burnthrough_split` with that `before`, and the
-# re-emitted stored energy scaled with the albedo, by α/α_before (1 - s f, or the
-# explicit `after`'s blend).
+# Return the albedo, intact albedo, transmitted fraction and emission of such a foil, and
+# the factor on the wall emission. While the foil is intact, these equal the values of the
+# wall, from `_wall_split` of `before`. Across the transition they blend
+# `_burnthrough_split` with that `before`, and the re-emitted stored energy is scaled with
+# the albedo by α/α_before. That factor is 1 - s f, or the blend of an explicit `after`.
 function _foil_history_split(m::BurnthroughAlbedo, t, T, st::_FoilHistory)
     αb, E, _ = _wall_split(m.before::WallLossAlbedo, st.wall, T)
     tb = !isnan(st.tb) ? st.tb : m.burnthrough !== nothing ? m.burnthrough : Inf
@@ -1069,11 +1093,12 @@ function _foil_history_split(m::BurnthroughAlbedo, t, T, st::_FoilHistory)
     k = αb > 0 ? α / αb : 1 - s
     return α, αb, αb - α, E * k, k
 end
-# Whether a model lets part of the flux on it leave the enclosure.
+# Test whether a model transmits part of its incident flux out of the enclosure.
 _transmits(::AlbedoModel) = false
 _transmits(::Union{BurnthroughAlbedo,GapClosure,LipClosure}) = true
 
-# Progress of a model's transition at time t (burnthrough time tb): 0 before, 1 after.
+# Return the progress of the transition of a model at time t for burnthrough time tb, 0
+# before the transition and 1 after.
 _transition_step(m::BurnthroughAlbedo, t, tb) = _burnthrough_step(m, t, tb)
 _transition_step(m::GapClosure, t, tb) = _closure_step(m, t)
 
@@ -1082,8 +1107,8 @@ _transition_step(m::GapClosure, t, tb) = _closure_step(m, t)
 
 Time (ns) at which the heat front driven by the radiation temperature history `Tr`
 (eV, at `times`, piecewise linear; `heat_front`) reaches the back of the layer, or `Inf`
-if it does not within `times`. This is the estimate alone; an explicit `burnthrough`
-of the model is not consulted.
+if it does not within `times`. The function returns only this estimate and does not
+use an explicit `burnthrough` of the model.
 """
 function burnthrough_time(m::BurnthroughAlbedo, times, Tr)
     length(times) == length(Tr) || throw(ArgumentError("times and temperatures differ in length"))
@@ -1095,7 +1120,8 @@ function burnthrough_time(m::BurnthroughAlbedo, times, Tr)
         Δ = times[k] - times[k-1]
         dI = Δ * (r0 + r1) / 2
         if I + dI >= need
-            # the integrand is linear across the step: solve the quadratic for the crossing
+            # The integrand is linear across the step, so solve the quadratic for the
+            # crossing.
             return times[k-1] + _linear_crossing(r0, r1, Δ, need - I)
         end
         I += dI
@@ -1103,21 +1129,22 @@ function burnthrough_time(m::BurnthroughAlbedo, times, Tr)
     return Inf
 end
 
-# x in [0, Δ] with ∫₀ˣ (r0 + (r1 - r0) s/Δ) ds = J (0 ≤ J ≤ Δ(r0 + r1)/2).
+# Return x in [0, Δ] with ∫₀ˣ (r0 + (r1 - r0) s/Δ) ds = J, for 0 ≤ J ≤ Δ(r0 + r1)/2.
 function _linear_crossing(r0, r1, Δ, J)
     a = (r1 - r0) / 2Δ
     abs(a) * Δ^2 <= 1e-12 * max(J, eps()) && return r0 > 0 ? J / r0 : Δ
-    # a x² + r0 x - J = 0, root in [0, Δ], written to avoid cancellation
+    # Solve a x² + r0 x - J = 0 for the root in [0, Δ], in a form that avoids cancellation.
     return 2J / (r0 + sqrt(max(r0^2 + 4a * J, 0.0)))
 end
 
-# The package's linear interpolation: through (ts, vs) (ts sorted; a time may repeat once
-# for a step, which takes the value after it), held at the end values outside. Generic in
-# `t` for ForwardDiff: the end values come back in t's number type (a Float64 beside
-# duals made callers infer a Union), and the interval is found on t's value. Shared by
-# albedo, radius and conversion tables, pulses, LPI transfer tables, response kernels
-# and drive-history resampling. (`TabulatedCurve` keeps a separate form, v₁ + w (v₂ − v₁),
-# which rounds differently.)
+# Interpolate linearly through (ts, vs), the interpolation used across the package. The
+# times ts are sorted, and a time may repeat once for a step, which takes the value after
+# it. Outside the table the end values are held. The function is generic in `t` for
+# ForwardDiff. The end values come back in the number type of t, because a Float64 beside
+# duals made callers infer a Union, and the interval is found on the value of t. Albedo,
+# radius and conversion tables, pulses, LPI transfer tables, response kernels and
+# drive-history resampling all use it. `TabulatedCurve` uses a separate form,
+# v₁ + w (v₂ − v₁), which rounds differently.
 function _interp(ts, vs, t)
     t <= ts[1] && return vs[1] * one(t)
     t >= ts[end] && return vs[end] * one(t)
@@ -1130,18 +1157,18 @@ end
     Conversion(; efficiency = 0.9, time_exponent = 0.0, reference_time = 1.0, start = 0.0,
                t0 = 0.1, intensities = nothing, efficiencies = nothing, range = (0.0, 1.0))
 
-Laser → x-ray conversion efficiency that varies in time and with the absorbed laser
+Laser-to-x-ray conversion efficiency that varies in time and with the absorbed laser
 intensity, for `Material(...; conversion = Conversion(...))`:
 
     η(t, I) = clamp(η₀(I) ((t - start)/reference_time)^s, range...),
 
 with `s` = `time_exponent`, `t - start` clamped below at `t0` (ns), and `η₀(I)` either
 the constant `efficiency` or, with `intensities` (W/cm²) and `efficiencies`, the table
-interpolated linearly in log₁₀ I and held at its ends. The default `efficiency` 0.9 is
-the conversion of [`gold`](@ref), the input of a published static VisRad model of a NIF
-hohlraum (Young et al., PoP 27, 082702 (2020)); 0.75 suits 1 ns Nova and Omega
-hohlraums. Research notes, "Material defaults and their sources (2026-11-18)". `I` is each element's absorbed
-laser flux `P/A` (×1e14 W/cm²): a property of the element mesh too (coarse elements
+interpolated linearly in log₁₀ I and held at its ends. The default `efficiency` 0.9 is the
+conversion of [`gold`](@ref), the input of a published static VisRad model of a NIF hohlraum
+(Young et al., PoP 27, 082702 (2020)); 0.75 suits 1 ns Nova and Omega hohlraums. Research
+notes, "Material defaults and their sources (2026-11-18)". `I` is the absorbed laser flux
+`P/A` of each element (×1e14 W/cm²): a property of the element mesh too (coarse elements
 average a spot over more area). Evaluate with `conversion_efficiency`.
 
 Published forms (see `nif_conversion` for the preset):
@@ -1151,10 +1178,10 @@ Published forms (see `nif_conversion` for the preset):
 - in intensity, the backscatter-corrected plateau on Au, U and cocktail spheres:
   0.95 at 10¹⁴ and 0.80 at 10¹⁵ W/cm² (Dewald et al., PoP 15, 072706 (2008),
   abstract), `Conversion(intensities = (1e14, 1e15), efficiencies = (0.95, 0.80))`.
-  A hohlraum's η exceeds a disk's at the same intensity (Lindl 2004, Fig. 4-10).
+  The η of a hohlraum exceeds that of a disk at the same intensity (Lindl 2004, Fig. 4-10).
 
 Generic in the number type of the laser power (the intensity table is differentiable);
-a material with a plain number keeps that number exactly (bitwise).
+for a material with a plain number, that number is used exactly.
 """
 struct Conversion
     efficiency::Float64
@@ -1162,7 +1189,7 @@ struct Conversion
     reference_time::Float64
     start::Float64
     t0::Float64
-    log_intensity::Vector{Float64}     # log₁₀(W/cm²); empty: no intensity dependence
+    log_intensity::Vector{Float64}     # log₁₀(W/cm²); empty without intensity dependence
     table::Vector{Float64}
     range::Tuple{Float64,Float64}
 end
@@ -1184,7 +1211,7 @@ end
 """
     conversion_efficiency(model, t = 0.0, I = nothing)
 
-Laser → x-ray conversion efficiency of `model` (a `Conversion` or a number) at time `t`
+Laser-to-x-ray conversion efficiency of `model` (a `Conversion` or a number) at time `t`
 (ns) and absorbed laser intensity `I` (W/cm²; required by an intensity table).
 """
 conversion_efficiency(η::Real, t = 0.0, I = nothing) = η
@@ -1212,9 +1239,10 @@ of the pulse, ns) capped at 0.95. Extrapolated to a NIF pulse it gives 0.80 at 3
 235–345 eV (Olson et al., PoP 19, 053301 (2012), abstract); the cap is the 10¹⁴ W/cm²
 plateau of Dewald 2008 and the value of the only published VisRad energetics
 calibration (η 0.95 with albedo 0.77, Au, 400 TW; Swadling et al., PoP 32, 052707
-(2025)). *Derived* (research notes, "Wall material, conversion and capsule energetics
-(2026-10-24)"). It is the conversion of the drive-history walls [`nif_gold`](@ref) and
-[`nif_uranium`](@ref); [`gold`](@ref) and [`uranium`](@ref) keep the constant 0.9.
+(2025)). The preset is *derived*, and the research notes section "Wall material, conversion
+and capsule energetics (2026-10-24)" gives the derivation. It is the conversion of the
+drive-history walls [`nif_gold`](@ref) and [`nif_uranium`](@ref); [`gold`](@ref) and
+[`uranium`](@ref) keep the constant 0.9.
 """
 nif_conversion(; efficiency = 0.7, time_exponent = 0.12, range = (0.0, 0.95), kwargs...) =
     Conversion(; efficiency, time_exponent, range, kwargs...)
@@ -1242,14 +1270,14 @@ albedo(m::Material, t = 0.0) = albedo(m.albedo, t)
 """
     gold(; albedo = 0.8, conversion = 0.9)
 
-Gold hohlraum wall for static solves: a constant laser → x-ray `conversion` 0.9 whatever
-the `albedo`. Both defaults are the inputs of a published static VisRad model of a NIF
-hohlraum (Young et al., PoP 27, 082702 (2020)); the conversion lies within the 0.85–0.95
-published for NIF hohlraums near peak power, above the 0.68–0.85 of 1 ns Nova and Omega
-hohlraums (`gold(conversion = 0.75)` for those). Research notes, "Material defaults and
-their sources (2026-11-18)". For a drive history on NIF use [`nif_gold`](@ref), whose
-albedo and conversion follow the drive; for a directly irradiated foil,
-[`foil_material`](@ref).
+Gold hohlraum wall for static solves. Its laser-to-x-ray `conversion` is a constant 0.9
+whatever the `albedo`. Both defaults are the inputs of a published static VisRad model of
+a NIF hohlraum (Young et al., PoP 27, 082702 (2020)). The conversion lies within the
+0.85–0.95 published for NIF hohlraums near peak power, above the 0.68–0.85 of 1 ns Nova
+and Omega hohlraums, which `gold(conversion = 0.75)` suits. The research notes section
+"Material defaults and their sources (2026-11-18)" gives the sources. For a drive history
+on NIF, use [`nif_gold`](@ref), whose albedo and conversion follow the drive. For a
+directly irradiated foil, use [`foil_material`](@ref).
 """
 gold(; albedo = 0.8, conversion = 0.9) = Material(:Au; albedo, conversion)
 """
@@ -1266,7 +1294,7 @@ uranium(; albedo = du_wall_loss(), conversion = 0.9) = Material(:DU; albedo, con
 The gold wall of a NIF drive history: Lindl's Marshak wall loss, evaluated by
 [`drive_history`](@ref) at the temperature history of each element, and the rising
 [`nif_conversion`](@ref)`()`, `0.7 t^0.12 ≤ 0.95` with `t` the time since the pulse
-start (at `solve`'s default `time = 0` it reads 0.53, so a static solve needs
+start (at `solve`'s default `time = 0` it is 0.53, so a static solve needs
 [`gold`](@ref)).
 """
 nif_gold(; albedo = WallLossAlbedo(), conversion = nif_conversion()) = Material(:Au; albedo, conversion)
@@ -1297,8 +1325,8 @@ the radiation model then uses the curved geometry (see `view_factors`).
 `part` names the user's part the component belongs to: the component name, unless it is a
 piece of a part split for computation ([`curved_components`](@ref) names the pieces of
 a part `p` `p/cyl1`, …, `p/rest`, each with `part = p`). Name-taking functions
-(`elements`, `Scenario(...; observe)`, keep-outs, clearance hardware) accept a part's
-name for all its pieces, and reports (`energy_balance`, `component_power`,
+(`elements`, `Scenario(...; observe)`, keep-outs, clearance hardware) accept the name of a
+part for all its pieces, and reports (`energy_balance`, `component_power`,
 `write_results`, `report`) are keyed by part; see [`parts`](@ref).
 """
 struct Component
@@ -1323,13 +1351,14 @@ end
 Transparent diagnostic surface (e.g. a laser entrance hole): rays pass through it and
 its incident x-ray flux is the flux escaping through it.
 
-With `closure`, a `GapClosure`, it is an opening that plasma closes to x-rays during the
-pulse while laser light and lines of sight still pass (the lip of a closing laser entrance
-hole, `hohlraum(; leh_closure)`): it re-emits the fraction ``α(t) = s α_{after}`` of its
-incident flux and lets `1 - s` escape, booked as escaped by `energy_balance`. It
-converts no laser light. The Monte Carlo reference ([`montecarlo_incident`](@ref)) lets
-paths escape through open apertures and re-emits them diffusely from a lip with the
-lip's albedo (given `albedo = albedos(target, time)`). With a `LipClosure`, the closed
+With `closure`, a `GapClosure`, the aperture is an opening that plasma closes to x-rays
+during the pulse while laser light and lines of sight still pass. An example is the lip
+of a closing laser entrance hole, `hohlraum(; leh_closure)`. The aperture re-emits the
+fraction ``α(t) = s α_{after}`` of its incident flux, and the fraction `1 - s` escapes and
+is booked as escaped by `energy_balance`. The aperture does not convert laser light. In
+the Monte Carlo reference ([`montecarlo_incident`](@ref)), paths escape through open
+apertures and are re-emitted diffusely from a lip with the albedo of the lip (given
+`albedo = albedos(target, time)`). With a `LipClosure`, the closed
 fraction of each element is `drive_history`'s state instead of a function of time.
 """
 aperture(name, mesh; surface = nothing, closure::Union{Nothing,GapClosure,LipClosure} = nothing) =
@@ -1350,34 +1379,33 @@ unknowns of the radiation model): one element per patch for one-sided surfaces a
 apertures, two for two-sided surfaces. The back side of a one-sided surface absorbs
 laser light as a loss but is not modeled radiatively.
 
-`closed = true` declares that the elements (apertures included) form a closed enclosure,
-so `RadiationModel` balances its view factors by default (`enforce_closure!`).
-`hohlraum` sets it; a target assembled from its components does not, since added parts
-(a foil, a sombrero) may lie outside the enclosure. Declare it (here, or `cad_target(...;
-closed = true)`) when apertures cover every opening ([`open_fraction`](@ref) shows where
-facets leak). On bored entrance holes, waist gaps, windows and CAD cavities so
-closed, balancing brings the loss through the apertures within 0.2% of a continuum
-Monte Carlo with `:sampled` visibility (raw factors up to 0.8% off) and the capsule
-drive within 0.07%, and moves the capsule's a₂/a₀ by at most 0.08 pp (toward the
-reference where it moves it most). With `:centroid`, rims leave the raw loss 2–3% high
-and balancing brings it within 0.4%, but moves a₂/a₀ by 0.1–0.3 pp, toward the reference
-or away from it. Flat facets must be watertight for it: balancing a cracked mesh adds the
-exchange the cracks lose (research notes, "Closure on bored, windowed and CAD
-cavities").
+`closed = true` declares that the elements (apertures included) form a closed enclosure, so
+`RadiationModel` balances its view factors by default (`enforce_closure!`). `hohlraum` sets
+it; a target assembled from its components does not, since added parts such as foils and
+sombreros may lie outside the enclosure. Declare it (here, or
+`cad_target(...; closed = true)`) when apertures cover every opening
+([`open_fraction`](@ref) shows where facets leak). On bored entrance holes, waist gaps,
+windows and CAD cavities so closed, balancing brings the loss through the apertures within
+0.2% of a continuum Monte Carlo with `:sampled` visibility (raw factors up to 0.8% off) and
+the capsule drive within 0.07%, and moves the capsule a₂/a₀ by at most 0.08 pp (toward the
+reference where it moves it most). With `:centroid`, rims leave the raw loss 2–3% high and
+balancing brings it within 0.4%, but moves a₂/a₀ by 0.1–0.3 pp, toward the reference or away
+from it. Flat facets must be watertight for it: balancing a cracked mesh adds the exchange
+the cracks lose (research notes, "Closure on bored, windowed and CAD cavities").
 
 `visibility` is the `view_factors` visibility rule `RadiationModel` uses by default:
 `:centroid` (one ray per pair) or `:sampled` (the visible fraction of pairs partly
 shadowed by a rim). Targets with rims set `:sampled`: `cad_target` and `visrad_target`
 (bored entrance holes, gaps, CAD walls), where one centroid ray leaves row sums up to
 1% off on walls and 6% on LEH apertures; `hohlraum` and assembled targets keep
-`:centroid`: on flush entrance holes the largest row-sum error is the wall's, 0.3–0.7%,
+`:centroid`: on flush entrance holes the largest row-sum error is on the wall, 0.3–0.7%,
 and after balancing `:sampled` moves the drive by less than 3e-5 relative and a₂/a₀ by
 less than 0.03 pp for 3–4 times the build (research notes, "Partial visibility" and
 "Visibility default on the GUI presets").
 
 A `Target` is immutable in all its fields but has identity (a `mutable struct` of
-`const` fields), so that caches of derived data (a Dante view's footprint, an imager's
-pixels) hold it weakly and release their entries once the target is unreachable.
+`const` fields), so that caches of derived data (the footprint of a Dante view, the pixels
+of an imager) hold it weakly and release their entries once the target is unreachable.
 """
 mutable struct Target
     const components::Vector{Component}
@@ -1398,7 +1426,7 @@ mutable struct Target
     const elem_comp::Vector{Int32}
     const elem_side::Vector{Int8}        # +1 front, -1 back
     const elem_tris::Vector{UnitRange{Int}}
-    const elem_curved::Vector{Int8}      # radiating side relative to the curved surface's outward normal (0: flat)
+    const elem_curved::Vector{Int8}      # radiating side relative to the curved surface's outward normal (0 if flat)
     const comp_elems::Vector{Vector{Int}}
     const bvh::BVH
     const scale::Float64                 # bounding-sphere radius about the origin (mm)
@@ -1446,8 +1474,8 @@ function Target(components::AbstractVector{Component}; closed::Bool = false,
                 cen = _onto_patch(tv0, te1, te2, gr, cen, nrm)
                 curv = Int8(0)
                 if c.surface !== nothing && !_at_apex(c.surface, tv0, te1, te2, gr)
-                    # radiation uses the curved patch: its area, and normals on the side
-                    # the flat element radiates from
+                    # Radiation uses the area of the curved patch, with normals on the
+                    # side the flat element radiates from.
                     A = c.surface isa DiskSurface ?
                         _sector_area(_sector(c.surface, _patch_vertices(tv0, te1, te2, gr))) :
                         sum(_curved_area(c.surface, tv0[k], tv0[k] + te1[k], tv0[k] + te2[k]) for k in gr)
@@ -1474,12 +1502,12 @@ end
 
 Target(cs::Component...; kwargs...) = Target(collect(cs); kwargs...)
 
-# Whether an element touches the apex of the cone it lies on: the true surface is
-# singular there (the kernel between points on either side of the apex grows as 1/s²
-# toward it), which the curved elements' point rules miss by a fixed fraction however
-# fine the mesh (the ring around the apex of a pointed cone saw 3.4% too little); such an
-# element stays flat, where near pairs use the exact polygon kernel with adaptive
-# emitters.
+# Test whether an element touches the apex of the cone it lies on. The true surface is
+# singular at the apex, where the kernel between points on either side grows as 1/s².
+# The point rules of curved elements miss this singularity by a fixed fraction however
+# fine the mesh; the ring around the apex of a pointed cone received 3.4% too little. Such
+# an element therefore stays flat, and near pairs on it use the exact polygon kernel with
+# adaptive emitters.
 _at_apex(s, tv0, te1, te2, gr) = false
 function _at_apex(s::ConeSurface, tv0, te1, te2, gr)
     dmin, dmax = Inf, 0.0
@@ -1494,8 +1522,8 @@ end
 # plane) has its area centroid off its facets: behind them on a convex surface, where
 # rays from the centroid (visibility, imaging) start inside the solid and are blocked by
 # the patch itself. Such a centroid is moved along the mean normal onto the facet the
-# line through it meets (`remesh_mesh` makes sure it meets one); a planar patch keeps
-# its centroid unchanged.
+# line through it meets (`remesh_mesh` makes sure it meets one). The centroid of a planar
+# patch is left unchanged.
 function _onto_patch(tv0, te1, te2, gr, c, n)
     length(gr) > 1 || return c
     h = 0.0
@@ -1538,7 +1566,7 @@ end
     parts(target) -> Vector{Symbol}
 
 The user's parts of a target, in the order of their first components: the components'
-`part`s. A primitive target's parts are its component names; a CAD part that
+`part`s. The parts of a primitive target are its component names; a CAD part that
 [`curved_components`](@ref) split into `p/cyl1`, …, `p/rest` is the one part `p`.
 """
 parts(t::Target) = unique!([c.part for c in t.components])
@@ -1560,7 +1588,7 @@ end
     elements(target, names...) -> Vector{Int}
 
 Element indices of the named parts or components (both sides of two-sided
-components); a part's name stands for all its pieces (see [`part_pieces`](@ref)).
+components); the name of a part stands for all its pieces (see [`part_pieces`](@ref)).
 """
 elements(t::Target, names::Symbol...) =
     reduce(vcat, (t.comp_elems[ci] for n in names for ci in part_pieces(t, n)); init = Int[])
@@ -1598,7 +1626,7 @@ _ray_eps(t::Target) = 1e-7 * max(t.scale, 1.0)
 
 Whether the open segment between points `a` and `b` is free of opaque surfaces
 (apertures are transparent): `visible(t, Vec3(0, 0, 0), Vec3(0, 0, 8))` is `true` when
-no opaque surface lies between the target's center and a point 8 mm up the axis.
+no opaque surface lies between the target center and a point 8 mm up the axis.
 """
 visible(t::Target, a::Vec3, b::Vec3) = !any_hit(t.bvh, a, b - a, 1 - 1e-9)
 
@@ -1608,9 +1636,9 @@ visible(t::Target, a::Vec3, b::Vec3) = !any_hit(t.bvh, a, b - a, 1 - 1e-9)
 Quadrature over element `e` from `4^level` sub-triangles per triangle: sub-triangle
 centroids weighted by area, with the element normal. On a component with a
 `CurvedSurface`, the points are projected onto the surface and carry its normals
-(on the element's radiating side) and curved-patch areas; an element of more than two
-facets (imported CAD) instead gets as many points as a two-triangle element, from its
-facets' pieces lumped into cells of the element's tangent plane. Weights sum to the
+(on the radiating side of the element) and curved-patch areas; an element of more than two
+facets (imported CAD) instead gets as many points as a two-triangle element, from the
+pieces of its facets lumped into cells of the element tangent plane. Weights sum to the
 element area.
 """
 function element_quadrature(t::Target, e::Integer, level::Integer)
@@ -1644,15 +1672,17 @@ function element_quadrature(t::Target, e::Integer, level::Integer)
     return cpts, cws, cns
 end
 
-# Quadrature of a curved element made of more than two facets (CAD faceting, e.g. a
-# remeshed element across many strips of a cylinder), with as many points as a
-# two-triangle element would have, wherever its facets lie: each facet is bisected along
-# its longest edge until that edge is under half a cell, the pieces (projected onto
-# the surface, exact curved areas) are lumped into square cells of side
-# size / (2^level √2) in the element's tangent plane (`size` = √2 × the largest
-# centroid-to-vertex distance, as in `view_factors`; a square element then has 2·4^level
-# cells), and each cell becomes one point: the projection of its pieces' weighted mean
-# point, with their total area. Weights sum to the element's exact curved area.
+# Build the quadrature of a curved element made of more than two facets, such as a CAD
+# element remeshed across many strips of a cylinder. The quadrature has as many points as
+# a two-triangle element would have, wherever the facets lie. It is built in three steps:
+# - Each facet is bisected along its longest edge until that edge is under half a cell.
+# - The pieces, with exact curved areas on the surface, are lumped into square cells of
+#   side size / (2^level √2) in the tangent plane of the element. Here `size` is √2 times
+#   the largest centroid-to-vertex distance, as in `view_factors`, so a square element has
+#   2·4^level cells.
+# - Each cell becomes one point, the projection of the weighted mean point of its pieces,
+#   with their total area.
+# The weights sum to the exact curved area of the element.
 function _lumped_quadrature(t::Target, e::Integer, level::Integer, s::CurvedSurface)
     C, n, sgn = t.elem_centroid[e], t.elem_normal[e], t.elem_curved[e]
     r = 0.0

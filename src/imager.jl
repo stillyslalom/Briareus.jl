@@ -1,7 +1,8 @@
-# Synthetic x-ray pinhole imagers: the target's x-ray emission seen through a pinhole,
-# filters and a detector, recorded time-integrated or in gated frames. Design:
-# reference/diagnostics-design.md (phase 5); public values: research notes, "X-ray
-# imagers, radiography and streaked diagnostics: what is public".
+# This file models synthetic x-ray pinhole imagers. The x-ray emission of the target is
+# seen through a pinhole, filters and a detector, and recorded time-integrated or in gated
+# frames. The design is in reference/diagnostics-design.md (phase 5), and the public
+# values are in the research notes, "X-ray imagers, radiography and streaked
+# diagnostics: what is public".
 
 """
     XrayImager(theta, phi; pinhole, distance, magnification, width, pixels = 256,
@@ -9,32 +10,34 @@
                detector = nothing, detector_pixel = 0.0, energy = nothing,
                mode = :integrated, times = Float64[], gate = 0.0, gate_shape = :gaussian)
 
-A pinhole x-ray imager on the line of sight (θ, φ) (degrees, from target chamber
-center toward the instrument): a pinhole of diameter `pinhole` (mm) at `distance` (mm)
-from the object, imaging at `magnification` onto a detector of pixel `detector_pixel`
+A pinhole x-ray imager on the line of sight (θ, φ), in degrees, from target chamber
+center toward the instrument. A pinhole of diameter `pinhole` (mm) at `distance` (mm)
+from the object images at `magnification` onto a detector of pixel `detector_pixel`
 (mm). The object plane is sampled over a `width` × `width` mm field about `center` (a
-point, or a part's name) on `pixels` × `pixels` rays; `up` (a chamber direction) is the
-image's up.
+point, or the name of a part) on `pixels` × `pixels` rays. `up` (a chamber direction) is
+the up direction of the image.
 
-The spectral response `R(E)` is the product of the filters (`filter_transmission`
-materials with thicknesses in mm, as [`DanteResponse`](@ref)'s, and measured `tables`),
-an optional `mirror` (as [`DanteResponse`](@ref)'s) and the detector's absorption:
-`detector = (:Si, 0.015)` absorbs `1 − e^{−μρt}` of the photons in 15 µm of Si (no
-dead layer), a [`TabulatedCurve`](@ref) is a measured efficiency, and `nothing`
-absorbs every photon. `R` is a fraction, so images are of detected x-ray energy.
+The spectral response `R(E)` is the product of the filters, an optional `mirror` and
+the absorption of the detector. The filters are `filter_transmission` materials with
+thicknesses in mm, as for [`DanteResponse`](@ref), and measured `tables`, and the mirror
+is as for [`DanteResponse`](@ref). `detector = (:Si, 0.015)` absorbs `1 − e^{−μρt}` of
+the photons in 15 µm of Si (no dead layer), a [`TabulatedCurve`](@ref) is a measured
+efficiency, and `nothing` absorbs every photon. `R` is a fraction, so images are of
+detected x-ray energy.
 
-The point-spread function on the object plane is the pinhole's geometric penumbra, a
-uniform disk of diameter `penumbra = d(1 + 1/M)`, convolved with a Gaussian of the
-summed variances of its Fraunhofer diffraction (FWHM `diffraction = 1.03 λ
-distance / d` at photon `energy`, eV) and of the detector pixel (a box of
-`detector_pixel / M`). The Gaussian is an engineering approximation: the Airy pattern
-and the box are not Gaussian, and a pinhole whose Fresnel number `d² / λz` is near 1 is
-not in the far field. `energy` defaults to the mean photon energy of what the imager
-detects of a 300 eV Planckian (an engineering default); a definition states it.
+The point-spread function on the object plane is the geometric penumbra of the pinhole,
+a uniform disk of diameter `penumbra = d(1 + 1/M)`. It is convolved with a Gaussian of
+the summed variances of the Fraunhofer diffraction of the pinhole (FWHM
+`diffraction = 1.03 λ distance / d` at photon `energy`, eV) and of the detector pixel (a
+box of `detector_pixel / M`). The Gaussian is an engineering approximation, since the
+Airy pattern and the box are not Gaussian, and a pinhole whose Fresnel number `d² / λz`
+is near 1 is not in the far field. `energy` defaults to the mean photon energy of the
+light that the imager detects from a 300 eV Planckian, an engineering default; a
+definition file states the value.
 
-`mode` is `:integrated` (one image of the time integral) or `:gated` (one frame per
-time of `times`, ns, each the integral of the image against a gate of FWHM `gate` ns,
-`:gaussian` or `:square`, of peak 1).
+`mode` is `:integrated` for one image of the time integral, or `:gated` for one frame
+per time of `times` (ns). Each gated frame is the integral of the image against a gate
+of FWHM `gate` ns, `:gaussian` or `:square`, of peak 1.
 """
 struct XrayImager
     theta::Float64
@@ -104,12 +107,13 @@ _detection(d::Tuple{Symbol,<:Real}, e) = 1 - filter_transmission([d[1] => Float6
 """
     pinhole_solid_angle(im::XrayImager) -> Float64
 
-The solid angle (sr) of the pinhole seen from the object, `π d² / 4 distance²`: a
+The solid angle (sr) of the pinhole seen from the object, `π d² / 4 distance²`. A
 detector pixel of side `p` records `L × (p/M)² × Ω` of an image of detected radiance `L`.
 """
 pinhole_solid_angle(im::XrayImager) = π * im.pinhole^2 / 4 / im.distance^2
 
-# The element each pixel sees first (0: none), on target `t` (cached per target).
+# Returns the first element along the ray of each pixel (0 for none) on target `t`,
+# cached per target.
 function _imager_pixels(im::XrayImager, t::Target)
     lock(im.lock) do
         get!(im.cache, t) do
@@ -122,7 +126,7 @@ function _imager_pixels(im::XrayImager, t::Target)
     end
 end
 
-# Planck-weighted means of R over [lo, hi) eV at temperatures `T` (eV)
+# Returns the Planck-weighted means of R over [lo, hi) eV at temperatures `T` (eV).
 function _planck_means(im::XrayImager, lo, hi, T)
     E, R = im.E, im.R
     out = similar(T, Float64)
@@ -142,8 +146,9 @@ end
 
 const _IMAGER_T = exp.(range(log(1.0), log(5000.0), 600))
 
-# ⟨R⟩(T) over [lo, hi) as a function, by a table linear in log ⟨R⟩ and log T (⟨R⟩ of a
-# band far above T falls as e^{−E/T}: linear in ⟨R⟩ it is 1% off between nodes)
+# Returns ⟨R⟩(T) over [lo, hi) as a function, by a table linear in log ⟨R⟩ and log T. ⟨R⟩
+# of a band far above T falls as e^{−E/T}, so a table linear in ⟨R⟩ would be 1% off
+# between nodes.
 function _mean_response(im::XrayImager, lo = 0.0, hi = Inf)
     tab = _planck_means(im, lo, hi, _IMAGER_T)
     lT = log.(_IMAGER_T)
@@ -163,12 +168,12 @@ end
     detected_radiance(im::XrayImager, s::SpectralSolution) -> Vector{Float64}
 
 The radiance of each element that the imager detects (TW mm⁻² sr⁻¹ of detected x-ray
-energy): `B ⟨R⟩ / π`, the element's Lambertian radiance times the imager's response
-averaged over its spectrum. For a gray radiosity `B` (TW/mm²) the spectrum is the
-Planckian at the element's brightness temperature `(B/σ)^{1/4}` (an assumption: the
-reflected part of the radiosity carries the incident spectrum); for a
-`SpectralSolution`, each group's radiosity with the Planckian of the element's wall
-temperature within the group.
+energy), `B ⟨R⟩ / π`. It is the Lambertian radiance of the element times the response
+of the imager averaged over its spectrum. For a gray radiosity `B` (TW/mm²), the
+spectrum is the Planckian at the brightness temperature `(B/σ)^{1/4}` of the element.
+This is an assumption, since the reflected part of the radiosity has the incident
+spectrum. For a `SpectralSolution`, the radiosity of each group is used with the
+Planckian of the wall temperature of the element within the group.
 """
 function detected_radiance(im::XrayImager, B::AbstractVector)
     mean = _mean_response(im)
@@ -187,15 +192,15 @@ function detected_radiance(im::XrayImager, s::SpectralSolution)
     return L
 end
 
-# The point-spread function on the object-plane pixels: the penumbra's disk (each
-# pixel's covered fraction, 8 × 8 subsamples) convolved with the Gaussian of diffraction
-# and the detector pixel; normalized to sum 1
+# Returns the point-spread function on the object-plane pixels, normalized to sum 1. It
+# is the disk of the penumbra (the covered fraction of each pixel, 8 × 8 subsamples)
+# convolved with the Gaussian of diffraction and the detector pixel.
 _psf(im::XrayImager) = _psf(im.camera.width / im.camera.nx, im.penumbra, im.diffraction,
                             im.detector_pixel / im.magnification)
 
-# the same for object-plane pixels of side `h`, a penumbra of diameter `penumbra`, a
-# diffraction FWHM `diffraction` and a detector pixel of side `pixel` (all on the
-# object plane, mm)
+# The same for object-plane pixels of side `h`, a penumbra of diameter `penumbra`, a
+# diffraction FWHM `diffraction` and a detector pixel of side `pixel`, all on the object
+# plane in mm.
 function _psf(h, penumbra, diffraction, pixel)
     σ = sqrt((diffraction / 2.3548)^2 + pixel^2 / 12) / h
     ρ = penumbra / 2 / h
@@ -210,7 +215,8 @@ function _psf(h, penumbra, diffraction, pixel)
     return k ./ sum(k)
 end
 
-# `img` convolved with the 1D kernel `w` (odd length, centered) along `dims`, the same size
+# Returns `img` convolved with the 1D kernel `w` (odd length, centered) along `dims`, at the
+# same size.
 function _convolve(img::AbstractMatrix, w::AbstractVector; dims)
     r = length(w) ÷ 2
     out = zeros(size(img))
@@ -222,7 +228,7 @@ function _convolve(img::AbstractMatrix, w::AbstractVector; dims)
     return out
 end
 
-# Blur an object-plane image by the point-spread function (zero outside the field).
+# Blurs an object-plane image by the point-spread function, with zero outside the field.
 _blur(im::XrayImager, img::AbstractMatrix) = _blur(_psf(im), img)
 
 function _blur(k::AbstractMatrix, img::AbstractMatrix)
@@ -248,9 +254,9 @@ end
     imager_image(im::XrayImager, sol) -> Matrix{Float64}
 
 The image on the object plane (row 1 at the top, `up`) of the per-element detected
-radiance `L` ([`detected_radiance`](@ref)), blurred by the imager's resolution:
-TW mm⁻² sr⁻¹ of detected x-ray energy. For a solution, its target and
-`detected_radiance(im, sol)`.
+radiance `L` ([`detected_radiance`](@ref)), blurred by the resolution of the imager, in
+TW mm⁻² sr⁻¹ of detected x-ray energy. For a solution, the target of the solution and
+`detected_radiance(im, sol)` are used.
 """
 function imager_image(im::XrayImager, t::Target, L::AbstractVector)
     P = _imager_pixels(im, t)
@@ -259,8 +265,8 @@ end
 imager_image(im::XrayImager, sol::RadiationSolution) = imager_image(im, sol.model.target, detected_radiance(im, sol))
 imager_image(im::XrayImager, s::SpectralSolution) = imager_image(im, s.gray.model.target, detected_radiance(im, s))
 
-# The weight of each history step in the integral of the piecewise-linear signal
-# against gate `g` (the trapezoid rule's weights for g ≡ 1)
+# Returns the weight of each history step in the integral of the piecewise-linear signal
+# against gate `g`, which are the weights of the trapezoid rule for g ≡ 1.
 function _gate_weights(time::AbstractVector, g)
     n = length(time)
     w = zeros(n)
@@ -284,11 +290,12 @@ _gate(shape, t0, fwhm) = shape === :square ? (τ -> abs(τ - t0) <= fwhm / 2 ? 1
 """
     imager_record(im::XrayImager, t::Target, time, L::AbstractMatrix) -> NamedTuple
 
-What the imager records of a history: `L` the detected radiance per element (rows) at
-each time of `time` (ns, columns; [`detected_radiance`](@ref) of each step), taken as
-linear between the times. `(; images, times)`: for `mode = :integrated` one image, the
-time integral (kJ mm⁻² sr⁻¹, as TW·ns), `times` empty; for `:gated` one frame per gate
-time, the integral against the gate (peak 1; kJ mm⁻² sr⁻¹), `times` the gate times.
+The record of a history by the imager. `L` is the detected radiance per element (rows)
+at each time of `time` (ns, columns), the [`detected_radiance`](@ref) of each step, taken
+as linear between the times. The result is `(; images, times)`. For
+`mode = :integrated` it holds one image of the time integral (kJ mm⁻² sr⁻¹, as TW·ns),
+with `times` empty. For `:gated` it holds one frame per gate time, the integral against
+the gate (peak 1; kJ mm⁻² sr⁻¹), with `times` the gate times.
 """
 function imager_record(im::XrayImager, t::Target, time::AbstractVector, L::AbstractMatrix)
     size(L, 2) == length(time) || throw(ArgumentError("one column of L per time"))

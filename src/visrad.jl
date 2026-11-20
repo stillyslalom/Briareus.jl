@@ -1,19 +1,20 @@
-# VisRad interchange: pointing, beam-summary and power files, element-table readers, and
-# a benchmark kit for rebuilding a Briareus case in VisRad (Prism Computational Sciences,
-# VISRAD 21.1.1).
+# This file handles interchange with VisRad (Prism Computational Sciences, VISRAD 21.1.1).
+# It reads and writes pointing, beam-summary and power files, reads element tables, and
+# writes a benchmark kit for rebuilding a Briareus case in VisRad.
 #
 # Every format detail cites a page of the online manual, https://prism-cs.com/Manuals/VisRad/
-# (abbreviated `VR/` below); details the manual does not fix are labeled *assumption*.
-# The sources and confidence of each detail are collected in
+# (abbreviated `VR/` below). Details that the manual does not fix are labeled
+# *assumption*. The sources and confidence of each detail are collected in
 # `reference/research-notes.md`, section "VisRad interchange formats".
 #
-# Conventions shared with VisRad (VR/power_sources/set_laser_beam_pointing.html):
-# a beam is pointed at a Reference Point and its focus sits a signed "focus offset" from
-# it along the propagation direction, positive moving the focus along the propagation.
-# That is Briareus's `aim` and `defocus` exactly. VisRad draws the beam axis from the
-# port position on the chamber wall through the Reference Point; Briareus keeps the
-# axis parallel to the port direction. The two differ by |aim⊥|/R_chamber (≲ 1e-3 rad
-# for mm-scale aims), i.e. by ≲ 1 µm at the focus for defocus ≲ 1 mm.
+# Some conventions are shared with VisRad (VR/power_sources/set_laser_beam_pointing.html).
+# A beam is pointed at a Reference Point, and its focus lies a signed "focus offset" from
+# it along the propagation direction, with a positive offset moving the focus along the
+# propagation. These are exactly the `aim` and `defocus` of Briareus. VisRad draws the
+# beam axis from the port position on the chamber wall through the Reference Point, and
+# Briareus keeps the axis parallel to the port direction. The two differ by
+# |aim⊥|/R_chamber (≲ 1e-3 rad for mm-scale aims), that is, by ≲ 1 µm at the focus for
+# defocus ≲ 1 mm.
 
 const _VR_COMMENT = "VisRad manual (VISRAD 21.1.1): https://prism-cs.com/Manuals/VisRad/"
 
@@ -35,7 +36,7 @@ end
 _vr_delim(line) = occursin('\t', line) ? '\t' :
                   count(==(';'), line) > count(==(','), line) ? ';' : ','
 
-# Split one delimited line, honoring double quotes and "" escapes (as `read_csv`).
+# Splits one delimited line, honoring double quotes and "" escapes (as `read_csv` does).
 function _vr_split(line::AbstractString, delim::Char)
     out = String[]
     buf = IOBuffer()
@@ -69,7 +70,8 @@ function _vr_num(s::AbstractString)
     return tryparse(Float64, t)
 end
 
-# Length scale to mm from a header's unit, e.g. "X (cm)"; `default` when none is given.
+# Returns the length scale to mm from the unit in a header, e.g. "X (cm)", or `default`
+# when the header gives no unit.
 function _vr_length_scale(header::AbstractString, default::Real)
     m = match(r"\(\s*(mm|cm|um|µm|μm|microns?|m)\s*\)"i, header)
     m === nothing && return Float64(default)
@@ -77,10 +79,11 @@ function _vr_length_scale(header::AbstractString, default::Real)
     return u == "mm" ? 1.0 : u == "cm" ? 10.0 : u == "m" ? 1000.0 : 1e-3
 end
 
-# Canonical beam key. NIF beams: "B115" (VisRad also accepts "BL115",
-# VR/files/laser_beam_data_files.html); OMEGA beams: "Beam_10" (same page), also
-# written "BL-10" or a bare beam number "10" (older summary tables, "Beam #" column,
-# VR/intro/images/laser_summary.jpg). Other names are compared case-insensitively.
+# Returns the canonical beam key. NIF beams are "B115", and VisRad also accepts "BL115"
+# (VR/files/laser_beam_data_files.html). OMEGA beams are "Beam_10" (same page), also
+# written "BL-10" or as a bare beam number "10" in older summary tables with a "Beam #"
+# column (VR/intro/images/laser_summary.jpg). Other names are compared
+# case-insensitively.
 function _vr_key(name::AbstractString)
     u = uppercase(strip(name))
     m = match(r"^BL-?(\d{3})$", u)
@@ -103,9 +106,10 @@ function _nif_quad_members()
     return d
 end
 
-# VisRad beams of a beam set: NIF quads (names "Q11T"…) become their four facility
-# beams with the quad's aim, defocus and spot and a quarter of its power; other beams
-# pass through. Returns `(beam, source_index, power_fraction)` per VisRad beam.
+# Returns the VisRad beams of a beam set. NIF quads (names "Q11T"…) become their four
+# facility beams with the aim, defocus and spot of the quad and a quarter of its power,
+# and other beams pass through unchanged. Returns `(beam, source_index, power_fraction)`
+# per VisRad beam.
 function _vr_expand(beams::AbstractVector{<:Beam})
     any(b -> _is_nif_quad(b.name), beams) || return [(b, i, 1.0) for (i, b) in enumerate(beams)]
     nb = Dict(b.name => b for b in nif_beams())
@@ -114,7 +118,8 @@ function _vr_expand(beams::AbstractVector{<:Beam})
     for (i, b) in enumerate(beams)
         if _is_nif_quad(b.name)
             for n in members[b.name]
-                # the quad's spot, oriented as on the quad (VisRad's rotation is quad-relative)
+                # the spot of the quad, oriented as on the quad, since the VisRad rotation is
+                # quad-relative
                 spot = _vr_turn(b.spot, _vr_reference_angle(nb[n]))
                 push!(out, (remake(nb[n]; aim = b.aim, defocus = b.defocus, power = b.power / 4,
                                    spot, group = b.group), i, 0.25))
@@ -133,15 +138,16 @@ end
 """
     VISRAD_PHASE_PLATES
 
-VisRad's built-in phase-plate profiles (`VR/power_sources/phase_plate_params.html`), keyed
-by the manual's names: `(facility, major, minor, order, level)` with radii in µm
-(the manual's "(mm)" header is a µ rendered in the Symbol font) measured where the
-intensity is `level` × peak — `exp(-1)` (1/e) for the OMEGA, OMEGA EP and GEKKO tables,
-`0.5` (HWHM) for NIF CPPs, `0.03` for LMJ. Circular plates have `minor == major`.
-`order` is the super-Gaussian exponent `n` of `exp(-[(x/a)²+(y/b)²]^(n/2))`
-(`VR/power_sources/set_laser_profile_props.html`). The NIF n = 2.0 entries are the
-manual's placeholder where no data were available. The GEKKO table does not state its
-radius definition; 1/e is an *assumption*. See `visrad_spot`.
+The built-in phase-plate profiles of VisRad (`VR/power_sources/phase_plate_params.html`),
+keyed by the names in the manual, as `(facility, major, minor, order, level)`. The radii
+are in µm; the "(mm)" header in the manual is a µ rendered in the Symbol font. They are
+measured where the intensity is `level` × peak: `exp(-1)` (1/e) for the OMEGA, OMEGA EP
+and GEKKO tables, `0.5` (HWHM) for NIF CPPs and `0.03` for LMJ. Circular plates have
+`minor == major`. `order` is the super-Gaussian exponent `n` of
+`exp(-[(x/a)²+(y/b)²]^(n/2))` (`VR/power_sources/set_laser_profile_props.html`). The NIF
+entries with n = 2.0 are placeholders in the manual where no data were available. The
+GEKKO table does not state its radius definition, and 1/e is an *assumption*. See
+`visrad_spot`.
 """
 const VISRAD_PHASE_PLATES = Dict{String,NamedTuple{(:facility, :major, :minor, :order, :level),
                                                     Tuple{Symbol,Float64,Float64,Float64,Float64}}}(
@@ -203,8 +209,8 @@ const VISRAD_PHASE_PLATES = Dict{String,NamedTuple{(:facility, :major, :minor, :
     "DPP-1" => (facility = :GEKKO, major = 353.6, minor = 353.6, order = 6.0, level = exp(-1)),
 )
 
-# Phase-plate names as they appear in other places: CMT CPP names
-# (VR/power_sources/import_nif_cmt_data_file.html) and summary-table model strings.
+# Phase-plate names as they appear in other places, in CMT CPP names
+# (VR/power_sources/import_nif_cmt_data_file.html) and in summary-table model strings.
 const _VR_PLATE_ALIASES = Dict("1.0 Rev1 Outer" => "Rev1-Outer-2w")
 
 function _vr_plate_norm(s::AbstractString)
@@ -228,27 +234,27 @@ function _vr_plate(model::AbstractString)
     return nothing
 end
 
-# Rotation of a spot's minor axis in VisRad's convention: degrees from vertical,
-# positive clockwise, zero with the major axis "nearly horizontal"
-# (VR/power_sources/set_laser_profile_props.html). The manual does not say from which
-# side "clockwise" is seen. `sense = :beam` (default, *assumption*) views the spot
-# looking along the propagation direction (the beam "as it enters the target
-# chamber"); `:target` views it from TCC looking back at the port. In the beam view
-# screen-up is -θ̂ and screen-right φ̂, so the minor axis is cos ρ θ̂ - sin ρ φ̂; from
-# TCC screen-right is -φ̂ and the minor axis is cos ρ θ̂ + sin ρ φ̂.
+# The rotation of the minor axis of a spot in the VisRad convention is in degrees from
+# vertical, positive clockwise, and zero with the major axis "nearly horizontal"
+# (VR/power_sources/set_laser_profile_props.html). The manual does not state from which
+# side "clockwise" is seen. `sense = :beam` (default, *assumption*) views the spot along
+# the propagation direction, for the beam "as it enters the target chamber". `:target`
+# views it from TCC back toward the port. In the beam view, screen-up is -θ̂ and
+# screen-right φ̂, so the minor axis is cos ρ θ̂ - sin ρ φ̂. From TCC, screen-right is -φ̂
+# and the minor axis is cos ρ θ̂ + sin ρ φ̂.
 function _vr_sense(sense::Symbol)
     sense === :beam && return -1.0
     sense === :target && return 1.0
     throw(ArgumentError("rotation_sense must be :beam or :target"))
 end
 
-# VisRad measures a NIF beam's rotation from the horizontal of its quad (rather than of the beam):
-# at rotation 0 the major axis lies along φ̂ of the quad's port, turned about the beam
-# axis by 1.6–5.3° from the beam's φ̂ (measured: VisRad 21 deposition on plates normal to
-# 48 beams, the fitted spot rotation equals this angle to 0.02° on all of them;
-# reference/research-notes.md, "VisRad deposition parity"). The angle (rad, Briareus's
-# sense: from θ̂ toward φ̂) of the quad's φ̂ from the beam's; 0 for beams of no NIF quad
-# (a quad itself, OMEGA beams).
+# VisRad measures the rotation of a NIF beam from the horizontal of its quad. At rotation
+# 0 the major axis lies along φ̂ of the quad port, which is turned about the beam axis by
+# 1.6–5.3° from φ̂ of the beam. This was measured from VisRad 21 deposition on plates
+# normal to 48 beams, where the fitted spot rotation equals this angle to 0.02° on all of
+# them (reference/research-notes.md, "VisRad deposition parity"). Returns the angle of φ̂
+# of the quad from φ̂ of the beam, in radians in the Briareus sense (from θ̂ toward φ̂).
+# Returns 0 for beams of no NIF quad, such as a quad itself or OMEGA beams.
 function _vr_reference_angle(b::Beam)
     q = get(_NIF_QUAD_PORTS, b.quad, nothing)
     q === nothing && return 0.0
@@ -259,16 +265,17 @@ end
 
 const _NIF_QUAD_PORTS = Dict(NIF_QUAD_NAMES[p] => port_vector(θ, φ) for (p, θ, φ) in NIF_PORTS)
 
-# NIF quad of a facility beam name (B<cluster><bundle><beam>: beams 1–4 form quad QxyT,
-# 5–8 QxyB), "" for other names
+# Returns the NIF quad of a facility beam name, B<cluster><bundle><beam>, where beams 1–4
+# form quad QxyT and beams 5–8 quad QxyB. Returns "" for other names.
 function _nif_beam_quad(name::AbstractString)
     m = match(r"^B([1-4][1-6])([1-8])$", name)
     m === nothing && return ""
     return "Q" * m[1] * (parse(Int, m[2]) <= 4 ? "T" : "B")
 end
 
-# A beam built from a file without a template: its NIF quad from its name, and its spot
-# (read relative to the beam φ̂) turned to the quad's horizontal
+# Completes a beam built from a file without a template. Its NIF quad comes from its
+# name, and its spot, read relative to φ̂ of the beam, is turned to the horizontal of the
+# quad.
 function _vr_quad_framed(b::Beam)
     q = _nif_beam_quad(b.name)
     isempty(q) && return b
@@ -279,7 +286,8 @@ end
 _vr_turn(sp::SuperGaussianSpot, δ) = δ == 0 ? sp :
     SuperGaussianSpot(sp.a, sp.b, sp.order, sp.angle + δ, sp.halo, sp.halo_scale, sp.halo_order)
 
-# VisRad rotation (degrees) of a Briareus spot; `ref` is `_vr_reference_angle` of its beam
+# Returns the VisRad rotation (degrees) of a Briareus spot, with `ref` the
+# `_vr_reference_angle` of its beam.
 function _vr_rotation(sp::SuperGaussianSpot, sense::Symbol, ref = 0.0)
     _vr_v(sp.a) == _vr_v(sp.b) && return 0.0
     ψ = rad2deg(sp.angle - ref)
@@ -288,8 +296,8 @@ function _vr_rotation(sp::SuperGaussianSpot, sense::Symbol, ref = 0.0)
     return mod(ρ + 90, 180) - 90
 end
 
-# Briareus spot from VisRad radii (µm) at intensity `level` × peak, rotation ρ (deg);
-# `ref` is `_vr_reference_angle` of the beam.
+# Returns the Briareus spot from VisRad radii (µm) at intensity `level` × peak and
+# rotation ρ (deg), with `ref` the `_vr_reference_angle` of the beam.
 function _vr_make_spot(major, minor, ρ, order, level, sense::Symbol;
                        halo = 0.0, halo_scale = 3.0, halo_order = 2.0, ref = 0.0)
     s = log(1 / level)^(1 / order)
@@ -302,12 +310,13 @@ end
 """
     visrad_spot(plate; rotation = 0.0, rotation_sense = :beam) -> SuperGaussianSpot
 
-Briareus spot equivalent to a VisRad built-in phase plate (`VISRAD_PHASE_PLATES` name,
-or a CMT/summary-table spelling such as `"Rev3 Inner Cone 2W CPP"` or
-`"OMEGA E-IDI-300 DPP"`). The tabulated radii, defined at the table's intensity level,
-are converted to 1/e semi-axes (mm) of the same super-Gaussian: `r_1/e = r_f /
-(ln(1/f))^(1/n)`. `rotation` is VisRad's minor-axis rotation (degrees, clockwise from
-vertical, 0 = major axis horizontal); see `read_visrad_summary` for `rotation_sense`.
+Briareus spot equivalent to a VisRad built-in phase plate, given by its
+`VISRAD_PHASE_PLATES` name or a CMT or summary-table spelling such as
+`"Rev3 Inner Cone 2W CPP"` or `"OMEGA E-IDI-300 DPP"`. The tabulated radii, defined at
+the intensity level of the table, are converted to 1/e semi-axes (mm) of the same
+super-Gaussian, `r_1/e = r_f / (ln(1/f))^(1/n)`. `rotation` is the minor-axis rotation
+of VisRad (degrees, clockwise from vertical, 0 with the major axis horizontal); see
+`read_visrad_summary` for `rotation_sense`.
 """
 function visrad_spot(plate::AbstractString; rotation = 0.0, rotation_sense::Symbol = :beam)
     p = _vr_plate(plate)
@@ -318,13 +327,13 @@ end
 """
     VISRAD_NIF_PLATES
 
-VisRad's phase plate (a `VISRAD_PHASE_PLATES` name) for each NIF cone: Rev3 Inner on
+The VisRad phase plate (a `VISRAD_PHASE_PLATES` name) for each NIF cone: Rev3 Inner on
 the 23.5° cone, 1.0 Rev1a Inner on the 30° cone, Rev3 Outer on the 44.5° cone and Rev1
 Outer on the 50° cone. The assignment is that of the measured CPP profiles behind
-[`nif_spot`](@ref) (LMF phase-plate table, 2020-10-15); VisRad lists the four plates
+[`nif_spot`](@ref) (LMF phase-plate table, 2020-10-15). VisRad lists the four plates
 among its NIF CPPs (`VR/power_sources/import_nif_cmt_data_file.html`) and tabulates
 their radii and exponents (`VR/power_sources/phase_plate_params.html`). Other campaigns
-field other plates: this is a default for VisRad parity, not a facility record.
+field other plates. This is a default for VisRad parity and is not a facility record.
 """
 const VISRAD_NIF_PLATES = Dict(:inner23 => "Rev3-Inner-2w", :inner30 => "1.0 Rev1a-Inner-2w",
                                :outer44 => "Rev3-Outer-2w", :outer50 => "Rev1-Outer-2w")
@@ -332,12 +341,13 @@ const VISRAD_NIF_PLATES = Dict(:inner23 => "Rev3-Inner-2w", :inner30 => "1.0 Rev
 """
     visrad_nif_spot(cone) -> SuperGaussianSpot
 
-The best-focus spot of VisRad's phase plate for a NIF cone (`VISRAD_NIF_PLATES`,
-[`visrad_spot`](@ref) at rotation 0), major axis along the port's φ̂ as for
-[`nif_spot`](@ref). VisRad measures the rotation of a NIF beam's spot from its quad's
-horizontal, so the spots of VisRad's beams are `nif_beams(; spot = visrad_nif_spot,
-spot_frame = :quad)`; with `deposition_kw = (; profile = VisRadProfile())` the
-deposition is VisRad's beam model (research notes, "VisRad deposition parity").
+The best-focus spot of the VisRad phase plate for a NIF cone (`VISRAD_NIF_PLATES`,
+[`visrad_spot`](@ref) at rotation 0), with the major axis along φ̂ of the port as for
+[`nif_spot`](@ref). VisRad measures the rotation of the spot of a NIF beam from the
+horizontal of its quad, so the spots of the VisRad beams are
+`nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)`. With
+`deposition_kw = (; profile = VisRadProfile())`, the deposition follows the VisRad beam
+model (research notes, "VisRad deposition parity").
 """
 visrad_nif_spot(cone::Symbol) = visrad_spot(VISRAD_NIF_PLATES[cone])
 
@@ -345,8 +355,9 @@ visrad_nif_spot(cone::Symbol) = visrad_spot(VISRAD_NIF_PLATES[cone])
 # Applying per-beam records to a template beam set
 # ---------------------------------------------------------------------------------------
 
-# A record: (name, on, theta, phi, aim, defocus, power, spot); `nothing` = not given.
-# `spot` is raw VisRad data (model, major, minor, rot, order, level) in µm/degrees.
+# A record is (name, on, theta, phi, aim, defocus, power, spot), with `nothing` for a
+# value not given. `spot` is raw VisRad data (model, major, minor, rot, order, level) in
+# µm and degrees.
 const _VRRecord = NamedTuple{(:name, :on, :theta, :phi, :aim, :defocus, :power, :spot)}
 
 function _vr_merge(recs::Vector)
@@ -366,8 +377,8 @@ function _vr_merge(recs::Vector)
             spot = isempty(sps) ? nothing : first(sps))
 end
 
-# VisRad's "Uniform" profile is flat across R0 at focus (n(z) = 0,
-# VR/power_sources/set_laser_profile_props.html); Briareus approximates it by a
+# The "Uniform" profile of VisRad is flat across R0 at focus (n(z) = 0,
+# VR/power_sources/set_laser_profile_props.html). Briareus approximates it by a
 # super-Gaussian of this order with 1/e radius R0 (*approximation*).
 const _VR_UNIFORM_ORDER = 50.0
 
@@ -465,10 +476,10 @@ end
 """
     VISRAD_SST_COLUMNS
 
-Column headers of the NIF SST beam-pointing CSV, as VisRad maps them when importing an
+Column headers of the NIF SST beam-pointing CSV, as VisRad maps them when it imports an
 SST file (screenshot in `VR/intro/revision_history.html`, v21.0.0, and
-`VR/power_sources/import_laser_beam_data_csv.html`): beam name, aim point x, y, z (mm,
-target-chamber Cartesian about TCC) and defocus (mm).
+`VR/power_sources/import_laser_beam_data_csv.html`). The columns are the beam name, the
+aim point x, y, z (mm, target-chamber Cartesian about TCC) and the defocus (mm).
 """
 const VISRAD_SST_COLUMNS = ("Beam", "Pointing: Beam Aim Point X (mm)",
                             "Pointing: Beam Aim Point Y (mm)", "Pointing: Beam Aim Point Z (mm)",
@@ -477,20 +488,20 @@ const VISRAD_SST_COLUMNS = ("Beam", "Pointing: Beam Aim Point X (mm)",
 """
     write_visrad_sst(path, beams; include_off = false) -> path
 
-Write beam pointing as a NIF SST CSV (`VISRAD_SST_COLUMNS`): one row per NIF beam
-(`"B111"`–`"B468"`), aim point in target-chamber Cartesian coordinates about TCC (mm)
-*without* the defocus applied, and the defocus (mm, positive moves the focus along the
-propagation direction). This is VisRad's export format
-(`VR/files/laser_beam_data_files.html`, "NIF SST Data Files") and imports into VisRad
+Write beam pointing as a NIF SST CSV (`VISRAD_SST_COLUMNS`). The file has one row per NIF
+beam (`"B111"`–`"B468"`), with the aim point in target-chamber Cartesian coordinates
+about TCC (mm) *without* the defocus applied, and the defocus (mm; a positive defocus
+moves the focus along the propagation direction). This is the export format of VisRad
+(`VR/files/laser_beam_data_files.html`, "NIF SST Data Files"). It imports into VisRad
 through File | Import Laser Beam Data | Pointing Data, "Custom" CSV, which recognizes
 these headers (`VR/power_sources/import_laser_beam_data_csv.html`).
 
 NIF quads (names `"Q11T"`…, e.g. `nif_quads()`) are written as their four beams with
-the quad's pointing. VisRad turns on exactly the beams that have pointing data, so beams
-with zero power are left out unless `include_off`.
+the pointing of the quad. VisRad turns on exactly the beams that have pointing data, so
+beams with zero power are left out unless `include_off`.
 
-The file carries no powers or spots: pair it with `write_visrad_powers` and set the spot
-model in VisRad (see `write_visrad_kit`).
+The file does not contain powers or spots. It is paired with `write_visrad_powers`, and the
+spot model is set in VisRad (see `write_visrad_kit`).
 """
 function write_visrad_sst(path::AbstractString, beams::AbstractVector{<:Beam};
                           include_off::Bool = false)
@@ -508,19 +519,20 @@ end
     read_visrad_sst(path; template = nif_beams(), absent = :off, units = nothing)
         -> Vector{Beam}
 
-Read a NIF SST pointing CSV (written by VisRad's File | Export Laser Beam Data | NIF SST
-Beam Data, by the SST, or by `write_visrad_sst`) and apply it to `template`: each beam
-found gets the file's aim (mm, chamber Cartesian about TCC, defocus not applied) and
-defocus (mm); power and spot are kept. Following VisRad's import
-(`VR/power_sources/import_laser_beam_data_csv.html`), template beams absent from the file
-are turned off (`absent = :off`, power 0); `:keep` leaves them unchanged and `:error`
-throws.
+Read a NIF SST pointing CSV and apply it to `template`. The file may come from File |
+Export Laser Beam Data | NIF SST Beam Data in VisRad, from the SST, or from
+`write_visrad_sst`. Each beam found in the file gets its aim (mm, chamber Cartesian about
+TCC, defocus not applied) and defocus (mm), and power and spot are kept. As in the
+VisRad import (`VR/power_sources/import_laser_beam_data_csv.html`), template beams
+absent from the file are turned off (`absent = :off`, power 0). `:keep` leaves them
+unchanged, and `:error` throws.
 
 Beam names match case-insensitively, with `BL115` read as `B115`. With a quad template
 (`nif_quads()`), each quad takes the mean aim and defocus of its four beams, with a
 warning if they differ by more than 1 µm. The header row is found by its
-"Beam Aim Point" columns; lines before it are skipped, extra columns ignored. Units come
-from the headers ("(mm)", "(cm)", "(um)"); `units` (mm per file unit) overrides them.
+"Beam Aim Point" columns. Lines before it are skipped, and extra columns are ignored.
+Units come from the headers ("(mm)", "(cm)", "(um)"), and `units` (mm per file unit)
+overrides them.
 """
 function read_visrad_sst(path::AbstractString; template = nif_beams(), absent::Symbol = :off,
                          units = nothing)
@@ -545,7 +557,7 @@ function read_visrad_sst(path::AbstractString; template = nif_beams(), absent::S
         name = f[ib]
         isempty(name) && continue
         xyz = _vr_num.((f[ix], f[iy], f[iz]))
-        any(isnothing, xyz) && continue                 # no pointing: beam stays off
+        any(isnothing, xyz) && continue                 # a beam without pointing stays off
         d = idf === nothing || idf > length(f) ? 0.0 : something(_vr_num(f[idf]), 0.0)
         recs[_vr_key(name)] = (name = name, on = true, theta = nothing, phi = nothing,
                                aim = sx * Vec3(xyz...), defocus = sd * d, power = nothing,
@@ -560,19 +572,20 @@ end
 # ---------------------------------------------------------------------------------------
 
 # Columns written by `write_visrad_summary`. Through "TC Pt Pos-z" they are the headers
-# of the v21 summary dialog (VR/power_sources/images/laser_summary.jpg); the remaining
-# headers are hidden in that screenshot and are *assumptions* (the manual lists the
-# quantities: power, DPR, profile model, R0 major/minor, minor-axis rotation —
-# VR/power_sources/laser_summary_table.html). The last two are Briareus extensions.
+# of the v21 summary dialog (VR/power_sources/images/laser_summary.jpg). The remaining
+# headers are hidden in that screenshot and are *assumptions*. The manual lists the
+# quantities as power, DPR, profile model, R0 major/minor and minor-axis rotation
+# (VR/power_sources/laser_summary_table.html). The last two columns are Briareus
+# extensions.
 const _VR_SUMMARY_COLUMNS = ("Cluster", "Beam ID", "On/Off", "Polar Ang", "Azm Ang",
                              "Pt Ref-CS", "Pt Geom", "Pt Param-1", "Pt Param-2", "Pt Param-3",
                              "Focus offset", "TC Pt Pos-x", "TC Pt Pos-y", "TC Pt Pos-z",
                              "Power", "DPR", "Spatial Profile", "R0 Major", "R0 Minor",
                              "Rot Angle", "SG Exponent", "R0 Def")
 
-# Header recognition: first matching rule not yet used, in this order. Covers the v21
-# headers and the older ones of VR/intro/images/laser_summary.jpg ("Beam #", "Pt CS",
-# "Pt X-1", "Sp Prof", "Ro").
+# Header recognition uses the first matching rule not yet used, in this order. The rules
+# cover the v21 headers and the older headers of VR/intro/images/laser_summary.jpg
+# ("Beam #", "Pt CS", "Pt X-1", "Sp Prof", "Ro").
 const _VR_SUMMARY_RULES = (
     :cluster => r"^cluster",
     :beam => r"^beam\b",
@@ -613,8 +626,8 @@ function _vr_summary_columns(header)
     return col
 end
 
-# Pointing reference point from summary-table parameters, when it is given in the
-# target-chamber frame (cm; angles in degrees since v9.0.0,
+# Returns the pointing reference point from summary-table parameters, when it is given in
+# the target-chamber frame (cm, with angles in degrees since v9.0.0,
 # VR/intro/revision_versions_800to1020.html).
 function _vr_ref_point(cs::AbstractString, geom::AbstractString, p, scale)
     c = lowercase(strip(cs))
@@ -624,7 +637,7 @@ function _vr_ref_point(cs::AbstractString, geom::AbstractString, p, scale)
     g = lowercase(strip(geom))
     v = startswith(g, "cyl") ? Vec3(p[1] * cosd(p[3]), p[1] * sind(p[3]), p[2]) :
         startswith(g, "sph") ? p[1] * port_vector(p[2], p[3]) : Vec3(p...)
-    return scale * v                       # lengths scale; angles were used above
+    return scale * v                       # lengths are scaled, and angles were used above
 end
 
 """
@@ -636,48 +649,50 @@ Read a VisRad Laser Beam Summary CSV (Export Data in the Laser Beams Summary dia
 Columns are recognized by header, so older layouts and extra columns are accepted.
 
 Conversions:
-- **Pointing.** "TC Pt Pos-x/y/z" (cm) is the beam's *focus* in the target-chamber frame:
-  the Reference Point plus the focus offset along the beam. This follows from the
-  example table in the manual (`VR/power_sources/images/laser_summary.jpg`): beams pointed
-  at the same foil-frame Reference Point with focus offset -0.215 cm have TC positions
-  that differ by exactly 0.215 cm × the difference of their port vectors. So
-  `aim = 10·TC + defocus·port` (mm) with `defocus = 10·focus offset` (cm → mm). When the
-  TC columns are absent, the Reference Point is taken from "Pt Param-1/2/3" (cm;
-  Cartesian, cylindrical (r, z, φ) or spherical (r, θ, φ), degrees), which works only for
-  references in the target-chamber frame ("Target Chamber" or "TCC"). When both are
-  present they are cross-checked.
-- **Power.** "Power" (TW; for NIF the sum of the 3ω, 2ω and 1ω cones,
-  `VR/power_sources/nif_beam_params.html`). Time-dependent beams show their peak as
-  "T-<peak>", read as the peak with a warning. Off beams get power 0.
+- **Pointing.** "TC Pt Pos-x/y/z" (cm) is the *focus* of the beam in the target-chamber
+  frame, which is the Reference Point plus the focus offset along the beam. This follows
+  from the example table in the manual (`VR/power_sources/images/laser_summary.jpg`).
+  Beams pointed at the same foil-frame Reference Point with focus offset -0.215 cm have
+  TC positions that differ by exactly 0.215 cm × the difference of their port vectors.
+  So `aim = 10·TC + defocus·port` (mm) with `defocus = 10·focus offset` (cm → mm). When
+  the TC columns are absent, the Reference Point is taken from "Pt Param-1/2/3" (cm, as
+  Cartesian, cylindrical (r, z, φ) or spherical (r, θ, φ) coordinates, with angles in
+  degrees). This works only for references in the target-chamber frame ("Target
+  Chamber" or "TCC"). When both are present they are cross-checked.
+- **Power.** "Power" is in TW, and for NIF it is the sum of the 3ω, 2ω and 1ω cones
+  (`VR/power_sources/nif_beam_params.html`). Time-dependent beams show their peak as
+  "T-<peak>", which is read as the peak with a warning. Off beams get power 0.
 - **Spot.** "R0" major/minor are radii (µm) at the spot-size definition level, "36.8%
-  (1/e)", "50%" or "5%" of peak (`VR/power_sources/set_laser_profile_props.html`); they
-  become 1/e semi-axes `a` (major), `b` (minor) of the same super-Gaussian
-  `exp(-[(x/a)²+(y/b)²]^(n/2))`, which is VisRad's focal profile. The definition comes
-  from an "R0 Def" column if present, else `spot_definition`: `:auto` uses the level of a
-  recognized built-in phase plate (`VISRAD_PHASE_PLATES`; NIF CPP radii are HWHM) and
-  1/e otherwise (VisRad's default for Custom Supergaussian, *assumption* for other
-  models); `:e`, `:hwhm`, `:pct5` or a number force it. The exponent `n` comes from an
-  "SG Exponent" column, else the phase-plate table, else the template beam. A "Uniform"
-  profile (flat across R0 at focus) is approximated by n = 50 with 1/e radius R0.
+  (1/e)", "50%" or "5%" of peak (`VR/power_sources/set_laser_profile_props.html`). They
+  become the 1/e semi-axes `a` (major) and `b` (minor) of the same super-Gaussian
+  `exp(-[(x/a)²+(y/b)²]^(n/2))`, which is the focal profile of VisRad. The definition
+  comes from an "R0 Def" column if present, and otherwise from `spot_definition`. With
+  `:auto`, the level of a recognized built-in phase plate is used (`VISRAD_PHASE_PLATES`;
+  NIF CPP radii are HWHM), and 1/e otherwise. 1/e is the VisRad default for Custom
+  Supergaussian and an *assumption* for other models. `:e`, `:hwhm`, `:pct5` or a number
+  set the level explicitly. The exponent `n` comes from an "SG Exponent" column, else
+  from the phase-plate table, else from the template beam. A "Uniform" profile (flat
+  across R0 at focus) is approximated by n = 50 with 1/e radius R0.
 - **Rotation.** "Rot Angle" is the minor-axis rotation ρ (degrees, clockwise from
-  vertical; ρ = 0 puts the major axis "nearly horizontal"). Briareus's `angle` of the
-  major axis from θ̂ toward φ̂ is `90° − ρ` for `rotation_sense = :beam` (spot seen
-  looking along the beam) and `90° + ρ` for `:target` (seen from TCC). The manual does
-  not say which. VisRad 21's deposition settles it as `:beam`: at ρ = ±30°, 60° and 90°
-  on ten NIF beams its spot axes match `:beam` within 0.04° and differ from `:target` by
-  60°. Horizontal is φ̂ of the beam's NIF quad port (`quad` of the template beam),
-  which is turned 1.6–5.3° from the φ̂ of the beam: measured in VisRad 21 to 0.02° on
-  48 beams. Beams of no NIF quad use their φ̂.
-- DPR, halo, f-number and wavelength are not in the file: DPR "On" is warned about and
-  ignored (VisRad splits such OMEGA beams into two cones 85 µm apart); the rest come from
-  the template.
+  vertical; ρ = 0 puts the major axis "nearly horizontal"). The Briareus `angle` of the
+  major axis from θ̂ toward φ̂ is `90° − ρ` for `rotation_sense = :beam` (the spot seen
+  along the beam) and `90° + ρ` for `:target` (seen from TCC). The manual does not state
+  which. The deposition of VisRad 21 settles it as `:beam`: at ρ = ±30°, 60° and 90° on
+  ten NIF beams, its spot axes match `:beam` within 0.04° and differ from `:target` by
+  60°. Horizontal is φ̂ of the NIF quad port of the beam (`quad` of the template beam),
+  which is turned 1.6–5.3° from φ̂ of the beam, as measured in VisRad 21 to 0.02° on 48
+  beams. Beams of no NIF quad use their φ̂.
+- DPR, halo, f-number and wavelength are not in the file. DPR "On" is ignored with a
+  warning; VisRad splits such OMEGA beams into two cones 85 µm apart. The other values
+  come from the template.
 
-With a `template`, beams are matched by name (case-insensitive; "BL115" reads as "B115",
-"10" and "BL-10" as `"Beam_10"`), port angles are checked against the file's "Polar
-Ang"/"Azm Ang" (warning beyond `angle_tol` degrees — a frame or naming mismatch),
-template beams absent from the file follow `absent` (`:off`, `:keep`, `:error`; VisRad
-omits hidden unused beams), and NIF quads aggregate their four beams (mean aim and
-defocus, summed power). Without a template, beams are built from the file's port angles.
+With a `template`, beams are matched by name, case-insensitively, with "BL115" read as
+"B115" and "10" and "BL-10" as `"Beam_10"`. Port angles are checked against the "Polar
+Ang"/"Azm Ang" of the file, with a warning beyond `angle_tol` degrees, which indicates a
+frame or naming mismatch. Template beams absent from the file follow `absent` (`:off`,
+`:keep`, `:error`), since VisRad omits hidden unused beams. NIF quads aggregate their
+four beams, with the mean aim and defocus and the summed power. Without a template,
+beams are built from the port angles of the file.
 """
 function read_visrad_summary(path::AbstractString; template = nothing, absent::Symbol = :off,
                              spot_definition = :auto, rotation_sense::Symbol = :beam,
@@ -756,19 +771,20 @@ end
     write_visrad_summary(path, beams; rotation_sense = :beam, cluster = b -> string(b.group),
                          profile = "Custom Supergaussian", extras = true) -> path
 
-Write beams in the layout of VisRad's Laser Beam Summary CSV, one row per VisRad beam
-(NIF quads expand to their four beams with a quarter of the power each): cluster, beam
-ID, on/off (power > 0), port polar/azimuth (degrees), pointing reference "Target
-Chamber"/"Cartesian" with the aim as Pt Param-1/2/3 (cm), focus offset (cm), focus
-position "TC Pt Pos" (cm, aim + defocus·k), power (TW), DPR "Off", spatial profile model,
-R0 major/minor as 1/e radii (µm), and the minor-axis rotation (degrees; see
-`read_visrad_summary` for `rotation_sense`). `extras` appends "SG Exponent" and "R0 Def"
-("36.8% (1/e)") so that the file is self-contained.
+Write beams in the layout of the VisRad Laser Beam Summary CSV, one row per VisRad beam.
+NIF quads expand to their four beams with a quarter of the power each. The columns are
+the cluster, beam ID, on/off (power > 0), port polar angle and azimuth (degrees), the
+pointing reference "Target Chamber"/"Cartesian" with the aim as Pt Param-1/2/3 (cm), the
+focus offset (cm), the focus position "TC Pt Pos" (cm, aim + defocus·k), the power (TW),
+DPR "Off", the spatial profile model, R0 major/minor as 1/e radii (µm), and the
+minor-axis rotation (degrees; see `read_visrad_summary` for `rotation_sense`). `extras`
+appends "SG Exponent" and "R0 Def" ("36.8% (1/e)") so that the file is self-contained.
 
-Columns through "TC Pt Pos-z" reproduce the v21 dialog's headers; the names of the
+Columns through "TC Pt Pos-z" reproduce the headers of the v21 dialog. The names of the
 later columns are not shown in the manual (*assumption*), and halo parameters are not
-written (VisRad has none). Use this file for records and for `read_visrad_summary`;
-to set pointing in VisRad, import `write_visrad_sst`, whose format is documented.
+written, since VisRad has none. The file serves for records and for
+`read_visrad_summary`. Pointing is set in VisRad by importing the output of
+`write_visrad_sst`, whose format is documented.
 """
 function write_visrad_summary(path::AbstractString, beams::AbstractVector{<:Beam};
                               rotation_sense::Symbol = :beam, cluster = b -> string(b.group),
@@ -806,22 +822,23 @@ _vr_scale(p::PulseShape, f) = f == 1 ? p : PulseShape(p.t, f .* p.p)
     write_visrad_powers(path, beams, pulses; by = :group, times = nothing) -> path
     write_visrad_powers(path, pulses::AbstractDict{Symbol,PulseShape}; times = nothing) -> path
 
-Write a VisRad time-dependent beam-power CSV (`VR/files/laser_beam_data_files.html`):
-header `time (ns)` then one column per beam named as VisRad names beams (`B115` for NIF,
-`Beam_10` for OMEGA), rows of time (ns) and power (TW per beam). Import it with File |
-Import Laser Beam Data | Time-Dependent Powers
-(`VR/power_sources/import_tdep_beam_powers.html`); for NIF VisRad assigns the powers to
+Write a VisRad time-dependent beam-power CSV (`VR/files/laser_beam_data_files.html`).
+The header is `time (ns)`, followed by one column per beam named as VisRad names beams
+(`B115` for NIF, `Beam_10` for OMEGA), and the rows hold time (ns) and power (TW per
+beam). The file is imported with File | Import Laser Beam Data | Time-Dependent Powers
+(`VR/power_sources/import_tdep_beam_powers.html`). For NIF, VisRad assigns the powers to
 the 3ω (blue) cones.
 
 `pulses` takes the forms of [`with_pulses`](@ref): a `PulseShape` for every beam, or a
 `Dict`/NamedTuple keyed `by` group (default), quad, beam name (`by = :beam`, as
 [`read_visrad_powers`](@ref) returns them) or a function of the beam. The second form
-writes a `Dict` keyed by beam name as it is. NIF quads expand to their four beams at a quarter of the quad's power each. Times default to
-the union of all pulse knots, so piecewise-linear pulses are reproduced exactly when
-each starts and ends at zero power (a `PulseShape` is zero outside its table; a pulse
-that starts or ends at a finite power gets a ramp to its neighbors' knots instead).
-Briareus beam names that are not facility names (e.g. `omega_beams()`'s hohlraum-frame
-`B01`…) are written as they are; rename them first.
+writes a `Dict` keyed by beam name as it is. NIF quads expand to their four beams at a
+quarter of the quad power each. Times default to the union of all pulse knots, so
+piecewise-linear pulses are reproduced exactly when each starts and ends at zero power.
+A `PulseShape` is zero outside its table, so a pulse that starts or ends at a finite
+power gets a ramp to the knots of its neighbors instead. Briareus beam names that are
+not facility names, such as the hohlraum-frame `B01`… of `omega_beams()`, are written
+as they are and should be renamed first.
 """
 function write_visrad_powers(path::AbstractString, beams::AbstractVector{<:Beam}, pulses;
                              by = :group, times = nothing)
@@ -852,15 +869,17 @@ end
 """
     read_visrad_powers(path; template = nothing) -> Dict{Symbol,PulseShape}
 
-Read a VisRad time-dependent beam-power CSV: first column time (ns; a "(s)"/"(sec)" or
-"(ps)" unit in its header is converted), then one power column (TW) per beam headed by
-the beam name (`VR/files/laser_beam_data_files.html`). Negative powers are set to zero as
-VisRad does on import (`VR/power_sources/import_tdep_beam_powers.html`).
+Read a VisRad time-dependent beam-power CSV. The first column is time in ns, and a
+"(s)"/"(sec)" or "(ps)" unit in its header is converted. One power column (TW) per beam
+follows, headed by the beam name (`VR/files/laser_beam_data_files.html`). Negative
+powers are set to zero, as VisRad does on import
+(`VR/power_sources/import_tdep_beam_powers.html`).
 
-Without a template the keys are the normalized beam names as `Symbol`s (`BL115` →
-`:B115`, `:Beam_10`). With a `template` beam set the keys are the template's names:
-beams match by name, and a NIF quad gets the sum of its four beams' pulses (on the union
-of their knots); template beams absent from the file have no key. Beams at time `t` are
+Without a template the keys are the normalized beam names as `Symbol`s, so that `BL115`
+becomes `:B115`, and OMEGA beams become keys such as `:Beam_10`. With a `template` beam
+set the keys are the names of the template. Beams match by name, and a NIF quad gets the
+sum of the pulses of its four beams, on the union of their knots. Template beams absent
+from the file have no key. The beams at time `t` are
 `with_pulses(beams, P, t; by = :beam)` ([`with_pulses`](@ref)).
 """
 function read_visrad_powers(path::AbstractString; template = nothing)
@@ -902,11 +921,11 @@ end
 """
     read_visrad_pulse_shape(path) -> PulseShape
 
-Read one of VisRad's standard laser pulse-shape files (`data/laser_pulse_shapes` of the
-installation): a two-column ASCII table of power (W) versus time (s)
-(`VR/files/laser_pulse_shape_files.html`), returned in ns and TW. The column order is not
-stated; time first is an *assumption*, and a first column that is not sorted while the
-second is triggers the swap. Non-numeric lines are skipped.
+Read one of the standard laser pulse-shape files of VisRad (`data/laser_pulse_shapes` of
+the installation), a two-column ASCII table of power (W) versus time (s)
+(`VR/files/laser_pulse_shape_files.html`), and return it in ns and TW. The column order
+is not stated. Time first is an *assumption*, and the columns are swapped when the first
+column is not sorted while the second is. Non-numeric lines are skipped.
 """
 function read_visrad_pulse_shape(path::AbstractString)
     xs, ys = Float64[], Float64[]
@@ -926,12 +945,13 @@ end
 # Result tables
 # ---------------------------------------------------------------------------------------
 
-# Unit-less column names of VisRad's element table (VR/results/images/surf_elem_table.jpg
-# shows "Surf Index"; the others are *assumed* spellings of the listed quantities).
+# Unit-less column names of the VisRad element table. VR/results/images/surf_elem_table.jpg
+# shows "Surf Index", and the others are *assumed* spellings of the listed quantities.
 const _VR_UNITLESS = ("Surf Index", "Albedo", "Laser Reflectivity", "X-ray Conv Eff", "Object")
 
-# Split a whitespace-separated header into `n` names: on runs of 2+ spaces, else by
-# attaching each "(unit)" token to the words before it (known unit-less names stand alone).
+# Splits a whitespace-separated header into `n` names, on runs of 2+ spaces, or else by
+# attaching each "(unit)" token to the words before it. Known unit-less names stand
+# alone.
 function _vr_header_names(line::AbstractString, n::Integer)
     s = strip(line)
     parts = split(s, r"\s{2,}")
@@ -965,19 +985,23 @@ end
 """
     read_visrad_table(path; header = nothing) -> (; header, labels, data)
 
-Read a multi-column ASCII table exported by VisRad — the Surface Element Properties
-table (File | Save Data for Object / All Objects / Selected Rows, and the `*.sed` files
-of a run; `VR/results/display_surf_elem_table.html`,
+Read a multi-column ASCII table exported by VisRad. The table is the Surface Element
+Properties table (File | Save Data for Object / All Objects / Selected Rows, and the
+`*.sed` files of a run; `VR/results/display_surf_elem_table.html`,
 `VR/simulation_times/config_sim_params.html`) or a Power Summary (`*.psd`). The manual
-shows the columns (e.g. "Z (cm)", "Azim. ang (deg)", "Radius (cm)", "Surf Index", "Emis
-T (eV)", "Rad T (eV)", "Flux In (TW/cm2)", "Flux Out (TW/cm2)", …;
-`VR/results/images/surf_elem_table.jpg`) but not the file layout, so the reader is
-tolerant (*assumption* throughout): comma-, tab- or whitespace-separated; data rows are
-the most common shape of lines ending in numbers, with any leading non-numeric text kept
-as the row's label (an object name); the header is the last non-data line before the
-first data row, split on the delimiter, on runs of 2+ spaces, or by attaching "(unit)"
-tokens to the words before them. Pass `header` (a vector of names for the numeric
-columns) when that fails.
+shows the columns, for example "Z (cm)", "Azim. ang (deg)", "Radius (cm)", "Surf Index",
+"Emis T (eV)", "Rad T (eV)", "Flux In (TW/cm2)" and "Flux Out (TW/cm2)"
+(`VR/results/images/surf_elem_table.jpg`), but not the file layout. The reader is
+therefore tolerant (*assumption* throughout):
+
+- the table may be comma-, tab- or whitespace-separated;
+- data rows are the most common shape of lines ending in numbers, and any leading
+  non-numeric text is kept as the label of the row (an object name);
+- the header is the last non-data line before the first data row. It is split on the
+  delimiter, on runs of 2+ spaces, or by attaching "(unit)" tokens to the words before
+  them.
+
+When that fails, `header` (a vector of names for the numeric columns) sets the names.
 
 Returns the numeric column names, row labels (empty strings when none) and an
 `nrows × ncols` matrix.
@@ -1041,12 +1065,13 @@ _vr_flux_scale(h) = occursin(r"mm\s*\^?2|mm²"i, h) ? 100.0 : occursin(r"w/cm"i,
 """
     visrad_legendre_fit(theta, values; terms = 0:4, weights = nothing) -> Vector
 
-Least-squares fit `f(θ) = Σₗ Aₗ Pₗ(cos θ)` over the given `terms`, as in VisRad's
-Surface Element Statistics (coefficients up to A4, each term selected by a check box;
-`VR/results/display_surf_elem_table.html`). `theta` in degrees; returns `A` indexed `l+1`
-(zero for unused terms), so `A[3]/A[1]` is P2/P0. Unweighted by default — VisRad's
-weighting is not documented (*assumption*); pass element areas as `weights` to weight.
-Apply the same fit to Briareus and VisRad element values for a like-for-like comparison.
+Least-squares fit `f(θ) = Σₗ Aₗ Pₗ(cos θ)` over the given `terms`, as in the Surface
+Element Statistics of VisRad, with coefficients up to A4 and each term selected by a
+check box (`VR/results/display_surf_elem_table.html`). `theta` is in degrees. The result
+`A` is indexed `l+1`, with zeros for unused terms, so `A[3]/A[1]` is P2/P0. The fit is
+unweighted by default, since the VisRad weighting is not documented (*assumption*);
+element areas passed as `weights` weight it. The same fit applied to Briareus and VisRad
+element values gives a like-for-like comparison.
 """
 function visrad_legendre_fit(θ::AbstractVector, values::AbstractVector; terms = 0:4,
                              weights = nothing)
@@ -1081,15 +1106,17 @@ end
 """
     visrad_ylm_fit(theta, phi, values; lmax = 4, weights = nothing) -> Vector
 
-Least-squares fit to VisRad's real spherical harmonics
-(`VR/results/display_surf_elem_table.html`): `Y_LM = N_LM P_L^M(cos θ)` for M = 0 and
-`√2 N_LM P_L^|M|(cos θ)` × `cos Mφ` (M > 0) or `sin |M|φ` (M < 0), with
-`N_LM = √((2L+1)(L−M)!/(L+M)!)`, so `Y_00 = 1` and `A_00` is the mean (the manual's
-example: mean 9.736, `A_00 = 9.739`) and `A_L0 = A_L/√(2L+1)` for the Legendre `A_L`
-(its example: 1.143·√5 = 2.556 vs `A_2 = 2.563`). Angles in degrees; coefficients in
-Briareus's flat `mode_index` order. These are Briareus's orthonormal `ylm_moments` times
-`√(4π)`. Whether VisRad's `P_L^M` carries the Condon–Shortley phase is not stated; none
-is assumed (signs of odd-M coefficients may flip); `√(Σ_M A_LM²)/A_00` is unaffected.
+Least-squares fit to the real spherical harmonics of VisRad
+(`VR/results/display_surf_elem_table.html`). These are `Y_LM = N_LM P_L^M(cos θ)` for
+M = 0 and `√2 N_LM P_L^|M|(cos θ)` × `cos Mφ` (M > 0) or `sin |M|φ` (M < 0), with
+`N_LM = √((2L+1)(L−M)!/(L+M)!)`. Then `Y_00 = 1`, and `A_00` is the mean; the example in
+the manual gives a mean of 9.736 and `A_00 = 9.739`. `A_L0 = A_L/√(2L+1)` for the
+Legendre `A_L`, and the same example gives 1.143·√5 = 2.556 against `A_2 = 2.563`.
+Angles are in degrees, and the coefficients are in the flat `mode_index` order of
+Briareus. They are the orthonormal `ylm_moments` of Briareus times `√(4π)`. The manual
+does not state whether its `P_L^M` includes the Condon–Shortley phase. No phase is
+assumed, so the signs of odd-M coefficients may flip; `√(Σ_M A_LM²)/A_00` is
+unaffected.
 """
 function visrad_ylm_fit(θ::AbstractVector, φ::AbstractVector, values::AbstractVector;
                         lmax::Integer = 4, weights = nothing)
@@ -1136,8 +1163,9 @@ end
 const _VR_POWER_COLUMNS = ("Surface Area", "Incident Rad Pwr", "Emitted Rad Pwr", "Pwr Src Term",
                            "Laser Pwr Dep")
 
-# A component's conversion as one number: the value itself, or for a `Conversion` model the
-# laser-weighted mean of the solved source (the model at the solution's time without laser).
+# Returns the conversion of a component as one number. That is the value itself, or for a
+# `Conversion` model the laser-weighted mean of the solved source. Without laser, it is
+# the model at the time of the solution.
 _mean_conversion(η::Real, sol, t, es) = η
 function _mean_conversion(m::Conversion, sol, t, es)
     v = ForwardDiff.value
@@ -1197,11 +1225,11 @@ end
                      time = 0.0, observe = :capsule, terms = (0, 2, 4), lmax = 4,
                      rotation_sense = :beam, notes = "") -> NamedTuple
 
-Write everything needed to rebuild a Briareus case in VisRad, together with Briareus's
+Write everything needed to rebuild a Briareus case in VisRad, together with the Briareus
 results for comparison (`compare_visrad`), into directory `dir`:
 
-- `pointing_sst.csv` — per-beam pointing in the NIF SST format (`write_visrad_sst`); import
-  with File | Import Laser Beam Data | Pointing Data, Custom CSV, units mm.
+- `pointing_sst.csv` — per-beam pointing in the NIF SST format (`write_visrad_sst`),
+  imported with File | Import Laser Beam Data | Pointing Data, Custom CSV, units mm.
 - `beam_summary.csv` — the full beam set in Laser Beam Summary layout
   (`write_visrad_summary`): port angles, pointing, focus, power, 1/e spot radii,
   exponents and rotations.
@@ -1212,12 +1240,12 @@ results for comparison (`compare_visrad`), into directory `dir`:
   materials, albedos and conversion efficiencies), beam settings, and the VisRad steps.
 - `briareus_results.csv` — `quantity,value,unit` rows: per-component "Laser Pwr Dep",
   "Pwr Src Term" (conversion × laser), "Incident Rad Pwr" (Σ H·A), "Emitted Rad Pwr"
-  (Σ B·A), all TW, and "Surface Area" (cm²), named as VisRad's Power Summary columns;
-  the laser power that misses or strikes outer surfaces; and for `observe` the mean
+  (Σ B·A), all TW, and "Surface Area" (cm²), named as the Power Summary columns of
+  VisRad; the laser power that misses or strikes outer surfaces; and for `observe` the mean
   incident flux (TW/cm²), the VisRad-style Legendre fit (`visrad_legendre_fit` over
   `terms`) and per-L amplitudes of the VisRad spherical-harmonic fit (`visrad_ylm_fit`).
-- `briareus_<observe>_elements.csv` — per-element polar/azimuthal angle about the
-  component's center (degrees), area (cm²), incident flux and absorbed laser flux
+- `briareus_<observe>_elements.csv` — per-element polar and azimuthal angle about the
+  center of the component (degrees), area (cm²), incident flux and absorbed laser flux
   (TW/cm²).
 
 The deposition uses `op` (default `DepositionOperator(target, beams)`) and the radiation
@@ -1243,7 +1271,7 @@ function write_visrad_kit(dir::AbstractString, target::Target, beams::AbstractVe
     t = target
     v = ForwardDiff.value
     results = Pair{String,Tuple{Float64,String}}[]
-    for p in parts(t)                    # a part split for computation as one
+    for p in parts(t)                    # a part split for computation is treated as one
         cis = part_pieces(t, p)
         c = t.components[first(cis)]
         es = elements(t, p)
@@ -1266,7 +1294,7 @@ function write_visrad_kit(dir::AbstractString, target::Target, beams::AbstractVe
 
     obs_ok = any(c -> c.name === observe || c.part === observe, t.components)
     if obs_ok
-        ci = first(part_pieces(t, observe))     # a split part's largest piece first
+        ci = first(part_pieces(t, observe))     # the largest piece of a split part comes first
         es = elements(t, observe)
         s = t.components[ci].surface
         ctr = s isa SphereSurface ? s.center :
@@ -1409,19 +1437,19 @@ end
                    names = Dict(), terms = (0, 2, 4), lmax = 4, io = nothing)
         -> Vector{NamedTuple}
 
-Compare a kit written by `write_visrad_kit` with VisRad's results for the same case.
+Compare a kit written by `write_visrad_kit` with the VisRad results for the same case.
 
-- `elements`: VisRad's Surface Element Properties export for the observed component
-  (`read_visrad_table`). The polar and azimuthal columns (headers containing
-  "polar"/"theta" and "azim"/"phi", degrees, in the component frame — for an
-  unrotated sphere the chamber frame) and "Flux In" (TW/cm²; a TW/mm² header is
-  converted) are fitted exactly as Briareus's elements were (`visrad_legendre_fit` over
-  `terms`, `visrad_ylm_fit` to `lmax`).
-- `power_summary`: VisRad's Power Summary, as a file (`read_visrad_table`; object names
-  are row labels) or a `Dict(object => Dict(column => value))` typed from the dialog,
-  columns as in VisRad ("Laser Pwr Dep", "Incident Rad Pwr", "Emitted Rad Pwr",
-  "Pwr Src Term", "Surface Area"; TW and cm²). `names` maps VisRad object names to
-  Briareus component names, e.g. `Dict("hohlraum_barrel" => "wall")`.
+- `elements`: the VisRad Surface Element Properties export for the observed component
+  (`read_visrad_table`). The polar and azimuthal columns are those whose headers contain
+  "polar"/"theta" and "azim"/"phi", in degrees and in the component frame, which for an
+  unrotated sphere is the chamber frame. They and "Flux In" (TW/cm²; a TW/mm² header is
+  converted) are fitted exactly as the Briareus elements were (`visrad_legendre_fit`
+  over `terms`, `visrad_ylm_fit` to `lmax`).
+- `power_summary`: the VisRad Power Summary, as a file (`read_visrad_table`, with object
+  names as row labels) or a `Dict(object => Dict(column => value))` typed from the
+  dialog. The columns are as in VisRad ("Laser Pwr Dep", "Incident Rad Pwr", "Emitted
+  Rad Pwr", "Pwr Src Term", "Surface Area"; TW and cm²). `names` maps VisRad object
+  names to Briareus component names, e.g. `Dict("hohlraum_barrel" => "wall")`.
 
 Returns rows `(; quantity, unit, briareus, visrad, difference, relative)` and prints
 them to `io` when given.

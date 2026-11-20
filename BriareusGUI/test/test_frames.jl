@@ -1,5 +1,6 @@
-# Frames in the GUI: part frames through `resolve_frames`, beams held in frames, the
-# optimizer's frame fields, the placement sweep, and sessions before version 3.
+# This file tests frames in the GUI: part frames through `resolve_frames`, beams held in
+# frames, the frame fields of the optimizer, the placement sweep, and sessions before
+# version 3.
 
 using LinearAlgebra: norm, normalize, I
 import TOML
@@ -20,7 +21,7 @@ _aims_held(bt; atol = 1e-12) =
         eachindex(bt.beams[]))
 
 @testset "part frames and the foil frame (no GL)" begin
-    # the foil starter built from its frame, bitwise identical to the core's `foil`
+    # The foil starter built from its frame is identical to `foil` from the core package.
     s = DesignSession(starter = :foil, resolution = :coarse)
     ts = s.target
     w = ts.parts[][part_index(ts, :foil)].values[:r1]
@@ -30,8 +31,8 @@ _aims_held(bt; atol = 1e-12) =
     c = ts.target[].components[findfirst(c -> c.name === :foil, ts.target[].components)]
     @test c.mesh.vertices == ref.mesh.vertices && c.mesh.triangles == ref.mesh.triangles
     F = part_frames(ts)[:foil]
-    @test F.origin == V3(6.0, 0, 0) && F.R[:, 3] == V3(-1, 0, 0)    # front: toward TCC
-    @test F == Frame(rotation_to(V3(-1, 0, 0)), V3(6.0, 0, 0))     # the former template's foil frame
+    @test F.origin == V3(6.0, 0, 0) && F.R[:, 3] == V3(-1, 0, 0)    # front toward TCC
+    @test F == Frame(rotation_to(V3(-1, 0, 0)), V3(6.0, 0, 0))     # the foil frame of the old template
     @test keys(part_frames(ts)) == Set([:tcc, :foil, :main])
     @test keys(part_frames(TargetSetup(resolution = :coarse))) ==
           Set([:tcc, :hohlraum, :capsule, Symbol("hohlraum.leh_top"), Symbol("hohlraum.leh_bottom")])
@@ -106,7 +107,7 @@ end
     @test ts.parts[][part_index(ts, :shield)].values[:y] == 0 &&
           ts.parts[][part_index(ts, :shield)].values[:x] == 3.5
     @test all(i -> isapprox(aim(i), V3(3.6, 0, -0.2); atol = 1e-12), idx)
-    # a part removed: its beams keep their aims, held in the chamber
+    # When a part is removed, its beams keep their aims, held in the chamber.
     a = [aim(i) for i in idx]
     @test remove_part!(ts, part_index(ts, :bead)) && remove_part!(ts, part_index(ts, :shield))
     @test all(==(:tcc), bt.aim_frame[][idx]) && [aim(i) for i in idx] == a
@@ -124,7 +125,7 @@ end
     edit_beam_set!(bt, a, :aim_y, "0.2")
     aims = copy(bt.beams[])
     loc = copy(bt.aim_local[])
-    # renamed: the beams aim in the new name, where they were
+    # After a rename, the beams aim in the new name, where they were.
     @test edit_part!(ts, part_index(ts, :shield), :name, "screen")
     @test all(==(:screen), bt.aim_frame[][a]) && bt.beams[] == aims && bt.aim_local[] == loc
     # the observed role takes a sphere or a flat face (a disk, here, which then gives it up;
@@ -164,7 +165,7 @@ end
     set_aim_frame!(s, 9:12, Symbol("hohlraum.leh_bottom"); keep = false)
     edit_beams!(bt, 1, :z, "3.3")
     edit_beam_set!(bt, 1:8, :aim_x, "0.4")
-    edit_beam_set!(bt, [1, 9], :aim_y, "0.1")                       # two frames: chamber y
+    edit_beam_set!(bt, [1, 9], :aim_y, "0.1")                       # two frames, so chamber y
     edit_beam_set!(bt, 1:4, :power, "6.0")
     nudge_part!(ts, part_index(ts, :lid), 0.3; frame = :tcc, axis = :x)
     edit_part!(ts, part_index(ts, :lid), :rotation, "40")
@@ -192,7 +193,8 @@ end
     accept_optimum!(s)
     @test held[] && st.result[].applied
 
-    # and no writer bypasses it: in the controllers, only `_set_aims!` assigns the table's beams
+    # No writer bypasses it: in the controllers, only `_set_aims!` assigns the beams of the
+    # table.
     writes = r"(?:\bbt|\btable|\bbeams|sess\.beams|s\.beams)\.beams(?:\[\]|\.val)\s*=[^=]|_assign!\(\s*(?:bt|[\w.]*\.beams)\.beams\b|notify\(\s*(?:bt|[\w.]*\.beams)\.beams\)"
     src = joinpath(pkgdir(BriareusGUI), "src")
     bad = String[]
@@ -231,7 +233,8 @@ end
     @test r !== nothing && r.value <= r.initial_value
     @test all(n -> endswith(n, ".u") || endswith(n, ".v"), r.names) && all(abs.(r.x) .<= 0.3 + 1e-12)
     accept_optimum!(s)
-    # each group's common point moved across the foil's face (w = 0: chamber x = distance)
+    # The common point of each group moves across the face of the foil (w = 0, so
+    # chamber x = distance).
     d = s.target.parts[][1].values[:x]
     groups = unique(bt.cluster[])
     loc = bt.aim_local[]
@@ -246,7 +249,7 @@ end
     ts, bt, sw = s.target, s.beams, s.sweep
     @test sweep_subject(s) === :foil && sweep_frame(s) === :foil
     @test sweep_los_object(s) === :main
-    θ, φ = sweep_los(s)                                              # foil (+x) → TCC → detector
+    θ, φ = sweep_los(s)                                              # from the foil (+x) through TCC to the detector
     @test isapprox(θ, 90; atol = 1e-9) && isapprox(φ, 180; atol = 1e-9)
     set_sweep!(sw; clearance = true, los = true, capture = true)
     @test edit_sweep!(sw, :start, "-1") && edit_sweep!(sw, :stop, "1") && edit_sweep!(sw, :step, "1")
@@ -279,13 +282,13 @@ end
     @test sweep_stale(s) && !apply_sweep_step!(s, 1)                # the design moved since
     @test undo!(s)
     @test [p.values for p in ts.parts[]] == [p.values for p in before[1]] && bt.beams[] == before[2]
-    # a part as the subject: it and what is placed in its frame move
+    # With a part as the subject, the part and what is placed in its frame move.
     @test add_part!(ts, :disk; name = :shield, frame = :foil, z = -0.5, r1 = 0.4)
     set_sweep!(sw; subject = :shield, frame = :tcc, axis = :y, los = false, capture = false)
     start_sweep!(s; spawn = false)
     @test length(sw.result[].rows) == 3 && apply_sweep_step!(s, 1)
     @test isapprox(part_centroid(ts.target[], :shield), V3(6.5, -1, 0); atol = 1e-12)
-    # in a window: on a worker, canceled at once
+    # In a window the sweep runs on a worker and is canceled at once.
     queue = Channel{Any}(Inf)
     s.deliver[] = f -> put!(queue, f)
     set_sweep!(sw; clearance = false, capture = true)
@@ -337,7 +340,7 @@ end
         worst = max(worst, maximum(norm(g - (R * v + t)) for (g, v) in zip(got, loc)))
     end
     @test worst < 1e-12
-    # saved again: version 3, read back the same
+    # Saved again, the session is version 3 and loads back unchanged.
     f = joinpath(mktempdir(), "v3.briar.toml")
     set_sweep!(s.sweep; subject = :substrate, axis = :x, los = true)
     edit_sweep!(s.sweep, :step, "0.25")
@@ -389,18 +392,19 @@ end
     @test remove_part_step!(ts, i, 3)
     # a nudge along the line to the snout is undone by the distance step: refused
     @test !nudge_part!(ts, i, 0.5; frame = :plate, axis = :z) && occursin("fix its position", ts.error[])
-    @test nudge_part!(ts, i, 0.5; frame = :tcc, axis = :y)            # across it: moves
+    @test nudge_part!(ts, i, 0.5; frame = :tcc, axis = :y)            # across it, so it moves
     @test !isapprox(part_frames(ts)[:plate], F; atol = 1e-3)
     @test nudge_part!(ts, i, -0.5; frame = :tcc, axis = :y) && part_frames(ts)[:plate] ≈ F
     @test !edit_part_step!(ts, i, 1, :angle, "3") && occursin("no angle", ts.error[])
     @test !edit_part_step!(ts, i, 2, :distance, "-1") && occursin("negative", ts.error[])
-    # reordered: the distance first, then the facing turn, the same frame here
+    # Reordered, the distance comes first and the facing turn second, with the same frame
+    # in this case.
     @test move_part_step!(ts, i, 2, -1) && step_kind.(ts.parts[][i].steps) == [:distance, :facing]
     @test part_frames(ts)[:plate] ≈ F
     # renaming the referred part renames the steps' frame
     @test edit_part!(ts, part_index(ts, :snout), :name, "nozzle")
     @test all(st -> st.ref === :nozzle, ts.parts[][i].steps) && part_frames(ts)[:plate] ≈ F
-    # saved and read back: the same steps and vertices
+    # Saved and loaded back, the steps and vertices are the same.
     f = joinpath(mktempdir(), "steps.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
@@ -504,7 +508,8 @@ end
           dr.result[].map.title == "Foil laser irradiance (W/cm²)" && dr.lookup[].foil === :foil_a
     @test dr.result[].spot.mean > 0 && spot(:foil_b).mean > 0 && !isequal(spot(:foil_a), spot(:foil_b))
     record!(s)
-    # another active foil: the drive's statistics and map follow without a rebuild
+    # With another active foil, the statistics and map of the drive follow without a
+    # rebuild.
     sc = dr.scenario[]
     @test !set_active_foil!(ts, :sphere_1) && occursin("not a backlighter foil", ts.error[])
     @test set_active_foil!(ts, :foil_b) && active_foil(ts) === :foil_b
@@ -534,7 +539,7 @@ end
     @test set_excluded!(ts, :foil_b, true) && active_foil(ts) === :foil_a && foil_names(ts) == [:foil_a]
     @test set_excluded!(ts, :foil_b, false) && active_foil(ts) === :foil_b
     @test remove_part!(ts, part_index(ts, :foil_b)) && active_foil(ts) === :foil_a
-    # the role cleared: no foil, and the part is checked hardware
+    # With the role cleared there is no foil, and the part is checked as hardware.
     @test set_part_role!(ts, part_index(ts, :foil_a), :none) && active_foil(ts) === nothing &&
           ts.parts[][part_index(ts, :foil_a)].name === :foil_a && :foil_a in s.review.hardware[]
     # a renamed active foil stays active
@@ -542,7 +547,7 @@ end
     @test edit_part!(ts, part_index(ts, :foil_a), :name, "shield") && ts.active_foil[] === :shield &&
           active_foil(ts) === :shield
 
-    # a version 4 session: the part named `backlighter` loads as the active foil
+    # In a version 4 session, the part named `backlighter` loads as the active foil.
     s4 = DesignSession(starter = :none, resolution = :coarse)
     @test add_part!(s4.target, :disk; name = :plate, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
     @test add_part!(s4.target, :disk; name = :backlighter, x = -3.0, theta = 90, r1 = 0.6)
@@ -557,7 +562,7 @@ end
           [part_role(p) for p in ps] == [:none, :foil] && active_foil(s5.target) === :backlighter
 end
 
-@testset "observed and wall roles held by parts, not names (no GL)" begin
+@testset "observed and wall roles belong to parts instead of names (no GL)" begin
     # a hohlraum without the starter's capsule, and a sphere part named ball in its place
     s = DesignSession(resolution = :coarse)
     ts = s.target
@@ -565,7 +570,8 @@ end
     @test wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]
     @test add_part!(ts, :sphere; name = :ball, r1 = 0.9, h = 0.16)
     @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
-    # the role: the name stays, the target is not rebuilt, the checks follow
+    # Setting the role keeps the name, does not rebuild the target, and updates the
+    # checks.
     t = ts.target[]
     record!(s)
     @test set_part_role!(ts, part_index(ts, :ball), :observed)
@@ -578,8 +584,8 @@ end
     @test r1 !== nothing && length(r1.modes) > 0 && isfinite(r1.mean_flux) &&
           Controllers._observed_parts(s.drive.scenario[]) == (:ball,)
 
-    # the same design saved by version 6, the sphere named capsule (the name was the role):
-    # it loads with the role, and its drive is bitwise the ball's
+    # The same design saved by version 6 has the sphere named capsule, since the name was
+    # the role. It loads with the role, and its drive is identical to that of the ball.
     old = session_state(s)
     old["version"] = 6
     for p in old["target"]["parts"]
@@ -600,22 +606,23 @@ end
     start_history!(s)
     start_history!(s6)
     @test s.time.history[].Tr == s6.time.history[].Tr && length(s.time.history[].Tr) > 1
-    # from version 7 the name carries no role
+    # From version 7 the name does not carry a role.
     st7 = session_state(s6)
     st7["target"]["parts"][end]["observed"] = false
     restore!(s6, st7)
     @test observed_name(s6.target) === nothing && s6.target.parts[][end].name === :capsule &&
           drive_stale(s6)
 
-    # role changes: the target stays, the drive goes stale (its scenario observes the old
-    # surface), undo and redo bring the role back and forth
+    # A role change keeps the target and makes the drive stale, since its scenario
+    # observes the old surface. Undo and redo switch the role back and forth.
     @test set_part_role!(ts, part_index(ts, :ball), :none)
     record!(s)
     @test ts.target[] === t && observed_name(ts) === nothing && drive_stale(s) && s.drive.result[] === nothing
     @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
-    # (a part wholly inside the hohlraum lies in its cavity; of one reaching out through
-    # the wall the cavity holds the elements facing into it, and the wall buried in it sees
-    # the part from behind: 1.2% of the cavity's rays leave it, and it is not balanced)
+    # A part wholly inside the hohlraum lies in its cavity. For a part that reaches out
+    # through the wall, the cavity contains the elements that face into it, and the wall
+    # buried in the part sees it from behind. Then 1.2% of the rays of the cavity leave it,
+    # and the cavity is not balanced.
     @test closed_design(ts)
     inside() = (b = elements(ts.target[], :ball); count(in(only(Controllers._closed_cavities(ts)).elements), b) / length(b))
     @test inside() == 1
@@ -636,8 +643,9 @@ end
     @test set_part_role!(ts, part_index(ts, :core), :none)
     @test edit_part!(ts, part_index(ts, :other), :name, "capsule") && observed_name(ts) === nothing
 
-    # the wall role: a shield outside the hohlraum re-emits as a wall; the target stays,
-    # the checks land the beams on it, and the drive history (which reads the walls) is stale
+    # With the wall role, a shield outside the hohlraum re-emits as a wall. The target is
+    # unchanged, the checks deposit the beams on it, and the drive history, which uses the
+    # walls, is stale.
     @test add_part!(ts, :disk; name = :shield, x = 4.0, theta = 90, r1 = 0.5)
     @test add_part!(ts, :disk; name = :hole, x = -4.0, theta = 90, r1 = 0.5, aperture = true)
     t = ts.target[]

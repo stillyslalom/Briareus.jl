@@ -1,15 +1,16 @@
-# The placement sweep: move a part (and what is placed in its frame, and the beams aimed
-# in those frames) along an axis of a named frame through a range of shifts, and check
-# each step on a worker (`placement_sweep`): beam clearance, the backlighter's line of
-# sight, the power the foil captures, and optionally a re-optimized pointing. A step of
-# the result can be applied to the design as one edit.
+# The placement sweep moves a part, with what is placed in its frame and the beams aimed in
+# those frames, along an axis of a named frame through a range of shifts. Each step is
+# checked on a worker (`placement_sweep`) for beam clearance, the line of sight of the
+# backlighter, the power the foil captures, and optionally a re-optimized pointing. A step
+# of the result can be applied to the design as one edit.
 
 """
 Placement-sweep quality presets, on top of the clearance check's sampling of the same
 name ([`REVIEW_QUALITY`](@ref)): `:quick` (line of sight from the foil's vertices
 through 2 rings of object points; the captured fraction on a 0.6 mm deposition grid) and
 `:standard` (4 sub-points per foil triangle and 4 rings; the deposition's default 0.3 mm
-grid). Engineering defaults for a sweep's many steps, not converged settings.
+grid). These are engineering defaults for the many steps of a sweep; they are not
+converged settings.
 """
 const SWEEP_QUALITY = Dict(:quick => (; level = 0, nrings = 2, resolution = 0.6),
                            :standard => (; level = 1, nrings = 4, resolution = 0.3))
@@ -200,7 +201,7 @@ sweep_subjects(sess) = Symbol[p.name for p in sess.target.parts[]]
     sweep_subject(sess) -> Symbol
 
 The subject the sweep moves: the chosen one when the design still has it, otherwise the
-first of [`sweep_subjects`](@ref) (a starter's first part: the foil of a backlighter), or `:none`.
+first of [`sweep_subjects`](@ref), such as the foil of a backlighter starter, or `:none`.
 """
 function sweep_subject(sess)
     subs = sweep_subjects(sess)
@@ -296,9 +297,10 @@ function _moved_components(t::Target, parts, frames::Set{Symbol})
     return moved
 end
 
-# The design of a sweep step: the moved components translated by `value * dir`, the
-# followed beams' aims with them, and (when re-optimizing) the step's parameterization:
-# a `FramePointing` in the beams' frames (the followed ones moved), else a `GroupPointing`.
+# The design of a sweep step: the moved components translated by `value * dir`, with the
+# aims of the followed beams moved along, and, when re-optimizing, the parameterization
+# of the step. That is a `FramePointing` in the frames of the beams, with the followed
+# frames moved, or else a `GroupPointing`.
 struct _SweepDesign
     target::Target
     moved::Set{Symbol}
@@ -370,8 +372,8 @@ end
 
 # The design of a sweep step that edits the parts (`edit(parts, value)`: a part's center,
 # a placement step's number) and re-resolves their frames: each part whose frame changes
-# moves rigidly by its map from the sweep's start (`frames`), and so do the beams
-# aimed in it, exactly as a rebuilt design would place them (to round-off).
+# moves rigidly by its map from the start of the sweep (`frames`), and so do the beams
+# aimed in it, as a rebuilt design would place them within round-off.
 struct _FrameSweepDesign
     target::Target
     parts::Vector{PartSpec}
@@ -408,8 +410,8 @@ function (d::_FrameSweepDesign)(value)
     return (; target, beams, pointing, scenario_kw = _step_scenario_kw(target, vols))
 end
 
-# The parts at a sweep value: the subject part's center moved by `value * dir` (chamber),
-# or its placement step's number set to `value`.
+# The parts at a sweep value, with the center of the subject part moved by `value * dir`
+# in the chamber or the number of its placement step set to `value`.
 struct _MoveCenter
     part::Int
     dir::Vec3
@@ -486,7 +488,7 @@ function (o::_StepObjective)(ev)
     return f(ev)
 end
 
-# Everything a sweep reads, captured on the GUI thread (and compared for staleness).
+# Everything a sweep uses, captured on the GUI thread and compared for staleness.
 function _sweep_inputs(sess)
     sw, ts, bt = sess.sweep, sess.target, sess.beams
     subject = sweep_subject(sess)

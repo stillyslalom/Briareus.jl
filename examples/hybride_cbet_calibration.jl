@@ -1,16 +1,18 @@
-# Joint multi-shot calibration of the two-zone CBET model to HYDRA's post-transfer cone
-# fraction for three HYBRID-E shots at three detunings: N210808 (Δλ 1.8 Å, PRE 109,
-# 025204 Fig. 1e with Kritcher et al. PRE 106, 025201 Fig. 1d's incident powers),
-# N220919 (2.5 Å) and N221204 (2.75 Å) (PRE 109 Fig. 9). One plasma history (Te(t)), one pair of zone multipliers and one outflow Mach
-# number serve all shots; per shot only what physically differs: its input powers, its
-# Δλ, and its pulse timing (the model's time tables follow each shot's rise to peak).
-# Physical constraints: Te ≤ `temax` (published LEH values), and a band for the Δλ null (a
-# penalty on N221204's peak beams): I-Raum's ≤ 0.5 Å (`iraum`, the default; the result is
-# `hybride_cbet_iraum()`), or NC24's 1–1.55 Å for HYBRID-E (`constrained`, `clamp`; the
-# result is `hybride_cbet()`), which is the Δλ of round hot spots, not the null. PRE 109
-# Fig. 10 is not used. Research notes, "Joint multi-shot CBET calibration (2026-10-24)"
-# and "Joint multi-shot CBET calibration: the null". 15–90 min per fit on 4 threads
-# (`clamp`: 98 iterations; `iraum`: 105 iterations, 45 min on 2 threads).
+# This example calibrates the two-zone CBET model jointly to the HYDRA post-transfer cone
+# fraction of three HYBRID-E shots at three detunings. The shots are N210808 (Δλ 1.8 Å; PRE
+# 109, 025204 Fig. 1e, with the incident powers of Kritcher et al. PRE 106, 025201 Fig. 1d),
+# N220919 (2.5 Å) and N221204 (2.75 Å), the last two from PRE 109 Fig. 9. One plasma history
+# Te(t), one pair of zone multipliers and one outflow Mach number serve all shots. Per shot,
+# only what physically differs is set: the input powers, the Δλ and the pulse timing, since
+# the time tables of the model follow the rise to peak of each shot. The physical
+# constraints are Te ≤ `temax` (published LEH values) and a band for the Δλ null, applied as
+# a penalty on the peak beams of N221204. The band is either the ≤ 0.5 Å of I-Raum (`iraum`,
+# the default, with the result in `hybride_cbet_iraum()`) or the 1–1.55 Å of NC24 for
+# HYBRID-E (`constrained`, `clamp`, with the result in `hybride_cbet()`). The NC24 band is
+# the Δλ of round hot spots; it is not the null. PRE 109 Fig. 10 is not used. The research
+# notes sections are "Joint multi-shot CBET calibration (2026-10-24)" and "Joint multi-shot
+# CBET calibration: the null". A fit takes from about a quarter of an hour to an hour and a
+# half on a desktop (98 iterations for `clamp`, 105 for `iraum`).
 #
 #   julia --project=. -t 4 examples/hybride_cbet_calibration.jl [variant ...] [key=value ...]
 #
@@ -48,11 +50,11 @@ function shot(name, tab, dλ)
     ts = [t for t in 0.8:0.2:8.4 if isfinite(post(t)) && ok[argmin(abs.(tab.t .- t))]]
     return (; name, tab, dλ, rise, beams_at, post, ts)
 end
-# N210808 (`n210808=pre109`, default): the cone fractions of PRE 109 Fig. 1e, the same
-# 2024 HYDRA model as Fig. 9 (and Fig. 10), with the outer cones' incident powers of
-# PRE 106 Fig. 1d (Fig. 1e's incident cone fraction agrees with PRE 106's to 0.004);
-# `n210808=pre106`: PRE 106 Fig. 1(d, e) alone (the 2022 model; post-CBET cone
-# fraction +0.03 at peak, +0.09 at 3.4 ns).
+# For N210808 the default, `n210808=pre109`, takes the cone fractions of PRE 109 Fig. 1e,
+# from the same 2024 HYDRA model as Figs. 9 and 10, with the incident powers of the outer
+# cones from PRE 106 Fig. 1d. The incident cone fraction of Fig. 1e agrees with that of PRE
+# 106 to 0.004. `n210808=pre106` takes only PRE 106 Fig. 1(d, e), from the 2022 model, whose
+# post-CBET cone fraction is +0.03 at peak and +0.09 at 3.4 ns.
 function n210808_table(source)
     k22 = n210808_fig1()
     source == "pre106" && return k22
@@ -78,12 +80,13 @@ cal = [(; beams_at = s.beams_at, data = [(t, s.post(t)) for t in s.ts], delay = 
 # `lo` and must gain at `hi`. Squared hinge on the inner-power ratio, weight 10 (a 1%
 # violation costs as much as ~3 cone-fraction residuals of 0.01).
 peak_beams = [(t, ref.beams_at(t)) for t in (5.6, 7.0)]
-# NC24's 1–1.55 Å (`constrained`, `clamp`) is the detuning that minimized hot-spot P2 in
-# the 2020–21 HYBRID-E shots (bubble absorption compensated as well), not the transfer
-# null; the closest published statement on the null is I-Raum's: 0.5 Å "mostly to negate
-# the flow-induced CBET" (NC24). Variant `iraum` holds the null in 0.25–0.5 Å (the lower
-# edge, keeping a flow-driven transfer at Δλ = 0, is our choice); `clampfree` has no null
-# constraint. Research notes, "Joint multi-shot CBET calibration: the null".
+# The 1–1.55 Å of NC24 (`constrained`, `clamp`) is the detuning that minimized hot-spot P2
+# in the 2020–21 HYBRID-E shots, with bubble absorption compensated as well; it is not the
+# transfer null. The closest published statement on the null is that of I-Raum, 0.5 Å
+# "mostly to negate the flow-induced CBET" (NC24). Variant `iraum` holds the null in
+# 0.25–0.5 Å. The lower edge, which keeps a flow-driven transfer at Δλ = 0, is a choice of
+# this example. `clampfree` does not constrain the null. See the research notes, "Joint
+# multi-shot CBET calibration: the null".
 null_band(variant) = startswith(variant, "iraum") ? (0.25, 0.5) : (1.0, 1.55)
 function null_penalty(m; lo = 1.0, hi = 1.55, w = 10.0)
     acc = 0.0
@@ -147,7 +150,7 @@ function report(io, name, m)
         @printf(io, "  N221204 beams %.1f ns: null %.2f Å; CF at Δλ 0 / 1 / 1.8 / 2.5 / 2.75 Å: %.3f / %.3f / %.3f / %.3f / %.3f; dCF/dΔλ 1–1.8 %.3f, 2.5–2.75 %.3f per Å\n",
                 t, nl, c(0.0), c(1.0), c(1.8), c(2.5), c(2.75), (c(1.8) - c(1.0)) / 0.8, (c(2.75) - c(2.5)) / 0.25)
     end
-    # cross-shot check against HYDRA: each shot with its beams at peak
+    # The cross-shot check against HYDRA takes each shot with its beams at peak.
     for t in (5.6, 7.0)
         @printf(io, "  %.1f ns, each shot's beams: ", t)
         for s in shots
@@ -170,10 +173,10 @@ function report(io, name, m)
     flush(io)
 end
 
-# Gauss–Newton (Laplace) covariance in the fit's parameter space: residual Jacobian J
-# by forward-mode AD, σ² from the residuals (model error included), parameters at a
-# bound held fixed. Returns the standard deviations of the fitted values (multiplicative
-# for log-space parameters: exp(±σ_u)).
+# Gauss–Newton (Laplace) covariance in the parameter space of the fit. The residual Jacobian
+# J comes from forward-mode AD and σ² from the residuals, model error included, and
+# parameters at a bound are held fixed. Returns the standard deviations of the fitted
+# values, multiplicative for log-space parameters as exp(±σ_u).
 function laplace(io, m, variant)
     u0, ulo, uhi, with = Briareus._calibration_space(m, fitspec(variant), bounds_for(variant))
     free = findall(i -> u0[i] > ulo[i] + 1e-6 && u0[i] < uhi[i] - 1e-6, eachindex(u0))
@@ -195,7 +198,7 @@ function laplace(io, m, variant)
     for i in axes(corr, 1)
         println(io, "   ", join([@sprintf("%+.2f", c) for c in corr[i, :]], " "))
     end
-    # derived: the null and the peak slope, by finite differences along the covariance
+    # The null and the peak slope are derived by finite differences along the covariance.
     q(mm) = (bs = ref.beams_at(5.6); c(d) = cf(apply_lpi(mm, ref.beams_at(5.6; d), 5.6));
              [3cbet_null(mm, bs, 5.6; receivers = INNER), (c(1.8) - c(1.0)) / 0.8, (c(2.75) - c(2.5)) / 0.25])
     q0 = q(m)
@@ -230,7 +233,8 @@ for variant in variants
         println(io, "model = ", repr(m))
         get(opt, "laplace", "on") == "on" && laplace(io, m, variant)
         if get(opt, "profile", "off") == "on" && !(variant in ("free", "tebound", "clampfree"))
-            # profile: best loss with the null pinned near each Δλ (± 0.05 Å), warm start
+            # The profile is the best loss with the null pinned near each Δλ (± 0.05 Å),
+            # from a warm start.
             for nl in (0.5, 0.8, 1.2, 1.55, 2.0)
                 pp(mm) = null_penalty(mm; lo = nl - 0.05, hi = nl + 0.05, w = 100.0)
                 mp, rp = calibrate_cbet(m, cal; receivers = INNER, fit = fitspec(variant),

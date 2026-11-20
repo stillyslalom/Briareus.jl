@@ -66,8 +66,9 @@ end
     render_smoothed(target, values, component, camera; σ) -> Matrix
 
 Like [`render`](@ref), but each pixel showing `component` takes a Gaussian-weighted
-(width `σ`, in mm) and area-weighted average of the values of that component's
-elements around the point it sees, instead of the one value of the element it hits.
+(width `σ`, in mm) and area-weighted average of the values of the elements of that
+component around the point shown in the pixel, instead of the single value of the
+element at that point.
 Other components are left blank. Row 1 is the top of the image.
 """
 function render_smoothed(t::Target, values, component::Symbol, cam::OrthoCamera; σ)
@@ -225,15 +226,16 @@ mark_directions!(ax, θφ; φ0 = 0.0, kwargs...) =
 # ## Cutaway drawings of meshes
 #
 # CairoMakie draws polygons in the order given, so a mesh seen from one side is drawn
-# by the painter's algorithm: farthest polygon first. Sorting by centroid depth is
+# by the painter's algorithm, with the farthest polygon first. Sorting by centroid depth is
 # right for the compact elements of a target, and good enough for a picture of long
 # CAD slivers.
 
 """
     patch_outline(mesh, patch) -> Vector{Vec3}
 
-Boundary loop of a mesh patch (an element): the edges used by one of its triangles,
-chained in the triangles' winding (the longest loop when there are several).
+Boundary loop of a mesh patch (an element). The loop is made of the edges used by one of its
+triangles, chained in the winding of the triangles; when there are several loops, the
+longest is returned.
 """
 function patch_outline(m::Briareus.Mesh, p::Integer)
     r = m.patches[p]

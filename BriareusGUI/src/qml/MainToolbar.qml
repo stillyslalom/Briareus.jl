@@ -1,4 +1,5 @@
-// The toolbar: views, display, and the analyses. Everything here is also in the menus.
+// The toolbar holds views, display and the analyses. Everything on the toolbar is also in
+// the menus.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -27,7 +28,7 @@ ToolBar {
     topPadding: 2
     bottomPadding: 2
     contentHeight: tools.implicitHeight
-    // the tools' height, not the style's toolbar background (48 px)
+    // the height of the tools; the toolbar background of the style (48 px) is not used
     implicitHeight: contentHeight + topPadding + bottomPadding
     Flow {
         id: tools
@@ -67,7 +68,7 @@ ToolBar {
         Tool {
             id: cutTool
             text: "Cutaway"; checkable: true; checked: app.cutaway
-            tip: "Cut the target open to see inside (right-click: options)"
+            tip: "Cut the target open to see inside; right-click for options"
             onClicked: Julia.br_set_cutaway(checked)
             TapHandler {
                 acceptedButtons: Qt.RightButton

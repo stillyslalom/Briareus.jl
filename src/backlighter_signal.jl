@@ -1,7 +1,7 @@
-# Backlighter physics: He-α conversion efficiency CE(hν, I) with its uncertainty, filter
-# attenuation, and the photometric chain from the laser power on a foil to photons at a
-# detector. Research notes, "Backlighter conversion efficiency and the photometric chain
-# (2026-10-24)".
+# This file holds the backlighter physics: the He-α conversion efficiency CE(hν, I) with
+# its uncertainty, filter attenuation, and the photometric chain from the laser power on a
+# foil to photons at a detector. See the research notes, "Backlighter conversion
+# efficiency and the photometric chain (2026-10-24)".
 
 const _HEALPHA_KEV = Dict(:Ti => 4.750, :V => 5.181, :Cr => 5.682, :Mn => 6.181, :Fe => 6.700,
                           :Co => 7.242, :Ni => 7.806, :Cu => 8.392, :Zn => 9.000, :Ga => 9.629,
@@ -11,13 +11,15 @@ const _HEALPHA_KEV = Dict(:Ti => 4.750, :V => 5.181, :Cr => 5.682, :Mn => 6.181,
 """
     kshell_line_energy(element) -> keV
 
-Photon energy of the He-α resonance line (He-like 1s²–1s2p ¹P₁, the "w" line) of a
-backlighter element given as a `Symbol` (`:Ti`, `:V`, `:Cr`, `:Mn`, `:Fe`, `:Co`, `:Ni`,
-`:Cu`, `:Zn`, `:Ga`, `:Ge`, `:Br`, `:Kr`, `:Zr`, `:Nb`, `:Mo`, `:Ag`). Ti–Ge and Kr are
-the commonly quoted line energies (to ~0.01 keV); Br, Zr, Nb, Mo and Ag come from a
-screened-hydrogenic fit anchored on them,
-`hν ≈ 10.204 eV · (Z − 0.42)² · [1 + 0.0011 (Z − 22)]`, good to ~0.5% (Zr: 16.30 keV,
-Barrios et al. 2013 quote 16.3). *derived* for Z ≥ 35.
+Returns the photon energy of the He-α resonance line of a backlighter element given as a
+`Symbol`. The line is the He-like 1s²–1s2p ¹P₁ transition, the "w" line. The elements
+are `:Ti`, `:V`, `:Cr`, `:Mn`, `:Fe`, `:Co`, `:Ni`, `:Cu`, `:Zn`, `:Ga`, `:Ge`, `:Br`,
+`:Kr`, `:Zr`, `:Nb`, `:Mo` and `:Ag`. The energies of Ti–Ge and Kr are the commonly
+quoted line energies, to ~0.01 keV. Those of Br, Zr, Nb, Mo and Ag come from a
+screened-hydrogenic fit anchored on the others,
+`hν ≈ 10.204 eV · (Z − 0.42)² · [1 + 0.0011 (Z − 22)]`, good to ~0.5%. For Zr the fit
+gives 16.30 keV, and Barrios et al. 2013 quote 16.3. The values for Z ≥ 35 are
+*derived*.
 """
 function kshell_line_energy(el::Symbol)
     haskey(_HEALPHA_KEV, el) || throw(ArgumentError("no He-α line energy for :$el; pass the energy in keV"))
@@ -29,14 +31,19 @@ _line_keV(line::Real) = (line > 0 || throw(ArgumentError("the line energy must b
 """
     KShellCEModel
 
-The fitted He-α conversion-efficiency model returned by [`kshell_ce_model`](@ref):
-`coef` (the eight parameters `(a_foil, a_prepulsed, b, c_foil, c_prepulsed, d, s, Lₛ)` of
-the form described there; the saturation energy is `hνₛ = 10 keV · exp(Lₛ)`), `cov` (their
-covariance), `tau` (the scatter of `ln CE` beyond the stated measurement errors),
-`scatter` (the predictive scatter of a measured `ln CE`, `√(tau² + s̄²)` with `s̄` the rms
-stated error of the fitted points), `n` (data points fitted), and the data's ranges per
-class: `hnu` (keV), `irradiance` (W/cm²) and `pulse` (ns), each a `Dict` from `:foil`
-and `:prepulsed` to `(min, max)`.
+The fitted He-α conversion-efficiency model returned by [`kshell_ce_model`](@ref), with
+fields:
+
+- `coef`, the eight parameters `(a_foil, a_prepulsed, b, c_foil, c_prepulsed, d, s, Lₛ)`
+  of the form described in [`kshell_ce_model`](@ref), where the saturation energy is
+  `hνₛ = 10 keV · exp(Lₛ)`;
+- `cov`, their covariance;
+- `tau`, the scatter of `ln CE` beyond the stated measurement errors;
+- `scatter`, the predictive scatter of a measured `ln CE`, `√(tau² + s̄²)` with `s̄` the
+  rms stated error of the fitted points;
+- `n`, the number of data points fitted;
+- `hnu` (keV), `irradiance` (W/cm²) and `pulse` (ns), the ranges of the data per class,
+  each a `Dict` from `:foil` and `:prepulsed` to `(min, max)`.
 """
 struct KShellCEModel
     coef::SVector{8,Float64}
@@ -58,13 +65,14 @@ function Base.show(io::IO, ::MIME"text/plain", m::KShellCEModel)
     end
 end
 
-# ln CE = a_c + b max(L − Lₛ, 0) + c_c Y + d Y², Y = X − s L, with L = ln(hν/10 keV),
-# X = ln(I/1e15 W/cm²); for fixed (s, Lₛ) it is linear in the first six parameters on this
-# basis
+# The model is ln CE = a_c + b max(L − Lₛ, 0) + c_c Y + d Y², Y = X − s L, with
+# L = ln(hν/10 keV) and X = ln(I/1e15 W/cm²). For fixed (s, Lₛ) it is linear in the first
+# six parameters on this basis.
 _ce_basis(L, X, prepulsed::Bool, s, Ls) = (Y = X - s * L;
     SVector{6,Float64}(!prepulsed, prepulsed, max(L - Ls, 0.0), Y * !prepulsed, Y * prepulsed, Y^2))
 _ce_lncE(p, L, X, prepulsed::Bool) = dot(_ce_basis(L, X, prepulsed, p[7], p[8]), p[SVector{6}(1:6)])
-# gradient of ln CE in all eight parameters (the hinge's derivative taken one-sided)
+# Returns the gradient of ln CE in all eight parameters, with the derivative of the hinge
+# taken one-sided.
 function _ce_grad(p, L, X, prepulsed::Bool)
     v = _ce_basis(L, X, prepulsed, p[7], p[8])
     Y = X - p[7] * L
@@ -74,16 +82,19 @@ end
 """
     kshell_ce_data() -> NamedTuple
 
-The He-α conversion-efficiency compilation behind [`kshell_ce_model`](@ref)
-(`data/kshell_ce.csv`, sources in its header): columns `element`, `Z`,
-`hnu` (keV), `irradiance` (10¹⁵ W/cm²), `pulse` (ns), `class` (`"foil"` or
-`"prepulsed"`), `ce` and `u` (%; `u` is NaN where the paper gives none), `fit` (1 if
-fitted), `facility`, `source` and `note`. Workman & Kyrala (2001; OMEGA, 1 ns,
-digitized from the figures), Barrios et al. (2013, 2014; NIF, a picket ahead of a
-2–5 ns drive, from the tables and text), Coppari et al. (2019; OMEGA and OMEGA EP Fe,
-Cu and Ge foils, 0.6–2 ns with or without a pre-pulse, digitized from their Fig. 16),
-and one OMEGA Ti foil (Girard et al. 2005, as recalibrated in the 2016 review; held
-out, `fit = 0`, as a check below the fitted lines).
+Returns the He-α conversion-efficiency compilation behind [`kshell_ce_model`](@ref),
+read from `data/kshell_ce.csv`, with the sources in its header. The columns are
+`element`, `Z`, `hnu` (keV), `irradiance` (10¹⁵ W/cm²), `pulse` (ns), `class`
+(`"foil"` or `"prepulsed"`), `ce` and `u` (%), `fit` (1 if fitted), `facility`,
+`source` and `note`. `u` is NaN where no error is published. The sources are:
+
+- Workman & Kyrala (2001), OMEGA, 1 ns, digitized from the figures;
+- Barrios et al. (2013, 2014), NIF, a picket ahead of a 2–5 ns drive, from the tables
+  and text;
+- Coppari et al. (2019), Fe, Cu and Ge foils on OMEGA and OMEGA EP, 0.6–2 ns with or
+  without a pre-pulse, digitized from their Fig. 16;
+- one OMEGA Ti foil (Girard et al. 2005, as recalibrated in the 2016 review), held out
+  with `fit = 0` as a check below the fitted lines.
 """
 function kshell_ce_data()
     h, rows = read_csv(joinpath(@__DIR__, "..", "data", "kshell_ce.csv"))
@@ -99,8 +110,8 @@ const _KSHELL_LOCK = ReentrantLock()
 """
     kshell_ce_model() -> KShellCEModel
 
-Weighted least-squares fit of `ln CE` to the rows of [`kshell_ce_data`](@ref) with
-`fit = 1` (68 points). CE is the He-α line with its satellites, into 4π, over the
+Returns the weighted least-squares fit of `ln CE` to the rows of [`kshell_ce_data`](@ref)
+with `fit = 1` (68 points). CE is the He-α line with its satellites, into 4π, over the
 incident laser energy, for planar foils driven at 351 nm:
 
 ```math
@@ -108,64 +119,73 @@ incident laser energy, for planar foils driven at 351 nm:
 ```
 
 with ``L = \\ln(h\\nu/10\\ \\mathrm{keV})`` and ``X = \\ln(I/10^{15}\\ \\mathrm{W/cm^2})``.
-Each line's CE is a parabola in `ln I` of shared curvature `d`, peaking at the optimum
-irradiance ``I^* \\propto (h\\nu)^s`` (`Y* = −c_c/2d`). The peak CE falls as
+The CE of each line is a parabola in `ln I` of shared curvature `d`. It peaks at the
+optimum irradiance ``I^* \\propto (h\\nu)^s``, where `Y* = −c_c/2d`. The peak CE falls as
 ``(h\\nu)^b`` above the saturation energy ``h\\nu_s = 10\\ \\mathrm{keV}\\, e^{L_s}`` and is
-flat below it. The class `c`, `:foil` (one main pulse) or `:prepulsed` (a pre-pulse or
-picket ahead of the main drive), sets a per-class amplitude `a_c` and `c_c` (hence a
-per-class peak and optimum); `b`, `d`, `s` and `hνₛ` are shared. Fitted: `b = −3.33 ± 0.25`
-(Workman & Kyrala report `hν^-(2.5–4)`, Barrios et al. `hν^-(3–4)`), `s = 2.5 ± 0.4`,
-`hνₛ = 6.1 ± 0.4 keV`, between Cr and Fe; foil optimum 1.2e15 W/cm² for Cr, 1.8e15 for
-Fe, 5.2e15 for Ge, peak 3.2% at and below hνₛ; prepulsed optimum 2.0e15 for Ge.
+flat below it. The class `c` is `:foil` for one main pulse or `:prepulsed` for a
+pre-pulse or picket ahead of the main drive. The amplitude `a_c` and the linear
+coefficient `c_c` differ by class, so each class has a separate peak and optimum; `b`,
+`d`, `s` and `hνₛ` are shared. The fitted values are:
 
-Why this form (research notes, "He-α CE: saturating peak (2026-10-26)"): the earlier
-form, `a_c + bL + c_c X + dX² + eXL`, has a peak `a_c + bL + (c_c + eL)²/(4|d|)` that is
-convex in `L`, so it rose steeply toward low `hν` (Cr 4.1%, Ti 9.2%) against the Cr data
-(3.0% at 0.93e15) and the held-out Ti foil. Writing the parabola about its optimum
-(`Y`) removes that convexity at the same number of parameters and lowers the
-cross-validated error (leave-one-source-out rms 0.55 → 0.44 in `ln CE`); the
-saturation, one more parameter, is what the Cr points require (they sit 0.24 below the
-power law through Fe–Mo) and what predicts the held-out Ti foil within 1.1σ. Inside the
-data the saturation is weakly determined (it moves the likelihood by 1.1 in `−2 ln L`),
-and with Cr left out `hνₛ` is not identified. Plausible reasons for a plateau below Fe
-(not modeled): absorption and the fraction of it radiated cannot grow without bound, and
-at the lower temperatures that suffice for low-Z lines the energy goes increasingly into
-lower ionization stages and the continuum.
+- `b = −3.33 ± 0.25`, where Workman & Kyrala report `hν^-(2.5–4)` and Barrios et al.
+  report `hν^-(3–4)`;
+- `s = 2.5 ± 0.4`;
+- `hνₛ = 6.1 ± 0.4 keV`, between Cr and Fe;
+- a foil optimum of 1.2e15 W/cm² for Cr, 1.8e15 for Fe and 5.2e15 for Ge, with a peak of
+  3.2% at and below hνₛ;
+- a prepulsed optimum of 2.0e15 for Ge.
 
-**Weights.** Each point carries `σᵢ² = sᵢ² + τ²`: `sᵢ = u/ce`, the paper's error bar as a
-relative error in `ln CE`; where a row gives none (Workman & Kyrala's digitized points),
-`sᵢ = √(0.1² + 0.2²)`, their stated relative error and shot-to-shot reproducibility.
-`τ`, the scatter the stated errors do not cover (calibrations, spot definitions, bands
-and the model's form), is set so that the weighted χ² per degree of freedom is 1
-(random effects): 0.23. For given `(s, Lₛ)` the other six parameters are linear;
-`(s, Lₛ)` maximize the likelihood on a refined grid, and the covariance of all eight is
-`(JᵀWJ)⁻¹`, `J` the gradient of `ln CE` at the data. The model's `scatter`, the spread of
-a measured CE about the fit, is `√(τ² + s̄²)` with `s̄` the rms `sᵢ`: 0.35 in `ln CE` (a
-factor of 1.43); outside the data the parameters' covariance adds to it (see
+**Why this form.** The reasons are recorded in the research notes, "He-α CE: saturating
+peak (2026-10-26)". The earlier form, `a_c + bL + c_c X + dX² + eXL`, has a peak
+`a_c + bL + (c_c + eL)²/(4|d|)` that is convex in `L`. Its peak therefore rose steeply
+toward low `hν`, to 4.1% for Cr and 9.2% for Ti, against the Cr data (3.0% at 0.93e15)
+and the held-out Ti foil. Writing the parabola about its optimum `Y` removes that
+convexity at the same number of parameters. It also lowers the cross-validated error,
+from 0.55 to 0.44 rms in `ln CE` with one source left out at a time. The saturation adds
+one parameter. The Cr points require it, since they lie 0.24 below the power law through
+Fe–Mo, and with it the fit predicts the held-out Ti foil within 1.1σ. Inside the data
+the saturation is weakly determined, since the likelihood changes by only 1.1 in
+`−2 ln L` with it. With Cr left out, `hνₛ` is not identified. Two plausible reasons for
+a plateau below Fe are not modeled. Absorption, and the fraction of it radiated, cannot
+grow without bound. At the lower temperatures that suffice for low-Z lines, the energy
+also goes increasingly into lower ionization stages and the continuum.
+
+**Weights.** Each point has the variance `σᵢ² = sᵢ² + τ²`. The term `sᵢ = u/ce` is the
+published error bar as a relative error in `ln CE`. Where a row has none, as for the
+digitized points of Workman & Kyrala, `sᵢ = √(0.1² + 0.2²)` combines their stated
+relative error and shot-to-shot reproducibility. `τ` is the scatter that the stated
+errors do not cover, from calibrations, spot definitions, bands and the model form. It
+is set to 0.23, so that the weighted χ² per degree of freedom is 1 (random effects). For
+given `(s, Lₛ)` the other six parameters are linear, and `(s, Lₛ)` maximize the
+likelihood on a refined grid. The covariance of all eight is `(JᵀWJ)⁻¹`, with `J` the
+gradient of `ln CE` at the data. The `scatter` of the model is the spread of a measured
+CE about the fit, `√(τ² + s̄²)` with `s̄` the rms `sᵢ`. It is 0.35 in `ln CE`, a factor
+of 1.43. Outside the data the parameter covariance adds to it (see
 [`kshell_ce`](@ref)).
 
-**Pulse length and spot size** do not enter. The foil data are 1 ns (OMEGA) except
-Coppari et al.'s Fe at 0.6 and 2 ns; a `ln τ` term on the foil class fits
-`CE ∝ τ^(0.6 ± 0.2)`, but only through Coppari's 2 ns Fe against Workman's 1 ns Fe (within
-Coppari's shots the 1 ns Fe point lies above the 2 ns ones), so the pulse length
-stays confounded with the source and, in the prepulsed class, with the picket. Every
+**Pulse length and spot size** do not enter. The foil data are 1 ns (OMEGA), except the
+Fe shots of Coppari et al. at 0.6 and 2 ns. A `ln τ` term on the foil class fits
+`CE ∝ τ^(0.6 ± 0.2)`, but only through the 2 ns Fe of Coppari against the 1 ns Fe of
+Workman. Within the shots of Coppari, the 1 ns Fe point lies above the 2 ns ones. The
+pulse length therefore stays confounded with the source and, in the prepulsed class,
+with the picket. Every
 source varies the irradiance through the spot size, so the spot size is confounded with
 the irradiance.
 
-**Below Cr** the plateau is an extrapolation. The one held-out Ti foil (OMEGA, 1 ns,
-1.3e15 W/cm²; `fit = 0`) measured 1.6% (the He-α share of a 4–6 keV band, *inferred*;
-2.3% for the whole band) where the fit gives 3.0% ×/÷ 1.48: −0.63 in `ln CE`, 1.1σ with
-the 42% error bar of that point. Ti foils on Gekko XII and Shenguang II gave 1.4–1.8% in
-the band, so the data may turn over below Cr rather than level off; the fit does not
-separate the two. Ti is
-flagged `extrapolated`; pass a measured `ce` for Ti backlighters when one exists. The
-fitted Fe peak (2.3%) sits below Coppari et al.'s two-sided Fe (2.8–3.25%) and
-Workman's 3.0% at 3.5e15, but agrees with Workman's Fe near 1e15 (2.4%): the sources
-disagree by about the two-sided factor.
+**Below Cr** the plateau is an extrapolation. The measured CE of the one held-out Ti foil
+(OMEGA, 1 ns, 1.3e15 W/cm², `fit = 0`) is 1.6%, where the fit gives 3.0% ×/÷ 1.48. That 1.6%
+is the He-α share of a 4–6 keV band, *inferred*; the whole band has 2.3%. The difference is
+−0.63 in `ln CE`, 1.1σ with the 42% error bar of that point. On Gekko XII and Shenguang II,
+Ti foils had CEs of 1.4–1.8% in the band, so the CE may fall below Cr, where the fitted
+plateau may not hold. The fit does not separate the two cases. Ti is flagged `extrapolated`;
+pass a measured `ce` for Ti backlighters when one exists. The fitted Fe peak (2.3%) lies
+below the two-sided Fe of Coppari et al. (2.8–3.25%) and the 3.0% of Workman at 3.5e15. It
+agrees with the Fe of Workman near 1e15 (2.4%), so the sources disagree by about the
+two-sided factor.
 
-*Engineering model*: confidence medium inside the data, low beyond it. The compilation
-mixes facilities, spectrometer calibrations, spot definitions, one- and two-sided
-irradiation and bands (Workman's 550 eV band may include part of Ly-α). The fit runs
+*Engineering model*: confidence medium inside the data, low beyond it. Facilities,
+spectrometer calibrations, spot definitions, one- and two-sided irradiation and bands are
+mixed in the compilation; the 550 eV band of Workman may include part of Ly-α. The fit runs
 once per session, from the CSV.
 """
 function kshell_ce_model()
@@ -177,12 +197,13 @@ function kshell_ce_model()
     return _KSHELL_MODEL[]
 end
 
-# relative error in ln CE taken for a row without an error bar: Workman & Kyrala's
-# stated ±10% relative error and 20% reproducibility in quadrature
+# The relative error in ln CE for a row without an error bar combines the stated ±10%
+# relative error and 20% reproducibility of Workman & Kyrala in quadrature.
 const _KSHELL_UNSTATED = sqrt(0.1^2 + 0.2^2)
 
-# inverse-variance weights 1/(sᵢ² + τ²), τ set so that χ² = dof (zero when the stated
-# errors already cover the scatter); returns the coefficients, χ², τ and the weights
+# Fits with inverse-variance weights 1/(sᵢ² + τ²). τ is set so that χ² = dof, or to zero
+# when the stated errors already cover the scatter. Returns the coefficients, χ², τ and
+# the weights.
 function _kshell_wls(A, y, s, dof)
     function solve(t)
         w = 1 ./ (s .^ 2 .+ t^2)
@@ -202,10 +223,11 @@ function _kshell_wls(A, y, s, dof)
     return β, χ², hi, w
 end
 
-# For each (s, Lₛ) the other six parameters are a weighted linear least-squares fit with
-# a separate τ; (s, Lₛ) minimize the Gaussian −2 ln L, Σ ln(sᵢ² + τ²) + χ², on a grid refined
-# four times (s in 0–5, hνₛ between the data's lowest and highest line). The covariance is
-# (JᵀWJ)⁻¹, J the gradient of ln CE in all eight parameters at the data.
+# For each (s, Lₛ), the other six parameters come from a weighted linear least-squares
+# fit with a separate τ. The pair (s, Lₛ) minimizes the Gaussian −2 ln L,
+# Σ ln(sᵢ² + τ²) + χ², on a grid refined four times, with s in 0–5 and hνₛ between the
+# lowest and highest line in the data. The covariance is (JᵀWJ)⁻¹, with J the gradient
+# of ln CE in all eight parameters at the data.
 function _fit_kshell_ce(d)
     k = findall(==(1.0), d.fit)
     pre = [d.class[i] == "prepulsed" for i in k]
@@ -247,7 +269,8 @@ function _fit_kshell_ce(d)
     scatter = sqrt(τ^2 + sum(abs2, s) / length(s))
     rng(f, c) = extrema(f[i] for (i, q) in zip(k, pre) if q == (c === :prepulsed))
     cls = (:foil, :prepulsed)
-    # pulse lengths: the data's shortest up to 5 ns (the NIF rows' "2" stands for 2–5 ns)
+    # The pulse range runs from the shortest pulse in the data up to 5 ns, because the "2"
+    # in the NIF rows stands for 2–5 ns.
     return KShellCEModel(p, SMatrix{8,8}(Matrix(C)), τ, scatter, length(k),
                          Dict(c => rng(d.hnu, c) for c in cls),
                          Dict(c => 1e15 .* rng(d.irradiance, c) for c in cls),
@@ -258,19 +281,19 @@ end
     kshell_ce(line; irradiance, prepulse = false, pulse = nothing,
               model = kshell_ce_model()) -> NamedTuple
 
-He-α conversion efficiency (a fraction, into 4π, over the incident laser energy) of a
-planar foil whose `line` is an element `Symbol` (see [`kshell_line_energy`](@ref)) or a
-line energy in keV, driven at `irradiance` (W/cm², the spot-average incident value),
-from the fit [`kshell_ce_model`](@ref).
+Returns the He-α conversion efficiency of a planar foil from the fit
+[`kshell_ce_model`](@ref). The CE is the fraction of the incident laser energy emitted
+in the line into 4π. `line` is an element `Symbol` (see [`kshell_line_energy`](@ref))
+or a line energy in keV, and `irradiance` (W/cm²) is the spot-average incident value.
 
 Returns `(ce, sigma, lo, hi, optimum, peak, extrapolated)`:
 - `ce`: the median CE.
-- `sigma`: the 1σ uncertainty of `ln CE`, the model's `scatter` and the fit's
-  coefficient uncertainty at this point in quadrature. CE is lognormal here, uncertain by a factor
-  `e^σ` either way.
+- `sigma`: the 1σ uncertainty of `ln CE`, which combines the model `scatter` and the
+  coefficient uncertainty of the fit at this point in quadrature. CE is lognormal in this
+  model, uncertain by a factor `e^σ` either way.
 - `lo = ce·e^-σ` and `hi = ce·e^σ`.
-- `optimum` and `peak`: the irradiance at which this line's CE peaks, and that CE.
-- `extrapolated`: whether the point lies outside its class's data in line energy or
+- `optimum` and `peak`: the irradiance at which the CE of this line peaks, and that CE.
+- `extrapolated`: whether the point lies outside the data of its class in line energy or
   irradiance, or in pulse length when `pulse` (ns) is given. `pulse` changes nothing
   else.
 """
@@ -292,10 +315,10 @@ function kshell_ce(line; irradiance::Real, prepulse::Bool = false, pulse = nothi
             peak = exp(_ce_lncE(p, L, Xs, prepulse)), extrapolated = ext)
 end
 
-# Mass attenuation coefficients μ/ρ (cm²/g, with coherent scattering) from NIST's X-Ray
-# Mass Attenuation Coefficients (Hubbell & Seltzer, Tables 3 and 4), 3–40 keV, each
-# absorption edge listed twice (below, above). Interpolated log-log between the
-# tabulated energies.
+# The mass attenuation coefficients μ/ρ (cm²/g, with coherent scattering) come from the NIST
+# X-Ray Mass Attenuation Coefficients (Hubbell & Seltzer, Tables 3 and 4) over 3–40 keV.
+# Each absorption edge is listed twice, below and above. The values are interpolated log-log
+# between the tabulated energies.
 const _MU_RHO = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}(
     :Be => ([3, 4, 5, 6, 8, 10, 15, 20, 30, 40],
             [21.27, 8.685, 4.369, 2.527, 1.124, 0.6466, 0.307, 0.2251, 0.1792, 0.164]),
@@ -316,9 +339,10 @@ const _MU_RHO = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}(
                [128.8, 54.66, 27.92, 16.08, 6.75, 3.481, 1.132, 0.5798, 0.3009, 0.2304]),
     :polyethylene => ([3, 4, 5, 6, 8, 10, 15, 20, 30, 40],
                       [77.43, 32.42, 16.43, 9.432, 3.975, 2.088, 0.7452, 0.4315, 0.2706, 0.2275]))
-# densities (g/cm³); under the NIST table Kapton (polyimide) takes Mylar's μ/ρ (close in
-# composition). The elements added with the Henke tables (`xray_optics.jl`) carry
-# handbook densities; compounds carry their own (`_COMPOUNDS`).
+# Filter densities (g/cm³). Under the NIST table, Kapton (polyimide) is given the μ/ρ of
+# Mylar, which is close in composition. The elements added with the Henke tables
+# (`xray_optics.jl`) have handbook densities, and the compounds have the densities in
+# `_COMPOUNDS`.
 const _FILTER_DENSITY = Dict(:Be => 1.848, :Al => 2.699, :Ti => 4.54, :Fe => 7.874, :Cu => 8.96,
                              :Mo => 10.22, :Ta => 16.65, :mylar => 1.38, :kapton => 1.42,
                              :polyethylene => 0.93, :Mg => 1.738, :Si => 2.329, :V => 6.11,
@@ -331,19 +355,21 @@ const _FILTER_DENSITY = Dict(:Be => 1.848, :Al => 2.699, :Ti => 4.54, :Fe => 7.8
 
 Mass attenuation coefficient μ/ρ of a filter `material` at photon energy `hν` (keV).
 
-- `table = :nist`: NIST's X-Ray Mass Attenuation Coefficients (Hubbell & Seltzer;
-  coherent scattering included), 3–40 keV, for `:Be`, `:Al`, `:Ti`, `:Fe`, `:Cu`, `:Mo`,
-  `:Ta`, `:mylar`, `:kapton` (Mylar's μ/ρ, a few-percent approximation) and
-  `:polyethylene`, interpolated log-log with the absorption edges exact (an energy
-  exactly on an edge takes the value above it); between the tables' 1–5 keV spaced
-  energies good to a few percent away from edges.
-- `table = :henke`: photoabsorption from Henke's f₂ ([`henke_mass_attenuation`](@ref),
-  0.01–30 keV), for the elements H, B, Be, C, N, O, F, Mg, Al, Si, Cl, Ca, Sc, Ti, V,
-  Cr, Mn, Fe, Co, Ni, Cu, Zn, Ge, Y, Mo, Ag, Au and the compounds `:CH`, `:lexan`,
-  `:parylene`, `:parylene_c`, `:saran`, `:polyimide` (= `:kapton`), `:mylar`,
-  `:polyethylene`, `:SiO2`, `:CaF2`, `:B4C`.
-- `table = :auto` (default): NIST where it covers the material and energy, Henke
-  elsewhere (so the backlighter filters keep NIST's values).
+- `table = :nist` takes the NIST X-Ray Mass Attenuation Coefficients (Hubbell &
+  Seltzer), with coherent scattering included, over 3–40 keV. The table covers `:Be`,
+  `:Al`, `:Ti`, `:Fe`, `:Cu`, `:Mo`, `:Ta`, `:mylar`, `:kapton` and `:polyethylene`;
+  `:kapton` is given the μ/ρ of Mylar, a few-percent approximation. Values are
+  interpolated log-log with the absorption edges exact, and an energy exactly on an edge
+  is given the value above it. Between the table energies, spaced 1–5 keV, the values
+  are good to a few percent away from edges.
+- `table = :henke` takes photoabsorption from Henke's f₂
+  ([`henke_mass_attenuation`](@ref)) over 0.01–30 keV. It covers the elements H, B, Be,
+  C, N, O, F, Mg, Al, Si, Cl, Ca, Sc, Ti, V, Cr, Mn, Fe, Co, Ni, Cu, Zn, Ge, Y, Mo, Ag
+  and Au and the compounds `:CH`, `:lexan`, `:parylene`, `:parylene_c`, `:saran`,
+  `:polyimide`, `:mylar`, `:polyethylene`, `:SiO2`, `:CaF2` and `:B4C`, where
+  `:polyimide` is the same as `:kapton`.
+- `table = :auto` (default) takes NIST where it covers the material and energy and Henke
+  elsewhere, so the backlighter filters keep the NIST values.
 """
 function mass_attenuation(mat::Symbol, hν::Real; table::Symbol = :auto)
     table in (:auto, :nist, :henke) || throw(ArgumentError("table must be :auto, :nist or :henke"))
@@ -360,22 +386,26 @@ function mass_attenuation(mat::Symbol, hν::Real; table::Symbol = :auto)
     return exp(log(μ[i]) + s * (log(μ[i+1]) - log(μ[i])))
 end
 
-# a filter material's density (g/cm³; NaN if none is known)
+# Returns the density of a filter material (g/cm³), or NaN if none is known.
 _density(mat::Symbol) = get(_FILTER_DENSITY, mat, haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : NaN)
 
 """
     filter_transmission(filters, hν; table = :auto) -> Real
 
-Transmission `exp(−Σ (μ/ρ) ρ t)` at normal incidence through `filters`, a collection of
-`material => thickness` pairs (thickness in mm), at photon energy `hν` (keV). The
-materials and μ/ρ are those of [`mass_attenuation`](@ref) (`table` passed on); the
-densities are Be 1.848, Al 2.699, Ti 4.54, Fe 7.874, Cu 8.96, Mo 10.22, Ta 16.65, Mylar
-1.38, Kapton 1.42, polyethylene 0.93, Mg 1.738, Si 2.329, V 6.11, Cr 7.19, Co 8.90, Ni
-8.908, Zn 7.134, Ag 10.49, Au 19.32, B 2.34, Sc 2.985, Mn 7.3, Ge 5.323, Y 4.472 and C
-2.2 (graphite, assumed) g/cm³; the other compounds of [`henke_mass_attenuation`](@ref)
-carry CH 1.05, Lexan 1.20, parylene (N) 1.11, Saran 1.70, SiO₂ 2.2, CaF₂ 3.18 and B₄C
-2.52 g/cm³ (CH, parylene and Saran densities assumed). Pass
-`material => (thickness, density)` to override a density.
+Returns the transmission `exp(−Σ (μ/ρ) ρ t)` at normal incidence through `filters` at
+photon energy `hν` (keV). `filters` is a collection of `material => thickness` pairs,
+with thickness in mm. The materials and μ/ρ are those of [`mass_attenuation`](@ref),
+with `table` passed on. The densities in g/cm³ are:
+
+- for elements, Be 1.848, Al 2.699, Ti 4.54, Fe 7.874, Cu 8.96, Mo 10.22, Ta 16.65,
+  Mg 1.738, Si 2.329, V 6.11, Cr 7.19, Co 8.90, Ni 8.908, Zn 7.134, Ag 10.49, Au 19.32,
+  B 2.34, Sc 2.985, Mn 7.3, Ge 5.323, Y 4.472 and C 2.2 (graphite, assumed);
+- Mylar 1.38, Kapton 1.42 and polyethylene 0.93;
+- for the other compounds of [`henke_mass_attenuation`](@ref), CH 1.05, Lexan 1.20,
+  parylene (N) 1.11, Saran 1.70, SiO₂ 2.2, CaF₂ 3.18 and B₄C 2.52, with the CH,
+  parylene and Saran densities assumed.
+
+Pass `material => (thickness, density)` to override a density.
 """
 function filter_transmission(filters, hν::Real; table::Symbol = :auto)
     τ = 0.0
@@ -389,9 +419,9 @@ function filter_transmission(filters, hν::Real; table::Symbol = :auto)
     return exp(-τ)
 end
 
-# angular distribution f(μ), μ = cos θ from the foil normal, normalized so ∫ f dΩ = 4π
-# over the sphere: isotropic f = 1 (half of it toward the front), Lambertian front face
-# f = 4μ (all of it toward the front)
+# Returns the angular distribution f(μ), with μ = cos θ from the foil normal, normalized
+# so that ∫ f dΩ = 4π over the sphere. The isotropic case is f = 1, with half of it
+# toward the front. The Lambertian front face is f = 4μ, all of it toward the front.
 _angular(a::Symbol, μ) = a === :isotropic ? one(μ) :
                          a === :lambertian ? 4 * max(μ, zero(μ)) :
                          throw(ArgumentError("angular must be :isotropic, :lambertian or a function"))
@@ -400,10 +430,10 @@ _angular(f, μ) = f(μ)
 """
     BacklighterSignal
 
-Result of [`backlighter_signal`](@ref).
+The result of [`backlighter_signal`](@ref).
 
 Source fields:
-- `line` (keV) and `laser_energy` (J incident on all the foil's elements).
+- `line` (keV) and `laser_energy` (J incident on all the foil elements).
 - `irradiance` (W/cm², the power-weighted mean over the foil).
 - `ce`, `sigma` (1σ of `ln CE`) and `extrapolated`.
 - `xray_energy` (J of He-α into 4π).
@@ -413,19 +443,19 @@ Source fields:
 
 Detector fields:
 - `mode` (`:projection` or `:pinhole`).
-- `solid_angle` (sr, seen from the foil center: of 1 mm² of detector, or of the
-  pinhole).
+- `solid_angle` (sr), seen from the foil center, of 1 mm² of detector or of the
+  pinhole.
 - `transmission` (through the filters).
-- `fluence` (J/mm² of He-α at the detector, after the filters; for a pinhole, the mean
-  over the object's image).
-- `photons` (per mm² of detector), with `photons_lo` and `photons_hi` (the CE's 1σ
-  range).
-- `photons_range` (the minimum and maximum per mm² over the object's image, pinhole
+- `fluence` (J/mm² of He-α at the detector, after the filters). For a pinhole it is the
+  mean over the image of the object.
+- `photons` (per mm² of detector), with `photons_lo` and `photons_hi` (the 1σ range of
+  the CE).
+- `photons_range` (the minimum and maximum per mm² over the image of the object, pinhole
   mode only).
 - `pixel` (mm, or `nothing`) and `photons_pixel`.
 
-The object does not attenuate here: these are open-field (bright) levels, to be
-multiplied by the object's transmission.
+Attenuation by the object is not included. These values are open-field (bright) levels,
+to be multiplied by the transmission of the object.
 """
 struct BacklighterSignal
     line::Float64
@@ -461,8 +491,9 @@ end
 
 const _KEV_J = 1.602176634e-16
 
-# The backlighter's source: the laser energy on each element of `foil` in `dep` over a
-# flat-top `pulse` and its He-α energy into 4π (steps 1–2 of `backlighter_signal`)
+# Computes the backlighter source, the laser energy on each element of `foil` in `dep`
+# over a flat-top `pulse` and the He-α energy converted from it into 4π (steps 1–2 of
+# `backlighter_signal`).
 function _backlighter_source(t::Target, dep::Deposition; line, pulse, foil, prepulse, ce, irradiance, model)
     hν = _line_keV(line)
     fe = elements(t, foil)
@@ -487,8 +518,9 @@ function _backlighter_source(t::Target, dep::Deposition; line, pulse, foil, prep
     return (; hν, fe, P, Ptot, Ibar, σ, ext, EL, Ee, Ex)
 end
 
-# The hardware that obstructs x rays: every surface component but those of `foil` and of
-# the parts `objects`. Returns the foil's pieces and the `skip(triangle)` of `any_hit`.
+# Selects the hardware that obstructs x rays, every surface component except those of
+# `foil` and of the parts `objects`. Returns the pieces of the foil and the
+# `skip(triangle)` of `any_hit`.
 function _hardware(t::Target, foil::Symbol, objects)
     fi = Set(part_pieces(t, foil))
     oi = Set(ci for o in objects for ci in part_pieces(t, o))
@@ -498,9 +530,10 @@ function _hardware(t::Target, foil::Symbol, objects)
     return fi, skip
 end
 
-# The radiance (J sr⁻¹ mm⁻² of He-α) of the foil seen from `Pp` along `u`, through the
-# foil's triangles `ftris` (`idx`: element => index into the energies `Ee`), zero when
-# hardware lies between; and the point seen (`Pp` itself when the radiance is zero)
+# Returns the radiance (J sr⁻¹ mm⁻² of He-α) of the foil seen from `Pp` along `u` and the
+# point seen. The ray is traced through the foil triangles `ftris`, and `idx` maps each
+# element to its index into the energies `Ee`. The radiance is zero when hardware lies
+# between, and the point seen is then `Pp` itself.
 function _foil_radiance(t::Target, ftris, idx, Ee, angular, Pp::Vec3, u::Vec3, skip, ε)
     s, k = _first_hit(t, ftris, Pp, u)
     k > 0 || return 0.0, Pp
@@ -514,11 +547,12 @@ function _foil_radiance(t::Target, ftris, idx, Ee, angular, Pp::Vec3, u::Vec3, s
     return 0.0, Pp
 end
 
-# The fluence (J/mm² of He-α) at the point `Pd` from each foil element `fe[i]` (energy
-# `Ee[i]`) as a point source at its centroid, unobstructed by hardware; each path
-# weighted by `transmit(origin, r)` (the segment from the element to `Pd`), if given. The
-# fluence is per area normal to each ray, or, with `normal`, per area of a flat detector
-# of that unit normal (each ray's incidence cosine `r̂ · normal`).
+# Returns the fluence (J/mm² of He-α) at the point `Pd`. Each foil element `fe[i]`, of
+# energy `Ee[i]`, is a point source at its centroid, and paths blocked by hardware are
+# skipped. When `transmit` is given, each path is weighted by `transmit(origin, r)`, with
+# `r` the segment from the element to `Pd`. The fluence is per area normal to each ray.
+# With `normal`, it is per area of a flat detector of that unit normal, which weights
+# each ray by its incidence cosine `r̂ · normal`.
 function _point_fluence(t::Target, fe, Ee, angular, Pd::Vec3, skip, ε, transmit = nothing, normal = nothing)
     fl = 0.0
     for (i, e) in enumerate(fe)
@@ -543,45 +577,47 @@ end
                        center = (0, 0, 0), radius = nothing, nrings = 4,
                        model = kshell_ce_model()) -> BacklighterSignal
 
-The photometric chain from the laser power on a backlighter foil to He-α photons per
-unit area at a detector `distance` mm from `center` on the line of sight `los` ((θ, φ)
-in degrees, or a direction vector, from `center` toward the detector).
+Computes the photometric chain from the laser power on a backlighter foil to He-α
+photons per unit area at a detector. The detector is `distance` mm from `center` on the
+line of sight `los`, given as (θ, φ) in degrees or as a direction vector from `center`
+toward the detector. The chain has six steps:
 
-1. **Laser energy.** The power that each foil element receives in `deposition` (TW; all of
-   the incident power, as Briareus deposits it), over a flat-top pulse of `pulse` ns.
+1. **Laser energy.** The energy of each foil element is its power in `deposition` (TW)
+   over a flat-top pulse of `pulse` ns. Briareus deposits all of the incident power.
 2. **Conversion.** The CE comes from [`kshell_ce`](@ref) for `line` (an element
-   `Symbol` or keV). With `irradiance = :mean`, it is evaluated at the foil's
-   power-weighted mean irradiance. With `:element`, each element gets the CE at its
-   irradiance, but σ is still the mean's. `ce = value` overrides the model (σ = 0).
+   `Symbol` or keV). With `irradiance = :mean`, it is evaluated at the power-weighted
+   mean irradiance of the foil. With `:element`, each element gets the CE at its
+   irradiance, but σ is still that of the mean. `ce = value` overrides the model, with
+   σ = 0.
    The He-α energy into 4π is `E = CE · E_laser`.
-3. **Angular distribution** (an assumption):
+3. **Angular distribution.** The distribution is an assumption:
    - `:isotropic` (the default): the CE data were converted to 4π this way, each from
      one view angle.
    - `:lambertian`: an optically thick emitting face, `4 cos θ`, toward the front only.
    - A function `f(cos θ)` normalized to `∫ f dΩ = 4π`.
 
    Each element radiates `E_e f(cos θ)/4π` per steradian. An element contributes
-   nothing if its front faces away from the detector, or if its path to the detector
-   crosses hardware (every surface part except the foil and `object`).
+   nothing if its front faces away from the detector or if its path to the detector
+   crosses hardware. Every surface part except the foil and `object` counts as hardware.
 4. **Geometry.**
-   - With `pinhole = nothing` (point projection), the fluence at the detector point is
+   - With `pinhole = nothing`, a point projection, the fluence at the detector point is
      `Σ_e E_e f(cos θ_e) / (4π r_e²)`, where `r_e` is the element–detector distance.
-   - With a `pinhole` (diameter, mm) at `pinhole_distance` p mm from `center`, and the
-     detector at `distance` (q = distance − p behind the pinhole), this is an imager of
-     the object. Each image point receives `R · A_pinhole / q²`, where
-     `R = E_e f / (4π A_e cos θ)` is the radiance of the foil element seen through the
-     pinhole and the object's disk. The disk has radius `radius`, by default the
-     `object`'s projected radius, and is sampled as in [`line_of_sight`](@ref).
-     `fluence` is the mean over the disk's image points.
-5. **Filters.** The [`filter_transmission`](@ref) of `filters` (`material => mm`
-   pairs) at the line energy, at normal incidence.
-6. **Photons.** `fluence / hν` per mm², and per `pixel` (mm, in the detector plane) if
-   given.
+   - With a `pinhole` of that diameter (mm) at `pinhole_distance` p mm from `center`,
+     the setup is an imager of the object. The detector is at `distance`, so
+     q = distance − p behind the pinhole. The fluence at each image point is
+     `R · A_pinhole / q²`, where `R = E_e f / (4π A_e cos θ)` is the radiance of the foil
+     element seen through the pinhole and the object disk. The disk has radius `radius`,
+     by default the projected radius of `object`, and is sampled as in
+     [`line_of_sight`](@ref). `fluence` is the mean over the image points of the disk.
+5. **Filters.** The fluence is multiplied by the [`filter_transmission`](@ref) of
+   `filters`, given as `material => mm` pairs, at the line energy and normal incidence.
+6. **Photons.** The photon count is `fluence / hν` per mm², and per `pixel` (mm, in the
+   detector plane) if given.
 
-The object does not attenuate here (the open-field level). Only the He-α line is
-counted: no continuum, no Ly-α, no detector response. The CE's lognormal 1σ
-propagates to `photons_lo` and `photons_hi`; filter and geometry uncertainties are not
-included.
+Attenuation by the object is not included, so the result is the open-field level. Only the
+He-α line is counted, without the continuum, Ly-α or a detector response. The lognormal
+1σ of the CE propagates to `photons_lo` and `photons_hi`; filter and geometry
+uncertainties are not included.
 """
 function backlighter_signal(t::Target, dep::Deposition, los; line, pulse::Real, distance::Real,
                             foil::Symbol = :backlighter, prepulse::Bool = false,

@@ -1,9 +1,10 @@
-# Absolute energetics: the wall-material factor of `WallLossAlbedo` (Au-lined DU against
-# Döppner 2015's 6.5% peak-power equivalence), time- and intensity-dependent laser →
-# x-ray conversion (closed-form Marshak balance, Dewald 2008's table, ForwardDiff), the
-# capsule's effective-radius albedo and the time-integrated `energy_budget` of a
-# `drive_history`. Research notes, "Wall material, conversion and capsule energetics
-# (2026-10-24)".
+# This file tests absolute energetics. It covers the wall-material factor of
+# `WallLossAlbedo`, checked for Au-lined DU against the 6.5% peak-power equivalence of
+# Döppner 2015. It also covers time- and intensity-dependent conversion of laser light to
+# x-rays (closed-form Marshak balance, the table of Dewald 2008, ForwardDiff), the
+# effective-radius albedo of the capsule, and the time-integrated `energy_budget` of a
+# `drive_history`. The source is the research notes section "Wall material, conversion and
+# capsule energetics (2026-10-24)".
 
 using Briareus, Test, ForwardDiff, LinearAlgebra
 
@@ -26,7 +27,8 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
 
 @testset "wall material factor" begin
     g = WallLossAlbedo()
-    # the defaults are bitwise gold's, and the factor scales gold's clamped loss
+    # The defaults are identical to the gold values, and the factor scales the clamped
+    # gold loss.
     for (τ, T) in ((0.05, 90.0), (1.0, 150.0), (8.0, 313.0), (14.0, 300.0))
         loss = g.coefficient * (T / 100)^g.temperature_exponent * max(τ, g.t0)^g.time_exponent
         @test albedo(g, τ, T) === clamp(1 - loss, g.range...)
@@ -36,7 +38,8 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     end
     # the cap applies to gold's loss: a DU wall may exceed it
     @test albedo(g, 14.0, 290.0) < 0.95 < albedo(du_wall_loss(), 14.0, 290.0)
-    # liner: gold while the front is inside it, the substrate's ratio once far past it
+    # A liner behaves as gold while the front is inside it and takes the substrate ratio
+    # once the front is far past it.
     d = du_wall_loss()
     f = d.front
     mF(τ, T) = f.coefficient * (T / 100)^f.temperature_exponent * τ^f.time_exponent
@@ -118,13 +121,13 @@ end
     P = zeros(nelements(t0))
     w = elements(t0, :wall)
     P[w] .= range(0.0, 2.0, length(w))
-    # a constant Conversion reproduces the number bitwise
+    # A constant Conversion gives the same results as the number.
     s1 = solve(RadiationModel(mats(0.75)), P; time = 3.0)
     m2 = RadiationModel(mats(Conversion(efficiency = 0.75)))
     s2 = solve(m2, P; time = 3.0)
     @test s1.source == s2.source && s1.H == s2.H
     @test conversions(m2.target, 3.0) == conversions(s1.model.target)
-    # the default efficiency is bitwise gold()'s
+    # The default efficiency is identical to that of gold().
     @test conversion_efficiency(Conversion()) === gold().conversion === 0.9
     s3 = solve(RadiationModel(mats(Conversion()); F = s1.model.F), P; time = 3.0)
     @test s3.source == solve(RadiationModel(mats(0.9); F = s1.model.F), P; time = 3.0).source
@@ -137,7 +140,8 @@ end
     R = flux_response(mt, obs; time = 4.0, albedo = st.albedo)
     @test R * P ≈ st.H[obs]
 
-    # intensity dependence: per-element source, the secant response, and duals
+    # The intensity dependence is checked for the per-element source, the secant response
+    # and duals.
     mi = RadiationModel(mats(d); F = s1.model.F)
     si = solve(mi, P; time = 4.0)
     I = to_Wcm2.(P[w] ./ t0.elem_area[w])
@@ -151,9 +155,10 @@ end
     @test g ≈ (f(1 + 1e-6) - f(1 - 1e-6)) / 2e-6 rtol = 1e-6
     @test !(g ≈ f(1.0))                             # the intensity dependence is in the derivative
 
-    # closed form: with wall loss ∝ T^-0.7 t^-0.38 dominating, η ∝ t^s gives T ∝
-    # t^((0.38 + s)/3.3) (Lindl 2004, Fig. 4-4: 0.7 t^0.12 makes T ∝ t^0.15); a scale-1
-    # Nova hohlraum with pinhole LEHs and a reflecting capsule, 20 TW on the wall
+    # In the closed form, with wall loss ∝ T^-0.7 t^-0.38 dominating, η ∝ t^s gives T ∝
+    # t^((0.38 + s)/3.3). In Lindl 2004, Fig. 4-4, 0.7 t^0.12 makes T ∝ t^0.15. The target
+    # is a scale-1 Nova hohlraum with pinhole LEHs and a reflecting capsule, with 20 TW on
+    # the wall.
     for (s, k) in ((0.0, 0.38 / 3.3), (0.12, 0.50 / 3.3))
         t = hohlraum(; length = 2.55, radius = 0.8, leh_radius = 0.05, capsule_radius = 0.25,
                      h = 0.15, capsule_h = 0.08, capsule = ablator(albedo = 0.999),
@@ -168,14 +173,15 @@ end
     end
 end
 
-# The coarse wall-loss hohlraum's deposition operator for all 192 beams, built once for
-# the three testsets below (it is most of their cost). Deposition depends on the geometry
-# alone, and their targets differ at most in the capsule's material.
+# The deposition operator of the coarse wall-loss hohlraum for all 192 beams is built once
+# for the three testsets below, since it is most of their cost. Deposition depends only on
+# the geometry, and their targets differ at most in the capsule material.
 wl_beams = nif_beams()
 wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold()), wl_beams)
 
 @testset "capsule radius schedules" begin
-    # a table: linear between its times, held at its ends; a (times, R/R₀) tuple becomes one
+    # A table is linear between its times and constant beyond its ends. A (times, R/R₀)
+    # tuple is converted to a table.
     tab = TabulatedRadius([0.0, 5.0, 9.0], [1.0, 1.0, 0.5]; source = "test")
     @test radius_fraction(tab, 7.0) == 0.75 && radius_fraction(tab, -1.0) == 1.0 &&
           radius_fraction(tab, 20.0) == 0.5 && tab.source == "test"
@@ -194,8 +200,9 @@ wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold(
     @test all(isapprox(radius_fraction(nested, 0.55t), 0.8 * radius_fraction(tab, t); rtol = 1e-12) for t in ts)
     @test occursin("derived", sc.source)
     @test_throws ArgumentError ScaledRadius(tab; time_scale = 0.0)
-    # the example's schedules, bitwise against the tables it built before the types:
-    # those of N221204 and the Zylstra pair (N210808 capsule, minimum moved to bang)
+    # The schedules of the example are identical to the tables it built before the types
+    # existed, for N221204 and for the Zylstra pair (N210808 capsule, with the minimum moved
+    # to bang).
     k = kritcher2024_capsule()
     ok = findall(isfinite, k.n210808)
     ya = TabulatedAlbedo([0.0, 6.0, 9.0], [0.05, 0.16, 0.4])
@@ -205,7 +212,8 @@ wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold(
     @test all(same(ScaledRadius(kritcher2024_radius(:n210808); time_scale = bang / 9.18),
                    ([k.t[ok]; 9.18] .* (bang / 9.18), [k.n210808[ok]; 0.055])) for bang in (9.37, 9.48))
     @test_throws ArgumentError kritcher2024_radius(:n230729)
-    # a kinematic trajectory: its anchors exactly, at rest at start and bang, monotone
+    # A kinematic trajectory passes through its anchors exactly, is at rest at start and
+    # bang, and is monotone.
     tr = TrajectoryRadius(; start = 3.864, peak_time = 9.09, peak_radius = 0.197, velocity = 383.0,
                           bang = 9.53, minimum = 0.055, radius = 1.050)
     v = 0.383 / 1.050
@@ -228,8 +236,8 @@ end
     @test albedo(ca, 7.0) ≈ 1 - 0.8 * 0.75^2
     @test radius_fraction(ca, 20.0) == 0.5
     @test albedo(CapsuleAlbedo(radius = τ -> 0.5), 1.0) ≈ 1 - 0.8 / 4
-    # absorption outside the front: a share of what misses the effective sphere; none
-    # without a radius, and the default is the front's alone
+    # The absorption outside the front is a share of the light that misses the effective
+    # sphere. It is zero without a radius, and by default only the front absorbs.
     @test albedo(CapsuleAlbedo(radius = τ -> 0.5, outside_absorptance = 0.4), 1.0) ≈ 1 - 0.8 / 4 - 0.4 * 3 / 4
     @test albedo(CapsuleAlbedo(outside_absorptance = 0.4), 1.0) == 0.2
     @test albedo(CapsuleAlbedo(radius = ca.radius, outside_absorptance = 0.0), 7.0) == albedo(ca, 7.0)
@@ -315,13 +323,14 @@ end
     beams = wl_beams
     op = wl_op
     w = elements(t, :wall)
-    # per step: each element's incident-flux temperature and net flux into it,
-    # (1 − α) H − E with E the emission the history adds to the source (`nif_gold()`
-    # converts as `nif_conversion()`, at the step's time)
+    # Each step records the incident-flux temperature of each element and the net flux into
+    # it, (1 − α) H − E. Here E is the emission the history adds to the source; `nif_gold()`
+    # converts as `nif_conversion()` at the time of the step.
     rec = sol -> (T = radiation_temperature.(sol.H),
                   F = (1 .- sol.albedo) .* sol.H .-
                       (sol.source .- conversions(t, sol.time) .* sol.laser ./ t.elem_area))
-    # a rising drive: no element falls below its running maximum, so the albedo is bitwise unchanged
+    # Under a rising drive no element falls below its running maximum, so the albedo is
+    # unchanged.
     rise = PulseShape([0.0, 0.2, 4.0, 4.2, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6])
     times = [0.5:0.5:4.0; 4.25; 4.5:0.5:9.0]
     on = drive_history(m, op, τ -> with_pulses(beams, rise, τ), times; keep_albedo = true)
@@ -337,7 +346,8 @@ end
     off = drive_history(m, op, τ -> with_pulses(beams, drop, τ), times; wall_release = false, tol = 1e-10)
     k7, k75, k9 = (findfirst(≈(x), times) for x in (7.0, 7.5, 9.0))
     @test on.Tr[1:k7] == off.Tr[1:k7]
-    # the wall gives energy back: the drive falls less, and never above the peak's
+    # The wall gives energy back, so the drive falls less, and it never rises above the
+    # peak value.
     @test on.Tr[k75] > off.Tr[k75] + 2
     # once the drive holds again the cooled wall takes energy back in: the two converge
     @test abs(on.Tr[k9] - off.Tr[k9]) < 0.25 * (on.Tr[k75] - off.Tr[k75])

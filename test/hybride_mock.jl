@@ -1,6 +1,6 @@
-# Mock HYBRID-E pointing: builds on the 192 beams and the 48 quads, and has the stated
-# symmetry (one rule per cone in each quad's frame, mirrored top to bottom, outer quads
-# split across their own ports).
+# This file builds a mock HYBRID-E pointing on the 192 beams and the 48 quads, with the
+# stated symmetry: one rule per cone in the frame of each quad, mirrored top to bottom, with
+# the outer quads split across the ports of their beams.
 
 @testset "hybride_mock_pointing" begin
     nb = nif_beams()
@@ -21,9 +21,10 @@
         er, eφ = Vec3(cos(φq[q]), sin(φq[q]), 0), Vec3(-sin(φq[q]), cos(φq[q]), 0)
         # up–down mirror: the same |z| in both hemispheres
         @test all(b -> b.aim[3] ≈ sign(b.port[3]) * p.z, mem)
-        # quad frame: radius along the quad azimuth, the split along its φ̂
-        # (outer cones have r = 0: the split along eφ leaves a rounding residual in the
-        # dot product, ~1e-17, nonzero where LLVM fuses the @simd sum into an fma (LTS))
+        # In the quad frame the radius is along the quad azimuth and the split along its φ̂.
+        # Outer cones have r = 0, and the split along eφ leaves a rounding residual of
+        # ~1e-17 in the dot product. The residual is nonzero where LLVM fuses the @simd sum
+        # into an fma, as on the LTS release.
         @test all(b -> isapprox(dot(b.aim, er), p.r; atol = 1e-12), mem)
         t = [dot(b.aim, eφ) for b in mem]
         if p.s == 0
@@ -43,7 +44,7 @@
         @test all(a -> hypot(a[1], a[2]) ≈ abs(tab[g].r) || hypot(a[1], a[2]) < 1e-12, mean_aims)
         @test abs(sum(a[3] for a in mean_aims)) < 1e-12           # top and bottom balance
     end
-    # quads as single beams: no split
+    # Quads as single beams are not split.
     qs = hybride_mock_pointing(nif_quads())
     @test length(qs) == 48
     @test all(b -> hypot(b.aim[1], b.aim[2]) ≈ abs(tab[b.group].r) ||

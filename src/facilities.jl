@@ -1,4 +1,4 @@
-# Facility beam configurations.
+# This file defines facility beam configurations.
 
 """
     beams_from_table(rows; spot, fnumber, power) -> Vector{Beam}
@@ -23,7 +23,8 @@ end
 # ---------------------------------------------------------------------------------------
 
 # Indirect-drive quad ports (port number, θ, φ in degrees), NIF User Guide §4.1,
-# Table 4-1. Port 63 is printed as "62" there. Lower ports are (180-θ, 360-φ) of upper.
+# Table 4-1, where port 63 is misprinted as "62". The lower ports are (180-θ, 360-φ) of
+# the upper ports.
 const NIF_PORTS = (
     (1, 23.5, 78.75), (2, 23.5, 168.75), (3, 23.5, 258.75), (4, 23.5, 348.75),
     (5, 30.58, 34.33), (6, 30.0, 123.75), (7, 30.58, 214.33), (8, 30.0, 303.75),
@@ -42,11 +43,12 @@ const NIF_PORTS = (
 """
     NIF_DIAGNOSTIC_PORTS
 
-The NIF target chamber's 110 diagnostic ports, `(name, θ, φ, size)`: the name as
-`"P143-274"`, the polar angle and azimuth in degrees and the port's diameter in mm, from
-the NIF User Guide (2024-09), Table 5-1, transcribed from the page images as printed
-(`"P116-250"` at θ 116.8°, φ 250.5° and `"P121-83"` at θ 120.5° among them: a name
-rounds its angles). [`port_angles`](@ref)`(:nif, "P143-274")` looks a port up by name.
+The 110 diagnostic ports of the NIF target chamber, as `(name, θ, φ, size)`. The fields
+are the name, such as `"P143-274"`, the polar angle and azimuth in degrees, and the port
+diameter in mm. They come from the NIF User Guide (2024-09), Table 5-1, transcribed from
+the page images as published. A name rounds its angles: `"P116-250"` is at θ 116.8°,
+φ 250.5°, and `"P121-83"` at θ 120.5°. [`port_angles`](@ref)`(:nif, "P143-274")` looks a
+port up by name.
 """
 const NIF_DIAGNOSTIC_PORTS = (
     ("P0-0", 0.0, 0.0, 533.4), ("P7-0", 7.0, 0.0, 482.6), ("P7-60", 7.0, 60.0, 482.6),
@@ -88,8 +90,8 @@ const NIF_DIAGNOSTIC_PORTS = (
     ("P161-236", 161.0, 236.25, 254.0), ("P161-326", 161.0, 326.25, 254.0),
 )
 
-# a diagnostic port's row by name: "P143-274", "P 143-274", "143-274" or "090-078";
-# `nothing` when the name is not of that form
+# Returns the row of a diagnostic port by name, such as "P143-274", "P 143-274",
+# "143-274" or "090-078", or `nothing` when the name is not of that form.
 function _nif_diagnostic_port(name::AbstractString)
     m = match(r"^\s*P?\s*(\d+)-(\d+)\s*$", name)
     m === nothing && return nothing
@@ -104,13 +106,14 @@ function _nif_cone(θ)
     c < 27 ? :inner23 : c < 37 ? :inner30 : c < 47 ? :outer44 : :outer50
 end
 
-# Best-focus CPP spots (1/e semi-axes in mm) from the measured profiles of LMF's
-# phase-plate-table-updated-10-15-2020.xlsx (sheet "Measured profiles"): super-Gaussian
-# fits `exp(-½ρⁿ)` to beam-normal TAS images of rod shot N151022-002-006, averaged per
-# cone, whose tabulated radii are half widths at half maximum. Converted here to the 1/e
-# semi-axes of `exp(-ρⁿ)`: a = r_HWHM / (ln 2)^(1/n). CPPs: Rev3 Inner (23.5°),
-# 1.0 Rev1a Inner (30°), Rev3 Outer (44.5°), Rev1 Outer (50°). Major axis horizontal
-# (along the port's φ̂), minor axis in the polar plane.
+# Best-focus CPP spots (1/e semi-axes in mm) from the measured profiles of the LMF file
+# phase-plate-table-updated-10-15-2020.xlsx (sheet "Measured profiles"). These are
+# super-Gaussian fits `exp(-½ρⁿ)` to beam-normal TAS images of rod shot N151022-002-006,
+# averaged per cone, and their tabulated radii are half widths at half maximum. They are
+# converted here to the 1/e semi-axes of `exp(-ρⁿ)` by a = r_HWHM / (ln 2)^(1/n). The
+# CPPs are Rev3 Inner (23.5°), 1.0 Rev1a Inner (30°), Rev3 Outer (44.5°) and Rev1 Outer
+# (50°). The major axis is horizontal (along φ̂ of the port), and the minor axis lies in
+# the polar plane.
 const NIF_SPOTS = Dict(
     :inner23 => (major = 0.88585 / log(2)^(1 / 7.37167), minor = 0.65579 / log(2)^(1 / 7.37167),
                  order = 7.37167),
@@ -126,25 +129,26 @@ const NIF_SPOTS = Dict(
     nif_spot(cone; scale = 1.0)
 
 Best-focus CPP spot for a NIF cone (`:inner23`, `:inner30`, `:outer44`, `:outer50`),
-major axis along the port's φ̂ and minor along θ̂.
+with the major axis along φ̂ of the port and the minor axis along θ̂.
 """
 function nif_spot(cone::Symbol; scale = 1.0)
     s = NIF_SPOTS[cone]
     return SuperGaussianSpot(scale * s.major, scale * s.minor; order = s.order, angle = π / 2)
 end
 
-# Quad names of the NIF ports, read from the LMF chamber-geometry figures 3 (top quads)
-# and 4 (bottom quads), both top views with φ counterclockwise from Switchyard 1
+# Quad names of the NIF ports, taken from the LMF chamber-geometry figures 3 (top quads)
+# and 4 (bottom quads). Both are top views with φ counterclockwise from Switchyard 1
 # (https://lmf.llnl.gov/for-users/experimental-capabilities/chamber-geometry, LLNL
 # 2012-040636 / 2012-040642). Each label was located by its projected radius (∝ sin θ,
-# separating the cones) and azimuth and assigned to the nearest port of that cone; all
-# 48 assignments are distinct and within 9° of the tabulated azimuth. The figure's
-# "FABS (130-186)_36B" label fixes the bottom view's orientation (Q36B = port 53).
+# which separates the cones) and azimuth, and assigned to the nearest port of that cone.
+# All 48 assignments are distinct and within 9° of the tabulated azimuth. The label
+# "FABS (130-186)_36B" in the figure fixes the orientation of the bottom view
+# (Q36B = port 53).
 """
     NIF_QUAD_NAMES
 
-NIF quad name of each indirect-drive chamber port (`Dict(port => "Q11T", …)`), read from
-the labeled LMF chamber-geometry figures; see `nif_port`, `nif_bundle`.
+NIF quad name of each indirect-drive chamber port (`Dict(port => "Q11T", …)`), taken
+from the labeled LMF chamber-geometry figures; see `nif_port`, `nif_bundle`.
 """
 const NIF_QUAD_NAMES = Dict(
     1 => "Q15T", 2 => "Q42T", 3 => "Q33T", 4 => "Q24T",
@@ -176,9 +180,9 @@ end
 """
     nif_bundle(beam_or_quad) -> String
 
-Bundle of a NIF quad or beam: the cluster and bundle digits of its quad name, e.g.
-`"31"` for Q31T and Q31B. A bundle's two quads sit in opposite hemispheres and need
-not share a cone.
+Bundle of a NIF quad or beam, given by the cluster and bundle digits of its quad name,
+e.g. `"31"` for Q31T and Q31B. The two quads of a bundle lie in opposite hemispheres and
+need not share a cone.
 """
 nif_bundle(quad::AbstractString) = quad[2:3]
 nif_bundle(b::Beam) = nif_bundle(b.quad)
@@ -217,18 +221,18 @@ end
 
 All 192 indirect-drive NIF beams with their individual directions from the LMF beam
 table (`data/nif_beams.csv`, transcribed from beam-port-locations-updated-10-15-2020.xlsx
-of the LMF Shot RI Resources). Names are the facility beam names (`"B111"`–`"B468"`:
-bundle `xy`, beam `z`; beams 1–4 form quad QxyT, 5–8 QxyB); `quad` is the quad name and
-`group` the cone. The mean direction of each quad's four beams is its port direction to
-within 0.004°.
+of the LMF Shot RI Resources). Names are the facility beam names, `"B111"`–`"B468"`,
+with bundle `xy` and beam `z`; beams 1–4 form quad QxyT and beams 5–8 quad QxyB. `quad`
+is the quad name and `group` the cone. The mean direction of the four beams of each quad
+is its port direction to within 0.004°.
 
-`spot` maps a cone to its spot, whose `angle` is measured in the frame `spot_frame`:
-`:beam`, the port θ̂ and φ̂ of the beam; or `:quad`, its quad port's, the spot turned
-about the beam's axis by the angle between the quad port's φ̂ and the beam's (1.6–5.3°,
-its sign varying by beam), as VisRad orients a NIF beam's phase-plate spot. VisRad's
-beams are `nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)`
-([`visrad_nif_spot`](@ref)). Whether the facility's spots follow the quad frame is not
-established.
+`spot` maps a cone to its spot, whose `angle` is measured in the frame `spot_frame`.
+With `:beam` the frame is the port θ̂ and φ̂ of the beam. With `:quad` it is that of the
+quad port, and the spot is turned about the beam axis by the angle between φ̂ of the
+quad port and φ̂ of the beam (1.6–5.3°, with a sign that varies by beam). This is how
+VisRad orients the phase-plate spot of a NIF beam. The VisRad beams are
+`nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)` ([`visrad_nif_spot`](@ref)).
+Whether the facility spots follow the quad frame is not established.
 """
 function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, spot_frame::Symbol = :beam)
     spot_frame in (:beam, :quad) || throw(ArgumentError("spot_frame is :beam or :quad, got :$spot_frame"))
@@ -246,17 +250,19 @@ end
 """
     nif_beams(quads; fnumber = 20.7, spot = nothing, spot_frame = :beam) -> Vector{Beam}
 
-The facility beams of NIF quads (beams named and `quad`-named as by `nif_quads`, e.g. a
-re-pointed quad model): each quad gives its four beams, in its order, from the LMF beam
-table, with the quad's aim, defocus, `dlambda`, wavelength and `group` and a quarter of
-its power. `spot` is `nothing` (each beam takes its quad's spot) or a function of the
-cone, as for `nif_beams()`; `spot_frame` is the frame of its `angle` (`:beam` or
-`:quad`, see `nif_beams()`). `nif_beams(nif_quads())` holds the beams of `nif_beams()`.
+The facility beams of NIF quads, such as a re-pointed quad model, with the beams named
+and `quad`-named as by `nif_quads`. Each quad gives its four beams, in its order, from
+the LMF beam table. The beams have the aim, defocus, `dlambda`, wavelength and `group`
+of the quad and a quarter of its power. `spot` is `nothing`, in which case each beam
+takes the spot of its quad, or a function of the cone, as for `nif_beams()`.
+`spot_frame` is the frame of its `angle` (`:beam` or `:quad`, see `nif_beams()`).
+`nif_beams(nif_quads())` contains the beams of `nif_beams()`.
 
-A per-beam pointing table on a quad model is then a template for a reader: an SST
-export (aims and defocus per beam) applied to the quads' beams is
-`read_visrad_sst(path; template = nif_beams(quads))`, which keeps each beam's quarter of
-its quad's power and its `dlambda`. [`nif_quads`](@ref)`(beams)` goes back.
+The beams of a quad model then serve as a template for a reader of a per-beam pointing
+table. An SST export (aims and defocus per beam) applied to the beams of the quads is
+`read_visrad_sst(path; template = nif_beams(quads))`, which keeps the quarter of the quad
+power and the `dlambda` of each beam. [`nif_quads`](@ref)`(beams)` converts back to
+quads.
 """
 function nif_beams(quads::AbstractVector{<:Beam}; fnumber = 20.7, spot = nothing,
                    spot_frame::Symbol = :beam)
@@ -283,17 +289,19 @@ end
 """
     nif_quads(beams; fnumber = 7.9, spot = nothing, spot_frame = :beam) -> Vector{Beam}
 
-NIF quads from their facility beams (named by `nif_beams`, any subset of a quad's four):
-one quad per `quad` name, in the order of the quads' first beams, at its port (the NIF
-User Guide's, as `nif_quads()`), with the mean aim, defocus and `dlambda` of its beams,
-their summed power, and the `group` and wavelength they share. This is a quad's mean
-aim from a beam list: `Dict(q.quad => q.aim for q in nif_quads(beams))`. A split quad
-(beams pointed apart, as in an as-shot table) becomes one aim point: the mean.
+NIF quads from their facility beams, named by `nif_beams`, with any subset of the four
+beams of a quad. The result has one quad per `quad` name, in the order of the first
+beams of the quads, at its port (that of the NIF User Guide, as for `nif_quads()`). Each
+quad has the mean aim, defocus and `dlambda` of its beams, their summed power, and the
+`group` and wavelength that they share. The mean aim of each quad in a beam list is
+therefore `Dict(q.quad => q.aim for q in nif_quads(beams))`. A split quad, with beams
+pointed apart as in an as-shot table, becomes one aim point at the mean.
 
-`spot` is `nothing` (each quad takes its first beam's spot) or a function of the cone;
-with `spot = nothing`, `spot_frame = :quad` reads that spot's `angle` in the quad frame
-and turns it back to the quad port (the inverse of `nif_beams(quads; spot_frame =
-:quad)`). Beams of one quad in different groups are an `ArgumentError`.
+`spot` is `nothing`, in which case each quad takes the spot of its first beam, or a
+function of the cone. With `spot = nothing`, `spot_frame = :quad` takes the `angle` of
+that spot in the quad frame and turns it back to the quad port, the inverse of
+`nif_beams(quads; spot_frame = :quad)`. Beams of one quad in different groups are an
+`ArgumentError`.
 """
 function nif_quads(beams::AbstractVector{<:Beam}; fnumber = 7.9, spot = nothing,
                    spot_frame::Symbol = :beam)
@@ -332,9 +340,9 @@ function _nif_beam_table()
              phi = parse(Float64, r[6])) for r in rows]
 end
 
-# Mock HYBRID-E pointing, per cone: aim z (mm, upper hemisphere), aim radius r (mm, along
-# the quad's port azimuth; negative = across the axis) and tangential split s (mm).
-# An illustrative stand-in, not a facility pointing.
+# Mock HYBRID-E pointing per cone, with aim z (mm, upper hemisphere), aim radius r (mm,
+# along the port azimuth of the quad, negative across the axis) and tangential split s
+# (mm). It is an illustrative stand-in and does not reproduce a facility pointing.
 const HYBRIDE_MOCK_POINTING = Dict(
     :inner23 => (z = 3.3, r = -1.3, s = 0.0),
     :inner30 => (z = 4.2, r = -0.8, s = 0.0),
@@ -345,15 +353,15 @@ const HYBRIDE_MOCK_POINTING = Dict(
 """
     hybride_mock_pointing(beams = nif_beams(); table = HYBRIDE_MOCK_POINTING) -> Vector{Beam}
 
-A mock of the HYBRID-E (N221204/N230729-class) NIF pointing: `beams` (NIF beams or
-quads, with `group` the cone) re-aimed by cone, defocus 0; power, spot and `dlambda` are
-kept. Each cone's quads share one rule in their own frame, mirrored top to bottom: the aim
-sits at `±z` (mm, the bottom hemisphere at `-z`), `r` along the quad's port azimuth
-(negative: across the axis, toward the opposite wall) and, for the outer cones, `±s` along
-the quad's φ̂, each beam aiming to the side opposite its port
-(`-sign(φ_beam − φ_quad) s`; the quad's beams cross). The quad azimuth is that of the
-mean port of its beams in `beams`, so a quad given as one beam (`nif_quads()`) gets no
-split.
+A mock of the HYBRID-E (N221204/N230729-class) NIF pointing. `beams` (NIF beams or
+quads, with `group` the cone) are re-aimed by cone with defocus 0, and power, spot and
+`dlambda` are kept. The quads of each cone share one rule in the frame of each quad,
+mirrored top to bottom. The aim lies at `±z` (mm, the bottom hemisphere at `-z`), at
+`r` along the port azimuth of the quad (negative across the axis, toward the opposite
+wall) and, for the outer cones, at `±s` along φ̂ of the quad. Each beam aims to the side
+opposite its port (`-sign(φ_beam − φ_quad) s`), so the beams of the quad cross. The quad
+azimuth is that of the mean port of its beams in `beams`, so a quad given as one beam
+(`nif_quads()`) is not split.
 
 | cone | z | r | s |
 |---|---|---|---|
@@ -362,8 +370,8 @@ split.
 | 44.5° | 5.7 | 0 | 0.5 |
 | 50° | 5.8 | 0 | 0.5 |
 
-*Derived*, not a facility pointing: an illustrative HYBRID-E-like rule on a 0.1 mm grid,
-for the 11.24 × 6.4 mm hohlraum with 3.1 mm LEHs.
+*Derived*; the rule is an illustrative HYBRID-E-like rule on a 0.1 mm grid, for the
+11.24 × 6.4 mm hohlraum with 3.1 mm LEHs, and does not reproduce a facility pointing.
 """
 function hybride_mock_pointing(beams::AbstractVector{<:Beam} = nif_beams();
                                table = HYBRIDE_MOCK_POINTING)
@@ -411,7 +419,7 @@ function omega_ports()
            if i != j && norm(V[i] - V[j]) < 1.01L]
     θs = [acosd(clamp(p[3], -1, 1)) for p in pts]
     φs = [mod(atand(p[2], p[1]), 360) for p in pts]
-    # rotate azimuths so that cone 1 sits at φ = 0
+    # rotate azimuths so that cone 1 lies at φ = 0
     φ1 = minimum(φs[i] for i in eachindex(pts) if θs[i] < 30)
     φs = mod.(φs .- φ1, 360)
     cones = (21.415, 42.020, 58.852, 81.249)

@@ -1,13 +1,13 @@
 # # Laser spot on a foil
 #
-# A phase plate placed before the focusing lens of a high-power laser breaks the beam
-# into many small, mutually phased elements. Each element illuminates the whole focal
-# region, and their sum, averaged over the speckle, is a smooth spot whose shape is set
-# by the plate rather than by the aberrations of the beam. The spots of the continuous
-# phase plates on NIF and the distributed phase plates on OMEGA are flat-topped and
-# elliptical or round, and an elliptical super-Gaussian describes them well. A foil
-# placed in such a beam, as in an area backlighter, absorbs the spot's power
-# distribution as it is projected onto the foil's surface.
+# A phase plate placed before the focusing lens of a high-power laser breaks the beam into
+# many small, mutually phased elements. Each element illuminates the whole focal region,
+# and their sum, averaged over the speckle, is a smooth spot whose shape is set by the
+# plate; the aberrations of the beam do not shape it. The spots of the continuous phase
+# plates on NIF and the distributed phase plates on OMEGA are flat-topped and elliptical
+# or round, and an elliptical super-Gaussian describes them well. A foil placed in such a
+# beam, as in an area backlighter, absorbs the power distribution of the spot as it is
+# projected onto the foil surface.
 #
 # Three properties of that distribution have exact forms: the total power, the growth
 # of the spot as the foil moves away from best focus, and the stretching of the
@@ -48,15 +48,14 @@ include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figu
 # \langle r^2 \rangle(s) = 2 a^2 m_n + \frac{s^2}{8F^2}.
 # ```
 #
-# Briareus evaluates deposition in two ways, both built on a quadrature of the f-cone:
-# a set of directions, equally weighted over the lens, whose spread reproduces the
-# disk's second moment exactly. A [`DepositionOperator`](@ref) samples every lit
-# surface at points fixed by the target and the beam directions; each point receives,
-# from every cone direction that reaches it, the focal profile where the ray along that
-# direction crosses the best-focus plane. This sum carries out the convolution and is
-# differentiable in pointing, focus and power. [`raytrace_deposition`](@ref) launches
-# rays from a grid of focal points along the same directions and follows them to the
-# first surface.
+# Briareus evaluates deposition in two ways, both built on a quadrature of the f-cone: a
+# set of directions, equally weighted over the lens, whose spread reproduces the second
+# moment of the disk exactly. A [`DepositionOperator`](@ref) samples every lit surface at
+# points fixed by the target and the beam directions; each point receives, from every cone
+# direction that reaches it, the focal profile where the ray along that direction crosses
+# the best-focus plane. This sum carries out the convolution and is differentiable in
+# pointing, focus and power. [`raytrace_deposition`](@ref) launches rays from a grid of
+# focal points along the same directions and follows them to the first surface.
 #
 # The beam here comes from directly above, through OMEGA's SG4 phase plate, which gives
 # a round spot with a 1/e radius of 0.36 mm and order 4.2 at f/6.7.
@@ -98,9 +97,9 @@ end
 
 # ## Spot size through focus
 #
-# Moving the focus a distance ``s`` along the beam leaves the foil at distance ``s``
-# from best focus. The second moment of the deposited power is computed from the
-# patch centroids. Assigning each patch's power to its centroid adds the variance of a
+# Moving the focus a distance ``s`` along the beam leaves the foil at distance ``s`` from
+# best focus. The second moment of the deposited power is computed from the patch
+# centroids. Assigning the power of each patch to its centroid adds the variance of a
 # uniform distribution over the patch, ``\Delta^2/12`` per axis for a patch of side
 # ``\Delta``, which is removed (Sheppard's correction).
 
@@ -149,10 +148,10 @@ fig
         maximum(abs.(fast_spread ./ moment.(shifts) .- 1)),
         maximum(abs.(ray_spread ./ moment.(shifts) .- 1)))
 
-# Both follow the exact growth, because the cone quadrature carries the disk's second
-# moment exactly; the residuals come from integrating a flat-topped profile over
-# patches, from the approximation behind Sheppard's correction, and for the ray trace
-# from sampling the focal plane on a grid.
+# Both follow the exact growth, because the cone quadrature reproduces the second moment
+# of the disk exactly. The residuals come from integrating a flat-topped profile over
+# patches, from the approximation behind Sheppard's correction, and for the ray trace from
+# sampling the focal plane on a grid.
 #
 # ## Shape far from focus
 #
@@ -186,7 +185,7 @@ exact_far = exact_deposition(s_far)
 @printf("exact convolution: power %.6f TW
 ", sum(exact_far))
 
-# The operator's error, as the fraction of the beam's power deposited in the wrong
+# The error of the operator, as the fraction of the beam power deposited in the wrong
 # place, falls as cone directions are added; 13 is the default:
 
 misplaced(E) = sum(abs.(E .- exact_far)) / P
@@ -204,9 +203,9 @@ moment_matched = [intensity(far, x) * a for (x, a) in zip(target.elem_centroid, 
 @printf("moment-matched super-Gaussian: misplaced %.4f, peak/exact %.3f\n",
         misplaced(moment_matched), maximum(moment_matched) / maximum(exact_far))
 
-# A cut through the spot shows the difference. Every curve gives, for each patch of
-# the row just above ``y = 0``, the absorbed power divided by the patch's area; the
-# best-focus profile is dashed for reference:
+# A cut through the spot shows the difference. Every curve gives, for each patch of the
+# row just above ``y = 0``, the absorbed power divided by the patch area; the best-focus
+# profile is dashed for reference:
 
 operator_far = deposit(DepositionOperator(target, [far]), [far]).element
 focus = Beam("B"; theta = 0, phi = 0, power = P, spot, fnumber = F)
@@ -227,11 +226,10 @@ lines!(ax, x_cut, flux_cut(moment_matched), color = Makie.wong_colors()[2], line
 Legend(fig[1, 2], ax; framevisible = false)
 fig
 
-# The moment-matched spot keeps a flat top, more than a quarter below the exact peak,
-# and misplaces a sixth of the power, which is why deposition sums over cone
-# directions. In a hohlraum the walls lie several
-# millimeters from focus, often at grazing incidence, and a moment-matched spot there
-# deposits up to 2% more power than the beam carries.
+# The moment-matched spot has a flat top more than a quarter below the exact peak, and a
+# sixth of its power is misplaced, which is why deposition sums over cone directions. In a
+# hohlraum the walls lie several millimeters from focus, often at grazing incidence, and a
+# moment-matched spot on those walls deposits up to 2% more power than the beam carries.
 
 # ## Oblique incidence
 #
@@ -251,10 +249,10 @@ fig
 # \frac{\langle x^2 \rangle \cos^2\theta}{a^2 m_n} = 1 + \frac{3\tan^2\theta}{16F^2},
 # ```
 #
-# 1.0059 at f/6.7 and 1.0001 for a nearly collimated f/50 beam. The ray trace here samples the
-# spot on a 241-point grid, a sixth of a patch apart: the rays of a nearly collimated
-# beam land on a regular lattice, and a lattice comparable to the patch spacing beats
-# against it and biases the second moment by about 2%.
+# The ratio is 1.0059 at f/6.7 and 1.0001 for a nearly collimated f/50 beam. In this check
+# the ray trace samples the spot on a 241-point grid, a sixth of a patch apart. The rays
+# of a nearly collimated beam fall on a regular lattice, and a lattice comparable to the
+# patch spacing beats against the patches and biases the second moment by about 2%.
 
 θ = 50.0
 function footprint(d)
@@ -275,7 +273,7 @@ for fnum in (F, 50.0)
 end
 
 # The transverse moment matches the projection, and the in-plane moment follows the
-# correction: the operator to 0.05%, the ray trace to the 0.2% of its sampling.
+# correction, to 0.05% for the operator and to the 0.2% of its sampling for the ray trace.
 
 tilted = Beam("B"; theta = θ, phi = 0, power = P, spot, fnumber = F)
 tilted_dep = deposit(DepositionOperator(target, [tilted]), [tilted])
@@ -291,13 +289,13 @@ I0 = focal_profile(spot, P, 0.0)
 
 # ## Images
 #
-# [`render`](@ref) draws any per-element field as seen by an [`OrthoCamera`](@ref).
-# Here the camera looks down onto the central 2.5 mm of a foil, and the field is the
-# absorbed laser flux from [`laser_flux`](@ref), converted to W/cm² by
-# [`to_Wcm2`](@ref). For the images the foil is that central 2.5 mm alone, divided into
-# 20 µm patches rather than 50 µm. Each patch shows the flux it absorbs. The three
-# images share one color scale, from zero to the peak at best focus. The beam at best
-# focus is aimed at ``(0.3, -0.2)`` mm, the other two at the origin.
+# [`render`](@ref) draws any per-element field as seen by an [`OrthoCamera`](@ref). Here
+# the camera is aimed down at the central 2.5 mm of a foil, and the field is the absorbed
+# laser flux from [`laser_flux`](@ref), converted to W/cm² by [`to_Wcm2`](@ref). For the
+# images the foil covers only that central 2.5 mm and is divided into 20 µm patches,
+# finer than the 50 µm patches of the calculations. Each patch shows the flux it absorbs. The three images share one color scale,
+# from zero to the peak at best focus. The beam at best focus is aimed at ``(0.3, -0.2)``
+# mm, the other two at the origin.
 
 camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.5, nx = 500)
 fine = Target(foil(:foil, (0, 0, 0), (0, 0, 1); width = 2.5, n = 125, two_sided = false))
@@ -318,16 +316,16 @@ fig
 
 # ## What this checks
 #
-# - The deposition operator and the ray trace both deliver the beam's power to the
+# - The deposition operator and the ray trace both deliver the power of the beam to the
 #   foil and center it at the aim point.
-# - Through focus, the spot's second moment follows the exact geometric-optics growth
+# - Through focus, the second moment of the spot follows the exact geometric-optics growth
 #   ``2a^2m_n + s^2/8F^2`` with both methods. This checks the cone quadrature.
-# - Four millimeters from focus, the operator's footprint matches the exact
-#   convolution of the focal spot with the f-cone patch by patch, to within about 1% of
-#   the beam power with the default 13 directions, and converges as directions are
-#   added. A moment-matched super-Gaussian of the right size has the wrong shape.
-# - At oblique incidence the footprint is stretched by ``1/\cos\theta`` along the
-#   plane of incidence, the transverse width is unchanged, and the absorbed flux is
-#   reduced by ``\cos\theta``. The defocus across the tilted footprint adds
-#   ``3\tan^2\theta/16F^2`` to the in-plane moment, which the operator reproduces to
-#   0.05%; this checks its incidence factor for each cone direction.
+# - Four millimeters from focus, the footprint of the operator matches the exact
+#   convolution of the focal spot with the f-cone in every patch, to within about 1% of
+#   the beam power with the default 13 directions, and converges as directions are added.
+#   A moment-matched super-Gaussian of the right size has the wrong shape.
+# - At oblique incidence the footprint is stretched by ``1/\cos\theta`` along the plane of
+#   incidence, the transverse width is unchanged, and the absorbed flux is reduced by
+#   ``\cos\theta``. The defocus across the tilted footprint adds ``3\tan^2\theta/16F^2``
+#   to the in-plane moment, which the operator reproduces to 0.05%; this checks its
+#   incidence factor for each cone direction.

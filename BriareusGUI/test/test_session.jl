@@ -12,7 +12,7 @@ const SESS = DesignSession(resolution = :coarse)
     @test task_status(sess, :talis)[1] === :todo
     @test_throws ArgumentError task_status(sess, :results)
 
-    build_scenario!(sess)                                # inline: spawn[] is false
+    build_scenario!(sess)                                # inline, since spawn[] is false
     dr = sess.drive
     @test dr.scenario[] isa Scenario && !dr.building[] && !drive_stale(sess)
     @test occursin("built in", dr.status[])
@@ -48,7 +48,8 @@ const SESS = DesignSession(resolution = :coarse)
     # the capsule θ–φ map: the observed flux on a regular grid
     mp = flux_map(dr)
     @test mp.kind === :capsule && size(mp.values) == (length(mp.x), length(mp.y))
-    # (from the radiosity solve; the flux response agrees to round-off)
+    # The map comes from the radiosity solve, and the flux response agrees within
+    # round-off.
     @test all(isapprox.(extrema(mp.values), extrema(to_Wcm2.(res.evaluation.flux)); rtol = 1e-9))
     set_view!(dr, :map)
     @test dr.view[] === :map
@@ -72,7 +73,7 @@ const SESS = DesignSession(resolution = :coarse)
     @test drive_stale(sess) && dr.result[] === nothing
     @test task_status(sess, :drive)[1] === :attention
     edit_part!(sess.target, 1, :length, "10.1")
-    @test sess.target.target[] === t10                       # the same parts: the same Target, found again
+    @test sess.target.target[] === t10                       # the same parts give the same Target, found again
     build_scenario!(sess)
     @test !drive_stale(sess) && dr.result[] isa DriveResult
 end
@@ -131,8 +132,8 @@ end
     r2 = st.result[]
     @test r2.completed && length(r2.beams) == 48 - beam_rows(sess.beams)[4].count
     @test r2.indices == findall(sess.beams.enabled[])
-    # the keep-out sees the hohlraum part's two entrance holes, not the part as one hole
-    # (its pieces share `Component.part`), and the pointing clears them
+    # The keep-out sees the two entrance holes of the hohlraum part separately, although
+    # its pieces share `Component.part`, and the pointing clears them.
     ko = ApertureKeepOut(sess.drive.scenario[].target)
     @test ko.names == [:hohlraum_leh_top, :hohlraum_leh_bottom] && all(c -> abs(abs(c[3]) - 5.05) < 1e-9, ko.centers)
     @test r2.before.clipped < 1e-9
@@ -270,7 +271,7 @@ end
     @test rv.status[] == "canceled after 2 of 4 beams" && !rv.running[]
     @test occursin("canceled, partial", review_brief(rv))
     @test task_status(sess, :clearance)[1] === :attention
-    # canceled before any beam: no report
+    # Canceled before any beam, the check gives no report.
     start_clearance!(rv, sess.target.target[], four; spawn = false, batch = 2,
                      deliver = f -> (f(); cancel_clearance!(rv)))
     @test rv.report[] === nothing && rv.status[] == "canceled after 0 of 3 beams"
@@ -284,8 +285,8 @@ end
 end
 
 @testset "background jobs through a delivery queue (no GL)" begin
-    # As in the window: jobs run on workers and their updates wait in a queue for
-    # the GUI thread; nothing changes until the queue is drained.
+    # As in the window, jobs run on workers and their updates wait in a queue for the GUI
+    # thread. Nothing changes until the queue is drained.
     q = Channel{Any}(Inf)
     sess = DesignSession(resolution = :coarse, deliver = f -> put!(q, f))
     sess.spawn[] = true
@@ -295,7 +296,7 @@ end
     drain_until(() -> sess.drive.result[] !== nothing, q)
     @test !sess.drive.building[] && sess.drive.scenario[] isa Scenario
 
-    # a stale build result is dropped: the later request wins
+    # A stale build result is dropped, and the later request wins.
     build_scenario!(sess)
     g = sess.drive.generation[]
     build_scenario!(sess)
@@ -366,7 +367,7 @@ end
     start_optimize!(sess; spawn = false)
     @test occursin("needs a hohlraum", st.status[])
 
-    # back to a hohlraum: the NIF quads return
+    # Back on a hohlraum, the NIF quads return.
     @test new_target!(sess, :hohlraum)
     @test sess.beams.preset[] === :nif_quads && drive_stale(sess)
     @test sess.review.hardware[] == [:hohlraum_cap_top, :hohlraum_cap_bottom]
@@ -374,7 +375,8 @@ end
 
 @testset "windows in the drive (no GL)" begin
     sess = DesignSession(resolution = :coarse)
-    # a closed and an open window: separate components, a valid closed enclosure
+    # A closed and an open window are separate components and give a valid closed
+    # enclosure.
     @test add_window!(sess.target)
     @test add_window!(sess.target; phi = 200.0, z = 2.0, width = 1.5, height = 1.5, open = true)
     build_scenario!(sess)

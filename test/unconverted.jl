@@ -1,4 +1,5 @@
-# Unconverted-light deposition: exact geometric checks and a Monte Carlo ray trace.
+# This file tests unconverted-light deposition with exact geometric checks and a Monte
+# Carlo ray trace.
 
 @testset "unconverted-light deposition" begin
     bl = first(nif_beams())
@@ -6,7 +7,7 @@
     ô = Briareus._own_side(bl.port, Briareus._nif_quad_port(bl.quad))
     ŵ = cross(k, ô)
     fb = Vec3(bl.aim...) - bl.defocus * bl.port
-    # the NIF colors absorbing all their light (the geometry alone)
+    # The NIF colors absorb all their light, so only the geometry matters.
     uc = [UnconvertedColor(c.name; footprint = c.footprint, edge = c.edge, focal_shift = c.focal_shift)
           for c in nif_unconverted()]
 
@@ -32,10 +33,10 @@
         dark = [e for e in 1:nelements(t) if any(side -> all(side, corners(e)),
                                                   (p -> p[1] <= c - h, p -> p[1] >= c + h, p -> p[2] <= -h, p -> p[2] >= h))]
         @test !isempty(full) && all(e -> dc.element[e] ≈ P * t.elem_area[e] / col.footprint^2, full)
-        @test all(e -> dc.element[e] <= 1e-12 * P, dark)                # edges on element edges: rounding
+        @test all(e -> dc.element[e] <= 1e-12 * P, dark)                # edges on element edges: rounding only
     end
 
-    # a color's absorption scales what is absorbed, not what is delivered
+    # The absorption of a color scales what is absorbed; the delivered power is unchanged.
     weak = UnconvertedColor(:omega1; footprint = 22.0, edge = 4.8, focal_shift = 460.0, absorption = 0.4)
     dw = unconverted_deposition(t, [bl]; ratio = (omega1 = 0.1,), colors = [weak]).omega1
     @test dw.delivered == 0.1 * bl.power && isapprox(sum(dw.element), 0.04 * bl.power; rtol = 1e-12)
@@ -80,7 +81,7 @@
     q = only(b for b in nif_quads() if b.quad == bl.quad)
     wide = Component(:wide, transform(rectangle_mesh(120.0, 120.0; nu = 60, nv = 60), hcat(ŵ, ô, -k),
                                       Vec3(0, 0, 0)), gold())
-    # (with the NIF colors: 1ω absorbs 0.88 of what reaches the plate)
+    # With the NIF colors, 1ω absorbs 0.88 of what reaches the plate.
     dq = unconverted_deposition(Target(wide), [q]; ratio = (omega1 = 0.05, omega2 = 0.0)).omega1
     @test nif_unconverted()[1].absorption == 0.88 && isapprox(sum(dq.element), 0.88 * 0.05 * q.power; rtol = 1e-12)
     tw = Target(wide)

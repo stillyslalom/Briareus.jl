@@ -1,9 +1,9 @@
-# The Optimize step: a GroupPointing parameterization of the enabled beams (chamber aim
-# fields), or a FramePointing one (aims in each beam's aim frame), with grouping and box
-# bounds, an objective (capsule symmetry, axisymmetric or 3D, a flat face's uniformity, or foil
-# uniformity) and `optimize_pointing` on a worker. Its callback reports each objective
-# evaluation (progress) and stops the optimization on cancel, which then returns the
-# best design found so far.
+# The Optimize step parameterizes the enabled beams with a GroupPointing (chamber aim
+# fields) or a FramePointing (aims in the aim frame of each beam), with grouping and box
+# bounds. It runs `optimize_pointing` on a worker with an objective for capsule symmetry
+# (axisymmetric or 3D), the uniformity of a flat face, or foil uniformity. Its callback
+# reports each objective evaluation as progress and stops the optimization on cancel, which
+# then returns the best design found so far.
 
 """
 Objectives of the pointing optimization: `:legendre` (`symmetry_objective`: weighted
@@ -32,8 +32,8 @@ const OPTIMIZE_FIELDS = (:z, :r, :phi, :u, :v, :w, :defocus, :power)
 const _CHAMBER_AIM = (:z, :r, :phi)
 const _LOCAL_AIM = (:u, :v, :w)
 
-# Default bound half-widths: mm for z, r, phi, u, v, w, defocus (engineering defaults, as
-# the core `bounds`); a fraction of the start for power.
+# Default bound half-widths, in mm for z, r, phi, u, v, w and defocus (engineering defaults,
+# as in the core `bounds`) and as a fraction of the start for power.
 const DEFAULT_DELTAS = Dict(:z => 1.0, :r => 1.0, :phi => 1.0, :u => 1.0, :v => 1.0, :w => 1.0,
                             :defocus => 2.0, :power => 0.4)
 
@@ -235,7 +235,8 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
             throw(ArgumentError("the face objective needs a flat observed face in the x-ray drive"))
         e0 = something(ev0, evaluate(s, initial_parameters(s.param)))
         flux = !cfg.hold_drive ? nothing : face_mean_flux(e0)
-        # the start's nonuniformity weighs `uniformity` (an exactly uniform start: absolute)
+        # The nonuniformity of the start weighs `uniformity`; an exactly uniform start
+        # makes the weight absolute.
         σ0 = face_nonuniformity(e0)
         rms_scale = isfinite(σ0) && σ0 > 0 ? σ0 : nothing
         return face_flux_objective(; uniformity = cfg.uniformity, rms_scale, flux,
@@ -375,7 +376,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     end
     run = function ()
         out = _try_job(job)
-        # a run discarded by `clear_optimize!` leaves the cleared state alone
+        # A run discarded by `clear_optimize!` leaves the cleared state unchanged.
         deliver(() -> st.generation[] == gen && _finish_optimize!(st, out))
     end
     _run_job(run, spawn)

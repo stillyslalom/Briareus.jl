@@ -1,6 +1,6 @@
-// Properties of an assembly: its members and frame on one line, name, the frame it is
-// placed in, its origin and axis angles, placement steps, a move along any frame's axis,
-// and the tree commands (ungroup, remove with its contents).
+// The properties of an assembly are its members and frame on one line, its name, the
+// frame it is placed in, its origin and axis angles, placement steps, a move along the
+// axis of any frame, and the tree commands (ungroup, remove with its contents).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

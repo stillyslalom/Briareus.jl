@@ -9,8 +9,9 @@
     quads = aimed.(nif_quads())
     inner(bs) = [b.group in (:inner23, :inner30) for b in bs]
 
-    # calibration: the tip against Izumi 2021 Fig. 8a (seven shots, ±40 µm), the absorbed
-    # fraction against its HYDRA run (Fig. 10a) with the bubble at Izumi's z = ±3 mm
+    # The tip is calibrated against Izumi 2021 Fig. 8a (seven shots, ±40 µm), and the
+    # absorbed fraction against the HYDRA run of that paper (Fig. 10a) with the bubble at z
+    # = ±3 mm as in Izumi.
     m3 = BubbleAbsorption(radius = 2.88, turn_on = 0.3)
     m15 = BubbleAbsorption(radius = 2.88, turn_on = 0.3, fill = 0.15)
     tr = izumi2021_bubble()
@@ -35,7 +36,8 @@
     @test bubble_transmission(m3, 0.4) == 1 && bubble_depth(m3, 0.4) == 0
     @test bubble_transmission(BubbleAbsorption(radius = 2.88, stagnation = Inf), 20.0) == 0
 
-    # stagnation: ballistic (bitwise) up to the knee, C¹ there, bounded by x_max
+    # At stagnation the motion is exactly ballistic up to the knee, C¹ at the knee, and
+    # bounded by x_max.
     mb = BubbleAbsorption(radius = 2.88, turn_on = 0.3, stagnation = Inf)
     @test bubble_depth(m3, 5.5) == bubble_depth(mb, 5.5)
     @test bubble_depth(m15, 5.5) == bubble_depth(BubbleAbsorption(radius = 2.88, turn_on = 0.3,
@@ -58,7 +60,8 @@
     @test mc.collision ≈ 5.8
     @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, capsule_radius = 1.064).collision ≈ 5.4 atol = 0.05
     @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, picket_ratio = 1.5).collision ≈ 5.45 atol = 0.01
-    # a wider capsule–wall gap collides later (HYBRID-E: 3.2 mm wall, 1.135 mm capsule)
+    # A wider capsule–wall gap collides later (HYBRID-E has a 3.2 mm wall and a 1.135 mm
+    # capsule).
     @test BubbleAbsorption(radius = 3.2, turn_on = 0.4, capsule_radius = 1.135).collision ≈
           0.4 + 5.5 * (3.2 - 1.135) / (2.875 - 0.908)
     @test m3.collision ≈ 0.3 + 5.5 * (2.88 - 0.908) / (2.875 - 0.908)
@@ -94,7 +97,8 @@
     m = BubbleAbsorption(radius = 2.875)
     # before the launch nothing moves
     @test [x.power for x in apply_lpi(m, quads, 0.1)] == [x.power for x in quads]
-    # an abstract vector of beams takes one number type first: bitwise the same powers
+    # An abstract vector of beams is converted to one number type first and gives the same
+    # powers as a concrete vector.
     @test [x.power for x in apply_lpi(m, Beam[quads...], 5.0)] == [x.power for x in apply_lpi(m, quads, 5.0)]
     # power is conserved, in each hemisphere, and moves from inner to 50° beams only
     for t in (3.0, 5.0, 7.0)
@@ -151,8 +155,8 @@
     @test p2(h1)[1] ≈ p2(h0)[1] atol = 1e-6
     @test p2(h1)[2] > p2(h0)[2] + 0.02
 
-    # the ridge stop: after t_c the inner power left by the bubble lands on a wall band
-    # at the height where each inner axis crosses r = 0.73 R; power is conserved
+    # At the ridge stop, after t_c, the inner power left by the bubble is deposited on a
+    # wall band at the height where each inner axis crosses r = 0.73 R. Power is conserved.
     tr = 7.0
     eff = apply_lpi(m, quads, tr)
     noridge = BubbleAbsorption(radius = 2.875, collision = Inf)

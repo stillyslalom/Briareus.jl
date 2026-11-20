@@ -1,5 +1,5 @@
-# VisRad interchange (src/visrad.jl): round trips and rows copied from the VisRad 21.1.1
-# manual, https://prism-cs.com/Manuals/VisRad/.
+# This file tests the VisRad interchange (src/visrad.jl) with round trips and with rows
+# copied from the VisRad 21.1.1 manual, https://prism-cs.com/Manuals/VisRad/.
 
 using Briareus: _vr_key, _vr_rotation, _vr_reference_angle
 
@@ -37,7 +37,7 @@ end
     @test all(isapprox(a.defocus, b.defocus; atol = 1e-9) for (a, b) in zip(rb, bs) if b.power > 0)
     @test [a.power for a in rb] == [b.power for b in bs]
     @test all(a.port == b.port && a.spot == b.spot for (a, b) in zip(rb, bs))
-    # quads: expanded to four beams on write, aggregated on read
+    # Quads are expanded to four beams on write and aggregated on read.
     q = nif_quads()
     qs = [i % 7 == 0 ? remake(b; power = 0.0) : remake(b; aim = (0.1i, -0.05i, 0.3), defocus = 0.01i)
           for (i, b) in enumerate(q)]
@@ -45,11 +45,12 @@ end
     rq = read_visrad_sst(pq; template = nif_quads())
     @test all(isapprox(a.aim, b.aim; atol = 1e-9) for (a, b) in zip(rq, qs))
     @test [a.power for a in rq] == [b.power for b in qs]
-    # the per-beam file of the quads reads into per-beam beams pointed like their quads
+    # The per-beam file of the quads is read into per-beam beams pointed like their quads.
     rbq = read_visrad_sst(pq; template = nif_beams())
     i31 = findfirst(b -> b.name == "Q31B", qs)
     @test all(b.aim ≈ qs[i31].aim for b in rbq if b.quad == "Q31B")
-    # a foreign file: preamble, BL names, cm units, extra column, a beam without pointing
+    # A foreign file has a preamble, BL names, cm units, an extra column and a beam without
+    # pointing.
     pf = vrfile("foreign_sst.csv", """
         Shot N000000-000-999 pointing export
         Beam,Pointing: Beam Aim Point X (cm),Pointing: Beam Aim Point Y (cm),Pointing: Beam Aim Point Z (cm),Pointing: Beam Aim Point Beam Defocus (cm),Comment
@@ -59,7 +60,7 @@ end
     rf = @test_logs min_level = Base.CoreLogging.Warn read_visrad_sst(pf; template = nif_beams())
     i115 = findfirst(b -> b.name == "B115", rf)
     @test rf[i115].aim ≈ [1.0, 2.0, -3.0] && rf[i115].defocus ≈ 0.5 && rf[i115].power == 2.0
-    @test rf[i115+1].power == 0                      # B116: no pointing data → off
+    @test rf[i115+1].power == 0                      # B116 has no pointing data, so it is off
     @test count(b -> b.power > 0, rf) == 1
     @test_throws ArgumentError read_visrad_sst(vrfile("bad.csv", "Beam,X\nB115,1\n"))
 end
@@ -81,16 +82,17 @@ end
     @test length(mb) == 6 && all(b -> b.power == 1.0, mb)
     @test all(isapprox.(port_angles(byname["Beam_31"]), (42.02, 342.0); atol = 1e-9))
     @test byname["Beam_10"].defocus ≈ -2.15                   # cm → mm
-    # TC Pt Pos is the focus: three beams aimed at the foil origin with focus offset
-    # -0.215 cm decode to one aim point (to the table's 4-digit precision)
+    # TC Pt Pos is the focus. Three beams aimed at the foil origin with focus offset
+    # -0.215 cm decode to one aim point, within the 4-digit precision of the table.
     foil_aims = [byname[n].aim for n in ("Beam_10", "Beam_28", "Beam_31")]
     @test maximum(norm(a - foil_aims[1]) for a in foil_aims) < 2e-3
-    # zero focus offset: TC Pt Pos is the reference point itself
+    # With zero focus offset, TC Pt Pos is the reference point itself.
     @test byname["Beam_25"].aim ≈ 10 .* [-0.05104, 0.01658, -0.02684]
     @test byname["Beam_50"].aim ≈ byname["Beam_25"].aim
     # Beam_40 is pointed 0.01 cm along the LEH axis from the LEH origin
     @test norm(byname["Beam_40"].aim - byname["Beam_25"].aim) ≈ 0.1 atol = 2e-3
-    # the older dialog (intro/images/laser_summary.jpg): "Beam #", "Pt CS", "Ro"
+    # The older dialog (intro/images/laser_summary.jpg) has the columns "Beam #", "Pt CS"
+    # and "Ro".
     po = vrfile("old_summary.csv", """
         Cluster,Beam #,On/Off,Polar Ang,Azm Ang,Pt Ref CS,Pt CS,Pt X-1,Pt X-2,Pt X-3,Focus offset,Power,Sp Prof,Ro
         Cone_2b,16,On,98.75,318.54,end_cap_2,Cartesian,0,0,0.025,0,0.5,Uniform,50
@@ -108,7 +110,7 @@ end
     @test ot[2].power == 0 && ot[2].aim == zeros(3)
     @test isapprox(ot[3].aim, [0, 1.0, 0]; atol = 1e-12) && ot[3].power ≈ 0.45
     @test ot[1].spot.a ≈ 0.05 && ot[1].spot.a == ot[1].spot.b   # Ro = 50 µm
-    @test ot[1].spot.order == 50                                # "Uniform" → flat top
+    @test ot[1].spot.order == 50                                # "Uniform" is a flat top
 end
 
 @testset "Laser Beam Summary round trip" begin
@@ -126,7 +128,7 @@ end
     @test all(isapprox(a.defocus, b.defocus; atol = 1e-8) for (a, b) in zip(rb, bs))
     @test all(isapprox(a.power, b.power; atol = 1e-9) for (a, b) in zip(rb, bs))
     @test all(same_spot(a.spot, b.spot) for (a, b) in zip(rb, bs))
-    # no template: beams rebuilt from the file's port angles
+    # Without a template, the beams are rebuilt from the port angles in the file.
     rn = read_visrad_summary(p)
     @test [b.name for b in rn] == [b.name for b in bs]
     @test all(isapprox(a.port, b.port; atol = 1e-9) for (a, b) in zip(rn, bs))
@@ -142,10 +144,10 @@ end
     @test intensity(r0, x) ≈ intensity(b0, x) rtol = 1e-8
     # NIF spots (major axis along φ̂) have rotation 0 in either sense
     @test _vr_rotation(nif_spot(:outer44), :beam) == 0 == _vr_rotation(nif_spot(:outer44), :target)
-    # VisRad's rotation is relative to the quad's horizontal: at rotation 0 a NIF beam's
-    # major axis lies along φ̂ of its quad's port, which for B111 is turned -1.60° from
-    # the beam φ̂ (VisRad 21 deposition on a plate normal to B111 fitted -1.58°); quads and
-    # beams of no quad keep their φ̂
+    # The VisRad rotation is relative to the horizontal of the quad. At rotation 0 the major
+    # axis of a NIF beam lies along the φ̂ of its quad port, which for B111 is turned -1.60°
+    # from the beam φ̂. A VisRad 21 deposition on a plate normal to B111 fitted -1.58°. For
+    # quads, and for beams that belong to no quad, the φ̂ of the port is used.
     b111 = nb[findfirst(b -> b.name == "B111", nb)]
     ref = _vr_reference_angle(b111)
     @test rad2deg(ref) ≈ -1.60 atol = 0.01
@@ -190,32 +192,34 @@ end
     rq = read_visrad_powers(p; template = nif_quads())
     ts = range(-1, 8; length = 91)
     @test all(isapprox(rq[Symbol(x.name)].(ts), pulses[x.group].(ts); atol = 1e-8) for x in q)
-    # the readers key by Symbol, so the pulses compose with with_pulses by beam name
+    # The readers key by Symbol, so the pulses compose with with_pulses by beam name.
     @test [b.power for b in with_pulses(q, rq, 3.0; by = :beam)] ≈ [b.power for b in with_pulses(q, pulses, 3.0)]
     @test_throws KeyError with_pulses(nif_beams(), rq, 3.0; by = :beam)
     rt = write_visrad_powers(joinpath(vrdir, "rt.csv"), q, rq; by = :beam)
     @test all(isapprox(read_visrad_powers(rt; template = q)[Symbol(x.name)].(ts), rq[Symbol(x.name)].(ts); atol = 1e-8) for x in q)
-    # the manual's examples: NIF "BL" names (import_tdep_laser_powers.jpg), OMEGA "Beam_10",
-    # negative powers set to zero (import_tdep_beam_powers.html)
+    # The examples of the manual have NIF "BL" names (import_tdep_laser_powers.jpg), the
+    # OMEGA name "Beam_10", and negative powers set to zero (import_tdep_beam_powers.html).
     pf = vrfile("tdep.csv", "time (ns),BL115,BL116,Beam_10\n0,0,0,0\n1,2.5,-0.1,0.5\n2,0,0,0\n")
     f = read_visrad_powers(pf)
     @test f[:B115](1.0) == 2.5 && f[:B116](1.0) == 0 && f[:Beam_10](0.5) == 0.25
     fb = read_visrad_powers(pf; template = nif_beams())
     @test keys(fb) == Set([:B115, :B116])
     @test pulse_energy(fb[:B115]) ≈ 2.5
-    # seconds in the header; direct Dict form
+    # The next file has seconds in the header, and the one after it uses the direct Dict
+    # form.
     ps = vrfile("tdep_s.csv", "time (s),B111\n0,0\n1e-9,1\n2e-9,0\n")
     @test read_visrad_powers(ps)[:B111](1.0) ≈ 1
     pd = write_visrad_powers(joinpath(vrdir, "pd.csv"), Dict(:B111 => PulseShape([0, 1, 2], [0, 3, 0])))
     @test read_visrad_powers(pd)[:B111](0.5) ≈ 1.5
-    # standard pulse-shape library file: W versus s
+    # A standard pulse-shape library file gives W versus s.
     pl = vrfile("pulse.dat", "# square\n0.0 0.0\n1.0e-10 5.0e11\n1.1e-9 5.0e11\n1.2e-9 0.0\n")
     sh = read_visrad_pulse_shape(pl)
     @test sh.t ≈ [0, 0.1, 1.1, 1.2] && sh(0.5) ≈ 0.5
 end
 
 @testset "result tables and fits" begin
-    # element table as in surf_elem_table.jpg (whitespace, units in headers)
+    # The element table is laid out as in surf_elem_table.jpg, with whitespace separators
+    # and units in the headers.
     pe = vrfile("elems.txt", """
         Z (cm) Azim. ang (deg) Radius (cm) Surf Index Emis T (eV) Rad T (eV) Flux In (TW/cm2) Flux Out (TW/cm2)
         1.0350e-01 1.5000e+01 7.8164e-02 0 6.2594e+01 9.5558e+01 8.5741e+00 1.5785e+00
@@ -226,7 +230,8 @@ end
     @test tb.header == ["Z (cm)", "Azim. ang (deg)", "Radius (cm)", "Surf Index", "Emis T (eV)",
                         "Rad T (eV)", "Flux In (TW/cm2)", "Flux Out (TW/cm2)"]
     @test size(tb.data) == (3, 8) && tb.data[2, 7] == 7.8007
-    # power summary as in power_summary_table.jpg, object names as labels
+    # The power summary is laid out as in power_summary_table.jpg, with object names as
+    # labels.
     pp = vrfile("psd.txt", """
         Object\tSurface Area (cm2)\tIncident Rad Pwr\tEmitted Rad Pwr\tPwr Src Term\tLaser Pwr Dep
         hohlraum_barrel\t1.156e-01\t1.131e+00\t1.583e+00\t1.375e+00\t5.000e+00
@@ -236,7 +241,8 @@ end
     ts = read_visrad_table(pp)
     @test ts.labels == ["hohlraum_barrel", "capsule", "Total (all objects)"]
     @test ts.header[end] == "Laser Pwr Dep" && ts.data[1, end] == 5.0
-    # Legendre and Y_LM fits: VisRad normalization (Y_00 = 1, A_L0 = A_L/√(2L+1))
+    # The Legendre and Y_LM fits use the VisRad normalization, Y_00 = 1 and
+    # A_L0 = A_L/√(2L+1).
     rng = Random.MersenneTwister(3)
     θ = acosd.(2 .* rand(rng, 400) .- 1)
     φ = 360 .* rand(rng, 400)
@@ -284,8 +290,8 @@ end
 end
 
 @testset "workspace (.vrw)" begin
-    # the synthetic workspace (vrw_fixture.jl): a primitive hohlraum + foil, a CAD mesh
-    # placed through a reference cone, and NIF beam rows; lengths in cm
+    # The synthetic workspace (vrw_fixture.jl) has a primitive hohlraum and foil, a CAD
+    # mesh placed through a reference cone, and NIF beam rows, with lengths in cm.
     tn, tf = TETRA_NODES, TETRA_FACES
     p = vrfile("work.vrw", synthetic_workspace())
 
@@ -294,39 +300,42 @@ end
     @test [o.kind for o in ws.objects] == [:rectangle, :cylindrical_hohlraum, :cone, :mesh, :sphere]
     @test [o.folder for o in ws.objects] == ["Foil", "", "CAD", "CAD", ""]
     @test ws.clusters == ["Ring_050", "Ring_045"]
-    # spherical position (r, θ, φ) in cm
+    # The spherical position (r, θ, φ) is in cm.
     @test ws.objects[5].position ≈ 3.2 * port_vector(90, 150)
-    # the CAD mesh: nodes (cm, centered) placed by its position in the reference cone's
-    # frame, which is turned 90° about z (Azimuthal) and raised 2 mm
+    # The nodes of the CAD mesh, centered and in cm, are placed by its position in the
+    # frame of the reference cone, which is turned 90° about z (Azimuthal) and raised 2 mm.
     cad = ws.objects[4]
     Rz = [0 -1 0; 1 0 0; 0 0 1]
     @test cad.position ≈ Vec3(0, 1, 2)
     @test cad.mesh.vertices ≈ [Vec3(Rz * (10 .* collect(v))) + Vec3(0, 1, 2) for v in tn]
     @test cad.mesh.triangles == [(1, 3, 2), (1, 2, 4), (1, 4, 3), (2, 3, 4)]
     @test cad.albedo == 0.5 && cad.radiosity && !ws.objects[3].radiosity
-    # The VisRad element counts for these primitives (power-source table of the
-    # workspace they come from): 81 for the rectangle, 216 for the hohlraum
+    # The VisRad element counts for these primitives, from the power-source table of the
+    # workspace they come from, are 81 for the rectangle and 216 for the hohlraum.
     t = visrad_target(ws)
     @test [c.name for c in t.components] == [:Rectangle_0, :Cyl_Hohlraum_0_wall, :Cyl_Hohlraum_0_cap_top,
         :Cyl_Hohlraum_0_cap_bottom, :Cyl_Hohlraum_0_leh_top, :Cyl_Hohlraum_0_leh_bottom, :CAD_0]
     np = [npatches(c.mesh) for c in t.components]
     @test np[1] == 81 && sum(np[2:6]) == 216 && np[7] == 4
-    # materials by object name, a String or a Symbol; a name that is no object is an error
+    # Materials are given by object name, a String or a Symbol. A name that matches no
+    # object is an error.
     tm = visrad_target(ws; materials = Dict(:Rectangle_0 => gold()))
     @test tm.components[1].material == gold() && tm.components[7].material == t.components[7].material
     @test_throws ArgumentError visrad_target(ws; materials = Dict(:Rectangle => gold()))
-    # foil: 4 × 4 mm at x = 1 mm, tilted 90° so its +z normal turns to +x
+    # The foil is 4 × 4 mm at x = 1 mm, tilted 90° so that its +z normal turns to +x.
     e = t.comp_elems[1]
     @test all(n -> n ≈ Vec3(1, 0, 0), t.elem_normal[e])
     @test sum(t.elem_area[e]) ≈ 16
     @test sum(t.elem_area[i] * t.elem_centroid[i] for i in e) / 16 ≈ Vec3(1, 0, 0)
-    # hohlraum: radius 2.55, length 9.35, LEH radius 1.52 mm, centered at x = -4 mm
+    # The hohlraum has radius 2.55, length 9.35 and LEH radius 1.52 mm, centered at
+    # x = -4 mm.
     w = t.comp_elems[2]
     @test sum(t.elem_area[w]) ≈ 2π * 2.55 * 9.35 rtol = 1e-12        # exact (curved) areas
     @test t.components[5].kind === :aperture
     @test all(norm((t.elem_centroid[i] - Vec3(-4, 0, 0))[1:2]) ≈ 2.55 * cos(π / 12) for i in w)  # 12 chords
     @test all(dot(t.elem_normal[i], t.elem_centroid[i] - Vec3(-4, 0, 0)) < 0 for i in w)  # normals in
-    # primitives at a given element size instead of VisRad's grid: same surfaces and places
+    # Primitives meshed at a given element size instead of the VisRad grid have the same
+    # surfaces and places.
     rect = only(visrad_component(ws.objects[1]; primitive_h = 0.5))
     @test npatches(rect.mesh) == 8 * 8                                   # 4 mm / 0.5 mm
     tr = Target([rect])
@@ -343,20 +352,20 @@ end
     sph = only(visrad_component(ws.objects[5]; primitive_h = 0.2))
     @test npatches(sph.mesh) > npatches(only(visrad_component(ws.objects[5])).mesh)
     @test_throws ArgumentError visrad_component(ws.objects[1]; primitive_h = 0.0)
-    # CAD mesh: outward front faces; two-sided on request
+    # The CAD mesh has outward front faces and is two-sided on request.
     @test all(dot(t.elem_normal[i], t.elem_centroid[i] - cad.position) > 0 for i in t.comp_elems[7])
     t2 = visrad_target(ws; select = o -> o.kind === :mesh, two_sided = o -> true)
     @test length(t2.components) == 1 && length(t2.comp_elems[1]) == 8
     @test !t2.closed && visrad_target(ws; select = o -> o.kind === :mesh, closed = true).closed
-    # remeshed into elements of about 0.3 mm (its faces are 1 mm right triangles): the
-    # same surface, still facing out; `coarsen` and `remesh` exclude each other
+    # Remeshed into elements of about 0.3 mm from faces that are 1 mm right triangles, the
+    # surface is the same and still faces out. `coarsen` and `remesh` exclude each other.
     t3 = visrad_target(ws; select = o -> o.kind === :mesh, orient = true, toward = cad.position, remesh = 0.3)
     @test sum(t3.elem_area) ≈ sum(t.elem_area[t.comp_elems[7]]) rtol = 1e-12
     @test nelements(t3) > 4 * 4
     @test all(dot(t3.elem_normal[i], t3.elem_centroid[i] - cad.position) > 0 for i in 1:nelements(t3))
     @test_throws ArgumentError visrad_target(ws; select = o -> o.kind === :mesh, coarsen = 0.3, remesh = 0.3)
-    # a tetrahedron has no cylinder or sphere: `fit` (on by default with `remesh`) leaves the
-    # part whole, as `fit = false` does
+    # A tetrahedron contains no cylinder or sphere, so `fit`, on by default with `remesh`,
+    # leaves the part whole, as `fit = false` does.
     t4 = visrad_target(ws; select = o -> o.kind === :mesh, orient = true, toward = cad.position, remesh = 0.3,
                        fit = false)
     @test [c.name for c in t4.components] == [c.name for c in t3.components] && t4.elem_area == t3.elem_area
@@ -366,21 +375,24 @@ end
     @test b1.group === :Ring_050 && b3.group === :Ring_045 && b1.fnumber == 20.755
     @test port_angles(b1)[1] ≈ 52.382 && port_angles(b1)[2] ≈ 37.056
     @test b1.aim ≈ Vec3(-0.245, 0.3775, 5.905) && b1.defocus ≈ -0.1
-    # power column 1 TW under the "Fraction of Total Beam Power" red/green model with
-    # f_G = f_R = 0.05 (green off): the blue cone carries 0.9 TW; under "None" all of it
+    # The power column is 1 TW under the "Fraction of Total Beam Power" red/green model
+    # with f_G = f_R = 0.05 and green off, so the blue cone carries 0.9 TW. Under "None"
+    # the blue cone carries all of it.
     @test b1.power ≈ 0.9 && b2.power == 1.0 && b3.power == 0.0
-    # Rev1-Outer-2w radii are HWHM: 1/e semi-axes r/(ln 2)^(1/n); rotation 0 puts the
-    # major axis along the φ̂ of the beam's quad (from its name without a template)
+    # Rev1-Outer-2w radii are HWHM, so the 1/e semi-axes are r/(ln 2)^(1/n). Rotation 0
+    # puts the major axis along the φ̂ of the quad of the beam, found from its name
+    # without a template.
     s = log(2)^(1 / 4.5)
     @test b1.spot.a ≈ 0.62 / s && b1.spot.b ≈ 0.36 / s && b1.spot.order == 4.5
     @test b1.quad == "Q11T" && b3.quad == "Q12T"
     @test mod(b1.spot.angle - _vr_reference_angle(b1), π) ≈ π / 2 && abs(_vr_reference_angle(b1)) > 0.01
-    # a custom super-Gaussian is read at 1/e; pointing in a component's frame (53-field
-    # row with a rotation ID) lands on that component's origin
+    # A custom super-Gaussian is read at 1/e. Pointing in the frame of a component, a
+    # 53-field row with a rotation ID, puts the aim at the origin of that component.
     @test b2.spot.a ≈ 0.3 && b2.spot.order == 2.0
     @test b2.aim ≈ cad.position
     @test ws.rows[2].rot_id == "R1" && ws.rows[1].rot_id == ""
-    # template: ports match the NIF table, facility metadata kept, absent beams off
+    # With a template, the ports match the NIF table, the facility metadata is kept, and
+    # absent beams are off.
     nifb = nif_beams()
     wt = read_visrad_workspace(p; template = nifb)
     nb = Dict(b.name => b for b in wt.beams)
@@ -389,12 +401,12 @@ end
     @test nb["B113"].quad == nifb[findfirst(b -> b.name == "B113", nifb)].quad
     @test nb["B113"].spot.angle ≈ b1.spot.angle atol = 1e-4     # the file's ports carry 3 decimals
     @test nb["B121"].power == 0 && nb["B468"].power == 0
-    # VisRad's beam model with the file's envelope ratios (per beam)
+    # The VisRad beam model takes the envelope ratios of the file, per beam.
     @test visrad_profile(ws).envelope["B113"] == 1.53645
     @test_throws ArgumentError read_visrad_workspace(vrfile("not.vrw", "{\"json\": 1}"))
 
-    # written back into the workspace: new pointing, focus, power and on/off, in the
-    # frame of each row; everything else unchanged
+    # The new pointing, focus, power and on/off state are written back into the
+    # workspace in the frame of each row, and everything else is unchanged.
     edited = [remake(b1; aim = Vec3(0.3, -0.2, 5.5), defocus = 0.25, power = 2.5),
               remake(b2; aim = cad.position + Vec3(0.1, 0.0, 0.0)),        # in CAD_0's frame
               remake(b3; power = 1.5)]                                       # was off
@@ -417,9 +429,9 @@ end
     @test_throws ArgumentError write_visrad_workspace(q, p, [remake(b1; port = port_vector(60, 37))])
     @test_logs (:warn, r"no row") write_visrad_workspace(q, p, [edited[1]; Beam("B999"; theta = 10, phi = 0)])
 
-    # VisRad's results read back: the [Power Source Data] section of a computed
-    # workspace (vrw_fixture.jl), followed by a table of the same layout in another
-    # section, which is not read
+    # The VisRad results are read back from the [Power Source Data] section of a computed
+    # workspace (vrw_fixture.jl). A table of the same layout follows in another section,
+    # which is not read.
     qcad = [10.0, 0.0, 2.5, 7.25]
     qrect = Float64.(1:81)                         # VisRad's row number, to find each row
     tables(; rect = qrect, hohl = zeros(216)) =
@@ -439,19 +451,20 @@ end
     @test ps.units[:direct_laser_pwr_source] == "TW/cm2" && ps.units[:pre_reflect_laser_pwr] == "TW/cm2"
     @test ps.units[:min_angle_overlap_3w] == "deg" && ps.units[:albedo] == ""
     @test length(ps.tables["Cyl_Hohlraum_0"].albedo) == 216
-    # not computed (or changed since): no tables
+    # A workspace that is not computed, or has changed since, has no tables.
     ps0 = vrfile("stale.vrw", synthetic_workspace() * "\n" * power_source_section([]; up_to_date = false))
     @test_throws ArgumentError visrad_power_sources(ps0)
     @test visrad_power_sources(ps0; stale = :nothing) === nothing
     @test_throws ArgumentError visrad_power_sources(p)                     # no section
-    # beams written into a computed workspace: its results belong to the old beams
+    # When beams are written into a computed workspace, its results belong to the old
+    # beams.
     qc = joinpath(dirname(pc), "computed_rewritten.vrw")
     write_visrad_workspace(qc, pc, edited)
     @test visrad_power_sources(qc; stale = :nothing) === nothing
     @test occursin("Power sources are not up to date for time", read(qc, String))
     @test all(isapprox(y.aim, x.aim; atol = 1e-6) for (x, y) in zip(edited, read_visrad_workspace(qc).beams))
 
-    # mapped onto the target: power = source × area (TW/cm² × mm² / 100) per element
+    # Mapped onto the target, power = source × area (TW/cm² × mm² / 100) per element.
     wc = read_visrad_workspace(pc)
     tc = visrad_target(wc)
     P = visrad_deposition(wc, tc)
@@ -459,18 +472,18 @@ end
     ec = elements(tc, :CAD_0)
     @test P[ec] ≈ qcad .* tc.elem_area[ec] ./ 100
     @test all(iszero, P[elements(tc, :Cyl_Hohlraum_0_wall, :Cyl_Hohlraum_0_cap_top)])
-    # the rectangle's rows run its local x fastest: tilted 90°, local x is chamber -z
-    # and local y is chamber y; 9 × 9 elements of 4/9 mm
+    # The rows of the rectangle run its local x fastest. Tilted 90°, local x is chamber
+    # -z and local y is chamber y, with 9 × 9 elements of 4/9 mm.
     er = elements(tc, :Rectangle_0)
     vrow(c) = 9 * round(Int, (c[2] + 2) * 9 / 4 - 0.5) + round(Int, (-c[3] + 2) * 9 / 4 - 0.5) + 1
     @test P[er] ≈ [vrow(tc.elem_centroid[e]) * tc.elem_area[e] / 100 for e in er]
     @test sort(vrow.(tc.elem_centroid[er])) == 1:81
-    # two-sided: on the front elements
+    # A two-sided part receives the power on its front elements.
     t2 = visrad_target(wc; select = o -> o.kind === :mesh, two_sided = true)
     P2 = @test_logs (:warn, r"Rectangle_0") match_mode = :any visrad_deposition(wc, t2)
     @test P2[t2.elem_side .== 1] ≈ qcad .* t2.elem_area[1:4] ./ 100 && all(iszero, P2[t2.elem_side .== -1])
-    # VisRad's hohlraum element order is unknown: refused when it has laser power,
-    # unless left out of the target; elements not from VisRad are refused
+    # The VisRad hohlraum element order is unknown, so a hohlraum with laser power is
+    # refused unless it is left out of the target. Elements not from VisRad are refused.
     wh = read_visrad_workspace(computed(; hohl = ones(216)))
     @test_throws ArgumentError visrad_deposition(wh)
     th = visrad_target(wh; select = o -> o.kind in (:rectangle, :mesh))
@@ -478,8 +491,9 @@ end
     @test_throws ArgumentError visrad_deposition(wc, visrad_target(wc; select = o -> o.kind === :mesh, remesh = 0.3))
     @test_throws ArgumentError visrad_deposition(wc, Target(visrad_component(wc.objects[1]; primitive_h = 0.5)))
 
-    # the writer never overwrites VisRad's results: a computed text workspace (also as the
-    # template) or a JSON one is refused unless `overwrite = true`; a JSON template is refused
+    # The writer never overwrites VisRad results. A computed text workspace, also as the
+    # template, or a JSON workspace is refused unless `overwrite = true`, and a JSON
+    # template is refused.
     @test_throws ArgumentError write_visrad_workspace(pc, p, edited)
     @test_throws ArgumentError write_visrad_workspace(pc, pc, edited)
     qo = vrfile("overwritten.vrw", read(pc, String))
@@ -490,9 +504,9 @@ end
 end
 
 @testset "workspace (.vrw): VisRad 21's JSON format" begin
-    # The same workspace in the JSON form VisRad 21 saves a computed workspace in
-    # (vrw_fixture.jl), its ports at full precision: every object, mesh, folder, beam row
-    # and beam is the text reader's, apart from the ports' digits.
+    # The same workspace is given in the JSON form in which VisRad 21 saves a computed
+    # workspace (vrw_fixture.jl), with its ports at full precision. Every object, mesh,
+    # folder, beam row and beam equals that of the text reader, apart from the port digits.
     p = vrfile("work.vrw", synthetic_workspace())
     wt = read_visrad_workspace(p)
     full = Dict(r.name => (r.theta + 2.3e-4, r.phi - 4.1e-4, r.fnumber + 3.3e-4) for r in wt.rows)
@@ -511,8 +525,8 @@ end
               for (o, u) in zip(wj.objects, wt.objects))
     cj, ct = wj.objects[4].mesh, wt.objects[4].mesh
     @test cj.triangles == ct.triangles && cj.patches == ct.patches && isapprox(cj.vertices, ct.vertices; atol = 1e-12)
-    # the text table rounds the ports (and cone_max) to 3 decimals, and lists a beam's power
-    # table even when empty (the JSON reader keeps only non-empty ones)
+    # The text table rounds the ports and cone_max to 3 decimals and lists the power table
+    # of a beam even when it is empty. The JSON reader keeps only non-empty tables.
     tabs(r) = filter(!isempty ∘ last, r.tables)
     same(r, s) = tabs(r) == tabs(s) &&
                  all(k -> k in (:theta, :phi, :fnumber, :cone_max, :tables) || isequal(r[k], s[k]), keys(s))
@@ -524,10 +538,11 @@ end
     # with a template too, as for text
     @test [b.power for b in read_visrad_workspace(pj; template = nif_beams()).beams] ==
           [b.power for b in read_visrad_workspace(p; template = nif_beams()).beams]
-    # the same targets, so VisRad's results map onto either
+    # The targets are the same, so the VisRad results map onto either.
     tj, tt = visrad_target(wj), visrad_target(wt)
     @test [c.name for c in tj.components] == [c.name for c in tt.components] && tj.elem_area ≈ tt.elem_area
-    # power sources: per object in the components' order, the text reader's columns and units
+    # The power sources are per object in the order of the components, with the columns
+    # and units of the text reader.
     ps = visrad_power_sources(pj)
     @test ps.time == 0 && sort(collect(keys(ps.tables))) == sort([o.name for o in wt.objects])
     tc = ps.tables["CAD_0"]
@@ -537,11 +552,11 @@ end
     @test tc.direct_laser_pwr_source == qcad && tc.surface_index == 0:3 && tc.n_blue_cones_hitting_surf == [2, 0, 2, 2]
     @test tc.n_blue_cones_hitting_surf isa Vector{Int}
     @test ps.units[:direct_laser_pwr_source] == "TW/cm2" && ps.units[:min_angle_overlap_3w] == "deg" && ps.units[:albedo] == ""
-    # mapped onto the target exactly as the text format's tables
+    # They are mapped onto the target exactly as the tables of the text format are.
     pt = vrfile("work_text_computed.vrw", synthetic_workspace() * "\n" *
                 power_source_section(["Rectangle_0" => qrect, "Cyl_Hohlraum_0" => zeros(216), "CAD_0" => qcad]))
     @test visrad_deposition(wj, tj) == visrad_deposition(read_visrad_workspace(pt), tt)
-    # not computed: no tables
+    # A workspace that is not computed has no tables.
     ps0 = vrfile("stale_json.vrw", synthetic_json_workspace(wt))
     @test_throws ArgumentError visrad_power_sources(ps0)
     @test visrad_power_sources(ps0; stale = :nothing) === nothing
@@ -549,15 +564,17 @@ end
     @test_throws ArgumentError write_visrad_workspace(vrfile("from_json.vrw", ""), pj, wj.beams)
     @test_throws ArgumentError write_visrad_workspace(pj, p, wt.beams)
     @test Briareus._vrw_is_json(pj)                                            # left as it was
-    # JSON that is no VisRad workspace, and a mismatched power-source count
+    # The errors cover JSON that is not a VisRad workspace and a mismatched power-source
+    # count.
     @test_throws ArgumentError read_visrad_workspace(vrfile("other.json", "{\"json\": 1}"))
     bad = replace(read(pj, String), r"\"Number of target components\": \d+" => "\"Number of target components\": 9")
     @test_throws ArgumentError read_visrad_workspace(vrfile("bad.vrw", bad))
 end
 
 @testset "workspace (.vrw): inconsistent CAD windings" begin
-    # the tetrahedron with one face wound against the others: read one-sided as stored,
-    # visrad_target warns (that face's area share); orient = true and two_sided do not
+    # The tetrahedron has one face wound against the others. Read one-sided as stored, it
+    # makes visrad_target warn with the area share of that face; orient = true and
+    # two_sided do not warn.
     txt = synthetic_workspace()
     a = findfirst("Surface element connectivity:", txt)
     b = findnext("End Parameters", txt, last(a))
@@ -577,7 +594,8 @@ end
 @testset "workspace (.vrw): required and optional keys" begin
     txt = synthetic_workspace()
     edit(f) = vrfile("keys.vrw", f(txt))
-    # in object `name`'s block, the line of `key` replaced (`nothing`: removed)
+    # The edit replaces the line of `key` in the block of object `name`, and `nothing`
+    # removes the line.
     function rekey(name, key, value)
         return t -> begin
             a = last(findfirst("Begin Parameters for Object = $name", t))
@@ -588,11 +606,12 @@ end
         end
     end
     msg(f) = try f(); "" catch e; e isa ArgumentError ? e.msg : rethrow() end
-    # a missing radius: refused when the primitive is meshed, naming key and object
+    # A missing radius is refused when the primitive is meshed, and the error names the
+    # key and the object.
     ws = read_visrad_workspace(edit(rekey("Cyl_Hohlraum_0", "Length 1 value", nothing)))
     m = msg(() -> visrad_target(ws))
     @test occursin("Cyl_Hohlraum_0", m) && occursin("Length 1 value", m)
-    # a malformed or missing position, a missing albedo: refused on reading
+    # A malformed or missing position and a missing albedo are refused on reading.
     m = msg(() -> read_visrad_workspace(edit(rekey("Marker", "Position 2", "abc"))))
     @test occursin("Marker", m) && occursin("Position 2", m) && occursin("abc", m)
     m = msg(() -> read_visrad_workspace(edit(rekey("CAD_0", "Position 1", nothing))))
@@ -601,7 +620,7 @@ end
     # a mesh count that is not an integer
     ws = read_visrad_workspace(edit(rekey("Rectangle_0", "Number of mesh pts 1", "9.5")))
     @test occursin("not an integer", msg(() -> visrad_target(ws)))
-    # optional keys take their defaults: color, visibility, normals
+    # The optional keys color, visibility and normals have defaults.
     ws0 = read_visrad_workspace(vrfile("keys0.vrw", txt))
     ws = read_visrad_workspace(edit(t -> rekey("Rectangle_0", "Normals in/out", nothing)(
                                           rekey("Rectangle_0", "Red value", nothing)(
@@ -612,8 +631,8 @@ end
 end
 
 @testset "workspace results: element tables, radiosity and modes" begin
-    # a CAD capsule (outward sphere, r = 0.5 mm, 1 mm below the chamber center) beside
-    # the tetrahedron, which takes VisRad's laser power
+    # A CAD capsule, an outward sphere with r = 0.5 mm 1 mm below the chamber center, lies
+    # beside the tetrahedron, which receives the VisRad laser power.
     sm = sphere_mesh(0.5; ntheta = 16, nphi = 24)
     nodes = [Tuple(v ./ 10) for v in sm.vertices]
     faces = [(a - 1, b - 1, c - 1) for (a, b, c) in sm.triangles]
@@ -626,8 +645,9 @@ end
     t = visrad_target(ws; select = o -> o.kind === :mesh)
     sol = solve(RadiationModel(t), visrad_deposition(ws, t))
     ec, es = elements(t, :CAD_0), elements(t, :Capsule_0)
-    # VisRad's capsule export, rows in reverse order (0-based surface index): an
-    # axisymmetric field f₀(1 + a₁P₁ + a₂P₂) about the capsule center at each centroid
+    # The VisRad capsule export lists the rows in reverse order (0-based surface index).
+    # It holds an axisymmetric field f₀(1 + a₁P₁ + a₂P₂) about the capsule center at each
+    # centroid.
     f0, a1, a2 = 0.5, 0.04, 0.1
     μ = [normalize(t.elem_centroid[e] - Vec3(0, 0, -1))[3] for e in es]
     f = f0 .* (1 .+ a1 .* legendre.(1, μ) .+ a2 .* legendre.(2, μ))
@@ -637,7 +657,8 @@ end
         println(io, "0.05  ", k - 1, "  ", radiation_temperature(f[k] / 100), "  ", f[k])
     end
     pcap = vrfile("capsule.sed", String(take!(io)))
-    # the tetrahedron's export: 1-based indices, reversed, Flux Out 2% above Briareus's
+    # The export of the tetrahedron has 1-based indices, reversed, with Flux Out 2% above
+    # that of Briareus.
     B = sol.B[ec]
     io = IOBuffer()
     println(io, "Surf Index  Flux Out (TW/cm2)")
@@ -655,15 +676,16 @@ end
     cmp = compare_visrad(ws, sol; elements = Dict("Capsule_0" => pcap, "CAD_0" => ptet), observe = :Capsule_0, io = out)
     row(q) = only(r for r in cmp.rows if r.quantity == q)
     stat(o, q) = only(s for s in cmp.elements if s.object == o && s.quantity == q)
-    # modes of VisRad's field by exact solid angles: the Legendre ratios of the field
+    # The modes of the VisRad field, by exact solid angles, give the Legendre ratios of the
+    # field.
     @test abs(row("P1/P0 [Capsule_0]").visrad - 100a1) < 0.02
     @test abs(row("P2/P0 [Capsule_0]").visrad - 100a2) < 0.05
     @test abs(row("mode amplitude l=2 [Capsule_0]").visrad - 100a2) < 0.05
-    # (centroid samples held constant over 16 rings leak 0.2 pp of the P2 into P4)
+    # Centroid samples held constant over 16 rings leak 0.2 pp of the P2 into P4.
     @test all(abs(row("mode amplitude l=$l [Capsule_0]").visrad) < 0.3 for l in (3, 4))
     @test row("Rad T [Capsule_0]").visrad ≈ radiation_temperature(f0 / 100) rtol = 1e-3
     @test row("Incident Rad Pwr [Capsule_0]").briareus ≈ sum(sol.H[es] .* t.elem_area[es]) rtol = 1e-12
-    # the tetrahedron: 2% above everywhere, so the rms is 0.02 B over the mean of 1.02 B
+    # The tetrahedron is 2% above everywhere, so the rms is 0.02 B over the mean of 1.02 B.
     s = stat("CAD_0", "Flux Out")
     A = t.elem_area[ec]
     @test s.n == 4
@@ -671,12 +693,13 @@ end
     @test s.max ≈ maximum(0.02B) / (sum(A .* 1.02B) / sum(A)) rtol = 1e-12
     @test s.correlation ≈ 1
     @test row("Emitted Rad Pwr [CAD_0]").relative ≈ 0.02 rtol = 1e-9
-    # laser deposition from the power sources: from VisRad here, so no difference
+    # The laser deposition comes from the VisRad power sources in this test, so the
+    # difference is zero.
     @test row("Laser Pwr Dep [CAD_0]").visrad ≈ sum(qcad .* A ./ 100) rtol = 1e-12
     @test row("Laser Pwr Dep [CAD_0]").difference == 0 && stat("CAD_0", "Laser").rms == 0
     @test !any(r -> occursin("Rectangle_0", r.quantity), cmp.rows)               # not in the target
     @test occursin("P2/P0 [Capsule_0]", String(take!(out)))
-    # the index base: 1-based found from the largest index; ambiguous tables are refused
+    # A 1-based index is found from the largest index, and ambiguous tables are refused.
     part = (; header = ["Surf Index", "Flux Out (TW/cm2)"], labels = fill("", 3), data = [1.0 1; 2 2; 3 3])
     @test_throws ArgumentError visrad_element_values(ws, t, Dict("CAD_0" => part), r"flux\s*out"i)
     vp = visrad_element_values(ws, t, Dict("CAD_0" => part), r"flux\s*out"i; index_base = 1)[ec]

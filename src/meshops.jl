@@ -1,15 +1,16 @@
-# Mesh repair and coarsening for imported (CAD) meshes: consistent orientation of the
-# patches, and merging of near-coplanar patches into elements of a chosen size.
+# This file repairs and coarsens imported (CAD) meshes. It orients the patches
+# consistently and merges near-coplanar patches into elements of a chosen size.
 
-# Vertex ids welded by position (to `tol` times the mesh's extent), so patches that
-# share an edge in space share it in the mesh even when the file duplicates vertices.
+# Returns vertex ids welded by position (to `tol` times the extent of the mesh), so that
+# patches that share an edge in space share it in the mesh even when the file duplicates
+# vertices.
 function _welded_ids(m::Mesh; tol = 1e-9)
     isempty(m.vertices) && return Int[]
     lo = reduce((a, b) -> min.(a, b), m.vertices)
     hi = reduce((a, b) -> max.(a, b), m.vertices)
     h = tol * max(norm(hi - lo), eps())
-    # cells of size h; a vertex joins a representative within h in its cell or a
-    # neighboring one, so points straddling a cell boundary still weld
+    # Cells have size h. A vertex is welded to a representative within h in its cell or a
+    # neighboring cell, so points that straddle a cell boundary are still welded.
     cells = Dict{NTuple{3,Int},Vector{Int}}()
     rep = Vec3[]
     ids = Vector{Int}(undef, length(m.vertices))
@@ -35,12 +36,13 @@ end
 """
     connected_pieces(mesh; tol = 1e-9) -> Vector{Mesh}
 
-The connected pieces of a mesh, largest area first: patches that share a vertex belong to
-one piece. Vertices are welded by position first (to `tol` times the mesh's extent, as
-[`orient_mesh`](@ref) welds them), so a piece whose file duplicates the vertices along a
-seam stays whole. Each piece keeps its patches, in their order. A CAD assembly stored as
-one mesh (e.g. a target holder with its shields, sombreros and arms) splits into its
-parts this way, where [`split_mesh`](@ref) needs a position test.
+The connected pieces of a mesh, largest area first, where patches that share a vertex
+belong to one piece. Vertices are first welded by position, to `tol` times the extent of
+the mesh, as [`orient_mesh`](@ref) welds them. A piece whose file duplicates the
+vertices along a seam therefore stays whole. The patches of each piece are kept, in their
+order. A CAD assembly stored as one mesh, such as a target holder with its shields,
+sombreros and arms, splits into its parts this way, where [`split_mesh`](@ref) needs a
+position test.
 """
 function connected_pieces(m::Mesh; tol = 1e-9)
     npatches(m) == 0 && return Mesh[]
@@ -86,8 +88,9 @@ function connected_pieces(m::Mesh; tol = 1e-9)
     end
     area(x) = sum(norm(_tri_cross(triangle_vertices(x, k)...)) / 2 for k in eachindex(x.triangles); init = 0.0)
     a = area.(pieces)
-    # largest first; areas equal to 12 digits (mirror pieces, which differ by rounding) by
-    # their first vertex, so the order does not depend on round-off
+    # Pieces are sorted largest first. Areas equal to 12 digits, as for mirror pieces that
+    # differ by rounding, are ordered by their first vertex, so the order does not depend
+    # on round-off.
     key(i) = (-round(a[i]; sigdigits = 12), Tuple(pieces[i].vertices[1]))
     return pieces[sort(eachindex(pieces); by = key)]
 end
@@ -101,9 +104,9 @@ function _triangle_patch(m::Mesh)
     return owner
 end
 
-# Edges between patches: undirected welded edge => [(patch, +1 if traversed from the
-# lower to the higher vertex id, else -1)], over every triangle edge that is not interior
-# to its patch.
+# Returns the edges between patches, as undirected welded edge => [(patch, +1 if traversed
+# from the lower to the higher vertex id, else -1)], over every triangle edge that is not
+# interior to its patch.
 function _patch_edges(m::Mesh, id)
     owner = _triangle_patch(m)
     edges = Dict{Tuple{Int,Int},Vector{Tuple{Int,Int}}}()
@@ -134,43 +137,43 @@ _patch_centroid(m::Mesh, r) =
 """
     orient_mesh(mesh; toward = nothing, tol = 1e-9, strict = true) -> Mesh
 
-The mesh with its patches' windings made consistent: across every edge two patches
-share (vertices welded by position to `tol` times the mesh's extent), the patches
-traverse it in opposite directions, so their front sides lie on the same side of the
-surface. Imported CAD is often stitched from faces of either orientation (a radiating
-element's front is the side its winding defines).
+The mesh with the windings of its patches made consistent. Across every edge that two
+patches share, the patches traverse it in opposite directions, so their front sides lie
+on the same side of the surface. Vertices are welded by position to `tol` times the
+extent of the mesh. Imported CAD is often stitched from faces of either orientation, and
+the front of a radiating element is the side that its winding defines.
 
 Each connected surface then gets one orientation as a whole:
 - a closed surface (every edge shared by exactly two patches) faces out of the volume
   it encloses (positive signed volume), so a thick hohlraum wall, meshed as a closed
   solid, faces into the cavity on its inner side;
 - an open surface faces the point `toward` (e.g. the target center for a thin hohlraum
-  wall) by area-weighted majority, or, without `toward`, keeps the orientation of the
+  wall) by area-weighted majority. Without `toward`, it takes the orientation of the
   larger part of its area.
 
 Edges shared by more than two patches (non-manifold) do not constrain the orientation.
-Where they only join separate surfaces, each with two patches on the edge (closed
-solids touching along an edge, as in a CAD assembly), each surface still counts as
-closed and faces out of its volume; other non-manifold edges (three patches of one
-surface, a sheet meeting a solid) leave their surfaces open, and are reported in a
-warning. A surface that cannot be oriented consistently (a Möbius-like stitching) has
-no right winding: every orientation leaves some front side facing the wrong way, which
-`enclosure` and the radiosity read as given. It throws an
-`ArgumentError`, unless `strict = false`, which keeps the first orientation found for
-each patch and warns.
+Where such edges only join separate surfaces, each with two patches on the edge, as for
+closed solids touching along an edge in a CAD assembly, each surface still counts as
+closed and faces out of its volume. Other non-manifold edges, such as three patches of
+one surface or a sheet meeting a solid, leave their surfaces open and are reported in a
+warning. A surface that cannot be oriented consistently, such as a Möbius-like
+stitching, has no correct winding. Every orientation leaves some front side facing the
+wrong way, and `enclosure` and the radiosity take the windings as given. Such a surface
+throws an `ArgumentError`. With `strict = false`, the first orientation found for each
+patch is kept instead, with a warning.
 """
 function orient_mesh(m::Mesh; toward = nothing, tol = 1e-9, strict::Bool = true)
     np = npatches(m)
     np == 0 && return m
     id = _welded_ids(m; tol)
     edges = _patch_edges(m, id)
-    # neighbors: (patch, same) with `same` true when the two must keep relative winding
+    # neighbors as (patch, same), with `same` true when the two must keep relative winding
     nbr = [Tuple{Int,Bool}[] for _ in 1:np]
     for list in values(edges)
         length(list) == 2 || continue
         (p, dp), (q, dq) = list
         p == q && continue
-        push!(nbr[p], (q, dp != dq))           # opposite traversal: consistent as they are
+        push!(nbr[p], (q, dp != dq))           # opposite traversals are consistent as they are
         push!(nbr[q], (p, dp != dq))
     end
     flip = falses(np)
@@ -201,7 +204,7 @@ function orient_mesh(m::Mesh; toward = nothing, tol = 1e-9, strict::Bool = true)
         throw(ArgumentError("orient_mesh: $conflicts patch pairs cannot be oriented consistently " *
                             "(a surface with no consistent winding); repair the mesh, or pass " *
                             "strict = false to keep the first orientation found"))
-    # a surface is closed when every edge of its patches has exactly two of them
+    # a surface is closed when every edge of its patches is shared by exactly two patches
     closed = trues(nshell)
     nonmanifold = 0
     for list in values(edges)
@@ -255,17 +258,18 @@ end
 """
     coarsen_mesh(mesh; size, angle = 10.0, tol = 1e-9) -> Mesh
 
-The mesh with neighboring patches merged into larger ones (the radiosity elements of a
-target): each new patch grows from a seed patch over shared edges, taking patches whose
-normals are within `angle` degrees of the seed's and whose vertices lie within
-`size / 2` mm of the seed's centroid. Triangles are unchanged; only their grouping into
-patches (and their order) is. Imported CAD often has hundreds of thousands of facets
-(fine tessellation of curved faces, slivers along edges), far more than view factors
-need: coarsening to a few hundred micrometers makes such parts usable for radiation.
+The mesh with neighboring patches merged into larger ones, the radiosity elements of a
+target. Each new patch grows from a seed patch over shared edges. It takes patches whose
+normals are within `angle` degrees of the seed normal and whose vertices lie within
+`size / 2` mm of the seed centroid. Triangles are unchanged, and only their grouping
+into patches and their order change. Imported CAD often has hundreds of thousands of
+facets, from fine tessellation of curved faces and slivers along edges, far more than
+view factors need. Coarsening to a few hundred micrometers makes such parts usable for
+radiation.
 
 Patches are merged only across edges where both are oriented consistently (see
-`orient_mesh`), so the front side of a merged patch is well defined, and an element
-stays within `angle` of planar: the flat-patch error of a merged element on a curved
+`orient_mesh`), so the front side of a merged patch is well defined. An element stays
+within `angle` of planar, so the flat-patch error of a merged element on a curved
 surface is that of a facet of the same size. Seeds are taken by decreasing area, so
 large flat faces are kept whole up to `size`.
 """
@@ -329,48 +333,49 @@ end
 """
     remesh_mesh(mesh; size, angle = 10.0, tol = 1e-9) -> Mesh
 
-The mesh's surface divided into compact, near-planar radiosity elements of about `size`
-mm, however its facets are shaped: on a smooth surface the elements average `size`² in
-area (a square element of side `size` has the same) and every vertex lies within `size`
-of its element's centroid. Imported CAD tessellates curved walls as long slivers (a
-hohlraum wall as axial strips spanning its length), which `coarsen_mesh` cannot
-shorten: it only groups whole facets. Here:
+The surface of the mesh divided into compact, near-planar radiosity elements of about
+`size` mm, whatever the shape of its facets. On a smooth surface the elements average
+`size`² in area, as a square element of side `size` does, and every vertex lies within
+`size` of the centroid of its element. Imported CAD tessellates curved walls as long
+slivers, such as a hohlraum wall as axial strips spanning its length. `coarsen_mesh`
+cannot shorten such strips, since it only groups whole facets. The steps are:
 
-1. vertices are welded by position (to `tol` times the mesh's extent), and one-sided
-   edges with other such edges' vertices on them (T-junctions between CAD faces) are
-   split there, so faces that meet along an edge are connected;
-2. every facet is split, in its plane, into triangles with edges of at most
-   `size / 3`; an edge gets the same points from both facets sharing it, so the refined
-   triangulation is conforming. Parallel edges longer than that (the sides of a wall's
-   strips: a cylinder's or an extrusion's generators, to 0.25°) and the diagonals of
-   their strips are cut where they cross a common family of planes across them, so
-   neighboring strips are cut at the same places and a cut across a strip is one
-   straight chord; other edges are divided equally;
-3. the refined triangles are clustered: seeds `0.85 size` apart (a Poisson-disk sample)
+1. Vertices are welded by position, to `tol` times the extent of the mesh. One-sided
+   edges with the vertices of other one-sided edges on them, the T-junctions between
+   CAD faces, are split there, so faces that meet along an edge are connected.
+2. Every facet is split, in its plane, into triangles with edges of at most `size / 3`.
+   An edge gets the same points from both facets that share it, so the refined
+   triangulation is conforming. Parallel edges longer than that are the sides of the
+   strips of a wall, the generators of a cylinder or an extrusion to within 0.25°. They
+   and the diagonals of their strips are cut where they cross a common family of planes
+   across them. Neighboring strips are therefore cut at the same places, and a cut
+   across a strip is one straight chord. Other edges are divided equally.
+3. The refined triangles are clustered. Seeds `0.85 size` apart (a Poisson-disk sample)
    collect triangles nearest first across shared, consistently wound edges (see
-   `orient_mesh`), taking those whose normals are within `angle` degrees of the seed's;
-   Lloyd iterations move each seed to its element's centroid and mean normal. On strips
-   (facets whose edges longer than `size` are all cut by one family of planes), every
-   few planes bound a band about `size` long, and elements grow within one band: their
-   cuts across the strips lie on the planes, straight and shared by the elements on
-   both sides, and a sliver strip's piece in a band goes whole to one element, so their
-   sides run along strip edges (an element `w` wide crosses about w/(strip width)
-   strips, and its outline has about two edges per strip). An element with a facet more
-   than `angle` from its mean normal, a vertex farther than `size` from its centroid, or
-   a centroid that does not project (along the normal) onto it, is halved until it has
-   none;
-4. within each element, the pieces of facets in one plane are joined and
-   re-triangulated from their outline (a point is dropped only where it lies on a
-   straight outline in every element using it, so the mesh stays conforming).
+   `orient_mesh`), and take those whose normals are within `angle` degrees of the seed
+   normal. Lloyd iterations move each seed to the centroid and mean normal of its
+   element. Strips are facets whose edges longer than `size` are all cut by one family
+   of planes. On strips, every few planes bound a band about `size` long, and elements
+   grow within one band. Their cuts across the strips then lie on the planes, straight
+   and shared by the elements on both sides. The piece of a sliver strip in a band goes
+   whole to one element, so the element sides run along strip edges. An element `w`
+   wide crosses about w/(strip width) strips, and its outline has about two edges per
+   strip. An element is halved until none of its facets lies more than `angle` from its
+   mean normal, no vertex lies farther than `size` from its centroid, and its centroid
+   projects along the normal onto the element.
+4. Within each element, the pieces of facets in one plane are joined and
+   re-triangulated from their outline. A point is dropped only where it lies on a
+   straight outline in every element that uses it, so the mesh stays conforming.
 
-The surface is unchanged: every output triangle lies in the plane of an input facet,
-and the elements tile the input facets exactly (areas agree to round-off). Facets of
-zero area (height below 1e-12 of their longest edge) and triangles outside every patch
-are dropped; slivers thinner than 1e-6 of their length have no orientation to keep and
-join any neighboring element. The input's patches do not constrain the elements; its
-windings do (orient it first). Faces narrower than `size` (a wall's end, a fillet) give
-elements as narrow, and elements on a faceted curved wall keep its faceting (a facet of
-width w on radius R lies up to w²/8R off the true surface).
+The surface is unchanged. Every output triangle lies in the plane of an input facet,
+and the elements tile the input facets exactly, with areas that agree within round-off.
+Facets of zero area (height below 1e-12 of their longest edge) and triangles outside
+every patch are dropped. Slivers thinner than 1e-6 of their length have no orientation
+to keep and join any neighboring element. The patches of the input do not constrain the
+elements, but its windings do, so the input should be oriented first. Faces narrower
+than `size`, such as the end of a wall or a fillet, give elements as narrow. Elements on
+a faceted curved wall keep its faceting, and a facet of width w on radius R lies up to
+w²/8R off the true surface.
 """
 function remesh_mesh(m::Mesh; size::Real, angle::Real = 10.0, tol = 1e-9)
     size > 0 || throw(ArgumentError("size must be positive"))
@@ -390,8 +395,8 @@ function remesh_mesh(m::Mesh; size::Real, angle::Real = 10.0, tol = 1e-9)
     return _assemble_elements(P, rtris, _coplanar_classes(P, tris, parent, region, size), region)
 end
 
-# Welded positions and the patch triangles in welded ids, without degenerate facets
-# (repeated vertices, or height below 1e-12 of the longest edge).
+# Returns the welded positions and the patch triangles in welded ids, without degenerate
+# facets (repeated vertices, or height below 1e-12 of the longest edge).
 function _welded_triangles(m::Mesh, tol)
     id = _welded_ids(m; tol)
     P = Vector{Vec3}(undef, isempty(id) ? 0 : maximum(id))
@@ -412,8 +417,8 @@ function _welded_triangles(m::Mesh, tol)
     return P, tris
 end
 
-# One-sided edges with other one-sided edges' vertices on them (within `δ`):
-# edge (lo, hi) => the vertices along it from lo to hi.
+# Returns the one-sided edges with the vertices of other one-sided edges on them (within
+# `δ`), as edge (lo, hi) => the vertices along it from lo to hi.
 function _tjunction_chains(P, tris, δ)
     cnt = Dict{Tuple{Int,Int},Int}()
     for (a, b, c) in tris, (u, v) in ((a, b), (b, c), (c, a))
@@ -463,27 +468,28 @@ function _tjunction_chains(P, tris, δ)
     return chains
 end
 
-# Cutting planes shared by parallel segments: segments longer than `h` whose directions
-# lie within `angle` degrees of one another (the long sides of a wall's strips: the
-# generators of a cylinder or an extrusion are parallel) form a family, cut by the planes
-# ⟂ `u` at `s0 + k g` (g ≤ h), and so are the strips' diagonals (below). Each such
-# segment gets its points where it crosses the planes, so neighboring strips are cut at
-# the same places whatever their lengths and ends, and a cut across a strip is one
-# straight chord (a strip's long sides and its diagonal meet each plane on one line).
-# Equal spacing per segment would not line up: a strip's diagonal is longer than its
-# sides and can take one point more, which staggers every cut across the strips. The
-# tolerance is tight (diagonals of neighboring strips of a 48-sided can are 0.5° apart
-# and must not form families of their own); converging strips (a fan, a cone) keep equal
-# spacing, which lines up when their edges are equally long.
+# Cutting planes shared by parallel segments. Segments longer than `h` whose directions
+# lie within `angle` degrees of one another form a family, cut by the planes ⟂ `u` at
+# `s0 + k g` (g ≤ h). These are the long sides of the strips of a wall, since the
+# generators of a cylinder or an extrusion are parallel. The diagonals of the strips are
+# cut in the same way (below). Each such segment gets its points where it crosses the
+# planes, so neighboring strips are cut at the same places whatever their lengths and
+# ends. A cut across a strip is then one straight chord, since the long sides and the
+# diagonal of a strip meet each plane on one line. Equal spacing per segment would not
+# line up. The diagonal of a strip is longer than its sides and can take one point more,
+# which staggers every cut across the strips. The tolerance is tight: the diagonals of
+# neighboring strips of a 48-sided can are 0.5° apart and must not form separate
+# families. Converging strips, such as a fan or a cone, keep equal spacing, which lines
+# up when their edges are equally long.
 struct _PlaneFamily
     u::Vec3
     s0::Float64
     g::Float64
     m::Int              # planes per element band (see `_band_zones`)
-    nb::Int             # element bands over the family's extent
+    nb::Int             # element bands over the extent of the family
 end
 
-const _PLANE_MARGIN = 0.05            # planes within this many g of a segment's end are skipped
+const _PLANE_MARGIN = 0.05            # planes within this many g of a segment end are skipped
 
 function _plane_families(P, tris, chains, h, band; angle = 0.25, strip = 30.0)
     fam = Dict{Tuple{Int,Int},Int}()
@@ -521,10 +527,11 @@ function _plane_families(P, tris, chains, h, band; angle = 0.25, strip = 30.0)
         nmem[group[i]] += 1
         usum[group[i]] += sgn[i] * (P[long[i][2]] - P[long[i][1]])
     end
-    # a group whose strip facets (two long sides within `strip` degrees) pair it mostly
-    # with one heavier group joins that group: the diagonals of a plate's equal strips
-    # are parallel among themselves, and their strips' sides set the planes (a fan's
-    # antipodal pairs pair equally with both neighbors and stay apart)
+    # A group whose strip facets (two long sides within `strip` degrees) pair it mostly
+    # with one heavier group is merged into that group. The diagonals of the equal strips
+    # of a plate are parallel among themselves, and the sides of their strips set the
+    # planes. The antipodal pairs of a fan pair equally with both neighbors and stay
+    # apart.
     index = Dict(long[i] => i for i in eachindex(long))
     weight = [(norm(usum[g]), g) for g in 1:G]
     cosβ = cosd(strip)
@@ -550,10 +557,10 @@ function _plane_families(P, tris, chains, h, band; angle = 0.25, strip = 30.0)
         3n > 2total[a] && weight[b] > weight[a] && (root[a] = b)
     end
     find(g) = (while root[g] != g; g = root[g]; end; g)
-    # a family needs two segments to line up; the planes are spaced so that no piece of a
-    # member within 2 `angle` of `u` is longer than h (others are divided further), ends
-    # skipped within the margin, and every m-th plane bounds an element band of about
-    # `band` over the family's extent
+    # A family needs two segments to line up. The planes are spaced so that no piece of a
+    # member within 2 `angle` of `u` is longer than h, and other members are divided
+    # further. Planes within the margin of the ends are skipped, and every m-th plane
+    # bounds an element band of about `band` over the extent of the family.
     gmax = h * cosd(2angle) / (1 + 2_PLANE_MARGIN)
     lo = fill(Inf, G)
     hi = fill(-Inf, G)
@@ -578,10 +585,10 @@ function _plane_families(P, tris, chains, h, band; angle = 0.25, strip = 30.0)
     for i in eachindex(long)
         nmem[group[i]] >= 2 && (fam[long[i]] = fi[find(group[i])])
     end
-    # a long segment in no family that shares a facet with members, within `strip`
-    # degrees of their direction (the diagonal of a strip wider than the tolerance), is
-    # cut by the nearest such family's planes: any plane meets a facet on one chord, so
-    # the cuts across the strip stay straight
+    # A long segment in no family that shares a facet with members, within `strip`
+    # degrees of their direction, is cut by the planes of the nearest such family. Such a
+    # segment is the diagonal of a strip wider than the tolerance. Any plane meets a facet
+    # on one chord, so the cuts across the strip stay straight.
     member = Set(keys(fam))                            # adopted segments adopt no others
     for t in tris
         _facet_segs!(empty!(segs), chains, t)
@@ -602,9 +609,9 @@ function _plane_families(P, tris, chains, h, band; angle = 0.25, strip = 30.0)
     return fam, families
 end
 
-# Points of segment p → q (with p, without q) at most `h` apart: where it crosses its
-# family's planes, or equally spaced; each segment's points are made once, so both
-# facets sharing it use the same ones.
+# Returns the points of the segment from p to q (with p, without q) at most `h` apart.
+# They lie where it crosses the planes of its family, or are equally spaced. The points of
+# each segment are made once, so both facets that share it use the same points.
 function _segment_points!(loop, P, segs, p, q, h, fam = nothing, families = nothing)
     k = minmax(p, q)
     ids = get(segs, k, nothing)
@@ -619,8 +626,8 @@ function _segment_points!(loop, P, segs, p, q, h, fam = nothing, families = noth
             k1 = floor(Int, (hi - s0) / g - _PLANE_MARGIN)
             cuts = [0.0; [(s0 + j * g - sa) / (sb - sa) for j in k0:k1]; 1.0]
             sa > sb && reverse!(@view cuts[2:end-1])
-            # a gap longer than h (only on a member far from `u`: a strip's diagonal)
-            # is divided equally
+            # A gap longer than h is divided equally. Such gaps occur only on a member far
+            # from `u`, the diagonal of a strip.
             L = norm(b - a)
             ts = Float64[]
             for i in 1:length(cuts)-1
@@ -662,7 +669,8 @@ function _edge_points!(loop, P, segs, chains, a, b, h, fam = nothing, families =
     return loop
 end
 
-# The segments (vertex pairs, sorted) of a facet's edges, split at their T-junctions.
+# Returns the segments (vertex pairs, sorted) of the edges of a facet, split at their
+# T-junctions.
 function _facet_segs!(segs, chains, (a, b, c))
     for (p, q) in ((a, b), (b, c), (c, a))
         ch = get(chains, minmax(p, q), nothing)
@@ -680,9 +688,9 @@ end
 _facet_segments(tris, chains) =
     sort!(unique!(foldl((s, t) -> _facet_segs!(s, chains, t), tris; init = Tuple{Int,Int}[])))
 
-# Every facet split in its plane into triangles with edges of at most `h`, conforming
-# across shared edges (segments of a plane family cut at its planes): the triangles, and
-# the facet each came from.
+# Splits every facet in its plane into triangles with edges of at most `h`, conforming
+# across shared edges, with the segments of a plane family cut at its planes. Returns the
+# triangles and the facet from which each came.
 function _refine_facets!(P, tris, chains, h, fam = nothing, families = nothing)
     segs = Dict{Tuple{Int,Int},Vector{Int}}()
     rtris = NTuple{3,Int}[]
@@ -705,11 +713,12 @@ end
 
 _cross2(u, v) = u[1] * v[2] - u[2] * v[1]
 
-# A convex planar polygon (a facet with points on its edges, counterclockwise about the
-# facet normal) split by chords between its points into triangles with edges of at
-# most `h`. While a piece is wider than `h` it is cut by the shortest chord leaving at
-# least a third of its area on each side (with points added along the chord every
-# `h`), so slivers are cut across; smaller pieces by the chord of least length² / area.
+# Splits a convex planar polygon by chords between its points into triangles with edges
+# of at most `h`. The polygon is a facet with points on its edges, counterclockwise about
+# the facet normal. While a piece is wider than `h`, it is cut by the shortest chord that
+# leaves at least a third of its area on each side, with points added along the chord
+# every `h`, so slivers are cut across. Smaller pieces are cut by the chord of least
+# length² / area.
 function _split_polygon!(rtris, parent, k, P, ids, h)
     a = P[ids[1]]
     nv = zero(Vec3)
@@ -748,7 +757,7 @@ function _split_polygon!(rtris, parent, k, P, ids, h)
             (j == i + 1 || (i == 1 && j == np)) && continue
             A1 = (S[j] - S[i] + _cross2(xy[poly[j]], xy[poly[i]])) / 2
             amin = min(A1, A - A1)
-            amin > 1e-10 * sqrt(d2) * D || continue          # not along a straight side
+            amin > 1e-10 * sqrt(d2) * D || continue          # skip a chord along a straight side
             if amin >= A / 3 && d2 < qlen
                 qi, qj, qlen = i, j, d2
             end
@@ -759,7 +768,7 @@ function _split_polygon!(rtris, parent, k, P, ids, h)
         if diam2 > h2 * (1 + 1e-9) && qi > 0
             bi, bj = qi, qj
         end
-        if bi == 0               # too thin for any chord to tell its sides apart: a fan
+        if bi == 0               # too thin for any chord to separate its sides, so a fan
             for l in 2:np-1
                 push!(rtris, (ids[poly[1]], ids[poly[l]], ids[poly[l+1]]))
                 push!(parent, k)
@@ -782,14 +791,14 @@ function _split_polygon!(rtris, parent, k, P, ids, h)
 end
 
 # Element bands on sliver strips. A facet whose segments longer than `size` are all cut
-# by one plane family is a strip (two long sides, at most 30° apart: see
-# `_plane_families`); its refined triangles lie between two of the family's planes
-# (cuts across a strip are its shortest chords). Every m-th plane bounds an element band,
-# and the band is the triangle's zone (0: none).
-# Elements grow within one zone (`_cluster_elements`), so their cuts across the strips
-# follow the planes: straight, and shared by the elements on either side, where nearest-
-# seed growth staggers them by a plane or two between neighboring strips. Returns the
-# zones and, per zone, the family's direction and the band's length.
+# by one plane family is a strip, with two long sides at most 30° apart (see
+# `_plane_families`). Its refined triangles lie between two planes of the family, since
+# cuts across a strip are its shortest chords. Every m-th plane bounds an element band,
+# and the band is the zone of the triangle (0 for none). Elements grow within one zone
+# (`_cluster_elements`), so their cuts across the strips follow the planes. The cuts are
+# then straight and shared by the elements on either side, whereas nearest-seed growth
+# staggers them by a plane or two between neighboring strips. Returns the zones and, per
+# zone, the direction of the family and the length of the band.
 function _band_zones(P, tris, chains, rtris, parent, fam, families, size)
     zone = zeros(Int, length(rtris))
     bands = [(u = F.u, len = F.m * F.g) for F in families for _ in 1:F.nb]
@@ -821,9 +830,9 @@ function _band_zones(P, tris, chains, rtris, parent, fam, families, size)
     return zone, bands
 end
 
-# The strip of each facet: facets sharing their longest edge within a degree of one
-# plane (a strip's two triangles, split along its diagonal) are one strip, numbered by
-# the lower facet.
+# Returns the strip of each facet. Facets that share their longest edge within a degree
+# of one plane, such as the two triangles of a strip split along its diagonal, form one
+# strip, numbered by the lower facet.
 function _strip_pairs(P, tris)
     strip = collect(eachindex(tris))
     longest = Dict{Tuple{Int,Int},Int}()
@@ -841,8 +850,8 @@ function _strip_pairs(P, tris)
     return strip
 end
 
-# Can a triangle of zone `zt` join an element seeded in zone `zs`? Zoned triangles join
-# only their own band's elements, or elements seeded off the bands.
+# Whether a triangle of zone `zt` may join an element seeded in zone `zs`. Zoned triangles
+# join only the elements of the same band, or elements seeded off the bands.
 _zone_ok(zt, zs) = zt == 0 || zs == 0 || zt == zs
 
 # Binary min-heap of (key, triangle, seed) for growing elements nearest first.
@@ -884,8 +893,8 @@ function _heap_pop!(H::_GrowHeap)
     return k, t, s
 end
 
-# Neighbors of each triangle across edges shared by exactly two triangles traversing
-# them in opposite directions (0 where there is none).
+# Returns the neighbors of each triangle across edges shared by exactly two triangles
+# that traverse them in opposite directions (0 where there is none).
 function _triangle_neighbors(tris)
     N = length(tris)
     E = Vector{NTuple{4,Int}}(undef, 3N)              # (lo, hi, triangle, forward)
@@ -910,7 +919,7 @@ function _triangle_neighbors(tris)
     return nbr
 end
 
-# Grow the given seeds over unowned triangles, nearest (to the seed point) first.
+# Grows the given seeds over unowned triangles, nearest to the seed point first.
 function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos, snrm, stri, cosmax, rmax, zone)
     for s in seeds
         t = stri[s]
@@ -940,18 +949,21 @@ function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos
     return owner
 end
 
-# Element of each refined triangle. Poisson-disk seeds `spacing` apart (a seed per face
-# direction) grow nearest first across shared edges, within `angle` of the seed normal
-# (triangles no seed reaches seed elements of their own), and Lloyd iterations move
-# each seed to its element's centroid and mean normal; teeth of the outlines are then
-# smoothed. Elements more than `angle` from planar, reaching beyond `rmax` of their
-# centroid, or with a centroid off the element are halved until they are not, and those
-# under `minarea` size² then join a neighbor where the union stays acceptable. The
-# spacing 0.85 `size` makes the mean element area ≈ `size`² on smooth surfaces.
-# Triangles of a `zone` (an element band on sliver strips, see `_band_zones`) join only
-# elements seeded in it (or off the bands); seeds in a band are spaced across it only,
-# 0.75 `size`²/length apart (one row: random sequential seeds leave gaps of 1.34 times
-# the spacing on average), so its elements span the band and their mean area is `size`².
+# Returns the element of each refined triangle. The steps are:
+# - Poisson-disk seeds `spacing` apart, one seed per face direction, grow nearest first
+#   across shared edges, within `angle` of the seed normal. Triangles that no seed
+#   reaches seed new elements.
+# - Lloyd iterations move each seed to the centroid and mean normal of its element, and
+#   teeth of the outlines are then smoothed.
+# - Elements more than `angle` from planar, reaching beyond `rmax` of their centroid, or
+#   with a centroid off the element are halved until they are acceptable. Elements under
+#   `minarea` size² then join a neighbor where the union stays acceptable.
+# The spacing 0.85 `size` makes the mean element area ≈ `size`² on smooth surfaces.
+# Triangles of a `zone`, an element band on sliver strips (see `_band_zones`), join only
+# elements seeded in it or off the bands. Seeds in a band are spaced only across it,
+# 0.75 `size`²/length apart, in one row; random sequential seeds leave gaps of 1.34 times
+# the spacing on average. The elements of the band therefore span it, and their mean area
+# is `size`².
 function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::Int = 5,
                            spacing::Float64 = 0.85size, rmax::Float64 = size,
                            smooth::Int = 3, zone::Vector{Int} = zeros(Int, length(rtris)),
@@ -961,7 +973,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     cen = Vector{Vec3}(undef, N)
     nrm = Vector{Vec3}(undef, N)
     area = Vector{Float64}(undef, N)
-    thin = falses(N)              # height below 1e-6 of the length: no orientation to keep
+    thin = falses(N)              # height below 1e-6 of the length, so no orientation to keep
     for (i, (a, b, c)) in enumerate(rtris)
         cr = _tri_cross(P[a], P[b], P[c])
         A = norm(cr)
@@ -971,8 +983,9 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         thin[i] = A <= 1e-6 * max(sum(abs2, P[b] - P[a]), sum(abs2, P[c] - P[b]), sum(abs2, P[a] - P[c]))
     end
     nbr = _triangle_neighbors(rtris)
-    # a band's connected piece under `minband` size² (a few strips of a small face, a
-    # band cut short by the strips' ends) would only confine its elements: no band there
+    # A connected piece of a band under `minband` size², such as a few strips of a small
+    # face or a band cut short by the ends of the strips, would only confine its
+    # elements, so no band is used there.
     zone = copy(zone)
     seen = falses(N)
     piece = Int[]
@@ -993,11 +1006,13 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         sum(t -> area[t], piece) < minband * size^2 && (zone[piece] .= 0)
     end
     cosmax = cosd(angle)
-    # a fixed shuffle (splitmix64 of the index): Random's streams differ across Julia
-    # versions (1.11 reseeded MersenneTwister), and the elements depend on the order
+    # A fixed shuffle (splitmix64 of the index) is used, since the streams of Random differ
+    # across Julia versions (1.11 reseeded MersenneTwister) and the elements depend on the
+    # order.
     order = sortperm([_splitmix(UInt64(t))[2] for t in 1:N])
-    # Poisson-disk seeds: a triangle seeds unless a seed facing the same way is closer
-    # than the spacing (in a band: a seed of the band, closer across it)
+    # Poisson-disk seeds: a triangle seeds an element unless a seed facing the same way is
+    # closer than the spacing. In a band, the test uses seeds of the band and the distance
+    # across it.
     spos, snrm, stri = Vec3[], Vec3[], Int[]
     lo = reduce((a, b) -> min.(a, b), cen)
     bspacing = [min(0.75size^2 / b.len, 2spacing) for b in axis]
@@ -1033,7 +1048,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     owner = zeros(Int, N)
     best = fill(Inf, N)
     H = _GrowHeap()
-    reach = 2size                 # bounds a seed's reach (halving enforces `rmax`)
+    reach = 2size                 # bound on the reach of a seed (halving enforces `rmax`)
     for it in 0:iterations
         fill!(owner, 0)
         fill!(best, Inf)
@@ -1045,7 +1060,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
                          spos, snrm, stri, cosmax, reach, zone)
         end
         it == iterations && break
-        # Lloyd: each seed to its element's centroid and mean normal
+        # Lloyd step: each seed moves to the centroid and mean normal of its element
         ns = length(spos)
         wa, wc, wn = zeros(ns), fill(zero(Vec3), ns), fill(zero(Vec3), ns)
         for t in 1:N
@@ -1066,9 +1081,9 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         snrm = [normalize(wn[s]) for s in keep]
         stri = [newtri[s] for s in keep]
     end
-    # smooth the outlines: a triangle with two of its edges on one other element (a
-    # tooth of a staircase outline) joins that element when its normal is within
-    # `angle` of the element's seed normal
+    # The outlines are smoothed. A triangle with two of its edges on one other element, a
+    # tooth of a staircase outline, joins that element when its normal is within `angle`
+    # of the seed normal of the element.
     for _ in 1:smooth
         moved = 0
         for t in 1:N
@@ -1085,10 +1100,10 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         end
         moved == 0 && break
     end
-    # a sliver strip's piece in a band (its refined triangles in one zone, `unit` giving
-    # the strip of each; narrower than size/5 on average) goes whole to the element
-    # holding most of its area, so element sides run along strip edges, not through
-    # strips; wider strips' pieces stay divided
+    # The piece of a sliver strip in a band (its refined triangles in one zone, with
+    # `unit` giving the strip of each, narrower than size/5 on average) goes whole to the
+    # element that holds most of its area. Element sides then run along strip edges and
+    # do not cut through strips. The pieces of wider strips stay divided.
     if !isempty(unit)
         strip = unit
         unit = sort!([t for t in 1:N if zone[t] > 0]; by = t -> (strip[t], zone[t]))
@@ -1123,7 +1138,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     part = Int[]
     while !isempty(stack)
         ms = pop!(stack)
-        # an element in pieces (strip pieces moved whole can cut one off) is split first
+        # an element in pieces, which moving strip pieces whole can produce, is split first
         lab[ms] .= -1
         empty!(part)
         push!(part, ms[1])
@@ -1153,8 +1168,8 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
             owner[ms] .= nel
             continue
         end
-        # halve: from the two triangles farthest apart in normal (if not flat) or in
-        # position, each half grown nearest first in that measure
+        # Halving starts from the two triangles farthest apart in normal (if not flat) or
+        # in position, and each half is grown nearest first in that measure.
         if flat
             a = argmax(t -> norm(cen[t] - c), ms)
             b = argmax(t -> norm(cen[t] - cen[a]), ms)
@@ -1178,7 +1193,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
                 _heap_push!(H, flat ? norm(cen[q] - cen[o]) : 1 - dot(nrm[q], nrm[o]), q, s)
             end
         end
-        for s in (1, 2, -1)                  # -1: unreached (not edge-connected)
+        for s in (1, 2, -1)                  # -1 marks unreached triangles (not edge-connected)
             part = [t for t in ms if lab[t] == s]
             isempty(part) || push!(stack, part)
         end
@@ -1188,13 +1203,14 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     return owner
 end
 
-# Is a set of triangles an acceptable element: flat within the angle, within `rmax` of
-# its centroid, and with the centroid (moved along the mean normal) on it? The set is
-# `ms` and, when `new` > 0, triangle `new` too: a caller adding triangles one at a time
-# passes `sums`, the set's area and area-weighted centroid and normal sums (the
-# element's `_element_sums` extended by `new`'s: the same left folds). `new` is tested
-# first, so a triangle that would make the element too large or too bent is rejected
-# without a pass over the element (same answer: each test must hold for every triangle).
+# Whether a set of triangles is an acceptable element: flat within the angle, within
+# `rmax` of its centroid, and with the centroid (moved along the mean normal) on it. The
+# set is `ms` and, when `new` > 0, also triangle `new`. A caller that adds triangles one
+# at a time passes `sums`, the area and area-weighted centroid and normal sums of the
+# set. These are the `_element_sums` of the element extended by those of `new`, with the
+# same left folds. `new` is tested first, so a triangle that would make the element too
+# large or too bent is rejected without a pass over the element. The answer is the same,
+# since each test must hold for every triangle.
 function _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax;
                      new::Int = 0, sums = _element_sums(ms, area, cen, nrm))
     A, ac, nv = sums
@@ -1212,15 +1228,17 @@ end
 _element_sums(ms, area, cen, nrm) =
     (sum(area[t] for t in ms), sum(area[t] * cen[t] for t in ms), sum(area[t] * nrm[t] for t in ms))
 
-# Elements under `amin` (slivers left between grown elements, pieces cut off by halving)
-# join, smallest first, the neighbor they share the longest edge with among those the
-# union keeps acceptable; the elements are then renumbered 1, 2, …. One that no
-# neighbor takes whole is dissolved only if it has at most `_DISSOLVE_MAX` triangles:
-# the dissolutions that succeed on the test meshes have at most 112, on a 40k-facet
-# sphere at 0.6 mm 237, while a finely faceted CAD capsule leaves small elements of up
-# to 4,600, whose dissolution costs ~n² element tests and mostly ends stuck. An engineering
-# default, not a quality criterion (research notes, "GUI on CAD", 2026-10-26: that
-# capsule's remesh at 0.28 mm 12.4 s → 2.0–3.3 s, its mesh changed on 0.17% of its area).
+# Elements under `amin`, such as slivers left between grown elements and pieces cut off
+# by halving, are merged smallest first. Each joins the neighbor with which it shares the
+# longest edge, among those for which the union stays acceptable, and the elements are
+# then renumbered 1, 2, …. An element that no neighbor takes whole is dissolved only if
+# it has at most `_DISSOLVE_MAX` triangles. The dissolutions that succeed on the test
+# meshes have at most 112 triangles, and 237 on a 40k-facet sphere at 0.6 mm. A finely
+# faceted CAD capsule leaves small elements of up to 4,600 triangles, whose dissolution
+# costs about n² element tests and mostly ends stuck. The limit is an engineering
+# default, and no quality criterion sets it (research notes, "GUI on CAD", 2026-10-26).
+# With it, the remesh of that capsule at 0.28 mm became four to six times faster, and
+# its mesh changed on 0.17% of its area.
 const _DISSOLVE_MAX = 256
 
 function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax, amin)
@@ -1231,7 +1249,7 @@ function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, 
     earea = [sum(area[t] for t in ms; init = 0.0) for ms in members]
     shared = Dict{Int,Float64}()
     for e in sortperm(earea)
-        earea[e] < amin || continue                  # (it may have grown by a merge)
+        earea[e] < amin || continue                  # (the element may have grown by a merge)
         empty!(shared)
         for t in members[e], q in view(nbr, :, t)
             q == 0 && break
@@ -1259,21 +1277,22 @@ function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, 
     return owner
 end
 
-# A small element no neighbor can take whole (a sliver across the edge between two wall
-# strips: either neighbor would exceed the angle) is shared out triangle by triangle,
-# each to an adjacent element that stays acceptable; all or nothing. Each round moves
-# the first triangle (in `members[e]` order) that some neighbor takes. A triangle's
-# try depends only on its neighbors' owners and those elements' members, so one that
-# failed is tried again (`stale`) only once a neighbor of it moved or an element it
-# tried grew: the same moves as trying every triangle each round, without the
-# quadratic cost (minutes on a 4 × 10⁴-facet CAD capsule, whose fill tube leaves small
-# elements of thousands of facets).
+# Shares out a small element that no neighbor can take whole, one triangle at a time,
+# each to an adjacent element that stays acceptable, all or nothing. Such an element is a
+# sliver across the edge between two wall strips, where either neighbor would exceed the
+# angle. Each round moves the first triangle (in `members[e]` order) that some neighbor
+# takes. The attempt for a triangle depends only on the owners of its neighbors and the
+# members of those elements. A triangle that failed is therefore tried again (`stale`)
+# only once one of its neighbors moved or an element that it tried grew. This gives the
+# same moves as trying every triangle each round, without the quadratic cost, which took
+# minutes on a 4 × 10⁴-facet CAD capsule whose fill tube leaves small elements of
+# thousands of facets.
 function _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax)
     rest = copy(members[e])
     n = length(rest)
     at = Dict(t => i for (i, t) in enumerate(rest))   # triangle => its place in `rest`
-    left = trues(n)                                   # not moved yet
-    stale = trues(n)                                  # to try (again)
+    left = trues(n)                                   # triangles not moved yet
+    stale = trues(n)                                  # triangles to try (again)
     tried = Dict{Int,Vector{Int}}()                   # element => places of triangles that tried it
     sums = Dict{Int,Tuple{Float64,Vec3,Vec3}}()       # element => its `_element_sums`
     moves = Tuple{Int,Int}[]                          # (triangle, element)
@@ -1296,11 +1315,11 @@ function _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thi
                     sums[o] = s
                     push!(moves, (t, o))
                     left[i] = false
-                    for j in get(tried, o, Int[])     # o grew
+                    for j in get(tried, o, Int[])     # element o has grown
                         stale[j] = left[j]
                     end
                     delete!(tried, o)
-                    for r in view(nbr, :, t)          # t's neighbors now see o
+                    for r in view(nbr, :, t)          # the neighbors of t now border o
                         r == 0 && break
                         j = get(at, r, 0)
                         j > 0 && left[j] && (stale[j] = true)
@@ -1319,7 +1338,7 @@ function _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thi
             earea[o] += area[t]
         end
         empty!(members[e])
-    else                                              # stuck: undo
+    else                                              # when stuck, the moves are undone
         for (t, o) in reverse(moves)
             owner[t] = e
             pop!(members[o])
@@ -1328,9 +1347,9 @@ function _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thi
     return owner
 end
 
-# Does the line through `c` along `n` meet one of the triangles `ts`? (An element's
-# centroid, moved along its normal, should land on the element: radiation is exchanged
-# from there.)
+# Whether the line through `c` along `n` meets one of the triangles `ts`. The centroid of
+# an element, moved along its normal, should land on the element, since radiation is
+# exchanged from there.
 function _centroid_on(P, rtris, ts, c, n)
     for t in ts
         a, b, d = P[rtris[t][1]], P[rtris[t][2]], P[rtris[t][3]]
@@ -1345,14 +1364,14 @@ function _centroid_on(P, rtris, ts, c, n)
     return false
 end
 
-# Is `v` on the straight segment from `p` to `q` (to round-off)?
+# Whether `v` lies on the straight segment from `p` to `q`, within round-off.
 function _on_segment(p, v, q)
     d = q - p
     return norm(cross(d, v - p)) <= 1e-10 * sum(abs2, d) && dot(v - p, q - v) > 0
 end
 
-# The outline of a set of triangles as one counterclockwise vertex loop, or `nothing`
-# when it is not a single simple loop.
+# Returns the outline of a set of triangles as one counterclockwise vertex loop, or
+# `nothing` when it is not a single simple loop.
 function _outline(rtris, ts)
     edges = Set{Tuple{Int,Int}}()
     for t in ts
@@ -1362,7 +1381,7 @@ function _outline(rtris, ts)
     next = Dict{Int,Int}()
     for (u, v) in edges
         (v, u) in edges && continue
-        haskey(next, u) && return nothing                # pinched
+        haskey(next, u) && return nothing                # a pinched outline
         next[u] = v
     end
     isempty(next) && return nothing
@@ -1379,7 +1398,7 @@ function _outline(rtris, ts)
 end
 
 # Ear-clipping triangulation of a simple planar polygon (counterclockwise about `n`),
-# taking the best-shaped ear each time; `nothing` if it gets stuck.
+# which takes the best-shaped ear each time. Returns `nothing` if it gets stuck.
 function _earclip(P, poly, n)
     m = length(poly)
     m < 3 && return nothing
@@ -1423,9 +1442,9 @@ function _earclip(P, poly, n)
     return out
 end
 
-# Plane of each refined triangle within its element: facets of one element that lie in
-# one plane (to round-off) share a class, so their pieces are re-triangulated together.
-# Returns the classes and their unit normals.
+# Returns the plane of each refined triangle within its element. Facets of one element
+# that lie in one plane, within round-off, share a class, so their pieces are
+# re-triangulated together. Returns the classes and their unit normals.
 function _coplanar_classes(P, tris, parent, region, size)
     plane = zeros(Int, length(parent))
     normals = Vec3[]
@@ -1456,8 +1475,9 @@ function _coplanar_classes(P, tris, parent, region, size)
     return plane, normals
 end
 
-# The output mesh: one patch per element, each plane's pieces in it re-triangulated
-# from their outline without the points that are straight in every outline using them.
+# Returns the output mesh, with one patch per element. The pieces of each plane in the
+# element are re-triangulated from their outline, without the points that are straight
+# in every outline that uses them.
 function _assemble_elements(P, rtris, (plane, pnormal), region)
     ord = sortperm(collect(zip(region, plane)))
     groups = UnitRange{Int}[]
@@ -1489,7 +1509,7 @@ function _assemble_elements(P, rtris, (plane, pnormal), region)
     end
     clipped = Vector{Union{Nothing,Vector{NTuple{3,Int}}}}(nothing, length(groups))
     changed = true
-    while changed                       # a failed clip keeps its points; redo the rest
+    while changed                       # a failed clip keeps its points, and the rest is redone
         changed = false
         for g in eachindex(groups)
             loops[g] === nothing && continue

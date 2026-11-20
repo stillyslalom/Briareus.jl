@@ -1,9 +1,10 @@
 # Laser–plasma interaction corrections applied between the laser setup and deposition.
 #
-# A model maps the *setup* beams (what the laser delivers to the chamber: pointing,
-# power, wavelength) at a given time to *effective* beams whose powers are what reaches
-# and is absorbed in the target. Models must stay generic in the number type so
-# gradients flow through power and `dlambda`.
+# A model maps the *setup* beams at a given time to *effective* beams. The setup beams
+# are what the laser delivers to the chamber, with their pointing, power and wavelength.
+# The powers of the effective beams are what reaches the target and is absorbed in it.
+# Models must stay generic in the number type so that gradients pass through power and
+# `dlambda`.
 
 """
     LaserPlasmaModel
@@ -27,14 +28,14 @@ apply_lpi(ms::Union{Tuple,AbstractVector}, beams, time = 0.0) =
     lpi_deposit(model, op::DepositionOperator, beams, time = 0.0) -> Deposition
 
 Deposition of the effective `beams` (from [`apply_lpi`](@ref)) under the laser–plasma
-`model`: `deposit(op, beams)`, unless the model deposits part of the light where no
-beam lands (the ridge stop of [`BubbleAbsorption`](@ref)). Of a tuple or vector of
-models, at most one may do so.
+`model`. It is `deposit(op, beams)`, unless the model deposits part of the light outside
+every beam footprint, as the ridge stop of [`BubbleAbsorption`](@ref) does. Of a tuple or
+vector of models, at most one may do so.
 """
 lpi_deposit(m, op, beams, time = 0.0) = _lpi_deposit(m, op, beams, time, nothing)
 
-# `lpi_deposit`, with `split` as in `_deposit` (the light a model deposits off the
-# operator added to its beam's group too).
+# Computes `lpi_deposit`, with `split` as in `_deposit`. The light that a model deposits
+# off the operator is also added to the group of its beam.
 _lpi_deposit(m, op, beams, time, split) = _deposit(op, beams, split)
 function _lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time, split)
     ds = [m for m in ms if _deposits(m)]
@@ -43,9 +44,10 @@ function _lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time, split)
 end
 _deposits(m) = false
 
-# The same, beam by beam (for the beam-error sensitivities, which deposit each beam
-# alone): `nothing`, or `(; g, es, w)`: the operator deposits 1 − g of beam `b`, and
-# g of it lands on elements `es` with weights `w` (summing to 1).
+# Returns the ridge split of the single beam `b`, for the beam-error sensitivities, whose
+# computation deposits each beam separately. The result is `nothing`, or `(; g, es, w)`
+# when the operator deposits 1 − g of beam `b` and the fraction g is deposited on the
+# elements `es` with weights `w` that sum to 1.
 _ridge_split(m, op, b, time) = nothing
 function _ridge_split(ms::Union{Tuple,AbstractVector}, op, b, time)
     ds = [m for m in ms if _deposits(m)]
@@ -53,7 +55,8 @@ function _ridge_split(ms::Union{Tuple,AbstractVector}, op, b, time)
     return isempty(ds) ? nothing : _ridge_split(only(ds), op, b, time)
 end
 
-# A per-group quantity: a number, a function of time, or a (times, values) table.
+# Evaluates a per-group quantity at time `t`. The quantity is a number, a function of
+# time, or a (times, values) table.
 _tvalue(f::Real, t) = f
 _tvalue(f::Function, t) = f(t)
 _tvalue(f::Tuple{<:AbstractVector,<:AbstractVector}, t) = _interp(f[1], f[2], t)
@@ -64,10 +67,10 @@ _tvalue(f::PulseShape, t) = f(t)
 
 Per-group backscattered power fraction (SRS + SBS), removed before deposition.
 `fractions` maps a beam group to a number, a function `t -> fraction`, or a
-`(times, values)` table (ns); groups not listed lose nothing. Typically set from
-measured FABS/NBI backscatter per cone. A fraction lies in [0, 1]: numbers and tables
-outside it throw an `ArgumentError` at construction, a function's value outside it
-when applied.
+`(times, values)` table (ns); groups not listed are unchanged. The fractions are
+typically set from measured FABS/NBI backscatter per cone. A fraction lies in [0, 1].
+Numbers and tables outside this range throw an `ArgumentError` at construction, and a
+function value outside it throws when applied.
 
     Backscatter(:inner23 => 0.10, :inner30 => ([0, 5, 8], [0.0, 0.05, 0.12]))
 """
@@ -100,18 +103,18 @@ end
 """
     CalibratedTransfer(donors, receivers, fraction)
 
-Empirical cross-beam transfer: a fraction of the total power of the `donors` groups
-moves to the `receivers` groups (shared in proportion to each receiving beam's
-power). `fraction(Δλ, t)` is a calibration — e.g. fit to shot data — where
+Empirical cross-beam transfer. A fraction of the total power of the `donors` groups is
+moved to the `receivers` groups and shared in proportion to the power of each receiving
+beam. `fraction(Δλ, t)` is a calibration, e.g. a fit to shot data, where
 `Δλ = ⟨dlambda⟩_receivers − ⟨dlambda⟩_donors` (Å, power-weighted means), so a
 positive `Δλ` means the receivers are red-shifted relative to the donors, the
 direction that drives transfer toward them. Total power is conserved.
 
-At zero power the transfer has its limit: donors without power give nothing (`f · 0`),
-their `⟨dlambda⟩` then the unweighted mean, so that the derivatives with respect to
-their powers are finite; receivers without power take nothing (the light is shared in
-proportion to their powers, so there is nothing to share it by), and the beams are
-returned unchanged.
+At zero power the transfer is evaluated at its limit. Nothing is transferred from donors
+without power (`f · 0`), and their `⟨dlambda⟩` is then the unweighted mean, so the
+derivatives with respect to their powers are finite. Nothing is transferred to receivers
+without power, since the light is shared in proportion to their powers, and the beams
+are then returned unchanged.
 
 Build `fraction` with `linear_transfer` or `tabulated_transfer`, or pass any
 differentiable function.
@@ -155,8 +158,9 @@ function apply_lpi(m::CalibratedTransfer, beams::AbstractVector{<:Beam}, time = 
             for (i, b) in enumerate(beams)]
 end
 
-# The power-weighted mean detuning of the beams `sel` (total power `P`); the unweighted
-# mean when they have no power (the weights stay in the power's number type).
+# Returns the power-weighted mean detuning of the beams `sel`, of total power `P`. When
+# the beams have no power, the mean is unweighted, and the weights stay in the number
+# type of the power.
 function _mean_dlambda(beams, sel, P)
     on = ForwardDiff.value(P) > 0
     w(b) = on ? b.power : one(b.power)
@@ -167,8 +171,9 @@ end
 """
     lpi_summary(setup, effective) -> Dict{Symbol,NamedTuple}
 
-Per-group setup and effective power (TW) and their ratio: 1 for a group without power
-in either (no change), `Inf` for one that gains power from none.
+Per-group setup and effective power (TW) and their ratio. The ratio is 1 for a group
+without power in either, which is unchanged, and `Inf` for one that gains power from
+none.
 """
 function lpi_summary(setup::AbstractVector{<:Beam}, eff::AbstractVector{<:Beam})
     out = Dict{Symbol,NamedTuple}()
@@ -183,16 +188,19 @@ end
 """
     kemp2026_sbs() -> NamedTuple
 
-Measured inner-cone SBS backscatter of N210808 per quad against time: Kemp et al., PoP 33,
-082705 (2026) Fig. 2, digitized (`data/kemp2026_fig2.csv`, sources in its header).
-Columns `t` (ns, 4.4–7.1 every 0.05), `inner23` and `inner30`: all backscattered SBS
-power of one 23° or 30° quad (TW; the in-lens signal × 3.4), cone-averaged over both
-hemispheres. The paper's energies are 2.8 and 0.9 kJ per quad (eight quads per cone);
-single-shot errors reach 100%, N210808 repeats vary by 30–50%. SBS starts as the inner
-power reaches its peak (the pre-CBET quad power is at half its 9 TW peak at 4.74 ns on
-this axis), peaks at 5.3 (23°) and 5.75 ns (30°) and ends by 6.6–6.9 ns, the 30° cone
-first (refraction and absorption by an on-axis density spike, the paper's §III C). Used
-by `examples/n221204.jl`'s `backscatter=history`. Research notes, "Inner-cone SBS time
-histories and the late-time refraction (2026-10-25)".
+Measured inner-cone SBS backscatter of N210808 per quad against time, digitized from
+Kemp et al., PoP 33, 082705 (2026) Fig. 2 into `data/kemp2026_fig2.csv`; the sources
+are listed in its header. The columns are `t` (ns, 4.4–7.1 every 0.05), `inner23` and
+`inner30`. Each column contains all backscattered SBS power of one 23° or 30° quad in TW,
+cone-averaged over both hemispheres; it is the in-lens signal × 3.4. The energies in
+the paper are 2.8 and 0.9 kJ per quad, with eight quads per cone. Single-shot errors
+reach 100%, and N210808 repeats vary by 30–50%.
+
+SBS starts as the inner power reaches its peak. On this axis the pre-CBET quad power is
+at half its 9 TW peak at 4.74 ns. SBS peaks at 5.3 ns (23°) and 5.75 ns (30°) and ends
+by 6.6–6.9 ns. The 30° cone ends first, which the paper attributes to refraction and
+absorption by an on-axis density spike (§III C). `examples/n221204.jl` uses this table
+for `backscatter=history`. Research notes, "Inner-cone SBS time histories and the
+late-time refraction (2026-10-25)".
 """
 kemp2026_sbs() = _data_table("kemp2026_fig2.csv")

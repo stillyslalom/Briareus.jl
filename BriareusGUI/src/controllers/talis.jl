@@ -23,8 +23,8 @@ const TALIS_RULE_LABELS = (capture_3w = "3ω capture", incidence_3w = "3ω incid
 What the rule tolerance stands for, carried by every TaLIS report: the requirements'
 "up to 0.5 degrees" of metrology, alignment and positioning tolerance is the target
 component rotated off nominal (insertion or assembly error), in the least favorable
-direction. It applies to the clearances and the capture margin, not to the 70°
-incidence limit.
+direction. It applies to the clearances and the capture margin; the 70° incidence limit
+does not include it.
 """
 const TALIS_TOLERANCE_NOTE =
     "The tolerance is the component rotated off nominal (target inserted rotated, or " *
@@ -75,15 +75,16 @@ TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable
 """
     default_selection!(tl::TaLISState, t::Target; capture = (), observed = ())
 
-Capture components and hardware for a target's components: the surfaces `capture`
-(names; a session passes the holders of the wall and foil roles: a hohlraum's wall,
-every backlighter foil) capture the beams; the observed surface (`observed`: a capsule)
-is left out (light on it is drive physics, handled by keep-outs and the drive, not a
-TaLIS hardware question; an engineering default); everything else (LEH caps and lips, closed windows, the main
-target) is checked. Checked LEH caps and lips go to `talis_check` as its `leh`, so
-their 3ω clearance is an LEH-clearance review rather than a failure. No component is a
-diagnostic by default. Components the selection was already made for keep their roles
-(a selection made afresh clears the diagnostics too).
+Choose the capture components and hardware for a target's components. The surfaces `capture`
+capture the beams; they are names, and a session passes the holders of the wall and foil
+roles, such as the wall of a hohlraum and every backlighter foil. The observed surface
+(`observed`, such as a capsule) is left out as an engineering default: light on it is drive
+physics, handled by keep-outs and the drive, and is not a TaLIS hardware question.
+Everything else (LEH caps and lips, closed windows, the main target) is checked. Checked LEH
+caps and lips go to `talis_check` as its `leh`, so their 3ω clearance is an LEH-clearance
+review; it does not count as a failure. No component is a diagnostic by default. Components
+the selection was already made for keep their roles, and a selection made afresh clears the
+diagnostics too.
 """
 function default_selection!(tl::TaLISState, t::Target; capture = (), observed = ())
     names = surface_names(t)
@@ -236,8 +237,8 @@ end
 """
     cancel_talis!(tl::TaLISState)
 
-Drop the check in progress (`talis_check` has no progress callback: the worker runs to
-its end and its result is discarded). The previous report stays.
+Drop the check in progress. `talis_check` does not take a progress callback, so the
+worker runs to the end and the result is discarded. The previous report stays.
 """
 function cancel_talis!(tl::TaLISState)
     tl.running[] || return tl

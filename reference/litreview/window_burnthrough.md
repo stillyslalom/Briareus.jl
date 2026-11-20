@@ -4,7 +4,7 @@ ROADMAP item 28 ("Diagnostic windows"). `HeatFront` puts a 2.5 µm gold window t
 about 2.7 ns before the leading edge of the window-emergent flux that Lester et al.
 measured on an ignition-scale shot, and their eq. 3 estimates a drive P2 that had not been
 compared with Briareus in a common convention. This review collects what the public
-record says about the window, its backing, low-Z burnthrough and the eq. 3 estimate. The
+record states about the window, its backing, low-Z burnthrough and the eq. 3 estimate. The
 calculations built on it are in the research notes, "Backed windows: what delays the
 emergent flux (2026-11-18)", and in `examples/tamped_foil.jl`.
 
@@ -28,7 +28,7 @@ rendered pages stayed in the session scratchpad.
 
 Not found in open form: Olson 2011's full text (its CH points beyond the 2007 slides);
 Lester et al.'s DPP 2024 (TO04.10) and DPP 2025 (JI02.6) abstracts, whose archive pages
-serve only a teaser; MacGowan et al., HEDP 40, 100944 (2021) and Milovich et al., PPCF 63,
+give only a teaser; MacGowan et al., HEDP 40, 100944 (2021) and Milovich et al., PPCF 63,
 025012 (2021), the sources of eq. 3's smoothing factor S₂ and recirculation factor F;
 whether Nova's burnthrough foils had a backing.
 
@@ -88,7 +88,7 @@ whether Nova's burnthrough foils had a backing.
 - In mass coordinates the diffusion flux is F = −(c/3κ) ∂(aT⁴)/∂m, so density enters the
   front's mass only through κ(ρ) and e(ρ). With HR03's fits (κ ∝ ρ^0.2, e ∝ ρ^−0.14) a
   diffusion front at fixed density heats m ∝ (κe)^(−1/2) ∝ ρ^(−0.03): holding the gold
-  at 1 g/cm³ rather than letting it expand to 0.1 g/cm³ changes the heated mass by 7%
+  at 1 g/cm³ instead of letting it expand to 0.1 g/cm³ changes the heated mass by 7%
   (*L*, derived). The ablative solution has no initial-density dependence at all (its
   m₀ is a mass per area).
 - The Nova foils (FTI **H**, Li04 **H-img**): gold foils of 1–3 µm in the wall of a

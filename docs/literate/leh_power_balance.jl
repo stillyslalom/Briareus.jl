@@ -1,29 +1,29 @@
 # # Entrance-hole size and the power balance
 #
-# The x rays a hohlraum wall emits have three places to go: back into the wall, into
-# the capsule, or out through the laser entrance holes (LEHs). The holes must be large
-# enough to admit the beams, and radiation that reaches an open hole is lost. The HYBRID-E design that first reached ignition by Lawson's
-# criterion, NIF shot N210808, shrank its LEHs from 3.64 mm to 3.1 mm in diameter
-# (27% less area) and spent the radiation it saved on a lower peak power, 441 TW
-# against the 487 TW of the 3.64 mm shot N210307, at a similar radiation temperature
-# (Kritcher et al., Phys. Rev. E 106, 025201 (2022), Table I and Sec. II A).
+# The x rays a hohlraum wall emits have three places to go: back into the wall, into the
+# capsule, or out through the laser entrance holes (LEHs). The holes must be large enough
+# to admit the beams, and radiation that reaches an open hole is lost. The HYBRID-E design
+# that first reached ignition by Lawson's criterion, NIF shot N210808, shrank its LEHs
+# from 3.64 mm to 3.1 mm in diameter (27% less area) and spent the radiation it saved on a
+# lower peak power, 441 TW against the 487 TW of the 3.64 mm shot N210307, at a similar
+# radiation temperature (Kritcher et al., Phys. Rev. E 106, 025201 (2022), Table I and
+# Sec. II A).
 #
 # The holes here are their nominal geometric size, open and static. In a shot the hole
 # is not that simple: plasma blown off the LEH rim and the expanding wall ("gold
 # bubble") close it down during the pulse and re-emit part of what reaches it, so its
-# effective size, and the loss, are smaller than the as-built hole's. The fractions below
-# are therefore the open-hole bound for each size, and their variation with size is
+# effective size, and the loss, are smaller than those of the as-built hole. The fractions
+# below are therefore the open-hole bound for each size, and their variation with size is
 # what a geometric change buys before plasma effects.
 #
 # This tutorial sweeps the LEH diameter of the N210808 hohlraum over realistic sizes,
-# 3.0 to 3.6 mm, and computes the
-# fraction of the x-ray source that escapes through the holes and the fraction the
-# capsule absorbs. It checks Briareus's view factors and radiosity solve against an
-# independent Monte Carlo photon walk in the exact geometry, compares both with the
-# closed-form power balance that assumes a uniform flux, and then compares the
-# predicted change in required power between the two shots with the published powers.
-# Laser propagation is not modeled: the x-ray source is prescribed on the wall, so the
-# sweep isolates the radiation power balance from beam clipping and pointing.
+# 3.0 to 3.6 mm, and computes the fraction of the x-ray source that escapes through the
+# holes and the fraction the capsule absorbs. It checks Briareus's view factors and
+# radiosity solve against an independent Monte Carlo photon walk in the exact geometry,
+# compares both with the closed-form power balance that assumes a uniform flux, and then
+# compares the predicted change in required power between the two shots with the published
+# powers. Laser propagation is not modeled: the x-ray source is prescribed on the wall, so
+# the sweep isolates the radiation power balance from beam clipping and pointing.
 
 using Briareus
 using CairoMakie
@@ -41,17 +41,18 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 # capsule of inner radius 1.05 mm under an ablator 76–80 µm thick; the outer radius
 # is taken as 1.13 mm.
 #
-# The albedos are engineering estimates, not shot data. The wall's is the Au-lined
-# depleted-uranium wall loss ([`du_wall_loss`](@ref): Lindl's gold scaling with the
-# uranium's lower loss) at 300 eV, 6 ns into the pulse. Its time is the wall's effective
-# age: the time that the wall would need, at today's temperature, to store today's energy,
+# The albedos are engineering estimates and do not come from shot data. The wall albedo is
+# the Au-lined depleted-uranium wall loss at 300 eV, 6 ns into the pulse
+# ([`du_wall_loss`](@ref), Lindl's gold scaling with the lower loss of uranium). The time
+# that enters the wall loss is the effective age of the wall, the time that the wall would
+# need at the present temperature to store its present energy,
 # ``t_\mathrm{eff} = \int (T/T_\mathrm{now})^{5.32}\,dt``, as [`drive_history`](@ref)
-# evaluates it: about 1 ns at 6 ns on the measured Dante history of the same design
-# (N221204, Pak et al., Phys. Rev. E 109, 025203 (2024), Fig. 1; the foot stores little),
-# not the 6 ns since the pulse began. The capsule takes the [`ablator`](@ref) default,
-# 0.3. The conversion
-# efficiency only scales the source, so the wall converts all of its laser power and
-# every fraction below is a fraction of the x-ray source.
+# evaluates it. On the measured Dante history of the same design (N221204, Pak et al.,
+# Phys. Rev. E 109, 025203 (2024), Fig. 1) that age is about 1 ns at 6 ns, well short of
+# the 6 ns since the pulse began, because the foot stores little. The capsule takes the
+# [`ablator`](@ref) default, 0.3. The conversion efficiency only scales the source, so the
+# wall converts all of its laser power and every fraction below is a fraction of the x-ray
+# source.
 
 const N210808 = (radius = 3.2, length = 11.24, leh_diameter = 3.1, capsule_radius = 1.13)
 const N210307_LEH = 3.64
@@ -79,7 +80,7 @@ nothing #hide
 # The beams heat two bands on each half of the wall: the inner cones (23.5° and 30°)
 # near the waist, the outer cones (44.5° and 50°) near the LEHs. The source is uniform
 # in each band, with the 33% inner-cone fraction of the N210808 peak (Kritcher et al.,
-# Sec. II A). The band positions are representative, not taken from the shot; the
+# Sec. II A). The band positions are representative and are not taken from the shot; the
 # fractions change little with them (checked below).
 #
 # Each wall element gets the source power of its overlap with the bands, so Briareus
@@ -135,7 +136,7 @@ nothing #hide
 # ## The closed-form power balance
 #
 # If the incident flux ``H`` were the same on every surface, the source would balance
-# the wall's and capsule's absorption and the escape through the holes (Lindl et al.,
+# the absorption in the wall and capsule and the escape through the holes (Lindl et al.,
 # Phys. Plasmas 11, 339 (2004), Sec. IV):
 #
 # ```math
@@ -160,15 +161,15 @@ nothing #hide
 
 # ## The Monte Carlo reference
 #
-# Photons start from the source, chosen element by element in proportion to its power
-# and uniformly over the element's true curved area, and leave each surface in a
-# cosine-distributed direction. Each step intersects the exact cylinder, end planes
-# and sphere analytically: no mesh, no view factors. A photon striking the wall or the
-# capsule deposits ``1-\alpha`` of its weight there and carries on with the rest, and
-# one crossing a hole escapes with its weight; Russian roulette ends photons whose
-# weight falls below 10⁻³ without bias. This is the gray, diffuse radiosity problem
-# solved by a different method, so it is exact up to its sampling error, which is
-# reported with each result.
+# Photons start from the source: each element is chosen in proportion to its power, and
+# the start point is uniform over the true curved area of the element. Photons leave each
+# surface in a cosine-distributed direction. Each step intersects the exact cylinder, end
+# planes and sphere analytically, so the walk needs neither a mesh nor view factors. A
+# photon striking the wall or the capsule deposits ``1-\alpha`` of its weight there and
+# continues with the rest, and one crossing a hole escapes with its weight; Russian
+# roulette ends photons whose weight falls below 10⁻³ without bias. This is the gray,
+# diffuse radiosity problem solved by a different method, so it is exact up to its
+# sampling error, which is reported with each result.
 
 const V3 = Briareus.Vec3     # Makie also exports a `Vec3`
 
@@ -268,8 +269,8 @@ pb_nominal = power_balance(N210808.leh_diameter)
 
 # Briareus and the photon walk agree to 2×10⁻⁴ of the source, within the 6×10⁻⁴ that the
 # view factors lose to their quadrature (rows of the view-factor matrix summing to
-# slightly less than one). The closed form reads the LEH loss 9% low (0.249 against
-# 0.273) and the capsule's share 0.3% high. Its uniform flux is a poor assumption for
+# slightly less than one). The closed form puts the LEH loss 9% low (0.249 against
+# 0.273) and the share of the capsule 0.3% high. Its uniform flux is a poor assumption for
 # the holes: the flux that reaches them comes mostly from the end caps and the wall
 # near the ends, where the outer-cone source sits.
 #
@@ -299,8 +300,8 @@ nothing #hide
 #
 # ## The sweep
 #
-# LEH diameters from 3.0 to 3.6 mm around N210808's 3.1 mm, and N210307's 3.64 mm,
-# with the two shots' sizes marked:
+# The sweep covers LEH diameters from 3.0 to 3.6 mm around the 3.1 mm of N210808, and the
+# 3.64 mm of N210307, with the sizes of the two shots marked:
 
 diameters = sort(unique([collect(3.0:0.1:3.6); N210808.leh_diameter; N210307_LEH]))
 sweep = map(diameters) do d
@@ -369,7 +370,7 @@ end
 # ## N210307 to N210808
 #
 # At the same radiation temperature the capsule absorbs the same power, so the source
-# needed scales as the inverse of the capsule's fraction, and the laser power with it
+# needed scales as the inverse of the capsule fraction, and the laser power with it
 # if conversion and coupling do not change. Shrinking the holes from 3.64 to 3.1 mm
 # then changes the required power by the ratio of the capsule fractions. The published
 # peak powers are 441 TW (N210808) and 487 TW (N210307). Over a range of wall albedos:
@@ -390,33 +391,33 @@ for (a, r, rc) in ratios
     @printf("wall albedo %.3f: Briareus %.3f, closed form %.3f\n", a, r, rc)
 end
 
-# At the estimated wall albedo the prediction is an 8.3% saving (ratio 0.917), and 9.5%
-# at an albedo of 0.9, against the 9.4% the two shots' peak powers show. The closed
-# form, whose error largely cancels in the ratio, gives nearly the same. The
-# comparison is approximate. The shots also changed the wavelength separation (1.55 to
-# 1.8 Å), the outer-cone pointing and the pulse duration. "Similar radiation
-# temperature" is the paper's qualitative statement, not a measured equality. And the
-# holes close down during the pulse, so their effective sizes, and the difference
-# between them, are smaller than the as-built ones. It confirms the size of the
-# effect, not a number.
+# At the estimated wall albedo the prediction is an 8.3% saving (ratio 0.917), and 9.5% at
+# an albedo of 0.9, against the 9.4% between the peak powers of the two shots. The closed
+# form, whose error largely cancels in the ratio, gives nearly the same. The comparison is
+# approximate. The shots also changed the wavelength separation (1.55 to 1.8 Å), the
+# outer-cone pointing and the pulse duration. "Similar radiation temperature" is a
+# qualitative statement in the paper and is not a measured equality. And the holes close
+# down during the pulse, so their effective sizes, and the difference between them, are
+# smaller than the as-built ones. The comparison confirms the size of the effect rather
+# than a number.
 #
 # ## What this checks
 #
 # - **Code verification.** On the N210808 hohlraum, the fraction of the x-ray source
 #   escaping through the LEHs and the fraction the capsule absorbs agree with an
 #   independent Monte Carlo photon walk in the exact geometry. The difference is
-#   2×10⁻⁴ of the source at a 0.4 mm wall mesh, within the view factors' lost
-#   fraction (6×10⁻⁴). With the rows balanced (`closed = true`) it is within the
+#   2×10⁻⁴ of the source at a 0.4 mm wall mesh, within the fraction the view factors
+#   lose (6×10⁻⁴). With the rows balanced (`closed = true`) it is within the
 #   sampling error (10⁻⁴; 2σ band) at every LEH diameter from 3.0 to 3.64 mm.
 # - **Solution verification.** The difference from the reference falls from 3×10⁻³ at
-#   a 0.6 mm wall mesh to a few 10⁻⁴ at 0.4 and 0.25 mm, within the view factors'
-#   lost fraction.
+#   a 0.6 mm wall mesh to a few 10⁻⁴ at 0.4 and 0.25 mm, within the fraction the view
+#   factors lose.
 # - **The closed-form power balance** with a uniform flux is not a reference for the
-#   LEH loss in a hohlraum: it reads it 9–9.5% low over 3.0–3.64 mm. It gets the
-#   capsule's share within 0.5%.
-# - **Validation, approximate.** For open, static holes, the capsule-coupling gain
-#   from shrinking the LEH from 3.64 to 3.1 mm predicts a peak-power saving of 8.3%
-#   at the estimated Au-lined DU wall albedo (0.875) and 9.5% at 0.90, against the 9.4% between N210307 and N210808
-#   (Kritcher et al. 2022, Table I). Those shots also changed other parts of the
-#   design, and their holes closed down during the pulse; this power balance models
-#   neither.
+#   LEH loss in a hohlraum: it puts that loss 9–9.5% low over 3.0–3.64 mm. It gets the
+#   share of the capsule within 0.5%.
+# - **Validation, approximate.** For open, static holes, the capsule-coupling gain from
+#   shrinking the LEH from 3.64 to 3.1 mm predicts a peak-power saving of 8.3% at the
+#   estimated Au-lined DU wall albedo (0.875) and 9.5% at 0.90, against the 9.4% between
+#   N210307 and N210808 (Kritcher et al. 2022, Table I). Those shots also changed other
+#   parts of the design, and their holes closed down during the pulse; this power balance
+#   models neither.

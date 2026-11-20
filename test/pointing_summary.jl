@@ -42,7 +42,7 @@ Briareus.keepout_clearance(k::_SummaryKeepOut, beams::AbstractVector{<:Beam}) =
     @test isempty(pointing_summary(s, beams).clearance)
     @test pointing_summary(s, quads).shift_max < 1e-12      # the start rebuilt by `apply`
     @test pointing_summary(s, quads; reference = quads).shift_max == 0.0
-    # display: one line
+    # The display is one line.
     shown = sprint(show, sm)
     @test !occursin('\n', shown) && occursin("aim shifts mean", shown) && occursin("cone fraction 0.333", shown)
     # a beam the rule cannot place (-Inf) is the least clearance and shows; a beam it does
@@ -78,15 +78,16 @@ Briareus.keepout_clearance(k::_SummaryKeepOut, beams::AbstractVector{<:Beam}) =
     same = pointing_summary(so, quads; drive_reference = ref)
     @test same.drive_ratio ≈ 1 rtol = 1e-12
     @test all(same.departure .< 1e-12)
-    # split by order: the m = 0 part by hand from the coefficients; the parts' squares add
-    # to the whole
+    # The split by order is checked by computing the m = 0 part by hand from the
+    # coefficients, and the squares of the parts add to the whole.
     cd, cr = flux_ylm(evaluate(so, beams); lmax = 4), flux_ylm(ref; lmax = 4)
     zonal = [sqrt(2l + 1) * abs(cd[mode_index(l, 0)] / cd[1] - cr[mode_index(l, 0)] / cr[1]) for l in 1:4]
     @test d.departure_zero ≈ zonal rtol = 1e-12
     @test d.departure_zero .^ 2 .+ d.departure_nonzero .^ 2 ≈ d.departure .^ 2 rtol = 1e-12
     @test d.departure_zero == mode_departure(cd, cr; m = :zero) && d.departure_nonzero == mode_departure(cd, cr; m = :nonzero)
     @test isempty(sm.departure_zero) && isempty(sm.departure_nonzero)
-    # on coefficient vectors: a change of c_11 alone is m ≠ 0 (√3 Δ at l = 1), of c_20 m = 0
+    # On coefficient vectors, a change of only c_11 is m ≠ 0 (√3 Δ at l = 1), and a
+    # change of only c_20 is m = 0.
     c1 = [1.0; zeros(24)]
     c2 = copy(c1); c2[mode_index(1, 1)] = 0.004; c2[mode_index(2, 0)] = -0.003
     @test mode_departure(c2, c1; m = :zero) ≈ [0, sqrt(5) * 0.003, 0, 0] atol = 1e-16
@@ -130,7 +131,8 @@ end
     @test ow(ev) ≈ sum(w .* x .^ 2) / sum(w) rtol = 1e-12
     gw = ForwardDiff.gradient(y -> ow(evaluate(s, y)), x)
     @test gw ≈ 2 .* w .* x ./ sum(w) rtol = 1e-12
-    # matched by name: a subset against the full set; a beam without a reference beam
+    # Beams are matched by name, both for a subset against the full set and for a beam
+    # without a reference beam.
     keep = findall(b -> b.group !== :inner23, quads)
     @test o(evaluate(subset(s, keep), ev.beams[keep])) ≈ sum(abs2, x[keep]) / length(keep) rtol = 1e-12
     @test_throws ArgumentError shift_objective(quads[1:4])(ev)

@@ -1,9 +1,9 @@
-# Drives the real Briareus window through its QML callbacks — target, parts and
-# windows, the model tree and inspector, beams and VisRad files, the 3D view's camera
-# and picking, the drive on request, the optimization with the capsule keep-out,
-# clearance and TaLIS — and grabs window images with `request_grab` (run by
-# runtests.jl in a separate process when BRIAREUSGUI_QT_TESTS=true; also runnable alone).
-# Exits nonzero on failure.
+# Drives the real Briareus window through its QML callbacks and grabs window images with
+# `request_grab`. The script covers the target, parts and windows, the model tree and
+# inspector, beams and VisRad files, the camera and picking of the 3D view, the drive on
+# request, the optimization with the capsule keep-out, clearance and TaLIS. runtests.jl runs
+# it in a separate process when BRIAREUSGUI_QT_TESTS=true, and it also runs by itself. The
+# script exits nonzero on failure.
 #
 #   julia --project=BriareusGUI -t 4 BriareusGUI/test/qt_window.jl
 using Test
@@ -18,7 +18,7 @@ using BriareusGUI.Briareus
     t_start = time()
     seen = Symbol[]
     refused = false
-    shots = get(ENV, "BRIAREUSGUI_SHOTS", mktempdir())     # keep the images: set the variable
+    shots = get(ENV, "BRIAREUSGUI_SHOTS", mktempdir())     # set the variable to keep the images
     mkpath(shots)
     files = mktempdir()
     png(name) = joinpath(shots, name * ".png")
@@ -43,7 +43,7 @@ using BriareusGUI.Briareus
             B.br_add_window()                                      # at φ = 270°
             B.br_edit_window(1, "phi", "60")
             B.br_window_open(2, true)
-            B.br_edit_window(2, "z", "9")                          # off the wall: rejected
+            B.br_edit_window(2, "z", "9")                          # off the wall, so rejected
             B.request_grab(png("target")); next!()
         elseif k == 1 && grabbed(png("target"))
             s.target.parts[][1].values[:length] == 10.0 && push!(seen, :target)
@@ -59,9 +59,9 @@ using BriareusGUI.Briareus
             s.view.selection[] == "part:" * name && s.target.parts[][end].values[:z] == 7.5 &&
                 s.target.parts[][end].values[:r1] == 2.5 && !isempty(s.target.error[]) &&
                 any(r -> r.id == "part:" * name, model_tree(s)) && push!(seen, :part)
-            # placement steps from the inspector: facing TCC (the nearer side: z stays up),
-            # then 6 mm from it; a step
-            # that undoes the facing is refused
+            # Placement steps from the inspector face the part toward TCC, from the nearer
+            # side so that z stays up, and then place it 6 mm from TCC. A step that undoes
+            # the facing is refused.
             B.br_step_add(findfirst(==(:facing), PART_STEP_KINDS) - 1)
             B.br_step_add(findfirst(==(:distance), PART_STEP_KINDS) - 1)
             B.br_step_edit(2, "distance", "6")
@@ -85,7 +85,8 @@ using BriareusGUI.Briareus
             # the starter's parts remain; the added part is gone
             length(s.target.parts[]) == n_parts - 1 && !any(p -> p.name === ps.name, s.target.parts[]) &&
                 s.view.selection[] == "target" && push!(seen, :remove)
-            # beams: a quad from the tree, the table per quad, VisRad round trip
+            # The beam checks cover a quad from the tree, the table per quad and a VisRad
+            # round trip.
             B.br_toggle_expand("group:inner23")
             B.br_select("group:inner23")
             B.br_edit_node("z", "3.0")
@@ -108,7 +109,8 @@ using BriareusGUI.Briareus
             B.request_grab(png("beams")); next!()
         elseif k == 3 && grabbed(png("beams"))
             all(s.beams.enabled[]) && sh.scene.volumes.visible[] && push!(seen, :volumes)
-            # the camera: zoom toward a pixel, orbit, pan, a click that selects the wall
+            # The camera checks zoom toward a pixel, orbit, pan and a click that selects the
+            # wall.
             c = sh.scene.camera
             d0 = B.norm(c.eye - c.lookat)
             mid = (c.viewport[3] / 2, c.viewport[4] / 2)
@@ -131,7 +133,7 @@ using BriareusGUI.Briareus
             B.camera_release!(c, (mid[1] - 40, mid[2]))
             B.br_fit_all()
             B.br_set_cutaway(true)
-            # color by the laser: computes the drive on request
+            # Coloring by the laser computes the drive on request.
             B.br_set_color("laser"); next!()
         elseif k == 4 && s.drive.result[] !== nothing && !s.drive.evaluating[]
             s.drive.scenario[] !== nothing && push!(seen, :drive)
@@ -197,7 +199,8 @@ using BriareusGUI.Briareus
                  length(node_beams(s.beams, "group:backlighter")) == 2
             B.br_edit_node("aim_x", "6.0")
             B.br_edit_node("aim_z", "0.0")
-            # (the preset aims both quads in the top entrance hole's frame: the edit is in it)
+            # The preset aims both quads in the frame of the top entrance hole, so the edit
+            # is in that frame.
             ok && all(i -> s.beams.aim_local[][i] ≈ Briareus.Vec3(6.0, s.beams.aim_local[][i][2], 0.0),
                       node_beams(s.beams, "group:backlighter")) && push!(seen, :group)
             B.br_fit_all()
@@ -215,8 +218,8 @@ using BriareusGUI.Briareus
             B.br_edit_node("defocus", "0.5")
             B.request_grab(png("split")); next!()
         elseif k == 17 && grabbed(png("split"))
-            # undo the split (one step: the tick recorded it with the defocus edit),
-            # after saving the session with the quad split
+            # After the session is saved with the quad split, one undo step removes the
+            # split, since the tick recorded it with the defocus edit.
             B.br_save_session(session_file, false)
             B.br_undo(); next!()
         elseif k == 18 && time() - t_stage[] > 0.2
@@ -232,14 +235,15 @@ using BriareusGUI.Briareus
             B.br_open_session(session_file)
             s.target.parts[][1].values[:length] == 10.0 && count(b -> b.quad == q, s.beams.beams[]) == 4 &&
                 sh.session_path == session_file && push!(seen, :session)
-            # an x-ray image down the axis, through the top entrance hole (the drive is
-            # stale after the load: computed first)
+            # An x-ray image is taken down the axis through the top entrance hole. The drive
+            # is stale after the load, so it is computed first.
             B.br_standard_view("top")
             B.br_xray_image(); next!()
         elseif k == 20 && s.drive.image[] !== nothing && !s.drive.building[] && !s.drive.evaluating[]
             count(isfinite, s.drive.image[].values) > 100 && sh.figure === sh.map.fig &&
                 push!(seen, :xray)
-            # the image beside the 3D view: two canvases at once (camera actions keep it)
+            # The image beside the 3D view shows two canvases at once, and camera actions
+            # leave it in place.
             B.br_side_view(true)
             B.br_standard_view("iso")
             B.request_grab(png("xray")); next!()
@@ -266,7 +270,8 @@ using BriareusGUI.Briareus
             isfile(retuned_csv) && occursin("quad powers", s.drive.retune_status[]) &&
                 sh.app["retuneStatus"] == s.drive.retune_status[] && s.time.pulses[].label == "retuned.csv" &&
                 push!(seen, :retune)
-            # the Time tab: the retune's powers, then N221204's shape and its history
+            # The Time tab shows the powers of the retune, then the shape of N221204 and its
+            # history.
             B.request_tab("time")
             s.time.chart[] === :retune && sh.app["timeChart"] == "retune" && push!(seen, :time_retune)
             B.request_grab(png("time_retune")); next!()

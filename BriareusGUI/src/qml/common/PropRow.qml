@@ -2,7 +2,7 @@
 // unit. `value` is the current text from Julia; `edited(text)` fires on a change. The
 // unit stands beside the field when it fits there, otherwise on a second, smaller line
 // under the field, wrapped to the panel. With `check` set the label is a check box
-// (`checked`, `toggled(on)`), and `fieldEnabled` can disable the field alone.
+// (`checked`, `toggled(on)`), and `fieldEnabled` can disable only the field.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

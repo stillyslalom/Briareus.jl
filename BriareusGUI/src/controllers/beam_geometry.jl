@@ -1,7 +1,8 @@
-# Beam geometry for the viewer: each beam's axis traced from a start point outside the
-# target to the first opaque surface it meets (where its light lands), and the beam's
-# volume (the best-focus contour carried along the f-cone, as VisRad draws beams),
-# each generator line ending where it meets a surface. Pure geometry, no GL.
+# Beam geometry for the viewer. The axis of each beam is traced from a start point outside
+# the target to the first opaque surface it meets, where its light is deposited. The volume
+# of the beam is the best-focus contour carried along the f-cone, as VisRad draws beams,
+# with each generator line ending where it meets a surface. The code is pure geometry and
+# uses no GL.
 
 """
 Ways the viewer draws beams: `:off`, `:rays` (each beam's axis from its start to where
@@ -64,7 +65,8 @@ function beam_volume(t::Target, b::Beam; length::Real = 2 * t.scale,
     s0 = -(length + b.defocus)                   # start: `length` before the aim
     s1 = length - b.defocus                      # end without a hit
     ψs = range(0, 2π; length = nring + 1)[1:end-1]
-    # each generator: before focus x = focus + w + s (k - cone u), after: (k + cone u)
+    # Each generator is x = focus + w + s (k - cone u) before focus and uses (k + cone u)
+    # after it.
     stops = map(ψs) do ψ
         u = cos(ψ) * e1 + sin(ψ) * e2
         w = A * cos(ψ) * e1 + B * sin(ψ) * e2
@@ -99,7 +101,8 @@ end
 """
     beam_hit_distance(path::BeamPath, origin, direction) -> Float64
 
-Shortest distance (mm) between a pick ray and the beam's drawn axis (start → stop).
+Shortest distance (mm) between a pick ray and the drawn axis of the beam, from start to
+stop.
 """
 function beam_hit_distance(p::BeamPath, o, d)
     a, b = Vec3(p.start), Vec3(p.stop)
@@ -188,8 +191,8 @@ end
 
 What the 3D view draws of beam `b`'s unconverted light of `harmonic` (1 or 2), per
 beamlet: the converging square beam (`vertices`, `faces`: index triples) from `length`
-mm before the aim to `length` mm past it, not stopped by the target (unconverted light
-mostly passes it; the deposition resolves its shadows, the drawing does not), the
+mm before the aim to `length` mm past it, drawn through the target, since unconverted
+light mostly passes it and only the deposition resolves its shadows, the
 footprint square at
 the 3ω best-focus plane (`outlines`, segments) and the footprint's center line
 (`axes`, segments). Empty for a beam without a footprint.
