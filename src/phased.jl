@@ -772,14 +772,47 @@ _exact_value(p::_InPhase, ev::PerPhase) = _exact_value(p.f, ev[p.phase])
 
 # A keep-out's clearance over every phase (`clearance_floor` on a `PerPhase` of
 # evaluations): per beam the least over the phases. The phases share the aims, so a
-# keep-out that does not read the beams' power gives every phase the first's values.
+# keep-out that does not read the beams' power gives every phase the first's values: a
+# phase whose beams the keep-out sees as the first phase's (`_same_clearance`, an exact
+# test) is skipped, its clearances being the first phase's bit for bit.
 function (c::_ClearanceValue)(ev::PerPhase)
+    b1 = ev.values[1].beams
     v = c(ev.values[1])
     for k in 2:length(ev.values)
+        bk = ev.values[k].beams
+        length(bk) == length(b1) && all(i -> _same_clearance(c.keepout, b1[i], bk[i]), eachindex(b1)) &&
+            continue
         v = min.(v, c(ev.values[k]))
     end
     return v
 end
+
+# Whether the keep-out `k` gives beams `a` and `b` the same clearance bit for bit: by
+# default when they are identical (values and partials); for an `ApertureKeepOut`, which
+# reads a beam's power only through its envelope radius (from the values), when they
+# differ at most in power and their envelope radii are equal.
+_same_clearance(k, a::Beam, b::Beam) = _same_but_power(a, b) && _identical(a.power, b.power)
+_same_clearance(k::ApertureKeepOut, a::Beam, b::Beam) =
+    _same_but_power(a, b) &&
+    (ForwardDiff.value(a.power) == ForwardDiff.value(b.power) ||
+     envelope_radius(a.spot, a.power; intensity = k.intensity, peak_fraction = k.peak_fraction) ==
+     envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction))
+
+_same_but_power(a::Beam, b::Beam) =
+    a.name == b.name && a.port == b.port && _identical(a.aim, b.aim) && _identical(a.defocus, b.defocus) &&
+    _identical(a.spot, b.spot) && a.fnumber == b.fnumber && a.group === b.group && a.quad == b.quad &&
+    a.wavelength == b.wavelength && _identical(a.dlambda, b.dlambda)
+
+# Equal values and partials, of one type (`==` on duals compares values only; `isequal`
+# tells -0.0 from 0.0).
+_identical(x::D, y::D) where {D<:ForwardDiff.Dual} =
+    _identical(ForwardDiff.value(x), ForwardDiff.value(y)) && _identical(ForwardDiff.partials(x).values, ForwardDiff.partials(y).values)
+_identical(x::Real, y::Real) = !(x isa ForwardDiff.Dual) && !(y isa ForwardDiff.Dual) && isequal(x, y)
+_identical(x::Tuple, y::Tuple) = length(x) == length(y) && all(i -> _identical(x[i], y[i]), eachindex(x, y))
+_identical(x::SVector{3}, y::SVector{3}) = _identical(x[1], y[1]) && _identical(x[2], y[2]) && _identical(x[3], y[3])
+_identical(x::SuperGaussianSpot, y::SuperGaussianSpot) =
+    _identical(x.a, y.a) && _identical(x.b, y.b) && x.order == y.order && x.angle == y.angle && x.halo == y.halo &&
+    x.halo_scale == y.halo_scale && x.halo_order == y.halo_order
 
 _beam_names(ev::PerPhase) = _beam_names(ev.values[1])
 

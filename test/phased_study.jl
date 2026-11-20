@@ -103,6 +103,19 @@
         ki = ApertureKeepOut(tP; intensity = 0.05, minimum = -0.8)
         per = [keepout_clearance(ki, e.beams) for e in ev]
         @test clearance_floor(ki).f(ev) == min.(per...) && per[3] != per[1]
+        # under the optimizer's duals (partials in an aim and a power scale, so the phases'
+        # powers differ in value and partials): the phases the keep-out sees as the first
+        # are skipped, and the value is the least over every phase, values and partials
+        # bit for bit; at an intensity the third phase is not skipped
+        yd = [ForwardDiff.Dual{:ko}(v, Float64(i == 1), Float64(i == length(y))) for (i, v) in enumerate(y)]
+        evd = evaluate(ps, yd)
+        perd = [keepout_clearance(ko, e.beams) for e in evd]
+        got, least = clf.f(evd), reduce((a, b) -> min.(a, b), perd)
+        @test all(i -> got[i] === least[i], eachindex(got, least))
+        same(k, j) = all(i -> Briareus._same_clearance(k, evd[1].beams[i], evd[j].beams[i]), eachindex(evd[1].beams))
+        @test same(ko, 2) && same(ko, 3) && !same(ki, 3)
+        gi, leasti = clearance_floor(ki).f(evd), reduce((a, b) -> min.(a, b), [keepout_clearance(ki, e.beams) for e in evd])
+        @test all(i -> gi[i] === leasti[i], eachindex(gi, leasti))
     end
 
     @testset "the power scales in an objective and a table" begin

@@ -158,6 +158,7 @@ end
     xph2 = initial_parameters(pph2.param) .+ 0.01
     regph = ev -> sum(abs2, power_scales(pph2, ev) .- 1)
     augph2 = Briareus._Augmented(regph, (clf, in_phase(:a, dcl)), (fill(0.1, length(quads)), [0.2]), 3.0)
+    clfa = clearance_floor(keepout[1])     # an aperture keep-out over the phases (one skipped)
     sw = Scenario(tw, p)
     pcross = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
 
@@ -367,7 +368,7 @@ end
             ev = evaluate(pph2, x)
             @test (@inferred power_scales(pph2, ev)) isa Vector{T}
             @test (@inferred power_scales(pph2, apply(pph2.param, x))) isa Vector{T}
-            @test (@inferred clf.f(ev)) isa Vector{T}
+            @test (@inferred clf.f(ev)) isa Vector{T} && (@inferred clfa.f(ev)) isa Vector{T}
             @test (@inferred augph2(ev)) isa T
             @test (@inferred dcl.f(ev[:a])) isa T && (@inferred gsh.f(ev[:a])) isa Vector{T}
         end
@@ -595,6 +596,8 @@ end
                 @test _inf_jet_clean(JET.report_opt, Briareus._read_scales, pph2.param, apply(pph2.param, x).values)
                 @test _inf_jet_clean(JET.report_call, power_scales, pph2, ev)
                 @test _inf_jet_clean(JET.report_call, clf.f, ev) && _inf_jet_clean(JET.report_call, augph2, ev)
+                @test _inf_jet_clean(JET.report_call, clfa.f, ev)
+                VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, clfa.f, ev)
                 @test _inf_jet_clean(JET.report_call, dcl.f, ev[:a]) && _inf_jet_clean(JET.report_call, gsh.f, ev[:a])
             end
             # a warm restart from a constrained result
