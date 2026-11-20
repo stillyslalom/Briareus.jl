@@ -96,6 +96,16 @@ Briareus.keepout_clearance(k::_SummaryKeepOut, beams::AbstractVector{<:Beam}) =
     ds = sprint(show, d)
     @test !occursin('\n', ds) && occursin("of the reference, departure (l = 1–4)", ds)
     @test isapprox(sm.shift_rms, sqrt((47 * 0.3^2 + 0.5^2) / 48); rtol = 1e-12) && occursin("rms 0.30", shown)
+    # groups moved past thresholds, by hand: 47 quads by 0.3 mm and Q31B by 0.5 mm; per cone,
+    # every cone by 0.3 mm and Q31B's by 0.5 mm
+    mq = pointing_summary(s, beams; moved = (0.25, 0.4, 0.6))
+    @test mq.moved == [48, 1, 0] && mq.ngroups == 48 && mq.moved_thresholds == [0.25, 0.4, 0.6]
+    mc = pointing_summary(s, beams; moved = [0.25, 0.4], moved_by = :group)
+    @test mc.moved == [4, 1] && mc.ngroups == 4
+    @test pointing_summary(s, beams; moved = (0.4,), moved_by = b -> b.port[3] > 0).moved == [1]
+    @test isempty(sm.moved) && sm.ngroups == 0
+    @test occursin("quads moved > 0.25 / 0.4 / 0.6 mm: 48 / 1 / 0 of 48", sprint(show, mq))
+    @test_throws ArgumentError pointing_summary(s, beams; moved = (-0.1,))
 end
 
 # `shift_objective`: the weighted mean squared aim shift against closed forms, its

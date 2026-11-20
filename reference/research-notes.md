@@ -14764,3 +14764,23 @@ and two single-mode changes against their closed forms. In the script the report
 hand-written sum over orders became `mode_departure(e, r; m = :zero)` and `m =
 :nonzero`: its four split columns agree at their printed digits in every phase, at the
 start and at the finished design of § 3's check (where they are not zero).
+
+### 5. Quads moved past given shifts
+
+The script counted the quads whose largest aim shift from the as-shot beams exceeded
+0.1, 0.2 and 0.3 mm. `pointing_summary(...; moved = (0.1, 0.2, 0.3), moved_by = :quad)`
+records the counts (`moved`, of `ngroups` groups) and shows them in the one-line
+display; `moved_by` is a beam field (`:group` for cones, `:name` for beams) or a
+function of a beam. `test/pointing_summary.jl` checks the counts by hand on rigid
+shifts per quad and per cone. In the script the report's six lines of shifts, per-quad
+maxima and clearance became one `pointing_summary(ps[:picket], beams[:picket];
+reference, moved, keepout)`: the aims line agrees at its printed digits, at the start
+(no quad moved) and at the finished design of § 3's check (most quads moved past
+0.1 mm, some past 0.3 mm).
+
+**Not built.** The script's uniform start scales (each early phase's scale set so that
+the start's drive is a fraction of the reference's,
+`fraction × mean_flux(reference) / mean_flux(start)`) are exact only where the drive is
+linear in the beams' powers; with CBET or another power-dependent laser–plasma model a
+single ratio is a first step of an iteration. Left as a few lines of a study (no design
+obvious enough for a public name).

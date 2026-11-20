@@ -364,6 +364,9 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         per mesh) to check a finished design on a finer one;
       - `mode_departure(...; m = :zero | :nonzero)` and the summary's
         `departure_zero`/`departure_nonzero`;
+      - `pointing_summary(...; moved, moved_by)`, the quads moved past given shifts.
+      *Left:* uniform start scales at a fraction of a reference's drive (exact only for
+      a drive linear in power; a few lines of a study).
     - A pulse-shape budget: `pulse_shape_groups` groups per-key multipliers
       over the phases into a given number of shapes by k-means on the log multipliers
       per class, the split between the classes by fit (exact by enumeration or 1-D

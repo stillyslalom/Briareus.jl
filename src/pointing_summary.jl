@@ -28,10 +28,14 @@ A pointing (e.g. the beams of a re-pointing result) against reference beams, fro
 - with `gates`: `gate`, the gate per degree, and `gate_departure`, the departure it
   bounds (a [`mode_gate`](@ref)'s own value, from its reference's shape, shifted if so;
   otherwise `departure`); with `floor`: `floor`, the pointing floor per degree, against
-  which `departure` is shown. Empty without them.
+  which `departure` is shown. Empty without them;
+- with `moved` thresholds (mm): `moved_thresholds`, and `moved`, the number of groups
+  (by `moved_by`, e.g. quads; `ngroups` of them) whose largest aim shift exceeds each
+  threshold. Empty, and `ngroups` 0, without them.
 
 Its display is one line, suited to a log of a study's runs, with the departure over
-the gate and over the floor per degree where given (1.00: at the gate).
+the gate and over the floor per degree where given (1.00: at the gate) and the groups
+moved past each threshold.
 """
 struct PointingSummary
     nbeams::Int
@@ -52,18 +56,23 @@ struct PointingSummary
     floor::Vector{Float64}
     departure_zero::Vector{Float64}
     departure_nonzero::Vector{Float64}
+    moved_thresholds::Vector{Float64}
+    moved::Vector{Int}
+    ngroups::Int
+    moved_by::String     # the groups' name in the display
 end
 
 PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
                 reference_clearance, margin, clipped, missed, drive_ratio, departure) =
     PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
                     reference_clearance, margin, clipped, missed, drive_ratio, departure,
-                    Float64[], Float64[], Float64[], Float64[], Float64[])
+                    Float64[], Float64[], Float64[], Float64[], Float64[], Float64[], Int[], 0, "groups")
 
 """
     pointing_summary(scenario, beams; reference = beams of the scenario's start,
                      keepout = nothing, inner = (:inner23, :inner30),
-                     drive_reference = nothing, lmax = 4) -> PointingSummary
+                     drive_reference = nothing, lmax = 4, gates = nothing, floor = nothing,
+                     moved = (), moved_by = :quad) -> PointingSummary
     pointing_summary(scenario, result::PointingResult; kwargs...)
 
 Summary of `beams` (or a result's `beams`) in `scenario` against the `reference` beams,
@@ -90,16 +99,23 @@ shape, shifted if so, with its check of the laser–plasma model and time) and l
 shown. `floor` (a vector, or a `mode_uncertainty` result) adds the departure from
 `drive_reference` against the pointing floor. Both need degrees `1:lmax`.
 
+`moved`, aim shifts in mm (e.g. `(0.1, 0.2, 0.3)`), counts the groups of beams whose
+largest shift exceeds each: groups by `moved_by`, a `Beam` field (`:quad`, the default;
+`:group` for cones, `:name` for beams) or a function of a beam. A quad re-aimed as a
+unit moves its beams alike, so the count per quad is the number of quads whose aim
+point a review sees changed by more than the threshold.
+
 ```julia
 r = optimize_pointing(scenario, objective)
-pointing_summary(scenario, r; keepout = ApertureKeepOut(target), drive_reference = ref)
+pointing_summary(scenario, r; keepout = ApertureKeepOut(target), drive_reference = ref,
+                 moved = (0.1, 0.2, 0.3))
 ```
 """
 function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
                           reference = apply(s.param, initial_parameters(s.param)),
                           keepout = nothing, inner = (:inner23, :inner30),
                           drive_reference = nothing, lmax::Integer = 4, gates = nothing,
-                          floor = nothing)
+                          floor = nothing, moved = (), moved_by = :quad)
     ref = Dict(b.name => b for b in reference)
     for b in beams
         haskey(ref, b.name) || throw(ArgumentError("beam $(b.name) has no reference beam"))
@@ -128,11 +144,29 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
     end
     gate, gdep = _summary_gate(gates, ev, dep, lmax)
     fl = floor === nothing ? Float64[] : _summary_floor(floor, dep, lmax)
+    th, nmoved, ng = _moved_groups(bs, shifts, moved, moved_by)
     return PointingSummary(length(bs), isempty(shifts) ? 0.0 : sum(shifts) / length(shifts),
                            isempty(shifts) ? 0.0 : sqrt(sum(abs2, shifts) / length(shifts)),
                            maximum(shifts; init = 0.0), P, P > 0 ? Pin / P : NaN, c, cref, margin,
                            Float64(clipped_fraction(ev)), Float64(missed_fraction(ev)), ratio, dep,
-                           gate, gdep, fl, dz, dn)
+                           gate, gdep, fl, dz, dn, th, nmoved, ng,
+                           moved_by === :quad ? "quads" : moved_by === :group ? "cones" :
+                           moved_by === :name ? "beams" : "groups")
+end
+
+# The thresholds, the number of groups (`by`: a beam field or a function of a beam) whose
+# largest shift exceeds each, and the number of groups; none without thresholds.
+function _moved_groups(beams, shifts, moved, by)
+    th = collect(Float64, moved)
+    isempty(th) && return th, Int[], 0
+    all(x -> x >= 0, th) || throw(ArgumentError("the shift thresholds must be non-negative, got $th"))
+    key = by isa Symbol ? (b -> getfield(b, by)) : by
+    most = Dict{Any,Float64}()
+    for (b, d) in zip(beams, shifts)
+        k = key(b)
+        most[k] = max(get(most, k, 0.0), d)
+    end
+    return th, [count(>(t), values(most)) for t in th], length(most)
 end
 
 # The summary's gates per degree and the departure they bound: a mode gate's own value
@@ -239,5 +273,8 @@ function Base.show(io::IO, p::PointingSummary)
               join((@sprintf("%.4f", 100d) for d in p.departure), " "), " %")
     isempty(p.gate) || print(io, "; over the gates ", join((@sprintf("%.2f", d / g) for (d, g) in zip(p.gate_departure, p.gate)), " "))
     isempty(p.floor) || print(io, "; over the floor ", join((@sprintf("%.2f", d / f) for (d, f) in zip(p.departure, p.floor)), " "))
+    isempty(p.moved_thresholds) ||
+        print(io, "; ", p.moved_by, " moved > ", join((@sprintf("%g", t) for t in p.moved_thresholds), " / "), " mm: ",
+              join(p.moved, " / "), " of ", p.ngroups)
     print(io, ")")
 end

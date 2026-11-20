@@ -1047,7 +1047,9 @@ dictionary by phase; a phase without an entry shows none), or one value for ever
 phase (a vector, a [`mode_uncertainty`](@ref) result, a [`mode_gate`](@ref)). `gates`
 may also be the run's constraints (a vector or tuple, e.g. the `constraints` passed to
 [`optimize_pointing`](@ref)): each phase then shows its `in_phase(phase, mode_gate(...))`,
-from that gate's own reference shape.
+from that gate's own reference shape. `moved` and `moved_by` count the groups moved
+past each shift threshold, as for one scenario (the phases share the aims, so every
+phase shows the same counts).
 
 ```julia
 pointing_summary(ps, r; drive_reference = refs, gates = constraints, floor = floors)
@@ -1057,7 +1059,7 @@ function pointing_summary(ps::PhasedScenario, beams::PerPhase;
                           reference = apply(ps.param, initial_parameters(ps.param)),
                           keepout = nothing, inner = (:inner23, :inner30),
                           drive_reference = nothing, lmax::Integer = 4, gates = nothing,
-                          floor = nothing)
+                          floor = nothing, moved = (), moved_by = :quad)
     beams.names == ps.param.phases ||
         throw(ArgumentError("the beams' phases are not the scenario's ($(join(ps.param.phases, ", ")))"))
     out = map(eachindex(ps.scenarios)) do k
@@ -1065,7 +1067,7 @@ function pointing_summary(ps::PhasedScenario, beams::PerPhase;
         ref = reference isa PerPhase ? reference[ph] : reference
         dr = drive_reference === nothing ? nothing : haskey(drive_reference, ph) ? drive_reference[ph] : nothing
         pointing_summary(ps.scenarios[k], beams[ph]; reference = ref, keepout, inner, drive_reference = dr, lmax,
-                         gates = _phase_gate(gates, ph), floor = _phase_entry(floor, ph))
+                         gates = _phase_gate(gates, ph), floor = _phase_entry(floor, ph), moved, moved_by)
     end
     return PerPhase(ps.param.phases, out)
 end
