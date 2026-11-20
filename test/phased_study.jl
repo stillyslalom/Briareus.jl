@@ -5,9 +5,10 @@
 # whose reference sits on another target.
 #
 # References: the quantities by hand (mean flux, keep-out clearances per phase, the
-# pulses' powers, the history's state and the scenario remade from it); the Legendre
-# moments against the spherical-harmonic coefficients on the same sub-triangles for the
-# shift's units; the closed-form gradient of a quadratic in the scales.
+# pulses' powers, per-degree gates, the history's state and the scenario remade from
+# it); the Legendre moments against the spherical-harmonic coefficients on the same
+# sub-triangles for the shift's units; the closed-form gradient of a quadratic in the
+# scales.
 
 @testset "phased study API" begin
     geom = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 1.2, capsule_h = 0.9)
@@ -66,6 +67,14 @@
         @test_throws ArgumentError mode_gate(e0[:picket], u; floor = u)             # the floor twice
         @test_throws ArgumentError mode_gate(e0[:picket], u; fraction = -1.0)
         @test_throws DimensionMismatch mode_gate(e0[:picket], phys[1:3]; floor = u)
+        # one multiple of the floor per degree: by hand, √3·1·0.002, √5·2·0.0012, √7·2·0.0015, 3·2·0.0004
+        fd = [sqrt(3) * 0.002, 2sqrt(5) * 0.0012, 2sqrt(7) * 0.0015, 6 * 0.0004]
+        @test mode_gate(e0[:picket], u; fraction = [1, 2, 2, 2]).limit ≈ fd rtol = 1e-15
+        @test mode_gate(e0[:picket], phys; floor = u, fraction = [1, 2, 2, 2]).limit ≈ max.(phys, fd) rtol = 1e-15
+        @test mode_gate(e0[:picket], fl; fraction = ones(4)).limit == fl     # gates as such, ones accepted
+        @test_throws DimensionMismatch mode_gate(e0[:picket], u; fraction = [1, 2, 2])
+        @test_throws ArgumentError mode_gate(e0[:picket], u; fraction = [1, 0, 2, 2])
+        @test_throws ArgumentError mode_gate(e0[:picket], phys; fraction = [1, 2, 2, 2])  # no floor to scale
         # a shifted target: the gate's value is the departure from the shifted shape, and
         # the reference's model is still checked
         c0 = flux_ylm(e0[:peak]; lmax = 4)

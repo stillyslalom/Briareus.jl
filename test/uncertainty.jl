@@ -40,6 +40,8 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
     u = mode_uncertainty(s, quads; pointing = 0.02, power = 0.02, lmax)
     @test u.sigma ≈ sqrt.(diag(u.covariance)) && length(u.rms_mode) == lmax
     @test u.sigma[1] == 0
+    # the noise floor in mode_departure's units: √(2l+1) × the rms of the mode-l budget
+    @test u.floor ≈ [sqrt(3), sqrt(5), sqrt(7), 3.0] .* u.rms_mode rtol = 1e-15
     u2 = mode_uncertainty(s, quads; pointing = 0.04, power = 0.04, lmax)
     @test u2.sigma ≈ 2u.sigma rtol = 1e-12                          # linear in the errors
     if LONG_TESTS
@@ -52,6 +54,9 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         rms_mc = [sqrt(sum(abs2, samples[l^2+1:(l+1)^2, :] .- sens.c[l^2+1:(l+1)^2]) / size(samples, 2))
                   for l in 1:lmax]
         @test all(abs.(rms_mc ./ u.rms_mode .- 1) .< 0.12)
+        # the floor is the rms of the sampled departures from the nominal shape
+        dep = reduce(hcat, [mode_departure(samples[:, j], sens.c; lmax) for j in axes(samples, 2)])
+        @test all(abs.(sqrt.(vec(sum(abs2, dep; dims = 2)) ./ size(dep, 2)) ./ u.floor .- 1) .< 0.12)
     end
 
     # the robust objectives add exactly the propagated variance

@@ -353,6 +353,11 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       opt-in cap on one inner run's evaluations, `inner_evaluations`, now ends such a
       run and updates the multipliers ("Inner-run options, a wall-loss scenario warning
       and laser delivery figures"). *Left:* the study rerun under it.
+    - A design ladder on the same study (scratch, 2026-11-20): what its script still
+      wrote by hand is API ("A ladder study's hand-written pieces as API (2026-11-20)"),
+      each checked by the script rewritten on it against the original:
+      - the pointing-noise floor as `mode_uncertainty(...).floor`, and gates at a
+        multiple of it per degree, `mode_gate(reference, u; fraction = [1, 2, 2, 2])`;
     - A pulse-shape budget: `pulse_shape_groups` groups per-key multipliers
       over the phases into a given number of shapes by k-means on the log multipliers
       per class, the split between the classes by fit (exact by enumeration or 1-D

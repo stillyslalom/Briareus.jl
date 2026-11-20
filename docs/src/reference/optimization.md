@@ -45,7 +45,9 @@ models).
 
 [`mode_sensitivity`](@ref) gives the exact sensitivity of the drive shape to each beam's
 pointing and power errors, and [`mode_uncertainty`](@ref) the asymmetry independent
-errors leave by linear propagation ([`sample_modes`](@ref) is the Monte Carlo check).
+errors leave by linear propagation ([`sample_modes`](@ref) is the Monte Carlo check),
+with its `floor`, the spread per degree in the units of [`mode_departure`](@ref), the
+lower bound of a gate.
 Errors can be shared by a group of beams or be the target's positioning. The
 objectives' `uncertainty` keyword optimizes the expected symmetry over them, and
 [`infer_errors`](@ref) finds the most probable errors behind a measured asymmetry.

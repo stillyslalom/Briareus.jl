@@ -138,13 +138,17 @@ Correlated errors (zero by default):
   3-tuple of rms values along x, y, z.
 
 Each source adds to the covariance independently. Returns `(; c, sigma, covariance,
-rms_mode, rms_by, J)`: the nominal `c_lm/c_00`, the rms of each coefficient, their
+rms_mode, floor, rms_by, J)`: the nominal `c_lm/c_00`, the rms of each coefficient, their
 covariance, and for each degree `l = 1:lmax` the rms of the mode's amplitude over the
 errors, `√E[Σ_m (δc_lm/c_00)²]` (the expected mode-`l` budget the errors use: compare
-`mode_amplitude`, which is `√(2l+1)` times the nominal one). `rms_by` splits `rms_mode`
-by source (`beam`, `group`, `positioning`; they add in quadrature), and `J` is
-`mode_sensitivity`'s. Linear in the errors: check large errors with `sample_modes`,
-which takes the same keywords.
+`mode_amplitude`, which is `√(2l+1)` times the nominal one). `floor[l]` is
+`√(2l+1) × rms_mode[l]`, the same spread in the units of [`mode_departure`](@ref) (for
+an axisymmetric change `|Δaₗ/a₀|`): the noise floor of a drive shape under these
+errors, the gate [`mode_gate`](@ref) takes from this result (`fraction` a multiple of
+it, one number or one per degree). `rms_by` splits `rms_mode` by source (`beam`,
+`group`, `positioning`; they add in quadrature), and `J` is `mode_sensitivity`'s.
+Linear in the errors: check large errors with `sample_modes`, which takes the same
+keywords.
 """
 function mode_uncertainty(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real = 0.05,
                           power::Real = 0.0, lmax::Integer = 4, group_pointing::Real = 0.0,
@@ -168,8 +172,13 @@ function mode_uncertainty(s::Scenario, beams::AbstractVector{<:Beam}; pointing::
     sigma = sqrt.(max.(diag(C), 0.0))
     budget(C) = [sqrt(max(sum(@view(diag(C)[l^2+1:(l+1)^2])), 0.0)) for l in 1:lmax]
     rms_by = (; beam = budget(Cb), group = budget(Cg), positioning = budget(Cp))
-    return (; c, sigma, covariance = C, rms_mode = budget(C), rms_by, J)
+    rms = budget(C)
+    return (; c, sigma, covariance = C, rms_mode = rms, floor = _mode_floor(rms), rms_by, J)
 end
+
+# The noise floor per degree in the units of `mode_departure`: √(2l+1) × the rms of the
+# mode-l budget.
+_mode_floor(rms_mode::AbstractVector{<:Real}) = [sqrt(2l + 1) * r for (l, r) in enumerate(rms_mode)]
 
 _error_variances(nb, pointing, power) =
     repeat([pointing^2 / 2, pointing^2 / 2, power^2], nb)

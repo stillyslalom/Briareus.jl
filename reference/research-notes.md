@@ -14668,3 +14668,36 @@ instead of the run's own digits. The penalty run and the least re-pointing are
 determined, and their text keeps its numbers. Making the polish's peak determined would
 take a converged polish (861 evaluations on an earlier first stage, minutes of the docs
 build), left as the user decided ("Defaults changed (2026-11-19)" §6).
+
+## A ladder study's hand-written pieces as API (2026-11-20) *derived*
+
+Roadmap item 34. The newest script of a multi-phase re-pointing study (a design ladder:
+six phases, 184 beams in 46 quads, one aim shift per quad and one power scale per cone
+and early phase, 100 parameters, 212 constraint rows, 184 of them the entrance-hole
+keep-out's) still wrote pieces by hand that the earlier pass (§ "The multi-phase
+study's hand-written pieces as API") had not covered. Those below are public now. A
+scratch copy of the script with those lines rewritten on the API, run beside a copy of
+the original on the same tree (8 threads, the start only, with the start's objective,
+every constraint row and the gates' limits printed to 17 digits), prints the same log
+as the original, character for character: the start report, the objective, the 212
+rows' values, limits and statuses and every phase's gate limits. Each subsection names
+the lines it replaced and what of the log checks them.
+
+### 1. The pointing-noise floor and per-degree gate multiples
+
+The script wrote `[sqrt(2l + 1) * r for (l, r) in enumerate(u.rms_mode)]` from a
+`mode_uncertainty` result where it needed the floor (the gates, the objective's
+normalization, the report), the expression of the internal `_gate_values`, and its
+gates as a multiple of the floor per degree (`GATES .* floor`, e.g. 1, 2, 2, 2).
+`mode_uncertainty` now returns `floor` beside `rms_mode`, `√(2l+1) × rms_mode[l]`, the
+rms of `mode_departure` under the errors (the long Monte Carlo check of
+`test/uncertainty.jl` compares the sampled departures' rms with it, within 12 % at 400
+samples), and `mode_gate(...; fraction)` takes one multiple per degree as well as one
+number, for a floor given as the gates or as `floor`. Chosen over a function
+(`mode_floor(u)`): the floor is a quantity of the result, read where the result is, and
+a field adds no name. `shift` already takes several modes, and `floor` a vector.
+Bit for bit: the floor is the same expression as before, and a vector of multiples
+the same product as the script's. In the script the floor of each reference and its
+gates (`mode_gate(reference, GATES .* floor)`) became `u.floor` and
+`mode_gate(reference, u; fraction = GATES)`: the 16 gate rows and the 24 gate limits
+agree to 17 digits.

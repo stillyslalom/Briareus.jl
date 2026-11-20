@@ -1003,7 +1003,7 @@ of its own gate.
 `gates` is a vector of departures (`gates[l]` for degree `l`, in the units of
 [`mode_departure`](@ref): for an axisymmetric difference `|Δaₗ/a₀|`, so `0.005` at
 `l = 2` is 0.5 % in P2/P0), or the result of [`mode_uncertainty`](@ref), whose
-`rms_mode` gives the gate `√(2l+1) × rms_mode[l]`: the departure that random errors of
+`floor` is the gate, `√(2l+1) × rms_mode[l]`: the departure that random errors of
 that size (e.g. NIF's 50 µm rms pointing) give each degree. That gate is a lower bound,
 what pointing error alone produces: laser delivery and the hohlraum plasma move the
 shape from shot to shot by more, in ways a view-factor model does not carry, so a
@@ -1031,8 +1031,10 @@ it: the vector must come from an evaluation with the scenario's `lpi` and time.
 **Keywords.**
 
 - `fraction` (positive, default 1) scales a pointing floor: with `gates` a
-  [`mode_uncertainty`](@ref) result the gate is `fraction × √(2l+1) × rms_mode[l]`
-  (`fraction = 0.8`: 0.8 of the floor).
+  [`mode_uncertainty`](@ref) result the gate is `fraction × √(2l+1) × rms_mode[l]`, that
+  is `fraction × u.floor[l]` (`fraction = 0.8`: 0.8 of the floor). A vector gives one
+  multiple per degree (`fraction = [1, 2, 2, 2]`: the floor at `l = 1`, twice it at
+  `l = 2–4`), as long as the floor.
 - `floor` (a [`mode_uncertainty`](@ref) result, or a vector of departures per degree)
   makes the floor a lower bound of physical gates: the gate per degree is the larger of
   `gates[l]` and `fraction × floor[l]`, so that a tolerance in physical units is never
@@ -1049,9 +1051,11 @@ it: the vector must come from an evaluation with the scenario's `lpi` and time.
   coefficient `c_lm`, so that the shifted shape departs from the reference's by `|Δ|` in
   degree `l` ([`shift_modes`](@ref)). The drive `c_00` is unchanged.
 """
-mode_gate(reference::Evaluation, gates; fraction::Real = 1, floor = nothing, shift = nothing) =
+mode_gate(reference::Evaluation, gates; fraction::Union{Real,AbstractVector{<:Real}} = 1, floor = nothing,
+          shift = nothing) =
     _mode_gate_of(reference, _gate_vector(gates, fraction, floor), shift)
-mode_gate(reference::AbstractVector, gates; fraction::Real = 1, floor = nothing, shift = nothing) =
+mode_gate(reference::AbstractVector, gates; fraction::Union{Real,AbstractVector{<:Real}} = 1, floor = nothing,
+          shift = nothing) =
     _mode_gate_of(reference, _gate_vector(gates, fraction, floor), shift)
 
 function _mode_gate_of(reference::Evaluation, g, shift)
@@ -1062,18 +1066,22 @@ _mode_gate_of(reference::AbstractVector, g, shift) =
     _mode_gate(shift === nothing ? reference : shift_modes(reference, shift), g, nothing)
 
 _gate_values(gates::AbstractVector{<:Real}) = gates
-_gate_values(u::NamedTuple) = [sqrt(2l + 1) * r for (l, r) in enumerate(u.rms_mode)]
+_gate_values(u::NamedTuple) = _mode_floor(u.rms_mode)
 _gate_lmax(gates) = max(length(_gate_values(gates)), 1)
 
 # The gates per degree from `mode_gate`'s arguments: the gates themselves, `fraction` of
-# a floor, or the larger of physical gates and `fraction` of a floor.
-function _gate_vector(gates, fraction::Real, floor)
-    isfinite(fraction) && fraction > 0 || throw(ArgumentError("the fraction must be positive and finite, got $fraction"))
+# a floor, or the larger of physical gates and `fraction` of a floor. `fraction` is one
+# number or one per degree of the floor.
+function _gate_vector(gates, fraction::Union{Real,AbstractVector{<:Real}}, floor)
+    all(f -> isfinite(f) && f > 0, fraction) ||
+        throw(ArgumentError("the fraction must be positive and finite, got $fraction"))
     if floor === nothing
-        gates isa NamedTuple && return fraction == 1 ? _gate_values(gates) : fraction .* _gate_values(gates)
-        fraction == 1 ||
+        gates isa NamedTuple && return _scaled_floor(fraction, _gate_values(gates))
+        all(==(1), fraction) ||
             throw(ArgumentError("`fraction` scales a pointing floor: give the gates as a mode_uncertainty " *
                                 "result, or the floor as `floor`"))
+        fraction isa Real || length(fraction) == length(_gate_values(gates)) ||
+            throw(DimensionMismatch("$(length(fraction)) fractions for $(length(_gate_values(gates))) gates"))
         return _gate_values(gates)
     end
     gates isa NamedTuple &&
@@ -1081,7 +1089,15 @@ function _gate_vector(gates, fraction::Real, floor)
     g, f = _gate_values(gates), _gate_values(floor)
     length(g) == length(f) ||
         throw(DimensionMismatch("$(length(g)) gates for a floor of $(length(f)) degrees"))
-    return max.(collect(Float64, g), fraction .* f)
+    return max.(collect(Float64, g), _scaled_floor(fraction, f))
+end
+
+# `fraction` (one number, or one per degree) times the floor `f`.
+_scaled_floor(fraction::Real, f) = fraction == 1 ? f : fraction .* f
+function _scaled_floor(fraction::AbstractVector{<:Real}, f)
+    length(fraction) == length(f) ||
+        throw(DimensionMismatch("$(length(fraction)) fractions for a floor of $(length(f)) degrees"))
+    return Float64.(fraction) .* f
 end
 
 """
