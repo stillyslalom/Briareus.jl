@@ -14053,6 +14053,12 @@ W: the distance dips between two samples by at most 0.51 µm below the nearer on
 the cases below (96 rim samples), so 3 µm keeps every interval that can hold the
 minimum; in the taper band the weights are below e⁻²⁵.
 
+**Superseded in part** ("The aperture keep-out's exact interval minima (2026-11-20)"):
+each interval's minimum is now found exactly from the distance's slopes at the samples,
+with no window, and the weights σₖ are anchored on the least interval minimum (1 within
+10 λ, 0 at 20 λ). The smooth minimum over intervals, the softness and every number below
+are unchanged: the clearances move by at most 1.2e-7 µm.
+
 Measured on the dropped-bundle tutorial's hohlraum and keep-out (1 % contour, minimum
 10 µm, as "Optimization defaults decided"): its 48 quads as pointed there, the same
 quads moved to within ±20 µm of the minimum along random directions, and 480 quads with
@@ -14264,12 +14270,14 @@ Case B, per evaluation (ms):
 | gradient's allocations (MB) | 17.3 | 17.2 | 18.4 | 18.4 | 18.4 | 45.9 | 31.1 |
 
 At 8 threads a short run's time per evaluation varies by about 20 % between runs: the
-row gives a single run and the best of three where both were taken.
+row gives a single run and the best of three where both were taken. Since fix 5 below
+(2026-11-20) the keep-out's gradient in case B is 1.8 ms on one thread (v0.1.0: 3.4,
+"fixed" above: 18.2, rerun beside it) and its allocations 1.3 MB.
 
 Case A, per evaluation (ms): `evaluate` 9.0–9.4 on one thread in every version; the
 serial-chunk gradient 152, 149, 157, 158, 162, 181 and 165 (fixed); the optimizer per
 evaluation on one thread 163, 163, 171, 172, 173, 194 and 178; the keep-out's gradient
-2.7, 2.7, 10.0, 9.7, 9.7, 28.2 and 14.1. Building the operator takes 2.1–2.4 s and the
+2.7, 2.7, 10.0, 9.7, 9.7, 28.2 and 14.1 (1.5 since fix 5). Building the operator takes 2.1–2.4 s and the
 radiation model 5.7 s (10-22), 7.2 s (0.1.0) and 7.7–8.1 s since (one thread; build
 time, not per evaluation; the step at 0.1.0 not bisected: the near-field view-factor
 quadrature changed in those days).
@@ -14323,12 +14331,19 @@ quadrature changed in those days).
    at 8 threads), at that rounding-level change of every VisRad deposition (it can
    move an optimizer run onto another path, and the evaluation counts and digits that
    tutorials and notes quote with it).
+5. (2026-11-20) `ApertureKeepOut` finds each sample interval's minimum exactly from the
+   distance's slopes at the samples, without a window of refined intervals, and takes a
+   dual beam's partials by the chain rule from the clearance's sensitivities to the focus
+   and the envelope's semi-axes ("The aperture keep-out's exact interval minima
+   (2026-11-20)"). Case B, 46 quads: value 1.49 to 0.20 ms (v0.1.0: 0.11), gradient
+   with serial chunks 18.2 to 1.8 ms (v0.1.0: 3.4), the optimizer's threaded gradient at
+   8 threads 2.96 to 0.50 ms (v0.1.0: 0.47). Results move by at most 1.2e-7 µm.
 
 Together, on case B the optimizer's evaluation costs 0.52–0.62 of 0.3.0's (168 against
 273 ms on one thread, 24.6–25.6 against 47.6–50.6 ms at 8 threads), 0.7–0.8 of
 v0.1.0's, and 1.4 (8 threads) to 3.1 (one thread) times the 2026-10-22 tree's, every
-result bit for bit 0.3.0's. The keep-out's gradient stays 6 times v0.1.0's (the refined
-rim and the window by design). On a multi-phase study's evaluation (scratch runs: six
+result bit for bit 0.3.0's (fixes 1–4). The keep-out's gradient, 6 times v0.1.0's after
+fixes 1–4 (the refined rim and the window), is 0.53 of it after fix 5. On a multi-phase study's evaluation (scratch runs: six
 phases, 552 parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient
 fell from 7.9 to 3.6 s (0.45), and the constraints from 0.98 to 0.40 of the objective's
 gradient: before the fixes the keep-out over the six phases and the three picket
@@ -14345,3 +14360,113 @@ hard cut per deposition (within 15 %). A picket ceiling on `measure = :average` 
 the outer cones once per phase it holds: a hand-written sum of `ev.deposition.per_beam`
 over the outer beams costs nothing but measures another quantity (it counts the light on
 the capsule and the entrance holes' outside).
+
+## The aperture keep-out's exact interval minima (2026-11-20) *measured*
+
+Why `ApertureKeepOut`'s gradient cost 6 times v0.1.0's, and the design that replaces the
+window of refined intervals ("Evaluation cost, measured (2026-11-19)", fix 5).
+
+**Before.** Every sample interval whose nearer end lay within 3 µm of the closest sample
+was refined by a 40-step golden section ("Defaults changed (2026-11-19)" §3): on NIF
+quads through a hohlraum's holes 10 such intervals per beam (median; up to 36 on a broad
+minimum), about 1,500 distance evaluations per beam, repeated in every chunk of a
+gradient, and the terms of the smooth minimum evaluated in the gradient's duals.
+
+**Now** (the smooth minimum over sample intervals, the softness and the rim unchanged):
+
+- *Each interval's minimum, exactly.* The rim points and their derivatives along the rim
+  are stored at the samples, and the search computes the distance and its slope there
+  (on Float64, a dual beam's values). An interval whose slope rises through zero holds
+  a minimum, found by regula falsi with the Illinois step to 1e-12 of the interval (6
+  steps on average); otherwise its minimum is its lower end. An interval is first split
+  where the f-cone term |s| has its kink (the rim crossing the plane of best focus:
+  closed form on an edge and an arc; the kink is concave, never a minimum); where the
+  rim crosses an axis of an elongated envelope, once the direction in envelope units
+  turns over the interval through a quarter of 1/√(e² − 1) (e the ratio of the
+  semi-axes: the angle over which the Sampson distance's direction factor peaks); where the
+  chord through the ends passes nearest the beam axis, if it reaches inside the
+  envelope (there the Sampson distance (q − 1)·h falls to −h within the axis's
+  distance); and where the cubic Hermite interpolant of the ends' distances and slopes
+  turns twice (a minimum and a maximum between two samples). Each split point is a
+  candidate.
+- *Weights on the least interval minimum.* σₖ is 1 within 10 λ of the least interval
+  minimum and falls (C¹) to 0 at 20 λ (a term at 10 λ weighs e⁻¹⁰ = 4.5e-5 of the least;
+  before: within 3 µm of the closest sample, 0 at 6 µm). Only the terms within 20 λ enter
+  in the beam's number type. *Engineering* constants.
+- *Partials by the chain rule.* On a dual beam whose values are Float64 the terms are
+  evaluated in the keep-out's own 5-partial duals, seeded on the focus (three) and the
+  envelope's semi-axes, the only quantities of the beam the distance reads, and the
+  result's partials are those sensitivities times the beam frame's partials: the cost
+  no longer grows with the gradient's chunk. Nested duals evaluate the terms in the
+  beam's own type. The value of a dual beam's clearance is the Float64 beam's bit for
+  bit.
+- The envelope radius (a root search) is computed once per distinct spot and power in
+  a call.
+
+**Validation** (*measured*, softness 0, against an independent reference: the distance
+sampled at 401 points per sample interval along the analytic rim pieces, the least
+refined by golden section between its neighbors). 2,820 beams (NIF quads and beams through
+two hohlraums' holes, aims moved up to ±0.4 mm, defocused up to ±2 mm, elliptical spots
+turned at random, and 900 oblique beams through the three holes of `test/keepout.jl`):
+within 9e-16 mm. 18,000 random oblique, defocused beams with spots of semi-axes 0.05 to
+0.3 mm (aspect up to 6) through those three holes, 5,058 with positive clearance and
+12,942 clipping: within 8e-15 mm; the former golden section missed the minimum on 37
+clipping beams by up to 0.29 mm (the dip near the axis inside the envelope). An
+intermediate form without the axis splits and the Hermite test missed it on 3 of the
+positive-clearance beams by up to 0.2 µm; `test/keepout.jl` keeps those beams and two
+whose axes pass 10 µm inside and 2 µm outside a rim, against 10⁵ samples per piece.
+
+**Change of results** (the 5,760 beam cases of "Evaluation cost, measured (2026-11-19)"
+fix 2: quads and beams in two hohlraums, aims moved up to 0.4 mm, some defocused):
+
+| | softness 1e-4 (default) | softness 0 |
+|---|---|---|
+| clearance, new − former (µm) | −2e-13 to +1.2e-7 (median 1e-8) | −4e-13 to +8e-13 |
+| partials, largest relative change | 5.6e-7 (median 1.1e-8) | 1.1e-8 (median), except at exact ties |
+
+The partials move by the former golden section's position error (about 1e-9 mm along
+the rim). At softness 0 the partials differ on 31 of the 2,880 beams, all at the unmoved
+aims, whose symmetric pointing ties two rim points: the exact minimum's derivative takes
+the other one-sided slope there.
+Differentiability, on the 144 scans of §3 (48 quads near the minimum, ±20 µm of aim):
+largest slope change per 1e-5 mm step 4.3e-3 (as before), per 1e-9 mm step at it 1.76e-3
+(1.77e-3: the interval that holds two local minima); forward mode against central
+differences at h = 1e-6 mm along 240 directions: largest difference 4.9e-9 (3.6e-8
+before), median 1.1e-10 (3.4e-9).
+
+**Cost** (*measured*, best of 50, one machine, the dropped-bundle workload of "Evaluation
+cost": 46 quads, 92 parameters; v0.1.0, the former tree 3a89a32 and this one):
+
+| case B (h = 0.2) | v0.1.0 | former | now |
+|---|---|---|---|
+| value, 1 thread (ms) | 0.114 | 1.49 | 0.197 |
+| gradient, serial chunks of 12, 1 thread (ms) | 3.41 | 18.2 | 1.81 |
+| the optimizer's threaded gradient, 8 threads (ms) | 0.469 | 2.96 | 0.498 |
+| allocations of a gradient (MB) | 0.41 | 13.1 | 1.26 |
+
+Case A (the tutorial's mesh): value 0.114, 1.26 and 0.164 ms; gradient 3.40, 15.5 and
+1.51 ms; threaded at 8 threads 0.38, 1.92 and 0.50 ms. Float64 per beam on the 5,760 cases
+18.9 to 4.2 µs, Dual{12} 30.7 to 4.5 µs. The value costs 1.7 times v0.1.0's (96 samples
+and no refinement then; 231 samples and exact minima now); what remains of a dual pass
+is that same search on the values, repeated in every chunk of a gradient (about 4 µs a
+beam a chunk): a cache across the chunks would cut the gradient to about a fifth, at
+the price of mutable state in the keep-out, not built.
+
+**Constrained runs** (*measured*, 8 threads; another run may have shared the machine).
+A study-sized re-pointing in scratch (a dropped bundle, the kept quads shifted in z and φ, the study's
+hohlraum at h = 0.2 with VisRad's profile, the mode-gate and peak-irradiance hinges, the
+entrance-hole keep-out as a `clearance_floor` at the dropped design's own least
+clearance, active on about 50 beams; 3,000-evaluation budget, which both runs reach):
+the designs differ by 0.35 µm rms in aim (1.0 µm at most), the objective by 3.4e-5
+relative, the least clearance by 3e-4 µm; 291 s before, 264 s now.
+The dropped-bundle tutorial's re-pointing under the keep-out's penalty (`second_try`, 20
+iterations): 87 evaluations either way, aims within 0.002 µm (0.0009 µm rms), the
+objective within 1.7e-7 relative, the least clearance within 2e-5 µm.
+The whole dropped-bundle tutorial prints the former tree's output to every digit, and
+the beam-errors tutorial's printed numbers agree with its text. The diagnostic-windows
+tutorial's pair re-pointing under the keep-out's penalty (an unconstrained run of up to
+200 iterations on a flat family of designs) ends elsewhere in that family, at 0.093–0.141 mm rms and 0.247 mm at most where the former
+tree ends at 0.105–0.142 mm and 0.257 mm, with l = 1–3 within 0.02 % either way; its text
+now reads 0.09–0.14 mm and 0.25 mm. The repository's constrained runs with an aperture
+keep-out floor (`test/phased.jl`) hold it far below the designs' clearance; their tests
+pass, plain and with bounds checks.

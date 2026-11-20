@@ -144,20 +144,44 @@ end
     @test abs(slope(-30λ)) < 1e-3 && abs(slope(30λ) + 1) < 1e-3 && -0.9 < slope(0.0) < -0.1
     @test slope(0.0) ≈ (c(ks, 1e-7) - c(ks, -1e-7)) / 2e-7 atol = 1e-6
 
-    # a dual beam's samples and golden sections run on its values, and only the points
-    # that enter the result in duals: value and partials bit for bit those of evaluating
-    # every point in duals (the reference: `_rim_clearance` without values)
-    function full(k, b)
+    # a dual beam's rim is searched on its values, and the smooth minimum's sensitivities
+    # to the focus and the envelope's semi-axes are carried to its partials by the chain
+    # rule: the value is the Float64 beam's bit for bit, the partials those of evaluating
+    # the terms found in the beam's own dual type (to rounding)
+    function in_beam_type(k, b)
+        j = argmax([dot(c, b.port) for c in k.centers])
+        terms, imin = Briareus._rim_terms(k, k.rims[j], k.samples[j], Briareus._RimFrame(k, Briareus._value_beam(b)))
         f = Briareus._RimFrame(k, b)
-        rim = k.rims[argmax([dot(c, b.port) for c in k.centers])]
-        return Briareus._rim_clearance(k, rim, f, nothing) - k.transverse - k.focus * f.cone
+        return Briareus._rim_soft_min(k, terms, imin, f) - k.transverse - k.focus * f.cone
     end
     D(x, p...) = ForwardDiff.Dual{:rim}(x, p...)
     dual_beam(b) = remake(b; aim = (D(b.aim[1], 1.0, 0.0, 0.0), D(b.aim[2], 0.0, 1.0, 0.0), D(b.aim[3], 0.0, 0.0, 1.0)),
                           defocus = D(b.defocus, 0.3, -0.2, 0.1), power = D(b.power, 0.0, 0.0, 0.0))
-    cases = [(k, dual_beam(b)) for k in (ks, ko(tr), ko(te), ko(cut)) for b in (sw(-30λ), sw(0.0), sw(1e-5), down, de, tilt)]
-    bitwise(c, e) = ForwardDiff.value(c) === ForwardDiff.value(e) && ForwardDiff.partials(c) === ForwardDiff.partials(e)
-    @test all(((k, b),) -> bitwise(only(aperture_clearance(k, [b])), full(k, b)), cases)
+    cases = [(k, b) for k in (ks, ko(tr), ko(te), ko(cut)) for b in (sw(-30λ), sw(0.0), sw(1e-5), down, de, tilt)]
+    function agree(k, b)
+        c, e = only(aperture_clearance(k, [dual_beam(b)])), in_beam_type(k, dual_beam(b))
+        p, q = collect(ForwardDiff.partials(c)), collect(ForwardDiff.partials(e))
+        return ForwardDiff.value(c) === only(aperture_clearance(k, [b])) === ForwardDiff.value(e) &&
+               isapprox(p, q; rtol = 1e-12, atol = 1e-15)
+    end
+    @test all(((k, b),) -> agree(k, b), cases)
+
+    # elongated spots beside and across the rim, where the first-order distance turns
+    # sharply near the envelope's ends and, inside it, dips steeply near the beam's axis:
+    # the exact minimum against the distance sampled at 10⁵ points per rim piece
+    function sampled(k, b)
+        f = Briareus._RimFrame(k, b)
+        return minimum(Briareus._rim_distance(f, r, τ) for r in k.rims[1] for τ in range(0, 1; length = 100_000))
+    end
+    thin(θ, φ, a, b, ψ, aim, d) = Beam("thin"; theta = θ, phi = φ, spot = SuperGaussianSpot(a, b; angle = ψ), aim, defocus = d,
+                                       fnumber = 8.0)
+    near = [(kr, thin(20, 30, 0.3, 0.12, 0.5, (0.2, H / 2 - 0.01, z0), 0.4)),        # the axis inside the hole, 10 µm from its edge
+            (kr, thin(15, 30, 0.3, 0.12, 2.0, (0.2, H / 2 + 0.002, z0), 0.4)),       # and 2 µm outside it
+            (kr, thin(21.993, 276.866, 0.052, 0.217, 2.975, (-0.491, 0.47, 0.387), -1.313)),
+            (whole, thin(11.59, 14.734, 0.071, 0.298, 3.539, (0.121, -0.228, 0.815), -0.605)),
+            (whole, thin(44.769, 89.483, 0.05, 0.231, 1.337, (-0.112, -0.53, 0.613), 1.062))]
+    gaps = [sampled(k, b) - only(aperture_clearance(k, [b])) for (k, b) in near]
+    @test all(g -> 0 <= g < 1e-6, gaps)
 end
 
 # The hardware keep-out against direct geometry: plates normal and parallel to a beam

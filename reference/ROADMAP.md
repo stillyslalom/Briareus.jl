@@ -377,13 +377,18 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       much as its objective. Fixed: the
       keep-out once for phases it sees alike, its dual search on values, zero-power
       beams and points beyond VisRad's cut skipped in `deposit`, bit for bit (an
-      evaluation at 0.52–0.62 of 0.3.0's, 0.7–0.8 of v0.1.0's). *Left (user's choice):*
+      evaluation at 0.52–0.62 of 0.3.0's, 0.7–0.8 of v0.1.0's); and the keep-out's exact
+      interval minima with chain-rule partials ("The aperture keep-out's exact interval
+      minima (2026-11-20)": its gradient 0.1 of before and 0.53 of v0.1.0's, clearances
+      within 1.2e-7 µm). *Left (user's choice):*
       the far screen inlined, about twice as fast again per deposition at a 1.2e-13
       relative change of every VisRad deposition. *Left:* the picket ceilings' deposition
       of the outer cones per phase (a deposition split by group inside `evaluate` would
-      serve them); the keep-out's window of refined intervals (by design, 6× v0.1.0's
-      gradient); the envelope-radius test behind fix 1 (about 3 ms a dual pass on 184
-      beams over five phases).
+      serve them); the keep-out's rim search on values, repeated in every chunk of a
+      gradient (now its whole cost: 1.8 ms for 46 quads on one thread; a cache across
+      chunks would cut that to about a fifth, at the price of state in the keep-out); the
+      envelope-radius test behind fix 1 (about 3 ms a dual pass on 184 beams over five
+      phases).
 
     The tutorial's section "A re-pointing study, end to end" walks these on exported
     names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a

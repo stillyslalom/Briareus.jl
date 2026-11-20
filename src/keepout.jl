@@ -21,6 +21,34 @@ _rim_point(r::_RimPiece, τ) =
     r.arc ? r.o + r.ρ * (cos(r.θ0 + τ * r.Δθ) * r.e1 + sin(r.θ0 + τ * r.Δθ) * r.e2) :
             r.p + τ * (r.q - r.p)
 
+# d(rim point)/dτ
+_rim_tangent(r::_RimPiece, τ) =
+    r.arc ? r.ρ * r.Δθ * (-sin(r.θ0 + τ * r.Δθ) * r.e1 + cos(r.θ0 + τ * r.Δθ) * r.e2) : r.q - r.p
+
+# A hole's rim samples, piece after piece: the rim point, its derivative in τ, τ, the
+# piece, and for an arc sample after the first of its piece the arc length from the
+# sample before (it bounds the change of s over the interval) and the sagitta of that
+# arc (-Inf and 0 on an edge).
+struct _RimSamples
+    x::Vector{Vec3}
+    dx::Vector{Vec3}
+    τ::Vector{Float64}
+    piece::Vector{Int}
+    arc::Vector{Float64}
+    sag::Vector{Float64}
+end
+
+function _RimSamples(rim::Vector{_RimPiece})
+    s = _RimSamples(Vec3[], Vec3[], Float64[], Int[], Float64[], Float64[])
+    for (p, r) in enumerate(rim), (i, τ) in enumerate(r.taus)
+        push!(s.x, _rim_point(r, τ)); push!(s.dx, _rim_tangent(r, τ)); push!(s.τ, τ); push!(s.piece, p)
+        θ = r.arc && i > 1 ? abs(r.Δθ) * (τ - r.taus[i-1]) : 0.0
+        push!(s.arc, r.arc && i > 1 ? r.ρ * θ : -Inf)
+        push!(s.sag, r.ρ * (1 - cos(θ / 2)))
+    end
+    return s
+end
+
 """
     ApertureKeepOut(target; apertures = planar aperture components, peak_fraction = 0.01,
                     intensity = nothing, pointing = 0.05, target_offset = 0.025,
@@ -42,14 +70,22 @@ continues across. On a `DiskSurface` aperture an edge whose ends lie at one radi
 the surface's center is the circular arc between them (the element's exact shape), so
 a circular hole meshed as a polygon keeps its circle; every other edge is straight
 (rectangular, slotted or elliptical openings, CAD apertures: the mesh is the geometry).
-The rim is sampled at about `nrim` points, every straight edge at both ends, and each
-sample interval whose nearer end lies within 3 µm of the closest sample (or 30
-`softness`, if larger) is refined by golden section, to about 1e-9 mm along the rim.
+The rim is sampled at about `nrim` points, every straight edge at both ends, and the
+least distance on each sample interval is found exactly: at an end, or where the
+distance's slope along the rim rises through zero, located from the slopes at the
+samples to 1e-12 of the interval. An interval is first split where the distance has a
+kink (where the rim crosses the plane of best focus, the f-cone term turning), where
+the rim crosses an axis of an elongated envelope (the first-order distance below turns
+sharply there), inside the envelope also where the rim passes nearest the beam axis
+(there the first-order distance dips steeply), and where the cubic through the ends'
+distances and slopes turns twice. A dual beam's rim is searched on its values; the
+result's partials follow from its sensitivities to the focus and the envelope's
+semi-axes, so their cost does not grow with the number of partials.
 
-The clearance is a smooth minimum of these refined minima (each interval's the least of
-its golden-section minimum and its ends), `−softness · log Σ σₖ exp(−dₖ/softness)`
-(`softness` in mm), each interval's weight σₖ 1 within that window and falling smoothly
-to 0 at twice it. The exact minimum over the rim has kinks where the worst rim point
+The clearance is a smooth minimum of these interval minima, `−softness · log Σ σₖ
+exp(−dₖ/softness)` (`softness` in mm), each interval's weight σₖ 1 within 10 `softness`
+of the least and falling smoothly to 0 at 20 `softness` (a term there weighs at most
+e⁻¹⁰ of the least). The exact minimum over the rim has kinks where the worst rim point
 jumps between separate local minima of the distance, which the smooth minimum rounds
 off. It never exceeds the exact minimum, lies below it by at most `softness` times the
 log of the number of intervals counted, and is the exact minimum for `softness = 0`.
@@ -70,6 +106,7 @@ struct ApertureKeepOut
     names::Vector{Symbol}
     centers::Vector{Vec3}
     rims::Vector{Vector{_RimPiece}}
+    samples::Vector{_RimSamples}
     peak_fraction::Union{Nothing,Float64}
     intensity::Union{Nothing,Float64}
     transverse::Float64
@@ -115,7 +152,7 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
         push!(centers, c)
         push!(rims, _hole_rim(t, comps, n, nrim))
     end
-    return ApertureKeepOut(names, centers, rims, peak_fraction, intensity,
+    return ApertureKeepOut(names, centers, rims, _RimSamples.(rims), peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
                            minimum, weight, Float64(softness))
 end
@@ -230,23 +267,39 @@ Worst-case clearance (mm) of each beam from the rim of its entrance aperture (se
 `ApertureKeepOut`); `Inf` for a beam with no aperture on its port side. Differentiable
 in the beams' aim, defocus and spot size.
 """
-aperture_clearance(k::ApertureKeepOut, beams::AbstractVector{<:Beam}) =
-    [_aperture_clearance(k, b) for b in beams]
+function aperture_clearance(k::ApertureKeepOut, beams::AbstractVector{<:Beam})
+    # the envelope radius once per distinct spot and power (values): a root search each
+    seen = Tuple{SuperGaussianSpot{Float64},Float64,Float64}[]
+    return [_aperture_clearance(k, b, _envelope_radius!(seen, k, b)) for b in beams]
+end
+
+function _envelope_radius!(seen, k::ApertureKeepOut, b::Beam)
+    sp, P = _value_spot(b.spot), _fvalue(b.power)
+    for (s, p, ρ) in seen
+        s === sp && p === P && return ρ
+    end
+    ρ = envelope_radius(sp, P; intensity = k.intensity, peak_fraction = k.peak_fraction)
+    push!(seen, (sp, P, ρ))
+    return ρ
+end
 
 # `Inf` in the beam's number type: a Float64 `Inf` beside dual clearances made the
 # clearance a `Union` and the objectives' keep-out penalty infer as `Any`.
 _no_clearance(::Beam{T}) where {T} = T(Inf)
 
-function _aperture_clearance(k::ApertureKeepOut, b::Beam)
-    side = [dot(c, b.port) for c in k.centers]
-    j = argmax(side)
-    side[j] > 0 || return _no_clearance(b)
+function _aperture_clearance(k::ApertureKeepOut, b::Beam, ρ::Float64)
+    j, side = 0, 0.0
+    for (i, c) in enumerate(k.centers)
+        s = dot(c, b.port)
+        (j == 0 || s > side) && ((j, side) = (i, s))
+    end
+    side > 0 || return _no_clearance(b)
     rim = k.rims[j]
     isempty(rim) && return _no_clearance(b)        # an aperture without a rim
-    f = _RimFrame(k, b)
-    # a dual beam's samples and golden sections run on its values (`_RimValues`)
-    return _rim_clearance(k, rim, f, b isa Beam{Float64} ? nothing : _RimValues(k, rim, _RimFrame(k, _value_beam(b)))) -
-           k.transverse - k.focus * f.cone
+    fv = _RimFrame(k, b isa Beam{Float64} ? b : _value_beam(b), ρ)
+    # the rim is searched on the beam's values; the terms found enter in its number type
+    terms, imin = _rim_terms(k, rim, k.samples[j], fv)
+    return _rim_result(k, terms, imin, fv, b, ρ) - k.transverse - k.focus * fv.cone
 end
 
 # What the distance from a rim point to a beam's envelope reads of the beam (in its number
@@ -262,157 +315,349 @@ struct _RimFrame{T}
     margin::Float64
 end
 
-function _RimFrame(k::ApertureKeepOut, b::Beam{T}) where {T}
-    ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
+# (`ρ`: the envelope radius, read from the beam's values)
+function _RimFrame(k::ApertureKeepOut, b::Beam{T},
+                   ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)) where {T}
     kv = direction(b)
     e1, e2 = spot_axes(b)
     return _RimFrame{T}(ρ * b.spot.a, ρ * b.spot.b, kv, e1, e2, b.aim + b.defocus * kv, 1 / (2b.fnumber), k.margin)
 end
 
-# The distance from the rim point at `τ` on piece `r` to the envelope.
-function _rim_distance(f::_RimFrame, r::_RimPiece, τ::Float64)
-    d = _rim_point(r, τ) - f.focus
+# The distance from the rim point `x` to the envelope.
+function _rim_distance(f::_RimFrame, x::Vec3)
+    d = x - f.focus
     s, u, v = dot(d, f.kv), dot(d, f.e1), dot(d, f.e2)
     return _sampson_distance(u, v, f.A, f.B) - f.cone * abs(s) - f.margin
 end
+_rim_distance(f::_RimFrame, r::_RimPiece, τ::Float64) = _rim_distance(f, _rim_point(r, τ))
 
-# A dual beam's rim distances on its values (`frame` of `_value_beam`), the samples
-# piece after piece: the values of the dual distances, which decide every comparison of
-# `_rim_clearance` but those between equal values (decided by the partials there).
-struct _RimValues
-    frame::_RimFrame{Float64}
-    samples::Vector{Float64}
-end
-_RimValues(k::ApertureKeepOut, rim, f::_RimFrame{Float64}) =
-    _RimValues(f, Float64[_rim_distance(f, r, τ) for r in rim for τ in r.taus])
+# The smooth minimum counts the sample intervals whose least distance lies within
+# `_SOFT_FULL` softness of the least at full weight, and those up to `_SOFT_ZERO` at a
+# weight falling (C¹) to 0 there: where a weight falls, its term is at most e⁻¹⁰ = 4.5e-5
+# of the least's.
+const _SOFT_FULL = 10.0
+const _SOFT_ZERO = 20.0
 
-# The smooth minimum of the refined interval minima over the rim (`ApertureKeepOut`).
-# With `values` (a dual beam's `_RimValues`), the samples outside the window and the
-# golden sections' trajectories come from the values, and only the points that enter the
-# result (the closest samples, each refined interval's ends and its golden section's
-# last two points) are evaluated in duals: the same arithmetic on the same points as on
-# the dual beam throughout, so the result is that one bit for bit; an interval whose
-# golden section meets two equal values, which the dual comparison orders by the
-# partials, is refined in duals.
-function _rim_clearance(k::ApertureKeepOut, rim::Vector{_RimPiece}, f::_RimFrame{T}, values) where {T}
-    n = sum(r -> length(r.taus), rim)
-    vals = Vector{T}(undef, n)
-    have = falses(n)
-    pj, τj = Vector{Int}(undef, n), Vector{Float64}(undef, n)       # each sample's piece and τ
-    m = 0
-    for (p, r) in enumerate(rim), τ in r.taus
-        m += 1
-        pj[m], τj[m] = p, τ
-    end
-    # the distance of sample `j`, in the beam's number type
-    function sample(j)
-        if !have[j]
-            vals[j] = _rim_distance(f, rim[pj[j]], τj[j])
-            have[j] = true
-        end
-        return vals[j]
-    end
-    if values === nothing
-        for j in 1:n
-            sample(j)
-        end
-        best = minimum(vals)
-        vb = 0.0
-    else
-        # the least sample: the dual minimum of the samples whose value is the least
-        vb = minimum(values.samples)
-        best = zero(T)
-        found = false
-        for j in 1:n
-            values.samples[j] == vb || continue
-            best = found ? min(best, sample(j)) : sample(j)
-            found = true
-        end
-    end
-    # the intervals whose nearer end lies within `W` of the closest sample, refined by
-    # golden section, weighted 1 there and falling (C¹) to 0 at 2W; their smooth minimum
-    # summed on the fly (lo: the least refined minimum, sw: Σ σ exp(−(g − lo)/λ))
-    λ = k.softness
-    W = max(_RIM_WINDOW, 30λ)
-    lo, sw = oftype(best, Inf), zero(best)
-    j0 = 0
-    for r in rim
-        for i in 1:length(r.taus)-1
-            a, b = j0 + i, j0 + i + 1
-            # outside the window on values (its dual weight would be exactly 0)
-            values === nothing ||
-                (min(values.samples[a], values.samples[b]) - vb - W) / W > 1 && continue
-            x = (min(sample(a), sample(b)) - best - W) / W
-            x >= 1 && continue
-            σ = x <= 0 ? one(x) : 1 - x^2 * (3 - 2x)
-            # (with its ends: on an interval where the distance is not unimodal, golden
-            # section can end at the higher end, and switch ends as the beam moves)
-            gs = values === nothing ? _golden_min(τ -> _rim_distance(f, r, τ), r.taus[i], r.taus[i+1]) :
-                 _golden_min_on_values(f, values.frame, r, r.taus[i], r.taus[i+1])
-            g = min(gs, sample(a), sample(b))
-            if λ == 0
+# The smooth minimum's terms, found on the beam's values (frame `f`): for each sample
+# interval of the rim its least distance (at an end, or at a minimum inside), kept with its
+# rim point if within `_SOFT_ZERO` softness of the least (`softness = 0`: the least
+# alone). Returns the terms (distance, point) and the index of the least.
+function _rim_terms(k::ApertureKeepOut, rim::Vector{_RimPiece}, rs::_RimSamples, f::_RimFrame{Float64})
+    reach = _SOFT_ZERO * k.softness
+    sf = _SlopeFrame(f)
+    terms = sizehint!(Tuple{Float64,Vec3}[], 32)
+    lo, cap = Inf, 32
+    x0 = rs.x[1]
+    d0, S0, s0, t0, w0 = _rim_slope(sf, x0, rs.dx[1])
+    @inbounds for j in 2:length(rs.x)
+        x1 = rs.x[j]
+        d1, S1, s1, t1, w1 = _rim_slope(sf, x1, rs.dx[j])
+        if rs.piece[j] == rs.piece[j-1]           # the interval from sample j − 1
+            g, xg = d1 < d0 ? (d1, x1) : (d0, x0)
+            g, xg = _interval_min(sf, rim, rs.piece[j], rs.τ[j-1], rs.τ[j], rs.arc[j], rs.sag[j],
+                                  (S0, s0, t0, w0, d0), (S1, s1, t1, w1, d1), g, xg)
+            if g <= lo + reach
+                push!(terms, (g, xg))
                 lo = min(lo, g)
-            elseif g < lo
-                sw = sw * exp((g - lo) / λ) + σ
-                lo = g
-            else
-                sw += σ * exp((lo - g) / λ)
+                # (the terms kept before the least was reached, dropped now and then)
+                length(terms) == cap && (_drop_above!(terms, lo + reach); cap = max(32, 2length(terms)))
             end
         end
-        j0 += length(r.taus)
+        x0, d0, S0, s0, t0, w0 = x1, d1, S1, s1, t1, w1
     end
-    return λ == 0 ? lo : lo - λ * log(sw)
+    _drop_above!(terms, lo + reach)
+    # a NaN distance (an envelope of zero size) passes into the result
+    isempty(terms) && push!(terms, (NaN, rs.x[1]))
+    imin = 1
+    for i in eachindex(terms)
+        terms[i][1] < terms[imin][1] && (imin = i)
+    end
+    return terms, imin
 end
 
-# `_golden_min` of the dual distance on [a, b], its trajectory found on the values
-# (frame `fv`): the dual distance at its last two points; in duals throughout if the
-# trajectory meets two equal values.
-function _golden_min_on_values(f::_RimFrame, fv::_RimFrame{Float64}, r::_RimPiece, a::Float64, b::Float64;
-                               iterations = 40)
-    φ = (sqrt(5.0) - 1) / 2
-    a0, b0 = a, b
-    c, d = b - φ * (b - a), a + φ * (b - a)
-    gc, gd = _rim_distance(fv, r, c), _rim_distance(fv, r, d)
-    for _ in 1:iterations
-        gc == gd && return _golden_min(τ -> _rim_distance(f, r, τ), a0, b0; iterations)
-        if gc < gd
-            b, d, gd = d, c, gc
-            c = b - φ * (b - a)
-            gc = _rim_distance(fv, r, c)
+_drop_above!(terms, cut) = filter!(t -> t[1] <= cut, terms)
+
+# The Float64 frame of the search, with the semi-axes' inverse squares.
+struct _SlopeFrame
+    focus::Vec3
+    kv::Vec3
+    e1::Vec3
+    e2::Vec3
+    ia::Float64
+    ib::Float64
+    ia2::Float64
+    ib2::Float64
+    minab::Float64
+    cone::Float64
+    margin::Float64
+    turn::Float64           # a quarter of the angle (envelope units) over which the direction factor turns at its peak
+end
+function _SlopeFrame(f::_RimFrame{Float64})
+    e = max(f.A, f.B) / min(f.A, f.B)
+    return _SlopeFrame(f.focus, f.kv, f.e1, f.e2, inv(f.A), inv(f.B), inv(f.A^2), inv(f.B^2), min(f.A, f.B), f.cone,
+                       f.margin, e > 1 ? 0.25 / sqrt(e^2 - 1) : Inf)
+end
+
+# At the rim point `x` with tangent `t` (dx/dτ): the distance to the envelope, the slope of
+# its Sampson part in τ, the axial position s and its slope, and the point in the
+# envelope's units (u/A, v/B: inside it within 1 of the axis). The distance's slope is
+# S′ − cone·sign(s)·s′: |s| has a concave kink where s = 0.
+@inline function _rim_slope(f::_SlopeFrame, x::Vec3, t::Vec3)
+    d = x - f.focus
+    s, u, v = dot(d, f.kv), dot(d, f.e1), dot(d, f.e2)
+    ts, tu, tv = dot(t, f.kv), dot(t, f.e1), dot(t, f.e2)
+    ua, vb = u * f.ia2, v * f.ib2
+    q = sqrt(u * ua + v * vb)
+    g = sqrt(ua * ua + vb * vb)
+    if q > 1e-9
+        D = (q - 1) * q / g
+        dq = (ua * tu + vb * tv) / q
+        dg = (ua * f.ia2 * tu + vb * f.ib2 * tv) / g
+        dD = ((2q - 1) * dq - D * dg) / g
+    else
+        D, dD = -f.minab, 0.0
+    end
+    return D - f.cone * abs(s) - f.margin, dD, s, ts, SVector(u * f.ia, v * f.ib)
+end
+
+# The point and tangent of piece `r` at τ (one sincos on an arc).
+function _rim_point_tangent(r::_RimPiece, τ::Float64)
+    r.arc || return r.p + τ * (r.q - r.p), r.q - r.p
+    sn, cs = sincos(r.θ0 + τ * r.Δθ)
+    return r.o + r.ρ * (cs * r.e1 + sn * r.e2), r.ρ * r.Δθ * (-sn * r.e1 + cs * r.e2)
+end
+
+# The distance's slope at τ on piece `r`, on the branch `σ` = sign(s) of |s|.
+function _slope_at(f::_SlopeFrame, r::_RimPiece, τ::Float64, σ)
+    x, t = _rim_point_tangent(r, τ)
+    _, S, _, ts = _rim_slope(f, x, t)
+    return S - f.cone * σ * ts
+end
+
+# The least distance on the sample interval [τa, τb] of piece `p` of `rim` (`arc`: its arc
+# length, -Inf on an edge; `sag`: the arc's sagitta), given the lesser end's (`g` at `xg`)
+# and the ends' Sampson slope, s, s′, point in envelope units and distance (`ea`, `eb`).
+# The interval is split (`_split_min`) where |s| has a kink; where the rim crosses an
+# axis of the envelope, if the Sampson distance's direction factor can turn sharply there
+# (an elongated spot: it peaks over about 1/√(e² − 1) of the direction in envelope units,
+# e the ratio of the semi-axes; the interval split if it turns through a quarter of
+# that); and, if it reaches inside the envelope, also where it passes nearest the beam
+# axis. Each part on which the distance is smooth is searched by `_part_min`.
+@inline function _interval_min(f::_SlopeFrame, rim, p, τa, τb, arc, sag, ea, eb, g, xg)
+    Sa, sa, ta, wa, da = ea
+    Sb, sb, tb, wb, db = eb
+    c = f.cone
+    # a kink inside: s changes sign, or (on an arc) passes an extremum near enough zero to
+    # cross it (|s′| is at most the interval's arc length per unit τ)
+    kink = c > 0 && ((sa > 0 && sb < 0) || (sa < 0 && sb > 0) || (ta * tb < 0 && min(abs(sa), abs(sb)) <= arc))
+    # the chord's nearest approach to the beam axis, in envelope units (with the arc's sag)
+    Δ = wb - wa
+    t = clamp(-dot(wa, Δ) / dot(Δ, Δ), 0.0, 1.0)
+    inside = sum(abs2, wa + t * Δ) < (1 + sag * max(f.ia, f.ib))^2
+    # an axis crossing (u = 0 or v = 0) through a turn of the direction wider than `turn`
+    axes = (wa[1] * wb[1] < 0 || wa[2] * wb[2] < 0) &&
+           abs(wa[1] * wb[2] - wa[2] * wb[1]) > f.turn * sqrt(sum(abs2, wa) * sum(abs2, wb))
+    (kink || inside || axes) &&
+        return _split_min(f, rim[p], τa, τb, ea, eb, g, xg, kink, inside || axes, inside ? τa + t * (τb - τa) : NaN)
+    σ = sa != 0 ? sign(sa) : sign(sb)
+    ml, mr = Sa - c * σ * ta, Sb - c * σ * tb
+    if ml < 0 < mr
+        r = rim[p]
+        return _smaller(f, r, _slope_root(f, r, τa, τb, ml, mr, σ), g, xg)
+    end
+    _hermite_turns(τb - τa, da, db, ml, mr) || return g, xg
+    return _part_min(f, rim, p, τa, τb, da, db, ml, mr, σ, g, xg)
+end
+
+# Whether the cubic Hermite interpolant on an interval of length `L` with end values `dl`,
+# `dr` and slopes `ml`, `mr` of one sign turns twice inside (its slope, a quadratic, changes
+# sign at its vertex).
+@inline function _hermite_turns(L, dl, dr, ml, mr)
+    (ml < 0) == (mr < 0) || return false
+    a0, a1, δ = L * ml, L * mr, dl - dr
+    α, β = 6δ + 3a0 + 3a1, -6δ - 4a0 - 2a1
+    α == 0 && return false
+    tv = -β / (2α)
+    return 0 < tv < 1 && (a0 > 0) != (a0 + tv * (β + α * tv) > 0)
+end
+
+function _smaller(f::_SlopeFrame, r::_RimPiece, τ, g, xg)
+    x, t = _rim_point_tangent(r, τ)
+    d = first(_rim_slope(f, x, t))
+    return d < g ? (d, x) : (g, xg)
+end
+
+# The least distance below `g` (at `xg`) on a part [l, rr] of piece `p` of `rim` on which
+# the distance is smooth (`σ`: the branch of |s|), from its ends' distances `dl`, `dr` and
+# slopes `ml`, `mr`: a minimum inside where the slope rises through zero (`_slope_root`).
+# Slopes of one sign at both ends whose cubic Hermite interpolant turns twice inside (a
+# minimum and a maximum between the samples) split the part at its two turning points,
+# each a candidate, and each piece is searched again (once).
+function _part_min(f::_SlopeFrame, rim, p, l, rr, dl, dr, ml, mr, σ, g, xg, again::Bool = true)
+    if ml < 0 < mr
+        r = rim[p]
+        return _smaller(f, r, _slope_root(f, r, l, rr, ml, mr, σ), g, xg)
+    end
+    (again && (ml < 0) == (mr < 0)) || return g, xg
+    # the interpolant's slope α t² + β t + γ on t ∈ [0, 1]
+    L = rr - l
+    a0, a1, δ = L * ml, L * mr, dl - dr
+    α, β, γ = 6δ + 3a0 + 3a1, -6δ - 4a0 - 2a1, a0
+    disc = β^2 - 4α * γ
+    (α != 0 && disc > 0) || return g, xg
+    q = -(β + copysign(sqrt(disc), β)) / 2
+    t1, t2 = minmax(q / α, γ / q)
+    0 < t1 && t2 < 1 || return g, xg
+    r = rim[p]
+    τ1, τ2 = l + t1 * L, l + t2 * L
+    x1, s1 = _rim_point_tangent(r, τ1)
+    d1, S1, _, ts1 = _rim_slope(f, x1, s1)
+    x2, s2 = _rim_point_tangent(r, τ2)
+    d2, S2, _, ts2 = _rim_slope(f, x2, s2)
+    d1 < g && ((g, xg) = (d1, x1))
+    d2 < g && ((g, xg) = (d2, x2))
+    m1, m2 = S1 - f.cone * σ * ts1, S2 - f.cone * σ * ts2
+    g, xg = _part_min(f, rim, p, l, τ1, dl, d1, ml, m1, σ, g, xg, false)
+    g, xg = _part_min(f, rim, p, τ1, τ2, d1, d2, m1, m2, σ, g, xg, false)
+    return _part_min(f, rim, p, τ2, rr, d2, dr, m2, mr, σ, g, xg, false)
+end
+
+# `_interval_min` on an interval split at the kinks of |s| and, with `axes`, where the rim
+# crosses the envelope's axes (u = 0, v = 0: the Sampson distance's direction factor at
+# its extremes, between which it turns within the axis's distance, sharply for an
+# elongated spot), and at `τq`, the chord's nearest approach to the beam axis inside the
+# envelope (where the Sampson distance (q − 1)·h falls to −h); each split point is a
+# candidate, and each part is searched by `_part_min` on its branch of |s|.
+function _split_min(f::_SlopeFrame, r::_RimPiece, τa, τb, ea, eb, g, xg, kink, axes, τq)
+    k1, k2 = kink ? _crossings(f, r, τa, τb, f.kv) : (NaN, NaN)
+    u1, u2 = axes ? _crossings(f, r, τa, τb, f.e1) : (NaN, NaN)
+    v1, v2 = axes ? _crossings(f, r, τa, τb, f.e2) : (NaN, NaN)
+    m = τa < τq < τb ? τq : NaN
+    splits = sort(SVector(k1, k2, u1, u2, v1, v2, m, τb); by = τ -> isnan(τ) ? Inf : τ)
+    c = f.cone
+    rim = (r,)
+    l, dl, Sl, tl = τa, ea[5], ea[1], ea[3]  # the part's left end: τ, distance, Sampson slope, s′
+    for rr in splits
+        (isnan(rr) || rr <= l) && continue
+        if rr == τb
+            dr, Sr, tr = eb[5], eb[1], eb[3]
         else
-            a, c, gc = c, d, gd
-            d = a + φ * (b - a)
-            gd = _rim_distance(fv, r, d)
+            x, t = _rim_point_tangent(r, rr)
+            dr, Sr, _, tr = _rim_slope(f, x, t)
+            dr < g && ((g, xg) = (dr, x))
         end
+        # the branch of |s| on (l, rr)
+        σ = kink ? sign(dot(_rim_point(r, (l + rr) / 2) - f.focus, f.kv)) : ea[2] != 0 ? sign(ea[2]) : sign(eb[2])
+        g, xg = _part_min(f, rim, 1, l, rr, dl, dr, Sl - c * σ * tl, Sr - c * σ * tr, σ, g, xg)
+        rr == τb && break
+        l, dl, Sl, tl = rr, dr, Sr, tr
     end
-    gc == gd && return _golden_min(τ -> _rim_distance(f, r, τ), a0, b0; iterations)
-    return min(_rim_distance(f, r, c), _rim_distance(f, r, d))
+    return g, xg
 end
 
-# The window (mm) above the closest rim sample within which `ApertureKeepOut` refines the
-# sample intervals: wider than the distance can dip between two samples below the nearer
-# one (0.5 µm at most on NIF quads through a hohlraum's entrance holes at 96 samples).
-const _RIM_WINDOW = 0.003
+# The points inside (τa, τb) at which the rim piece `r` crosses the plane through the focus
+# normal to `n` (dot(x − focus, n) = 0), ascending (NaN for none): linear in τ on an edge,
+# C + M cos(θ − φ) on an arc. With `n` the beam direction, the kinks of |s|.
+function _crossings(f::_SlopeFrame, r::_RimPiece, τa, τb, n)
+    if !r.arc
+        ds = dot(r.q - r.p, n)
+        τ = ds == 0 ? NaN : dot(f.focus - r.p, n) / ds
+        return τa < τ < τb ? (τ, NaN) : (NaN, NaN)
+    end
+    C = dot(r.o - f.focus, n)
+    a1, a2 = r.ρ * dot(r.e1, n), r.ρ * dot(r.e2, n)
+    M = hypot(a1, a2)
+    M > abs(C) || return (NaN, NaN)
+    φ, δ = atan(a2, a1), acos(-C / M)
+    period = 2π / abs(r.Δθ)
+    t1, t2 = _arc_tau(r, φ - δ, τa, τb, period), _arc_tau(r, φ + δ, τa, τb, period)
+    isnan(t1) && return (t2, NaN)
+    isnan(t2) && return (t1, NaN)
+    return (min(t1, t2), max(t1, t2))
+end
 
-# The smallest value of `g` on [a, b] found by golden-section search (the abscissae stay
-# Float64; only `g`'s values carry its number type).
-function _golden_min(g, a::Float64, b::Float64; iterations = 40)
-    φ = (sqrt(5.0) - 1) / 2
-    c, d = b - φ * (b - a), a + φ * (b - a)
-    gc, gd = g(c), g(d)
-    for _ in 1:iterations
-        if gc < gd
-            b, d, gd = d, c, gc
-            c = b - φ * (b - a)
-            gc = g(c)
+# The τ in (τa, τb) at which arc `r` reaches the angle θ (modulo a turn, `period` in τ),
+# or NaN.
+function _arc_tau(r::_RimPiece, θ, τa, τb, period)
+    τ = τa + mod((θ - r.θ0) / r.Δθ - τa, period)
+    return τa < τ < τb ? τ : NaN
+end
+
+# The point in (a, b) where the slope `S′ − cone·σ·s′` of the distance along piece `r`
+# rises through zero (`la` < 0 at a, `lb` > 0 at b): regula falsi with the Illinois step,
+# to 1e-12 of the interval.
+function _slope_root(f::_SlopeFrame, r::_RimPiece, a, b, la, lb, σ)
+    tol = 1e-12 * (b - a)
+    side = 0
+    τ = a
+    for it in 1:100
+        τn = (a * lb - b * la) / (lb - la)
+        a < τn < b || (τn = (a + b) / 2)
+        step = abs(τn - τ)
+        τ = τn
+        l = _slope_at(f, r, τ, σ)
+        l == 0 && break
+        if l < 0
+            a, la = τ, l
+            side == -1 && (lb /= 2)
+            side = -1
         else
-            a, c, gc = c, d, gd
-            d = a + φ * (b - a)
-            gd = g(d)
+            b, lb = τ, l
+            side == 1 && (la /= 2)
+            side = 1
         end
+        (b - a <= tol || (it > 1 && step <= tol)) && break
     end
-    return min(gc, gd)
+    return τ
 end
+
+# The smooth minimum of the terms' distances (`ApertureKeepOut`), evaluated in the frame
+# `f`: −λ log Σₖ σₖ exp(−dₖ/λ), each term's weight σₖ 1 within `_SOFT_FULL` λ of the
+# least and falling (C¹) to 0 at `_SOFT_ZERO` λ.
+function _rim_soft_min(k::ApertureKeepOut, terms, imin, f::_RimFrame)
+    λ = k.softness
+    lo = _rim_distance(f, terms[imin][2])
+    λ == 0 && return lo
+    S = zero(lo)
+    for (_, x) in terms
+        z = (_rim_distance(f, x) - lo) / λ
+        S += _soft_weight(z) * exp(-z)
+    end
+    return lo - λ * log(S)
+end
+
+function _soft_weight(z)
+    z <= _SOFT_FULL && return one(z)
+    z >= _SOFT_ZERO && return zero(z)
+    t = (z - _SOFT_FULL) / (_SOFT_ZERO - _SOFT_FULL)
+    return 1 - t^2 * (3 - 2t)
+end
+
+# The keep-out's own dual numbers: the smooth minimum's sensitivities to the focus (three)
+# and the envelope's semi-axes (two), the only quantities of the beam it reads.
+struct _RimTag end
+const _RimDual = ForwardDiff.Dual{_RimTag,Float64,5}
+
+# The smooth minimum in the beam's number type. On Float64 the terms on the values; on a
+# dual beam its sensitivities to the frame's five dual quantities (`_RimDual`, Float64
+# partials), carried to the beam's partials by the chain rule, so the cost does not grow
+# with the beam's partials; on nested duals the terms in the beam's own type.
+_rim_result(k::ApertureKeepOut, terms, imin, fv, ::Beam{Float64}, ρ) = _rim_soft_min(k, terms, imin, fv)
+
+function _rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam{<:ForwardDiff.Dual{<:Any,Float64}}, ρ)
+    e(i) = ForwardDiff.Partials{5,Float64}(ntuple(j -> Float64(j == i), 5))
+    fs = _RimFrame{_RimDual}(_RimDual(fv.A, e(4)), _RimDual(fv.B, e(5)), fv.kv, fv.e1, fv.e2,
+                             SVector(_RimDual(fv.focus[1], e(1)), _RimDual(fv.focus[2], e(2)), _RimDual(fv.focus[3], e(3))),
+                             fv.cone, fv.margin)
+    c = _rim_soft_min(k, terms, imin, fs)
+    p = ForwardDiff.partials(c)
+    fb = _RimFrame(k, b, ρ)
+    Δ(x) = x - ForwardDiff.value(x)          # the partials alone, at value 0
+    return ForwardDiff.value(c) + p[1] * Δ(fb.focus[1]) + p[2] * Δ(fb.focus[2]) + p[3] * Δ(fb.focus[3]) +
+           p[4] * Δ(fb.A) + p[5] * Δ(fb.B)
+end
+
+_rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam, ρ) = _rim_soft_min(k, terms, imin, _RimFrame(k, b, ρ))
 
 # First-order (Sampson) signed distance from (u, v) to the ellipse with semi-axes A, B:
 # exact on the ellipse and for circles, smooth everywhere but the center.
