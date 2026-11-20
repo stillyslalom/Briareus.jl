@@ -14418,13 +14418,39 @@ quadrature changed in those days).
    On the study the optimizer's augmented-Lagrangian gradient allocates 2.14 GB instead
    of 2.34 GB; its time at 8 threads moved within the machine's noise that session (1.17
    to 1.69 s before, 1.51 to 1.62 s after, alternating, another job on the second slot).
+10. Phases on one mesh deposit in one pass (2026-11-20). A `PhasedScenario` keeps, per
+   phase, the first phase whose deposition operator has the same points, weights,
+   normals, visibility, destinations, ports and profile (the same operator, or one built
+   alike on a target that differs in its materials; compared once at construction), and
+   `evaluate` deposits together the phases of one such class whose effective beams
+   differ in power alone (an exact test on aims, focus, spots and ports, values and
+   partials) and whose laser–plasma models deposit no light themselves: each point is
+   evaluated once, for the beam at unit power, and added to every phase times that
+   phase's beam power, into its elements, back sides and kept group sets (fix 7). A
+   beam's deposition is linear in its power (the profile's shape, cut-off and screens do
+   not read it); a model that changed a spot by power would fail the exact test and
+   deposit alone, as phases on other points do. Results change at rounding: on the
+   multi-phase study (scratch runs: six phases on two meshes, three each; Float64 and two
+   Dual{12} chunks, plain and tapered with the kept group sets) the depositions move by
+   at most 2.2e-13 of an element's own value (6.4e-16 of the largest), per-beam totals by
+   8.5e-16, back sides by 3.1e-16, the kept group sets by 4.6e-16, every term's
+   violations by at most 3.2e-13 of its scale and the objective by 4.5e-16. A constrained
+   run of 20 evaluations takes the same 20 evaluations and lands 5.9e-8 mm away (1.6e-8
+   mm rms in the aims, 5.9e-8 in the scales), its objective 4.2e-7 relative. Timings,
+   the former path being the same build with the grouping switched off, alternated in one
+   session (another job held the second lock slot): at 8 threads a dual pass's
+   evaluation 37–40 to 15–17 ms, the objective's gradient 1.21–1.26 to 0.46–0.49 s and the
+   optimizer's augmented-Lagrangian gradient 1.58–1.59 to 0.74 s (allocations 2.14 to
+   1.87 GB), the 20-evaluation run 27.0 to 13.3 s; on one thread the dual pass's
+   evaluation 138 to 52 ms (Float64: 81 to 27 ms), the objective's gradient 7.11 to
+   2.65 s and the augmented Lagrangian's 7.85 to 3.29 s.
 
 Together, on case B the optimizer's evaluation costs 0.21 of 0.3.0's on one thread (56
 against 273 ms) and 0.18–0.19 at 8 threads (9.0–9.2 against 47.6–50.6 ms), 0.24–0.29
 of v0.1.0's, and about the 2026-10-22 tree's on one thread (1.04; 0.5 at 8 threads), all
 nine fixes measured together on 2026-11-20 (case A: 160 ms on one thread, 22–23 ms at 8).
 Fixes 1–4 alone (0.52–0.62 of 0.3.0's) left every result bit for bit 0.3.0's; fixes
-6–8 change depositions at the rounding level only, and fix 9 nothing. The keep-out's
+6–8 and 10 change depositions at the rounding level only, and fix 9 nothing. The keep-out's
 gradient, 6 times v0.1.0's after fixes 1–4 (the refined rim and the window), is 0.53 of
 it after fix 5. On a multi-phase study's evaluation (scratch runs: six phases, 552
 parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient fell from
@@ -14435,9 +14461,11 @@ takes the objective's gradient from 2.83 to 1.62 s and the augmented Lagrangian'
 3.80 to 2.44 s (the two measured in one session; another run may have shared the
 machine, whose second lock slot is open to other jobs), fix 7 the latter to 1.87 s and
 fix 8 the two to 0.88 and 1.32 s; with all nine, on one thread, 7.1 and 7.7 s. The six
-phases' depositions are now more than half of a dual pass (56 % before fix 9), and they
-deposit on two meshes (three phases each, the same operator points): the law is
-evaluated six times where two would do. The gradient's chunks run threaded on the
+phases' depositions were then more than half of a dual pass (56 % before fix 9), on two
+meshes (three phases each, the same operator points), the law evaluated six times where
+two would do: fix 10 evaluates it twice, and takes the two gradients to 0.37 and 0.42 of
+fix 9's on one thread (2.65 and 3.29 s) and to 0.38 and 0.47 at 8 threads (0.46–0.49 and
+0.74 s; fix 10 does not enter cases A and B, one scenario each). The gradient's chunks run threaded on the
 phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
 at 16, fast and slow cores).
 

@@ -647,6 +647,104 @@ end
 # A beam-group set as `_GroupSplit` keys it.
 _group_set(gs) = sort!(unique!(collect(Symbol, gs)))
 
+# `deposit` of several sets of beams on one operator, the sets differing in the beams'
+# powers alone (beam by beam the same aim, focus, spot and port: the phases of a
+# `PhasedScenario` on one mesh, `_deposit_groups`), with set k's group sets kept in
+# `splits[k]` (a `_GroupSplit` with no sets keeps none). A beam's deposition is its power
+# times that of the beam at unit power (the profile's shape, cut-off and screens do not
+# read the power), so each point's intensity is evaluated once, at unit power, and every
+# set adds it times its own beam's power: set k's deposition is `deposit(op, sets[k])` to
+# rounding (the power enters as a last factor instead of through the profile's peak). A
+# beam at exactly zero power in a set (value and partials) adds nothing to that set, as
+# `deposit` skips it.
+function _deposit_sets(op::DepositionOperator, sets::Vector{Vector{Beam{T}}},
+                       splits::Vector{_GroupSplit{T}}) where {T}
+    b1 = first(sets)
+    for beams in sets
+        length(beams) == length(op.ports) || throw(DimensionMismatch("beam count changed"))
+    end
+    for (b, p) in zip(b1, op.ports)
+        b.port == p || throw(ArgumentError("beam $(b.name) port differs from the operator's"))
+    end
+    t = op.target
+    ne, nc, nb, nk = nelements(t), length(t.components), length(b1), length(sets)
+    plan = op.plan
+    nblock, nback = size(plan.boff, 1) - 1, length(plan.back)
+    P = [T[b.power for b in beams] for beams in sets]           # per set, per beam
+    frames = [BeamFrame(remake(b; power = one(T))) for b in b1]
+    screens = [_screen_frame(f, b) for (f, b) in zip(frames, b1)]
+    slopes = [_cone_slopes(op.dirs[bi], frames[bi]) for bi in 1:nb]
+    live = [Int[k for k in 1:nk if P[k][bi] !== zero(T)] for bi in 1:nb]   # per beam, its sets with power
+    E = [zeros(T, ne) for _ in 1:nk]
+    PB = zeros(T, nb, nblock)                 # per beam at unit power, by element block
+    LB = [zeros(T, nc, nback) for _ in 1:nk]  # per set, back-side power by piece
+    SB = zeros(T, nback)                      # piece totals at unit power
+    _deposit_sets_units!(E, PB, LB, SB, op, frames, screens, slopes, P, splits, live)
+    unit = T[sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]
+    for (u, (bi, _)) in enumerate(plan.back)
+        unit[bi] += SB[u]
+    end
+    out = Vector{Deposition{T}}(undef, nk)
+    for k in 1:nk
+        L = zeros(T, nc)
+        for u in 1:nback
+            L .+= @view LB[k][:, u]
+        end
+        out[k] = Deposition(E[k], L, T[P[k][bi] * unit[bi] for bi in 1:nb],
+                            convert(T, sum(b.power for b in sets[k])))
+    end
+    return out
+end
+
+# Function barrier for `_deposit_sets`' threaded loop over `op.plan`'s work units: each
+# unit writes its own elements of every set (and their group sets), or its own back-side
+# piece.
+function _deposit_sets_units!(E::Vector{Vector{T}}, PB::Matrix{T}, LB::Vector{Matrix{T}}, SB::Vector{T},
+                              op::DepositionOperator, frames, screens, slopes, P::Vector{Vector{T}},
+                              splits::Vector{_GroupSplit{T}}, live::Vector{Vector{Int}}) where {T}
+    plan = op.plan
+    nblock = size(plan.boff, 1) - 1
+    _tforeach(length(plan.order)) do k
+        u = plan.order[k]
+        if u <= nblock
+            for bi in axes(plan.boff, 2)
+                r = plan.boff[u, bi]:plan.boff[u+1, bi]-1
+                (isempty(r) || isempty(live[bi])) && continue
+                PB[bi, u] = _deposit_points_sets!(E, splits, P, live[bi], op, bi, frames[bi], screens[bi],
+                                                  slopes[bi], r)
+            end
+        else
+            v = u - nblock
+            bi, r = plan.back[v]
+            isempty(live[bi]) && return
+            ks = live[bi]
+            SB[v] = _sum_points(op, bi, frames[bi], screens[bi], slopes[bi], r, T) do d, val
+                for j in ks
+                    @inbounds LB[j][-d, v] += P[j][bi] * val
+                end
+            end
+        end
+    end
+end
+
+# An element block's points of beam `bi` (all on elements) at unit power, into the
+# element powers of every set `ks` that gives the beam power (times that power), and
+# into those of the set's group sets that hold the beam; returns the unit-power sum.
+function _deposit_points_sets!(E::Vector{Vector{T}}, splits::Vector{_GroupSplit{T}}, P::Vector{Vector{T}},
+                               ks::Vector{Int}, op::DepositionOperator, bi, f::BeamFrame,
+                               fv::BeamFrame{Float64}, slopes, r) where {T}
+    return _sum_points(op, bi, f, fv, slopes, r, T) do d, val
+        for k in ks
+            @inbounds v = P[k][bi] * val
+            @inbounds E[k][d] += v
+            @inbounds s = splits[k]
+            @inbounds for j in s.cols[bi]
+                s.element[j][d] += v
+            end
+        end
+    end
+end
+
 # An element block's points of beam `bi` (all on elements), also into the element powers
 # of the group sets that hold it.
 function _deposit_points_split!(E::AbstractVector{T}, s::_GroupSplit{T}, op::DepositionOperator,

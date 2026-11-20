@@ -389,7 +389,8 @@ _picket_map(op::DepositionOperator, power, gs, beams) = deposit(op, _picket_beam
 # `nothing`. They serve the beams at their own powers when the evaluation deposited those
 # beams as `deposit` does: its effective beams (`lpi`), or its setup beams when the
 # laser–plasma model left them as they are. The same sums as the deposition in
-# `_picket_map`, bit for bit (`_GroupSplit`).
+# `_picket_map`, bit for bit (`_GroupSplit`); to rounding when phases of a
+# `PhasedScenario` deposited in one pass (`_deposit_sets`).
 function _split_map(ev::Evaluation, power, gs, lpi::Bool)
     sp = getfield(ev, :_split)
     (sp === nothing || !(power isa _OwnPower)) && return nothing

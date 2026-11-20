@@ -936,8 +936,10 @@ end
 """
 evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x))
 
-function evaluate(s::Scenario, beams::AbstractVector{<:Beam})
-    eff = apply_lpi(s.lpi, beams, s.time)
+evaluate(s::Scenario, beams::AbstractVector{<:Beam}) = _evaluate(s, beams, apply_lpi(s.lpi, beams, s.time))
+
+# `evaluate` of the setup `beams` and their effective beams `eff`.
+function _evaluate(s::Scenario, beams::AbstractVector{<:Beam}, eff)
     sets = getfield(s, :_split)
     (isempty(sets) || !_plain_deposit(s.lpi)) && return _evaluation(s, beams, eff, lpi_deposit(s.lpi, s.deposition, eff, s.time), nothing)
     # the element powers of the group sets the run's constraints read (`_with_split`), in

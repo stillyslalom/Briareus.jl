@@ -228,4 +228,45 @@
         esh = evaluate(pss, y)
         @test all(k -> rel(flux_ylm(esh[k]), flux_ylm(ev[k])) < 1e-10, keys(ps))
     end
+
+    @testset "phases on one mesh deposit in one pass" begin
+        # reference: each phase's own scenario evaluated alone (`deposit` per phase). The
+        # three targets differ in albedo only: their operators have the same points.
+        flat(v) = reduce(vcat, [[ForwardDiff.value(z); collect(ForwardDiff.partials(z))] for z in v])
+        near(a, b) = rel(flat(a), flat(b)) < 1e-12
+        @test ps._mesh == [1, 1, 1]
+        sp = Briareus._with_split(ps, Briareus._SplitRequest([:step => [:outer44, :outer50]]))   # a kept group set
+        yd = ForwardDiff.Dual{:phased}.(y, (1:length(y)) ./ length(y), -0.5 .* sin.(1:length(y)), 0.25)
+        for x in (y, yd)
+            bs = apply(pp, x)
+            @test Briareus._deposit_groups(sp, bs.values) == [[1, 2, 3]]
+            ev = evaluate(sp, x)
+            alone = [evaluate(sp.scenarios[k], bs[k]) for k in 1:3]
+            @test all(k -> near(ev[k].deposition.element, alone[k].deposition.element) &&
+                           near(ev[k].deposition.backside, alone[k].deposition.backside) &&
+                           near(ev[k].deposition.per_beam, alone[k].deposition.per_beam) &&
+                           ev[k].deposition.delivered == alone[k].deposition.delivered, 1:3)
+            kept = getfield(ev[:step], :_split)
+            @test kept.sets == [[:outer44, :outer50]] && near(only(kept.element), only(getfield(alone[2], :_split).element))
+            @test getfield(ev[:picket], :_split) === nothing
+        end
+        # alone: a model that deposits light itself, another operator's points; a model that
+        # changes powers only (backscatter) joins
+        sO = remake(sP; deposition_kw = (; dk..., resolution = 0.5))
+        mixed = [Phase(:a, sP; power = picket_power),
+                 Phase(:b, remake(sP; lpi = Backscatter(:inner23 => 0.1)); power = 2.0, scaled = false),
+                 Phase(:c, remake(sP; lpi = BubbleAbsorption(radius = 2.875)); power = 1.5, scaled = false),
+                 Phase(:d, sO; power = 1.0, scaled = false)]
+        pm = PhasedScenario(gq, mixed; by = :quad)
+        @test pm._mesh == [1, 1, 1, 4]
+        ym = y[1:nparams(pm.param)]   # the aims and the first phase's scales
+        bm = apply(pm.param, ym)
+        eff = [apply_lpi(pm.scenarios[k].lpi, bm[k], pm.scenarios[k].time) for k in 1:4]
+        @test Briareus._deposit_groups(pm, eff) == [[1, 2], [3], [4]]
+        em = evaluate(pm, ym)
+        alone = [evaluate(pm.scenarios[k], bm[k]) for k in 1:4]
+        @test all(k -> near(em[k].deposition.element, alone[k].deposition.element), 1:2)
+        @test all(k -> em[k].deposition.element == alone[k].deposition.element &&
+                       em[k].deposition.per_beam == alone[k].deposition.per_beam, 3:4)   # bit for bit
+    end
 end

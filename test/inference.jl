@@ -51,6 +51,25 @@ function _inf_kernel_allocs(op, beams, split = nothing)
     return minimum(@allocated(run()) for _ in 1:3)
 end
 
+# The same for the pass over beam sets that differ in power alone (`_deposit_sets`: the
+# phases of a phased scenario on one operator), every beam live in every set.
+function _inf_sets_allocs(op, sets, splits)
+    b1 = first(sets)
+    T = typeof(first(b1).power)
+    frames = [Briareus.BeamFrame(remake(b; power = one(T))) for b in b1]
+    screens = [Briareus._screen_frame(f, b) for (f, b) in zip(frames, b1)]
+    slopes = [Briareus._cone_slopes(op.dirs[bi], frames[bi]) for bi in eachindex(b1)]
+    nblock, nback, nk = size(op.plan.boff, 1) - 1, length(op.plan.back), length(sets)
+    E = [zeros(T, nelements(op.target)) for _ in 1:nk]
+    PB, SB = zeros(T, length(b1), nblock), zeros(T, nback)
+    LB = [zeros(T, length(op.target.components), nback) for _ in 1:nk]
+    P = [T[b.power for b in bs] for bs in sets]
+    live = [collect(1:nk) for _ in b1]
+    run() = Briareus._deposit_sets_units!(E, PB, LB, SB, op, frames, screens, slopes, P, splits, live)
+    run()
+    return minimum(@allocated(run()) for _ in 1:3)
+end
+
 # Method instances of the positional function `f` (all its methods), inference-only ones
 # included.
 _inf_instances(f) = sum(m -> count(_ -> true, Base.specializations(m)), methods(f))
@@ -363,6 +382,12 @@ end
             @test (@inferred in_phase(:a, gatec).f(ev)) isa Vector{T}
             @test (@inferred in_phase(:b, dobj)(ev)) isa T
             @test (@inferred augph(ev)) isa T
+            # its phases on one operator in one pass (`_deposit_sets`), one keeping a group set
+            bp = apply(pph.param, x)
+            sets = [bp[:a], bp[:b]]
+            spl = [Briareus._GroupSplit([[:outer44, :outer50]], bp[:a], nelements(t), T),
+                   Briareus._GroupSplit(Vector{Symbol}[], bp[:b], nelements(t), T)]
+            @test (@inferred Briareus._deposit_sets(s.deposition, sets, spl)) isa Vector{Briareus.Deposition{T}}
         end
         # a multi-phase study's pieces: the drive's ceiling, a shifted gate, the power
         # scales in an objective, a keep-out over every phase, a picket ceiling on another
@@ -599,6 +624,14 @@ end
                 @test _inf_jet_clean(JET.report_call, apply, pph.param, x)
                 @test _inf_jet_clean(JET.report_call, evaluate, pph, x)
                 @test _inf_jet_clean(JET.report_call, augph, evaluate(pph, x))
+                # the phases' one deposition pass: no dispatch (from 1.11, as the deposition)
+                if VERSION >= v"1.11"
+                    bp = apply(pph.param, x)
+                    T = eltype(x)
+                    spl = [Briareus._GroupSplit([[:outer44, :outer50]], bp[:a], nelements(t), T),
+                           Briareus._GroupSplit(Vector{Symbol}[], bp[:b], nelements(t), T)]
+                    @test _inf_jet_clean(JET.report_opt, Briareus._deposit_sets, s.deposition, [bp[:a], bp[:b]], spl)
+                end
             end
             @test _inf_jet_clean(JET.report_call, (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c),
                                  pph, in_phase(:a, objectives[1]), xph, (in_phase(:a, ceilc), in_phase(:b, gatec)))
@@ -637,5 +670,11 @@ end
         @test _inf_kernel_allocs(s.deposition, bd, getfield(evaluate(ssp, _inf_duals(x0)), :_split)) < bound
         # VisRad's beam model, tapered
         @test _inf_kernel_allocs(opv, apply(p, _inf_duals(x0))) < bound
+        # phases on one operator in one pass, on duals, one keeping a group set
+        bp = apply(pph.param, _inf_duals(xph))
+        Td = eltype(_inf_duals(xph))
+        spl = [Briareus._GroupSplit([[:outer44, :outer50]], bp[:a], nelements(t), Td),
+               Briareus._GroupSplit(Vector{Symbol}[], bp[:b], nelements(t), Td)]
+        @test _inf_sets_allocs(s.deposition, [bp[:a], bp[:b]], spl) < bound
     end
 end

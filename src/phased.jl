@@ -613,6 +613,37 @@ struct PhasedScenario{P,S<:Scenario,K} <: _AbstractScenario
     phases::Vector{Phase}
     scenarios::Vector{S}
     param::PhasedPointing{P,K}
+    _mesh::Vector{Int}   # per phase: the first phase whose operator has the same points (`_operator_classes`)
+end
+
+PhasedScenario(phases::Vector{Phase}, scen::Vector{S}, param::PhasedPointing{P,K}) where {P,S<:Scenario,K} =
+    PhasedScenario{P,S,K}(phases, scen, param, _operator_classes(scen))
+
+Base.propertynames(::PhasedScenario) = (:phases, :scenarios, :param)
+
+# Per phase, the first phase whose deposition operator has the same points, weights,
+# normals, visibility, destinations, cone directions, ports and profile (the same
+# operator, or one built alike on a target that differs in its materials): phases of one
+# class whose beams differ in power alone deposit in one pass (`_deposit_groups`).
+function _operator_classes(scen::AbstractVector{<:Scenario})
+    cls = collect(eachindex(scen))
+    for k in eachindex(scen)
+        for j in 1:k-1
+            cls[j] == j && _same_points(scen[j].deposition, scen[k].deposition) && (cls[k] = j; break)
+        end
+    end
+    return cls
+end
+
+function _same_points(a::DepositionOperator, b::DepositionOperator)
+    a === b && return true
+    same(x, y) = x === y || x == y
+    nelements(a.target) == nelements(b.target) && length(a.target.components) == length(b.target.components) ||
+        return false
+    (a.profile === nothing) == (b.profile === nothing) || return false
+    a.profile === nothing || (a.profile.taper == b.profile.taper && a.envelope == b.envelope) || return false
+    return a.ports == b.ports && same(a.dirs, b.dirs) && same(a.pts, b.pts) && same(a.w, b.w) &&
+           same(a.normal, b.normal) && same(a.mask, b.mask) && same(a.dest, b.dest)
 end
 
 PhasedScenario(pointing, phases::Phase...; kwargs...) = PhasedScenario(pointing, collect(Phase, phases); kwargs...)
@@ -671,17 +702,79 @@ One [`Evaluation`](@ref) per phase: each phase's beams (`apply(scenario.param, x
 `beams`, a `PerPhase` of beam vectors with the scenario's phases in order) in the
 phase's scenario. Generic in the number type; the evaluations share nothing mutable, so
 concurrent gradient chunks each evaluate their own.
+
+Phases whose deposition operators have the same points (one operator, or operators built
+alike on targets that differ in their materials) and whose effective beams differ in
+power alone deposit in one pass: the beam profile is evaluated once per point and scaled
+by each phase's beam powers, each phase's deposition equal to its own `deposit` to
+rounding. A phase deposits alone when its effective beams differ from the others' in
+aim, spot or focus, when its operator's points differ, or when its laser–plasma model
+deposits light itself.
 """
 evaluate(ps::PhasedScenario, x::AbstractVector{<:Real}) = evaluate(ps, apply(ps.param, x))
 
 function evaluate(ps::PhasedScenario, beams::PerPhase)
     beams.names == ps.param.phases ||
         throw(ArgumentError("the beams' phases ($(join(beams.names, ", "))) are not the scenario's ($(join(ps.param.phases, ", ")))"))
-    return PerPhase(ps.param.phases, _phase_evaluations(ps.scenarios, beams.values))
+    return PerPhase(ps.param.phases, _phase_evaluations(ps, beams.values))
 end
 
-_phase_evaluations(scen::Vector{<:Scenario}, beams::AbstractVector) =
-    [evaluate(scen[k], beams[k]) for k in eachindex(scen, beams)]
+# The phases' evaluations. Phases on the same operator points (`ps._mesh`) whose effective
+# beams differ in power alone, and whose laser–plasma models deposit no light themselves,
+# deposit in one pass (`_deposit_sets`): the profile is evaluated once for them, each
+# phase's deposition then equal to its own `deposit` to rounding. Other phases, or phases
+# that differ in aims, spots or focus (a model that changes them by power), deposit alone.
+function _phase_evaluations(ps::PhasedScenario, beams::AbstractVector)
+    scen = ps.scenarios
+    eff = [apply_lpi(scen[k].lpi, beams[k], scen[k].time) for k in eachindex(scen, beams)]
+    evs = Vector{Any}(undef, length(scen))
+    for g in _deposit_groups(ps, eff)
+        if length(g) == 1
+            k = only(g)
+            evs[k] = _evaluate(scen[k], beams[k], eff[k])
+        else
+            _shared_evaluations!(evs, scen, beams, eff, g)
+        end
+    end
+    return [ev for ev in evs]
+end
+
+# The phases that deposit together, in groups: a phase joins the first earlier phase on
+# the same operator points whose effective beams differ from its own in power alone (an
+# exact test, `_same_but_power`), when neither phase's laser–plasma model deposits light.
+function _deposit_groups(ps::PhasedScenario, eff::AbstractVector)
+    n = length(eff)
+    lead = collect(1:n)
+    for k in 2:n
+        _plain_deposit(ps.scenarios[k].lpi) || continue
+        for j in 1:k-1
+            lead[j] == j && ps._mesh[j] == ps._mesh[k] && _plain_deposit(ps.scenarios[j].lpi) &&
+                _same_shape(eff[j], eff[k]) || continue
+            lead[k] = j
+            break
+        end
+    end
+    return [findall(==(j), lead) for j in 1:n if lead[j] == j]
+end
+
+_same_shape(a::Vector{Beam{T}}, b::Vector{Beam{T}}) where {T} =
+    length(a) == length(b) && all(i -> _same_but_power(a[i], b[i]), eachindex(a, b))
+_same_shape(a, b) = false
+
+# The evaluations of the phases `g` (one group of `_deposit_groups`) from one pass over
+# the first phase's operator, each phase keeping its own group sets (`Scenario`'s split).
+# A function barrier: the beams' number type is known here.
+function _shared_evaluations!(evs, scen, beams, eff, g)
+    T = typeof(first(eff[g[1]]).power)
+    sets = Vector{Beam{T}}[eff[k] for k in g]
+    splits = [_GroupSplit(getfield(scen[k], :_split), eff[k], nelements(scen[k].target), T) for k in g]
+    deps = _deposit_sets(scen[g[1]].deposition, sets, splits)
+    for (i, k) in enumerate(g)
+        sp = isempty(splits[i].sets) ? nothing : splits[i]
+        evs[k] = _evaluation(scen[k], beams[k], eff[k], deps[i], sp)
+    end
+    return evs
+end
 
 phase_beams(ps::PhasedScenario, beams::AbstractVector{<:Beam}; kwargs...) = phase_beams(ps.param, beams; kwargs...)
 power_scales(ps::PhasedScenario, v) = power_scales(ps.param, v)
