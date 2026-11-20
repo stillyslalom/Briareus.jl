@@ -900,22 +900,27 @@ review_line("polished", polished_review)
 held = filter(r -> r.name != "irradiance", stage2.constraints)   # gates, keep-out, light
 @assert stage2.outcome in (:interior, :box, :evaluations) && all(r -> r.violation <= 0.01, held)
 @assert ceiling.f(ev2) <= only(ceiling.limit) * 1.01   # the ceiling's smooth stand-in
+@assert peak_irradiance(ev2, :wall) <= only(ceiling.limit) * 1.01   # the peak itself
 @assert polished_review.fail == 0 && polished_review.worst > 0
 
-# The polish brings the departures back to their gates and raises the drive by 0.15
-# to 0.36 % over the first stage's aims on beams. It stops at its budget, and a run
-# stopped by its budget reports its limits as they stand. The gates and the keep-out
-# are held: over the perturbed starts above they end within 0.2 % of their gates and
-# within 1.3 µm of the keep-out's minimum. The wall's peak is not: the run holds the
-# ceiling's smooth stand-in, the 64-norm (0.94 to 0.99 of the limit), and the ceiling
-# holds the peak itself only once a run has converged on the stand-in, so the peak
-# printed above is one draw from a range, 0.966 to 1.020 of the ceiling over the
-# perturbed starts. The budget is kept small here to keep the tutorial short; a design
-# to hand off runs to convergence, which on an earlier first stage took 861 evaluations
-# (five and a half minutes on 8 threads) and met every limit, the peak at 0.997 of the
-# ceiling, at the same drive (research notes, "Optimization defaults decided"). The
-# clearance check confirms the keep-out on the worst case: no beam fails, the closest
-# staying 8 to 49 µm from a cap.
+# The polish brings the departures back to their gates. It stops at its budget, and a
+# run stopped by its budget with a limit beyond its tolerance returns its design of
+# least violation, here its best design within every limit (`least_violation` in the
+# result). Over six starts (the tutorial's and five moved by 10⁻¹² or 10⁻⁹ mm, which
+# stand for another CPU's rounding), two runs end within the limits and keep the drive
+# they gained, 0.17 and 0.32 % over the first stage's aims on beams; on the other four
+# the last design exceeds a gate by more than the tolerance, and the run returns an
+# earlier one within the limits, at the drive it started from. Every limit then holds:
+# the gates, the keep-out, and the wall's peak at 0.93 to 0.995 of the ceiling: the
+# returned design is chosen on the reported rows, which hold the peak itself, while the
+# run itself holds the ceiling's smooth stand-in (the ceiling holds the peak only once a
+# run has converged; before this choice the peak ended 0.966 to 1.020 of the ceiling
+# over thirteen such starts). The budget is kept small here to keep the tutorial short; a design to hand off
+# runs to convergence, which on an earlier first stage took 861 evaluations (five and a
+# half minutes on 8 threads) and met every limit, the peak at 0.997 of the ceiling, at
+# the same drive (research notes, "Optimization defaults decided"). The clearance check
+# confirms the keep-out on the worst case: no beam fails, the closest staying 17 to
+# 49 µm from a cap.
 #
 # Each stage was one call of [`optimize_pointing`](@ref) on exported names: a
 # parameterization, its box and the limits, the second stage's scenario built with

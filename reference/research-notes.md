@@ -14667,7 +14667,9 @@ for what the family does not determine (drive, active gates, the caps' clearance
 instead of the run's own digits. The penalty run and the least re-pointing are
 determined, and their text keeps its numbers. Making the polish's peak determined would
 take a converged polish (861 evaluations on an earlier first stage, minutes of the docs
-build), left as the user decided ("Defaults changed (2026-11-19)" §6).
+build), left as the user decided ("Defaults changed (2026-11-19)" §6). *Superseded in part* ("Least violation, capped inner runs and phase 1's budget", § 8):
+a budget-stopped run now returns its least-violating iterate, and the polish's peak
+ends within the ceiling on every start measured.
 
 ## A ladder study's hand-written pieces as API (2026-11-20) *derived*
 
@@ -14926,3 +14928,92 @@ phases away from both. `bounds(...; pulses, times, peak)` builds it (`pulses` a
 time, checked to 1e-9 relative); without `pulses` the box is as before, bit for bit.
 Checked (`test/pulse_shapes.jl`) against the scaled pulse sampled every 1e-4 ns and the
 closed-form caps of the mock-up.
+
+### 5. On the study (scratch runs, 8 threads; values not recorded here)
+
+- The infeasible variant as first run (phase 1 off, `iterations = 100`, an inner
+  evaluation cap): every inner run but one ended on its cap above the limits and held
+  the penalty, so the run went to its evaluation budget instead of the verdict at the
+  penalty's ceiling, and returned an iterate from early in the run (outer iteration 3 of
+  28) whose ceiling excess and largest violation are below the former return's, the
+  gates' about as far over. It still lies inside the keep-out on many beams: by the
+  normalized measure the start, far over its gates, is the more violating design (§ 6).
+- The same with phase 1 (the default) and `iterations = 100`: the verdict in a few
+  hundred evaluations, as the former run reached only with a cap ten times larger.
+- The converging variant continued from its converged design: the same design and
+  evaluation count as on the base tree, bit for bit (11 outer iterations; the 9 capped
+  inner runs ended within the limits, where the usual penalty test applies), within
+  0.01 mm rms of the design it started from.
+
+### 6. The clearance's unit
+
+`clearance_floor`'s `scale` (1 mm) makes 0.1 mm of clearance weigh as a gate exceeded
+by 10 % of itself, each beam a component. Measured with the scale at 0.05 mm (the
+pointing tolerance), everything else as in §§ 1–3:
+
+- the infeasible variant: phase 1's verdict trades the other way, the keep-out
+  shortfall smaller and the gates and the ceiling several times further over (the
+  largest normalized violation, in gate units, ten times the 1 mm run's); the phase-1-off
+  run likewise. Neither weighting is the better design: which shortfall to accept is
+  the study's.
+- the dropped-bundle tutorial (a script run): its first stage converges in 767
+  evaluations instead of 1,590 but at 0.9499 of the 48-quad drive instead of 0.9574 (the
+  keep-out held 50 µm clear of the caps instead of 15 µm, against a 10 µm minimum), and
+  the budget-stopped polish then ends at its start's drive (0.9489); the runs without a
+  keep-out do not move.
+- the constrained runs of `test/constraints.jl`, `test/phased.jl`,
+  `test/picket_fluence.jl` and `test/pointing_summary.jl`: two move, the one-parameter
+  keep-out run (the same design and value in 99 evaluations instead of 75) and the
+  held-scales verdict (the same design, its violation 0.111 in the new unit instead of
+  0.0055); every other run is bit for bit (`test/phased.jl`'s floors lie far below the
+  designs' clearance), and two assertions on the scale itself fail, as expected.
+
+Decision: the default stays 1 mm (nothing in the notes argues for it, and nothing
+measured argues for 0.05 mm: on the conflicting case the weighting moves the violation
+between the limits, and on the tutorial it costs 0.8 % of drive for clearance the
+keep-out does not require). `clearance_floor`'s docstring now states the weighing.
+
+### 7. An exact ceiling in a run stopped by its budget
+
+The question from the dropped-bundle tutorial's budget-stopped polish ("The
+dropped-bundle tutorial's long runs under rounding"): its wall peak ended over the
+ceiling on some starts while the run held the ceiling's smooth stand-in. The reading
+holds in part. The reported rows carry the exact peak: `_constraint_rows` reports
+`_exact_value` (the peak over the elements) for an exact ceiling, and `in_phase`
+forwards it, so `PointingResult.constraints` gives the peak and its violation as they
+stand. The stand-in's working limit is lowered only after a run has converged on the
+stand-in (`irradiance_ceiling(...; exact = true)`), so a run stopped earlier never
+corrects for the stand-in's offset from the peak. Since § 1, a run that ends above its
+limits returns its iterate of least violation measured on those exact rows.
+
+Not built: lowering the working limit at every outer iteration from the exact value at
+the iterate. The lowering only ratchets (a peak below the limit leaves the working
+limit, § "Constrained re-pointing: an irradiance ceiling and mode gates", exact peak,
+to avoid cycling where the peak moves between elements), and the stand-in-to-peak
+ratio of an early, unconverged iterate is not the converged design's, so early rounds
+would hold the converged design below the limit by the difference, a drive cost that
+later rounds cannot return.
+
+### 8. The dropped-bundle tutorial's polish under § 1
+
+The per-beam polish (120 evaluations, always stopped by the budget) from six starts:
+the tutorial's own and five of the perturbed starts of "The dropped-bundle tutorial's
+long runs under rounding" (10⁻⁹ mm, seeds 1 and 2; 10⁻¹² mm, seeds 3 to 5), on the tree
+with the f-cone model's shared coordinates (8 threads):
+
+| start | returned | drive gained over the first stage on beams | departure / gate, largest | peak / ceiling | caps, closest |
+|---|---|---|---|---|---|
+| the tutorial's | last iterate (within the limits) | +0.17 % | 0.998 | 0.966 | 34 µm |
+| 10⁻⁹, seed 1 | an earlier one within the limits | −0.002 % | 0.954 | 0.931 | 42 µm |
+| 10⁻⁹, seed 2 | an earlier one | 0.000 % | 1.000 | 0.959 | 49 µm |
+| 10⁻¹², seed 3 | the start (within the limits) | 0 | 0.948 | 0.927 | 49 µm |
+| 10⁻¹², seed 4 | last iterate | +0.32 % | 1.000 | 0.995 | 17 µm |
+| 10⁻¹², seed 5 | an earlier one | −0.002 % | 0.992 | 0.942 | 49 µm |
+
+Before § 1 the same starts ended 0.966–1.020 of the ceiling with gates up to 0.2 %
+over; now every returned design meets every limit, the peak at 0.93–0.995, and where
+the last iterate exceeded a gate the run gives up the polish's drive gain for a design
+within the limits. The tutorial's text now says so, and the tutorial asserts the peak
+again, at most 1 % over the ceiling (its largest over the six starts 0.995). The
+tutorial's own start prints the former output to every digit (its last iterate met the
+limits).

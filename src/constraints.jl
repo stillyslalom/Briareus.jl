@@ -917,6 +917,17 @@ the keep-out to the objective's `keepout` keyword or as a constraint, not both.
 than the keep-out's own accuracy against [`clearance`](@ref), a few micrometers). Give
 each of several keep-outs its own `name`.
 
+Where the limits conflict, `scale` is also the keep-out's weight against the other
+constraints: phase 1, the augmented Lagrangian and the least-violation design of
+[`PointingResult`](@ref) trade normalized violations, so at 1 mm a beam 0.1 mm inside
+the keep-out weighs as a mode gate exceeded by 10 % of itself or a ceiling 10 % over its
+limit (each beam its own component). A smaller scale, e.g. a pointing tolerance of
+0.05 mm, makes the same shortfall weigh twenty times more: on a re-pointing study whose
+gates conflicted with the keep-out and a ceiling, it moved the violation from the
+keep-out onto the gates and the ceiling, each then several times further over (research
+notes, "Least violation, capped inner runs and phase 1's budget", § 6). Choose it for
+the trade the design accepts.
+
 The floor is per beam, not on the smallest clearance over the beams: in the augmented
 Lagrangian each beam's component has its own multiplier, which stays zero for a beam
 clear of its minimum (its term then vanishes from the inner problem), and each term is
