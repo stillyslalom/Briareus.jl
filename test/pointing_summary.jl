@@ -78,6 +78,21 @@ Briareus.keepout_clearance(k::_SummaryKeepOut, beams::AbstractVector{<:Beam}) =
     same = pointing_summary(so, quads; drive_reference = ref)
     @test same.drive_ratio ≈ 1 rtol = 1e-12
     @test all(same.departure .< 1e-12)
+    # split by order: the m = 0 part by hand from the coefficients; the parts' squares add
+    # to the whole
+    cd, cr = flux_ylm(evaluate(so, beams); lmax = 4), flux_ylm(ref; lmax = 4)
+    zonal = [sqrt(2l + 1) * abs(cd[mode_index(l, 0)] / cd[1] - cr[mode_index(l, 0)] / cr[1]) for l in 1:4]
+    @test d.departure_zero ≈ zonal rtol = 1e-12
+    @test d.departure_zero .^ 2 .+ d.departure_nonzero .^ 2 ≈ d.departure .^ 2 rtol = 1e-12
+    @test d.departure_zero == mode_departure(cd, cr; m = :zero) && d.departure_nonzero == mode_departure(cd, cr; m = :nonzero)
+    @test isempty(sm.departure_zero) && isempty(sm.departure_nonzero)
+    # on coefficient vectors: a change of c_11 alone is m ≠ 0 (√3 Δ at l = 1), of c_20 m = 0
+    c1 = [1.0; zeros(24)]
+    c2 = copy(c1); c2[mode_index(1, 1)] = 0.004; c2[mode_index(2, 0)] = -0.003
+    @test mode_departure(c2, c1; m = :zero) ≈ [0, sqrt(5) * 0.003, 0, 0] atol = 1e-16
+    @test mode_departure(c2, c1; m = :nonzero) ≈ [sqrt(3) * 0.004, 0, 0, 0] atol = 1e-16
+    @test mode_departure(c2, c1; m = :all) == mode_departure(c2, c1)
+    @test_throws ArgumentError mode_departure(c2, c1; m = :odd)
     ds = sprint(show, d)
     @test !occursin('\n', ds) && occursin("of the reference, departure (l = 1–4)", ds)
     @test isapprox(sm.shift_rms, sqrt((47 * 0.3^2 + 0.5^2) / 48); rtol = 1e-12) && occursin("rms 0.30", shown)

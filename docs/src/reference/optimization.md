@@ -92,7 +92,8 @@ limit, [`phase_beams`](@ref) puts reference beams at each phase's powers,
 by the beams it governs) and [`power_scale_table`](@ref) tabulates them per key and
 phase, `remake(scenario; deposition_kw)` rebuilds every phase's deposition operator (a
 finished design checked on a finer one), and [`pointing_summary`](@ref) reports each
-phase, against its gates and pointing floor.
+phase, against its gates and pointing floor, with the departure per degree split into
+`m = 0` and `m ≠ 0`.
 
 ```@autodocs
 Modules = [Briareus]

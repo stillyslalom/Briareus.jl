@@ -956,8 +956,8 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    mode_departure(c, reference; lmax = 4) -> Vector
-    mode_departure(ev, reference; lmax = 4) -> Vector
+    mode_departure(c, reference; lmax = 4, m = :all) -> Vector
+    mode_departure(ev, reference; lmax = 4, m = :all) -> Vector
 
 The departure of a drive shape from a reference shape per degree `l = 1:lmax`:
 `δₗ = √((2l+1) Σₘ (c_lm/c_00 - r_lm/r_00)²)`, the [`mode_amplitude`](@ref) of the
@@ -965,23 +965,32 @@ difference of the two normalized shapes (`c` and `reference` are coefficient vec
 from [`flux_ylm`](@ref); with an evaluation, its own). For an axisymmetric difference
 this is `|aₗ/a₀ - aₗ'/a₀'|`. Generic in the number type: the value of
 [`mode_gate`](@ref).
+
+`m = :zero` sums the zonal order `m = 0` alone (`√(2l+1) |Δ(c_l0/c_00)|`, the change of
+`aₗ/a₀` about the coefficients' polar axis) and `m = :nonzero` the other orders, so that
+`δₗ² = δₗ(:zero)² + δₗ(:nonzero)²`, the split of [`mode_rms`](@ref)'s `m`: a gate per
+degree holds `δₗ`, and the split shows whether a degree's departure is axisymmetric
+(e.g. `l = 1`, `m = ±1`: a sideways shift of the drive from a dropped bundle).
 """
-function mode_departure(c::AbstractVector, reference::AbstractVector; lmax::Integer = 4)
+function mode_departure(c::AbstractVector, reference::AbstractVector; lmax::Integer = 4, m::Symbol = :all)
     n = (lmax + 1)^2
     length(c) >= n && length(reference) >= n ||
         throw(ArgumentError("the coefficient vectors need degrees through l = $lmax"))
+    m in (:all, :zero, :nonzero) || throw(ArgumentError("m must be :all, :zero or :nonzero, got :$m"))
     # a zero of the result type rather than the type itself: the comprehension's closure
     # stores a type as a `DataType` field, and Julia 1.10 then dispatches at run time
     z = zero(c[1] / c[1] - reference[1] / reference[1])
-    return [_departure(c, reference, l, z) for l in 1:lmax]
+    return [_departure(c, reference, l, z, m) for l in 1:lmax]
 end
-mode_departure(ev::Evaluation, reference::AbstractVector; lmax::Integer = 4) =
-    mode_departure(flux_ylm(ev; lmax), reference; lmax)
+mode_departure(ev::Evaluation, reference::AbstractVector; lmax::Integer = 4, m::Symbol = :all) =
+    mode_departure(flux_ylm(ev; lmax), reference; lmax, m)
 
-function _departure(c, r, l, z)
+# The departure of degree l over the orders `m` selects (:all, :zero, :nonzero).
+function _departure(c, r, l, z, m::Symbol)
     s = z
-    for m in -l:l
-        i = mode_index(l, m)
+    for k in (m === :zero ? (0:0) : -l:l)
+        m === :nonzero && k == 0 && continue
+        i = mode_index(l, k)
         s += (c[i] / c[1] - r[i] / r[1])^2
     end
     d2 = (2l + 1) * s

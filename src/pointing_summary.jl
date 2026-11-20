@@ -21,8 +21,10 @@ A pointing (e.g. the beams of a re-pointing result) against reference beams, fro
   the beams in the scenario;
 - with a `drive_reference`: `drive_ratio`, the capsule drive's mean over the
   reference's (`c₀₀/r₀₀` of the [`flux_ylm`](@ref) coefficients), and `departure`, the
-  [`mode_departure`](@ref) per degree `l = 1:lmax` from the reference's shape; `NaN`
-  and empty without one;
+  [`mode_departure`](@ref) per degree `l = 1:lmax` from the reference's shape, split by
+  order into `departure_zero` (`m = 0`, `mode_departure(...; m = :zero)`) and
+  `departure_nonzero` (`m ≠ 0`), whose squares add to `departure`'s; `NaN` and empty
+  without one;
 - with `gates`: `gate`, the gate per degree, and `gate_departure`, the departure it
   bounds (a [`mode_gate`](@ref)'s own value, from its reference's shape, shifted if so;
   otherwise `departure`); with `floor`: `floor`, the pointing floor per degree, against
@@ -48,13 +50,15 @@ struct PointingSummary
     gate::Vector{Float64}
     gate_departure::Vector{Float64}
     floor::Vector{Float64}
+    departure_zero::Vector{Float64}
+    departure_nonzero::Vector{Float64}
 end
 
 PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
                 reference_clearance, margin, clipped, missed, drive_ratio, departure) =
     PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
                     reference_clearance, margin, clipped, missed, drive_ratio, departure,
-                    Float64[], Float64[], Float64[])
+                    Float64[], Float64[], Float64[], Float64[], Float64[])
 
 """
     pointing_summary(scenario, beams; reference = beams of the scenario's start,
@@ -113,13 +117,14 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
     cref = Float64[least(k, refb) for k in ks]
     margin = Float64[ci - k.minimum for (ci, k) in zip(c, ks)]
     ev = evaluate(s, bs)
-    ratio, dep = NaN, Float64[]
+    ratio, dep, dz, dn = NaN, Float64[], Float64[], Float64[]
     if drive_reference !== nothing
         cr = drive_reference isa Evaluation ? flux_ylm(drive_reference; lmax) :
              collect(Float64, drive_reference)
         cd = flux_ylm(ev; lmax)
         ratio = cd[1] / cr[1]
         dep = mode_departure(cd, cr; lmax)
+        dz, dn = mode_departure(cd, cr; lmax, m = :zero), mode_departure(cd, cr; lmax, m = :nonzero)
     end
     gate, gdep = _summary_gate(gates, ev, dep, lmax)
     fl = floor === nothing ? Float64[] : _summary_floor(floor, dep, lmax)
@@ -127,7 +132,7 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
                            isempty(shifts) ? 0.0 : sqrt(sum(abs2, shifts) / length(shifts)),
                            maximum(shifts; init = 0.0), P, P > 0 ? Pin / P : NaN, c, cref, margin,
                            Float64(clipped_fraction(ev)), Float64(missed_fraction(ev)), ratio, dep,
-                           gate, gdep, fl)
+                           gate, gdep, fl, dz, dn)
 end
 
 # The summary's gates per degree and the departure they bound: a mode gate's own value

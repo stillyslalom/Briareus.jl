@@ -14749,3 +14749,18 @@ ladder (100 parameters, quads moved by tenths of a millimeter), the rewritten ch
 log as the original, character for character, the drive ratios and departures of every
 phase printed to 17 digits included; the leg took 3.6 instead of 5.5 minutes, setup
 included (8 threads; another run may have shared the machine).
+
+### 4. The departure per degree split by order
+
+The script reported each degree's departure split into its `m = 0` and `m ≠ 0` parts
+(`√((2l+1) Σ_{m ∈ M} (c_lm/c_00 − r_lm/r_00)²)`), from `flux_ylm`'s exact facet
+integrals. `mode_departure(...; m = :zero | :nonzero)` gives the parts, the split and
+the names of `mode_rms`'s `m` (`:all`, the default, is the departure as before, bit for
+bit), and `PointingSummary` records them as `departure_zero` and `departure_nonzero`
+whenever it has a `drive_reference`. The zonal part depends on the coefficients' polar
+axis (the hohlraum axis for `flux_ylm`). `test/pointing_summary.jl` checks the zonal
+part against `√(2l+1) |Δ(c_l0/c_00)|` by hand, the parts' squares against the whole,
+and two single-mode changes against their closed forms. In the script the report's
+hand-written sum over orders became `mode_departure(e, r; m = :zero)` and `m =
+:nonzero`: its four split columns agree at their printed digits in every phase, at the
+start and at the finished design of § 3's check (where they are not zero).

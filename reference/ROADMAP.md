@@ -362,6 +362,8 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         scales of a `PhasedScenario`;
       - `remake(::PhasedScenario; deposition_kw)`, every phase's operator rebuilt (one
         per mesh) to check a finished design on a finer one;
+      - `mode_departure(...; m = :zero | :nonzero)` and the summary's
+        `departure_zero`/`departure_nonzero`;
     - A pulse-shape budget: `pulse_shape_groups` groups per-key multipliers
       over the phases into a given number of shapes by k-means on the log multipliers
       per class, the split between the classes by fit (exact by enumeration or 1-D

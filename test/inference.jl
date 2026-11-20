@@ -401,7 +401,7 @@ end
             @test (@inferred clf.f(ev)) isa Vector{T} && (@inferred clfa.f(ev)) isa Vector{T}
             @test (@inferred augph2(ev)) isa T
             @test (@inferred dcl.f(ev[:a])) isa T && (@inferred gsh.f(ev[:a])) isa Vector{T}
-            @test (@inferred regw(ev)) isa T
+            @test (@inferred regw(ev)) isa T && (@inferred mode_departure(ev[:a], c_ref; m = :zero)) isa Vector{T}
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -648,6 +648,7 @@ end
                 VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, clfa.f, ev)
                 @test _inf_jet_clean(JET.report_call, dcl.f, ev[:a]) && _inf_jet_clean(JET.report_call, gsh.f, ev[:a])
                 @test _inf_jet_clean(JET.report_call, regw, ev) && _inf_jet_clean(JET.report_opt, regw, ev)
+                @test _inf_jet_clean(JET.report_opt, (e, c) -> mode_departure(e, c; m = :nonzero), flux_ylm(ev[:a]), c_ref)
             end
             # a warm restart from a constrained result
             r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))
