@@ -511,7 +511,8 @@ end
 
 """
     bounds(p::PhasedPointing, x0 = initial_parameters(p); scale = 0.5, scale_min = 0.0,
-           scale_max = Inf, power_max = Inf, kwargs...) -> (lower, upper)
+           scale_max = Inf, power_max = Inf, pulses = nothing, times = nothing,
+           peak = nothing, kwargs...) -> (lower, upper)
 
 The pointing's box (its `bounds` about `x0[1:n]` with `kwargs`) for the first
 parameters, and each power scale within `x0 (1 ± scale)` (`scale = Inf`: no relative
@@ -521,14 +522,36 @@ scale is at most the least `power_max / P` over its group's beams in its phase (
 phase's power; the pointing's own at `x0` in a phase without powers). A fixed phase with
 a beam above `power_max` is an `ArgumentError`, and so is an empty box (`scale_min`
 above a scale's cap). The defaults are engineering defaults, not facility limits.
+
+**Between the phases.** The scales hold the beams at their limit at the phases' times
+only. The pulse a design is delivered as, [`scaled_pulse`](@ref) (or
+[`shape_pulses`](@ref)) of each beam's base pulse with its key's scales as multipliers at
+the scaled phases' times, interpolates the multipliers between those times, and a base
+pulse that rises between two phase samples (to its peak before a `peak` ramp) then
+exceeds `power_max` where neither sample does. Given `pulses` (the base pulse of each
+beam: a [`PulseShape`](@ref) for every beam, or a function of a beam), `times` (each
+phase's time in ns, by name: a named tuple or dictionary, or a vector in the phases'
+order) and the `peak` given to `scaled_pulse`, each scale is capped instead at
+`power_max` over the base pulse's largest power on the interval its multiplier governs:
+from the previous scaled phase's time to the next one's (the pulse's start before the
+first, `peak` or the pulse's end after the last). The interpolated multiplier there lies
+between two capped scales (or the `peak` ramp's 1), so the scaled pulse stays within
+`power_max` wherever the base pulse itself does: a sufficient condition, tight where the
+base pulse peaks next to a phase time or inside the `peak` ramp (where a scale above 1
+exceeds the limit at the base's maximum whatever the ramp). Each phase's power must be
+its base pulse at its time (an `ArgumentError` otherwise: the multipliers would scale
+another pulse). Without `pulses` the caps are those at the phases' times, as before;
+`scaled_pulse(...; power_max)` checks a pulse table.
 """
 function bounds(p::PhasedPointing, x0 = initial_parameters(p); scale = 0.5, scale_min = 0.0,
-                scale_max = Inf, power_max = Inf, kwargs...)
+                scale_max = Inf, power_max = Inf, pulses = nothing, times = nothing, peak = nothing,
+                kwargs...)
     length(x0) == nparams(p) || throw(DimensionMismatch("expected $(nparams(p)) parameters"))
     xp = collect(Float64, x0[1:p.n])
     lo, hi = bounds(p.pointing, xp; kwargs...)
     tmpl = apply(p.pointing, xp)
     lim(b) = power_max isa Real ? Float64(power_max) : Float64(power_max(b))
+    span = _scale_spans(p, pulses, times, peak)
     cap = fill(Inf, length(p.keys))
     for (k, ph) in enumerate(p.phases)
         P = p.power[k]
@@ -540,7 +563,8 @@ function bounds(p::PhasedPointing, x0 = initial_parameters(p); scale = 0.5, scal
                     throw(ArgumentError("phase $(repr(ph)) has fixed powers and beam $(b.name) is at $Pi TW, above power_max = $L"))
             elseif Pi > 0
                 g = p.group[k][i]
-                cap[g] = min(cap[g], L / Pi)
+                M = span === nothing ? Pi : _governed_max(pulses isa PulseShape ? pulses : pulses(b), span[k], Pi, ph, b)
+                cap[g] = min(cap[g], L / M)
             end
         end
     end
@@ -553,6 +577,46 @@ function bounds(p::PhasedPointing, x0 = initial_parameters(p); scale = 0.5, scal
                                 (cap[g] < slo[g] ? " (the laser's limit caps the scale at $(cap[g]))" : "")))
     end
     return vcat(lo, slo), vcat(hi, shi)
+end
+
+# Per phase, the interval its scales govern in a scaled pulse (`scaled_pulse` with the
+# scaled phases' times and `peak`): (t₋, t, t₊), the previous scaled phase's time (-Inf
+# before the first), its own and the next one's (`peak`, or Inf, after the last); `nothing`
+# without `pulses`.
+function _scale_spans(p::PhasedPointing, pulses, times, peak)
+    pulses === nothing && return nothing
+    times === nothing && throw(ArgumentError("`pulses` need the phases' `times`"))
+    timeof(k) = Float64(times isa AbstractVector ? times[k] : times[p.phases[k]])
+    sc = [k for k in eachindex(p.phases) if !isempty(p.group[k])]
+    ts = [timeof(k) for k in sc]
+    issorted(ts; lt = <=) || throw(ArgumentError("the scaled phases' times must increase in their order"))
+    peak === nothing || isempty(ts) || peak > ts[end] ||
+        throw(ArgumentError("peak ($peak ns) must follow the last scaled phase ($(ts[end]) ns)"))
+    span = Vector{NTuple{3,Float64}}(undef, length(p.phases))
+    for (j, k) in enumerate(sc)
+        span[k] = (j == 1 ? -Inf : ts[j-1], ts[j], j == length(sc) ? (peak === nothing ? Inf : Float64(peak)) : ts[j+1])
+    end
+    return span
+end
+
+# The largest power of the base pulse `q` on a scale's interval `(t₋, t, t₊)`, after a check
+# that the phase's power `Pi` is the pulse's at `t`.
+function _governed_max(q::PulseShape, (a, t, c)::NTuple{3,Float64}, Pi::Float64, ph::Symbol, b)
+    isapprox(q(t), Pi; rtol = 1e-9) ||
+        throw(ArgumentError("phase $(repr(ph)): beam $(b.name)'s power, $Pi TW, is not its base pulse's at $t ns ($(q(t)) TW)"))
+    return max(Pi, _pulse_max(q, a, c))
+end
+
+# The largest power of a pulse on [a, c] (zero outside its table): at its points inside
+# and at the ends (it is linear between its points).
+function _pulse_max(q::PulseShape, a::Float64, c::Float64)
+    lo, hi = max(a, q.t[1]), min(c, q.t[end])
+    lo <= hi || return 0.0
+    m = max(q(lo), q(hi))
+    for (τ, v) in zip(q.t, q.p)
+        lo < τ < hi && (m = max(m, v))
+    end
+    return m
 end
 
 function Base.show(io::IO, p::PhasedPointing)

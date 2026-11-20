@@ -410,7 +410,8 @@ function _hartigan!(a::Vector{Int}, X::Matrix{Float64}, k::Int)
 end
 
 """
-    scaled_pulse(base::PulseShape, times, multipliers; peak = nothing) -> PulseShape
+    scaled_pulse(base::PulseShape, times, multipliers; peak = nothing, power_max = nothing)
+        -> PulseShape
 
 The pulse `base` with its power multiplied by a multiplier given per phase: `multipliers[i]`
 at `times[i]` (ns, increasing), interpolated linearly between the phase times and held at
@@ -426,8 +427,17 @@ and `peak`, and is 1 after it. This is the treatment for a peak at the laser's l
 which carries no multiplier: the phases sample the pulse at their times only, and the ramp
 between the last phase and the peak is an assumption of this function, not a fitted
 quantity.
+
+`power_max` (TW per beam) checks the result against the laser's limit: a pulse above it
+anywhere (the table's points, where its maximum lies) is an `ArgumentError` naming the
+time, the power and the excess. Multipliers within the limit at the phase times can
+still exceed it between them, where the base pulse rises (a peak before `peak`):
+[`bounds`](@ref)`(scenario.param; power_max, pulses, times, peak)` caps the power scales
+of a phased design so that this pulse stays within the limit. A table is not clipped:
+clipping would change the pulse's energy and the drive the design was optimized for.
 """
-function scaled_pulse(base::PulseShape, times, multipliers; peak = nothing)
+function scaled_pulse(base::PulseShape, times, multipliers; peak = nothing,
+                      power_max::Union{Nothing,Real} = nothing)
     t = collect(Float64, times)
     m = collect(Float64, multipliers)
     length(t) == length(m) || throw(DimensionMismatch("$(length(t)) phase times for $(length(m)) multipliers"))
@@ -440,23 +450,38 @@ function scaled_pulse(base::PulseShape, times, multipliers; peak = nothing)
     end
     lo, hi = base.t[1], base.t[end]
     ts = sort!(unique!([base.t; filter(τ -> lo < τ < hi, t)]))
-    return PulseShape(ts, [base(τ) * _interp(t, m, τ) for τ in ts])
+    out = PulseShape(ts, [base(τ) * _interp(t, m, τ) for τ in ts])
+    power_max === nothing || _check_power_max(out, Float64(power_max))
+    return out
+end
+
+# A pulse table within the laser's limit, or an `ArgumentError` at its largest excess.
+function _check_power_max(q::PulseShape, L::Float64)
+    i = argmax(q.p)
+    q.p[i] <= L * (1 + 1e-12) && return nothing
+    throw(ArgumentError("the scaled pulse reaches $(round(q.p[i]; sigdigits = 6)) TW at $(q.t[i]) ns, " *
+                        "$(round(100 * (q.p[i] / L - 1); sigdigits = 3)) % above power_max = $L TW " *
+                        "(cap the design's scales between the phases: bounds(...; power_max, pulses, times, peak))"))
 end
 
 """
-    shape_pulses(groups::PulseShapeGroups, base, times; peak = nothing) -> Dict{Symbol,PulseShape}
+    shape_pulses(groups::PulseShapeGroups, base, times; peak = nothing, power_max = nothing)
+        -> Dict{Symbol,PulseShape}
 
 The pulse of each shape of `groups` ([`pulse_shape_groups`](@ref)), keyed by the shape's
 name: [`scaled_pulse`](@ref) of its class's base pulse with the shape's multipliers at the
 phase `times` (and `peak`). `base` is one [`PulseShape`](@ref) for every class, or a
 dictionary or function from class to pulse (e.g. the inner and the outer cones' pulses).
 [`write_pulse_table`](@ref) writes the result as a table, one column per shape, and
-[`with_pulses`](@ref) applies it to beams keyed by `groups.assignment`.
+[`with_pulses`](@ref) applies it to beams keyed by `groups.assignment`. `power_max` (a
+number, or like `base` one per class) checks every shape against the laser's limit as
+`scaled_pulse` does.
 """
-function shape_pulses(g::PulseShapeGroups, base, times; peak = nothing)
+function shape_pulses(g::PulseShapeGroups, base, times; peak = nothing, power_max = nothing)
     size(g.multipliers, 2) == length(times) ||
         throw(DimensionMismatch("$(length(times)) phase times for $(size(g.multipliers, 2)) phases"))
-    pick(c) = base isa PulseShape ? base : base isa AbstractDict ? base[c] : base(c)
-    return Dict{Symbol,PulseShape}(name => scaled_pulse(pick(g.class[i]), times, g.multipliers[i, :]; peak)
+    pick(v, c) = v isa Union{Nothing,Real,PulseShape} ? v : v isa AbstractDict ? v[c] : v(c)
+    return Dict{Symbol,PulseShape}(name => scaled_pulse(pick(base, g.class[i]), times, g.multipliers[i, :]; peak,
+                                                        power_max = pick(power_max, g.class[i]))
                                    for (i, name) in enumerate(g.names))
 end

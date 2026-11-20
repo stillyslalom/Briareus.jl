@@ -14892,3 +14892,37 @@ evaluations and the design of the default `iterations` exactly (violations 0.023
 iteration cap are bit for bit (every constrained run of the four test files above).
 `test/constraints.jl` checks the verdict at `iterations = 3` and the stop at a budget of
 5 evaluations, with its line in the display.
+
+### 4. The laser's limit between the phase samples
+
+`bounds(phased.param; power_max)` caps each power scale so that its beams stay within
+the laser's limit at the phase's time; the pulse a design is delivered as,
+`scaled_pulse` of the beam's base pulse with the scales as multipliers at the scaled
+phases' times, interpolates the multipliers between those times. Where the base pulse
+rises between two samples the product exceeds the limit with every sample inside it: on
+the mock-up of `test/pulse_shapes.jl` (a base pulse at its 2.0 TW limit at 5.2 ns,
+phases at 1, 2, 3 and 5 ns, the multiplier ramped to 1 by 5.5 ns) multipliers of 1.05,
+1.05, 1.05, 1.03 give 2.036 TW at 5.2 ns, and the box's own corners give 2.13 TW (between
+the first two phases, where the base pulse is linear, the product of two rising and
+falling linear pieces, 2.08 TW). On the multi-phase study a scale of the last scaled
+phase carried a cone's pulse past its laser limit between that phase and the peak
+(scratch runs).
+
+Layers considered: a clip in `scaled_pulse` or the table writer (changes the pulse's
+energy, so the delivered drive is no longer the optimized one: rejected); a check that
+reports (kept: `scaled_pulse(...; power_max)` and `shape_pulses(...; power_max)` throw
+an `ArgumentError` naming the time, the power and the excess); and the design's box. The
+exact condition, `(1 − w) mᵢ + w mᵢ₊₁ ≤ L / base(τ)` for every τ between two phase
+times, couples neighboring scales (a linear constraint per interval, not a box). The box
+used instead, `mᵢ ≤ L / max(base on [tᵢ₋₁, tᵢ₊₁])` (the pulse's start before the first
+phase, `peak` or its end after the last), is sufficient: on each interval the
+interpolated multiplier lies between two capped scales (or the ramp's 1), each below
+`L` over the base's maximum there. It is exact where the base pulse peaks at a phase
+time or inside the `peak` ramp: a scale above 1 before a ramp to 1 exceeds the limit at
+the base pulse's maximum whatever the ramp, so a phase just before a peak at the limit
+can carry no multiplier above 1. It is conservative where the base peaks between two
+phases away from both. `bounds(...; pulses, times, peak)` builds it (`pulses` a
+`PulseShape` or a function of a beam; each phase's power must be its pulse's at its
+time, checked to 1e-9 relative); without `pulses` the box is as before, bit for bit.
+Checked (`test/pulse_shapes.jl`) against the scaled pulse sampled every 1e-4 ns and the
+closed-form caps of the mock-up.

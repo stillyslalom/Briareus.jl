@@ -378,8 +378,16 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       is within an rms in log multiplier (NIF's public figures, energies within 2–3 %
       and beam-to-beam balance better than 5 %, give the scale, not a default;
       "Inner-run options, a wall-loss scenario warning and laser delivery figures").
+      Since 2026-11-20 `scaled_pulse` and `shape_pulses` check a table against the
+      laser's limit (`power_max`: an error naming the time and the excess, no clip),
+      and `bounds(phased.param; power_max, pulses, times, peak)` caps each scale over
+      the base pulse's maximum on the interval its multiplier governs, so that the
+      interpolated pulse stays within the limit between the phase samples ("Least
+      violation, capped inner runs and phase 1's budget", § 4).
       *Left:* the tied re-optimization with per-phase keys on a `PhasedScenario` as
-      one call; phase weights in the grouping (user).
+      one call; phase weights in the grouping (user); the exact interval condition
+      (linear in neighboring scales) as a constraint where the box is too
+      conservative.
     - The smallest re-pointing that meets given gates: `shift_objective`,
       the weighted mean squared aim shift from reference beams, and
       `PointingSummary.shift_rms`.

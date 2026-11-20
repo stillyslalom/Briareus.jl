@@ -156,5 +156,50 @@ end
         # (the table carries ten significant digits)
         @test all(n -> all(τ -> isapprox(back[n](τ), ps[n](τ); rtol = 1e-9, atol = 1e-15), 0:0.5:8), g.names)
         @test_throws DimensionMismatch shape_pulses(g, base, t[1:2])
+        # the laser's limit checked on the table, a shape's limit per class
+        @test_throws ArgumentError scaled_pulse(base, t, m; power_max = 2.0)
+        @test scaled_pulse(base, t, m; peak = 5.0, power_max = 2.0) == r
+        @test_throws ArgumentError shape_pulses(g, Dict(:inner => inner, :outer => base), t; peak = 5.0,
+                                                power_max = Dict(:inner => 2.0, :outer => 1.0))
+    end
+
+    # The laser's limit between the phase samples. A base pulse that peaks between the
+    # last phase (5 ns) and the end of the `peak` ramp (5.5 ns): multipliers within the
+    # limit at every phase time exceed it at 5.2 ns, where the base is at the limit. The
+    # box from `bounds(...; pulses, times, peak)` caps each scale at the limit over the
+    # base's largest power on the interval its multiplier governs (closed form below);
+    # checked against the scaled pulse sampled every 1e-4 ns.
+    @testset "power cap between the phases" begin
+        base = PulseShape([0.0, 4.0, 5.0, 5.2, 6.0, 8.0], [0.1, 0.5, 1.8, 2.0, 1.9, 1.9])
+        p = scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], [1.05, 1.05, 1.05, 1.03]; peak = 5.5)
+        @test maximum(p.p) > 2.03 && p.t[argmax(p.p)] == 5.2
+        @test_throws ArgumentError scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], [1.05, 1.05, 1.05, 1.03];
+                                                peak = 5.5, power_max = 2.0)
+        quads = nif_quads(power = 1.0)[1:4]
+        times = (a = 1.0, b = 2.0, c = 3.0, d = 5.0, peak = 6.0)
+        names = collect(keys(times))
+        pw = [fill(base(times[k]), 4) for k in names]
+        pp = PhasedPointing(GroupPointing(quads; by = :quad, fields = (:z,)), names, pw;
+                            scaled = names[1:4], by = b -> :all)
+        dense(q) = maximum(q, 0.0:1e-4:8.0)
+        # at the phase times only: every sample within the limit, the pulse above it
+        _, hi0 = bounds(pp; scale = Inf, power_max = 2.0)
+        s0 = hi0[pp.n+1:end]
+        @test all(k -> isapprox(s0[k], 2.0 / pw[k][1]; rtol = 1e-14), 1:4)
+        @test dense(scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], s0; peak = 5.5)) > 2.1
+        # over the governed intervals: (-∞, 2], [1, 3], [2, 5], [3, 5.5] (the ramp to 1)
+        _, hi = bounds(pp; scale = Inf, power_max = 2.0, pulses = base, times, peak = 5.5)
+        sc = hi[pp.n+1:end]
+        @test sc ≈ 2.0 ./ [base(2.0), base(3.0), base(5.0), 2.0] rtol = 1e-14
+        q = scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], sc; peak = 5.5, power_max = 2.0)
+        @test dense(q) <= 2.0 * (1 + 1e-12)
+        # a vector of times in the phases' order, and a function of the beam, alike
+        @test bounds(pp; scale = Inf, power_max = 2.0, pulses = b -> base, times = collect(values(times)),
+                     peak = 5.5) == bounds(pp; scale = Inf, power_max = 2.0, pulses = base, times, peak = 5.5)
+        # the phases' powers must be the base pulse's at their times
+        bad = PhasedPointing(GroupPointing(quads; by = :quad, fields = (:z,)), names, [[pw[1] .* 1.1]; pw[2:end]];
+                             scaled = names[1:4], by = b -> :all)
+        @test_throws ArgumentError bounds(bad; power_max = 2.0, pulses = base, times, peak = 5.5)
+        @test_throws ArgumentError bounds(pp; power_max = 2.0, pulses = base)
     end
 end
