@@ -528,7 +528,8 @@ deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
 # the same pass: beam `bi`'s element powers (values) are added to column `key[bi]` of
 # `EG` (elements × groups; none for `key[bi] == 0`), in the order `deposit` sums them,
 # so each column is exactly `deposit` of that group's beams alone (the others at zero
-# power add exact zeros), with the same `absorption`. The deposition itself is
+# power add exact zeros), with the same `absorption`. With `split` a `_GroupSplit`, the
+# same in the deposition's number type for sets of groups. The deposition itself is
 # `deposit`'s, bit for bit.
 function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
                   absorption::Union{Nothing,Real} = nothing)
@@ -597,6 +598,41 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
             live === nothing || live[bi] || return
             SB[v] = _deposit_points!(E, view(LB, :, v), op, bi, frames[bi], screens[bi],
                                      slopes[bi], r, η)
+        end
+    end
+end
+
+# A deposition's element powers kept by sets of beam groups, in the deposition's number
+# type, for `evaluate` (`Scenario`'s split): `element[j]` sums the beams whose group is
+# in `sets[j]` (sorted, unique), those of `cols[bi]` holding beam `bi`. Each set's
+# element powers are summed in the order `deposit` sums them, so `element[j]` is `deposit`
+# of that set's beams with the others at zero power, bit for bit (the zero-power beams
+# are skipped); the deposition itself is unchanged.
+struct _GroupSplit{T}
+    sets::Vector{Vector{Symbol}}
+    cols::Vector{Vector{Int}}
+    element::Vector{Vector{T}}
+end
+
+function _GroupSplit(sets::Vector{Vector{Symbol}}, beams::AbstractVector{<:Beam}, ne::Integer, ::Type{T}) where {T}
+    cols = [findall(s -> b.group in s, sets) for b in beams]
+    return _GroupSplit{T}(sets, cols, [zeros(T, ne) for _ in sets])
+end
+
+# A beam-group set as `_GroupSplit` keys it.
+_group_set(gs) = sort!(unique!(collect(Symbol, gs)))
+
+# An element block's points of beam `bi` (all on elements), also into the element powers
+# of the group sets that hold it.
+function _deposit_points_split!(E::AbstractVector{T}, s::_GroupSplit{T}, op::DepositionOperator,
+                                bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r, η = nothing) where {T}
+    cs = s.cols[bi]
+    isempty(cs) && return _deposit_points!(E, E, op, bi, f, fv, slopes, r, η)
+    G = s.element
+    return _sum_points(op, bi, f, fv, slopes, r, T, η) do d, val
+        @inbounds E[d] += val
+        for j in cs
+            @inbounds G[j][d] += val
         end
     end
 end

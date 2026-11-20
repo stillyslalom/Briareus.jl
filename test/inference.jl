@@ -161,6 +161,10 @@ end
     clfa = clearance_floor(keepout[1])     # an aperture keep-out over the phases (one skipped)
     sw = Scenario(tw, p)
     pcross = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
+    # ceilings at the beams' own powers read from the evaluation's own deposition (the
+    # optimizer's split scenario)
+    pown = picket_ceiling(evaluate(s, xo), :wall)
+    ssp = Briareus._with_split(s, Briareus._split_request((pavg, pown)))
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -386,6 +390,9 @@ end
             @test (@inferred pceil.f(ev)) isa T && (@inferred pmean.f(ev)) isa T
             @test (@inferred pavg.f(ev)) isa T && (@inferred pcor.f(ev)) isa T
             @test (@inferred pcross.f(evaluate(sw, x))) isa T        # on another target
+            evs = evaluate(ssp, x)                                     # from the evaluation's split
+            @test (@inferred pavg.f(evs)) isa T && (@inferred pown.f(evs)) isa T
+            @test (@inferred Briareus._deposit(s.deposition, bs, getfield(evs, :_split))).element isa Vector{T}
             @test (@inferred linked_bubble(linked, bs)) isa BubbleAbsorption{T}
             # the bubble and the linked bubble on the beams (6 ns: clipping and the ridge stop)
             @test all(m -> (@inferred apply_lpi(m, bs, 6.0)) isa Vector{Beam{T}}, (bubble, linked))
@@ -507,6 +514,9 @@ end
                     @test _inf_jet_clean(JET.report_opt, pceil.f, ev) && _inf_jet_clean(JET.report_opt, pmean.f, ev)
                     @test _inf_jet_clean(JET.report_opt, pavg.f, ev) && _inf_jet_clean(JET.report_opt, pcor.f, ev)
                     @test _inf_jet_clean(JET.report_opt, pcross.f, evaluate(sw, x))      # on another target
+                    evs = evaluate(ssp, x)                                                # from the split
+                    @test _inf_jet_clean(JET.report_opt, pavg.f, evs) && _inf_jet_clean(JET.report_opt, pown.f, evs)
+                    @test _inf_jet_clean(JET.report_opt, Briareus._deposit, s.deposition, bs, getfield(evs, :_split))
                     @test _inf_jet_clean(JET.report_opt, linked_bubble, linked, bs)
                     @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), linked, bs)
                     @test all(m -> _inf_jet_clean(JET.report_opt, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
@@ -517,6 +527,9 @@ end
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
                 @test _inf_jet_clean(JET.report_call, pavg.f, ev) && _inf_jet_clean(JET.report_call, pcor.f, ev)
                 @test _inf_jet_clean(JET.report_call, pcross.f, evaluate(sw, x))
+                @test _inf_jet_clean(JET.report_call, evaluate, ssp, x)
+                @test _inf_jet_clean(JET.report_call, pavg.f, evaluate(ssp, x)) &&
+                      _inf_jet_clean(JET.report_call, pown.f, evaluate(ssp, x))
                 @test all(m -> _inf_jet_clean(JET.report_call, (q, b) -> apply_lpi(q, b, 6.0), m, bs) &&
                                _inf_jet_clean(JET.report_call, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
                           (bubble, linked))
@@ -619,6 +632,9 @@ end
         # with the per-group (M-band) split of `drive_history`
         sp = Briareus._mband_split(nif_mband(), t, quads)
         @test _inf_kernel_allocs(s.deposition, quads, sp) < bound
+        # with the group sets' split of `evaluate`, on duals
+        bd = apply(p, _inf_duals(x0))
+        @test _inf_kernel_allocs(s.deposition, bd, getfield(evaluate(ssp, _inf_duals(x0)), :_split)) < bound
         # VisRad's beam model, tapered
         @test _inf_kernel_allocs(opv, apply(p, _inf_duals(x0))) < bound
     end

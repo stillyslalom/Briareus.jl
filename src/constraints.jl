@@ -174,6 +174,8 @@ Base.@nospecializeinfer function _constrained_pointing(
     inner_reltol >= 0 || throw(ArgumentError("inner_reltol must be nonnegative"))
     inner_evaluations >= 1 || throw(ArgumentError("inner_evaluations must be at least 1"))
     phase1 |= relaxation
+    # the constraints' picket maps read from the evaluations' own deposition
+    s = _with_split(s, _split_request(cs))
     ev = evaluate(s, xs)
     f0 = Float64(ForwardDiff.value(objective(ev)))
     g = _all_violations(cs, ev)

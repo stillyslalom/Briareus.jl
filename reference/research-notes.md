@@ -14345,6 +14345,26 @@ quadrature changed in those days).
    smallest. Case B's objective prints the same 15 digits and its six-iteration run
    takes the same 8 evaluations to the same value; the dropped-bundle tutorial, run as
    a script, prints the same output.
+7. The picket ceilings read the evaluation's own deposition (2026-11-19 evening). A
+   ceiling at the beams' own powers (no `pulses` or `power`: a phase's evaluation at
+   that phase's powers) deposited the outer cones again on every evaluation. Inside a
+   constrained `optimize_pointing` run the scenario now keeps, in the deposition's own
+   pass, the element powers of each group set such a ceiling reads (`_GroupSplit`, a
+   `Scenario` field set per phase from the constraints), and the ceiling reads them;
+   outside a run, with other powers, or when the laser–plasma model deposits light
+   itself (or, with `lpi = false`, changes the beams) it deposits as before. The kept
+   sums are those of the ceiling's own deposition, in the same order
+   (`test/picket_fluence.jl`: every measure, overlapping group sets, with and without
+   backscatter, to 1e-12). On the multi-phase study (scratch runs: six phases, 552
+   parameters, the three picket ceilings on `:average`, plain and tapered cut) the
+   Dual{12} depositions and every term's violations, values and partials, are bit for
+   bit; on Float64 the loop with the kept sums compiles the law differently and the
+   depositions move by at most 5.9e-16 of an element's own value, the terms' violations
+   by 6.8e-14 of their scale. A constrained run of 20 evaluations takes 53.4 s without
+   and 40.5 s with (8 threads), the same 20 evaluations, and lands 6.6e-8 (mm, or scale
+   units) away, its objective 4.7e-7 relative (the round-off moves the line searches).
+   The optimizer's augmented-Lagrangian gradient falls from 2.39 to 1.87 s at 8 threads
+   (the objective's alone 1.57 s): the constraints from 0.52 to 0.19 of the objective.
 
 Together, on case B the optimizer's evaluation costs 0.52–0.62 of 0.3.0's with fixes
 1–4 (168 against 273 ms on one thread, 24.6–25.6 against 47.6–50.6 ms at 8 threads),
@@ -14368,10 +14388,11 @@ adds its own evaluations before the main run, not cost per evaluation; each lowe
 an exact ceiling's working limit continues the run; the reported multipliers cost one
 Jacobian at the end of a constrained run (as much as one gradient, whatever the number
 of constraints); the optimizer's tapered VisRad cut (`smooth_cut`) costs as much as the
-hard cut per deposition (within 15 %). A picket ceiling on `measure = :average` deposits
-the outer cones once per phase it holds: a hand-written sum of `ev.deposition.per_beam`
-over the outer beams costs nothing but measures another quantity (it counts the light on
-the capsule and the entrance holes' outside).
+hard cut per deposition (within 15 %). A picket ceiling outside `optimize_pointing`, or
+one given the picket's powers by `pulses` or `power`, deposits the outer cones once per
+evaluation (fix 7 serves the beams' own powers inside a run): a hand-written sum of
+`ev.deposition.per_beam` over the outer beams costs nothing but measures another
+quantity (it counts the light on the capsule and the entrance holes' outside).
 
 ## The aperture keep-out's exact interval minima (2026-11-20) *measured*
 

@@ -769,6 +769,15 @@ struct _InPhase{F} <: Function
 end
 (p::_InPhase)(ev::PerPhase) = p.f(ev[p.phase])
 _exact_value(p::_InPhase, ev::PerPhase) = _exact_value(p.f, ev[p.phase])
+_split_sets(p::_InPhase) = _SplitRequest([something(k, p.phase) => g for (k, g) in _split_sets(p.f)])
+
+# `_with_split` per phase: each phase's scenario keeps the group sets its constraints read.
+function _with_split(ps::PhasedScenario, req)
+    scen = [_with_split(sc, _SplitRequest([nothing => g for (k, g) in req if k === name]))
+            for (sc, name) in zip(ps.scenarios, ps.param.phases)]
+    all(i -> scen[i] === ps.scenarios[i], eachindex(scen)) && return ps
+    return PhasedScenario(ps.phases, scen, ps.param)
+end
 
 # A keep-out's clearance over every phase (`clearance_floor` on a `PerPhase` of
 # evaluations): per beam the least over the phases. The phases share the aims, so a

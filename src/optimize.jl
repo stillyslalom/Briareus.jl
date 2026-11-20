@@ -627,7 +627,12 @@ struct Scenario{P} <: _AbstractScenario
     time::Float64
     _response::_LazyResponse          # the full response, once read (shared by subsets)
     albedo::Union{Nothing,Vector{Float64}}   # explicit albedos of the response
+    _split::Vector{Vector{Symbol}}    # beam-group sets whose element powers `evaluate` keeps
 end
+
+# A scenario whose evaluations keep no group sets' powers (`_with_split` sets them).
+Scenario(t::Target, param, op::DepositionOperator, model, obs, W, Y, WR, YR, lpi, time, response::_LazyResponse,
+         albedo) = Scenario(t, param, op, model, obs, W, Y, WR, YR, lpi, time, response, albedo, Vector{Symbol}[])
 
 const _CACHED_YLM_LMAX = 6
 
@@ -879,7 +884,12 @@ struct Evaluation{T,B,E}
     effective::Vector{E}
     deposition::Deposition{T}
     _flux::Base.RefValue{Union{Nothing,Vector{T}}}   # observed flux, once computed
+    _split::Union{Nothing,_GroupSplit{T}}            # the scenario's group sets' powers
 end
+
+Evaluation(s::Scenario, beams::Vector, effective::Vector, d::Deposition{T},
+           flux::Base.RefValue{Union{Nothing,Vector{T}}}) where {T} =
+    Evaluation(s, beams, effective, d, flux, nothing)
 
 Base.getproperty(ev::Evaluation, name::Symbol) =
     name === :flux ? _flux(ev) : getfield(ev, name)
@@ -913,10 +923,22 @@ evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x)
 
 function evaluate(s::Scenario, beams::AbstractVector{<:Beam})
     eff = apply_lpi(s.lpi, beams, s.time)
-    dep = lpi_deposit(s.lpi, s.deposition, eff, s.time)
-    T = eltype(dep.element)
-    return Evaluation(s, beams, eff, dep, Ref{Union{Nothing,Vector{T}}}(nothing))
+    sets = getfield(s, :_split)
+    (isempty(sets) || !_plain_deposit(s.lpi)) && return _evaluation(s, beams, eff, lpi_deposit(s.lpi, s.deposition, eff, s.time), nothing)
+    # the element powers of the group sets the run's constraints read (`_with_split`), in
+    # the same pass
+    T = mapreduce(b -> typeof(b.power), promote_type, eff)
+    split = _GroupSplit(sets, eff, nelements(s.target), T)
+    return _evaluation(s, beams, eff, _deposit(s.deposition, eff, split), split)
 end
+
+_evaluation(s, beams, eff, dep::Deposition{T}, split) where {T} =
+    Evaluation(s, beams, eff, dep, Ref{Union{Nothing,Vector{T}}}(nothing), split)
+
+# Whether the laser–plasma model deposits the effective beams as `deposit` does (no model
+# that deposits light off the operator, `_deposits`).
+_plain_deposit(m) = !_deposits(m)
+_plain_deposit(ms::Union{Tuple,AbstractVector}) = !any(_deposits, ms)
 
 # `A * x` for a Float64 matrix and a vector of duals through BLAS: the values and each
 # partial are the columns of one matrix product (a generic dual mat-vec runs ~10×
@@ -1880,7 +1902,38 @@ function _tapered(s::Scenario)
     op = _tapered(s.deposition)
     op === nothing && return nothing
     return Scenario(s.target, s.param, op, s.model, s.observed, s.moment_weights, s.ylm_weights,
-                    s.moment_response, s.ylm_response, s.lpi, s.time, getfield(s, :_response), s.albedo)
+                    s.moment_response, s.ylm_response, s.lpi, s.time, getfield(s, :_response), s.albedo,
+                    getfield(s, :_split))
+end
+
+# The optimizer's view of a scenario whose constraints read the element powers of sets of
+# beam groups (a picket ceiling's outer cones, `_split_sets`): the same scenario, its
+# evaluations keeping those powers from their own deposition (`evaluate`), which the
+# constraints then read instead of depositing the groups again. `req` pairs a phase
+# (`nothing`: the scenario itself) with a group set; `s` itself when none applies.
+const _SplitRequest = Vector{Pair{Union{Nothing,Symbol},Vector{Symbol}}}
+
+_split_sets(f) = _SplitRequest()
+
+function _split_request(cs::Tuple)
+    req = _SplitRequest()
+    for c in cs
+        append!(req, _split_sets(c.f))
+    end
+    return req
+end
+
+_with_split(s::_AbstractScenario, req) = s
+
+function _with_split(s::Scenario, req)
+    old = getfield(s, :_split)
+    sets = copy(old)
+    for (k, g) in req
+        k === nothing && !(g in sets) && push!(sets, g)
+    end
+    length(sets) == length(old) && return s
+    return Scenario(s.target, s.param, s.deposition, s.model, s.observed, s.moment_weights, s.ylm_weights,
+                    s.moment_response, s.ylm_response, s.lpi, s.time, getfield(s, :_response), s.albedo, sets)
 end
 
 # A run on the tapered profile (`_tapered`) reported under the scenario `s`'s hard cut:

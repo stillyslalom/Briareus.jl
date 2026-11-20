@@ -249,6 +249,46 @@ end
                   end, ((ca.f, xc), (cc.f, x)))
     end
 
+    # Inside a constrained run the evaluations keep the element powers of the group sets
+    # that ceilings at the beams' own powers read (`_with_split`, per phase on a phased
+    # scenario), and the ceilings read them instead of depositing: the sums of their own
+    # deposition (bit for bit where the compiler builds both loops alike; held here to
+    # 1e-12 in values and partials), and the deposition unchanged. Other powers, and
+    # setup beams that the laser–plasma model changed, deposit as before.
+    @testset "the evaluation's own deposition serves the ceilings" begin
+        x = x0 .+ 0.05 .* sin.(1:length(x0))
+        xd = [ForwardDiff.Dual{:split}(x[i], (sin(i), cos(i))) for i in eachindex(x)]
+        sb = remake(s; lpi = Backscatter(:outer50 => 0.5))
+        cs = (picket_ceiling(ref, :wall), picket_ceiling(ref, :wall; measure = :weighted),
+              picket_ceiling(ref, :wall; measure = :average), picket_ceiling(ref, :wall; measure = :corridor),
+              picket_ceiling(ref, :wall; groups = (:outer50,), measure = :average),   # a set within another
+              picket_ceiling(ref, :wall; kw..., measure = :average),                  # picket powers: not kept
+              picket_ceiling(evaluate(sb, x0), :wall; measure = :average, lpi = true))
+        req = Briareus._split_request(cs)
+        @test sort(unique(last.(req))) == [[:outer44, :outer50], [:outer50]] && all(isnothing, first.(req))
+        vp(a) = a isa ForwardDiff.Dual ? [ForwardDiff.value(a); collect(ForwardDiff.partials(a))] : [a]
+        same(a, b) = isapprox(vp(a), vp(b); rtol = 1e-12)
+        flat(v) = reduce(vcat, vp.(v))
+        for (sc, n) in ((s, 6), (sb, 7)), xx in (x, xd)
+            ev, evs = evaluate(sc, xx), evaluate(Briareus._with_split(sc, req), xx)
+            @test isapprox(flat(ev.deposition.element), flat(evs.deposition.element); rtol = 1e-12)
+            @test all(c -> same(c.f(ev), c.f(evs)) && same(something(Briareus._exact_value(c.f, ev), 0.0),
+                                                            something(Briareus._exact_value(c.f, evs), 0.0)), cs[1:n])
+            # read from the evaluation's deposition, except the setup beams that the
+            # backscatter changed
+            kept(lpi) = Briareus._split_map(evs, Briareus._OwnPower(), (:outer50, :outer44), lpi) !== nothing
+            @test kept(true) && kept(false) == (sc === s)
+        end
+        # a phased scenario: the phase whose constraint reads the groups keeps them
+        ps = PhasedScenario(p, Phase(:a, s), Phase(:b, s; power = 4.0, scaled = false))
+        cb = in_phase(:b, cs[3])
+        pss = Briareus._with_split(ps, Briareus._split_request((cb, in_phase(:a, cs[6]))))
+        @test isempty(getfield(pss[:a], :_split)) && getfield(pss[:b], :_split) == [[:outer44, :outer50]]
+        xp = initial_parameters(ps.param) .+ 0.01
+        @test cb.f(evaluate(pss, xp)) ≈ cb.f(evaluate(ps, xp)) rtol = 1e-12
+        @test Briareus._with_split(ps, Briareus._split_request((in_phase(:a, cs[6]),))) === ps
+    end
+
     # One free parameter, the 50° cone's z, pulled toward the waist by the objective: the
     # picket ceiling stops it where the constrained quantity reaches the limit (a root
     # found by bisection on the quantity itself; each is monotone over the bracket)
@@ -297,9 +337,12 @@ end
         @test zp - 1e-6 <= only(rp.x) < zp + 0.01
         # the spatially averaged fluence falls as the 50° spots clip on the holes (above
         # ~5.6 mm); the corridor's mean falls as they move away from the inner beams' paths
-        for (meas, zl, zbox, z0) in ((:average, 6.0, (5.7, 6.4), 6.3), (:corridor, 5.2, (4.9, 6.0), 5.8))
-            val(z) = picket_irradiance(at(z), :wall; kw..., measure = meas)
-            cv = picket_ceiling(ref, :wall; kw..., measure = meas, limit = val(zl))
+        # (and the average at the beams' own powers, which the run's evaluations serve from
+        # their own deposition)
+        for (meas, zl, zbox, z0, pk) in ((:average, 6.0, (5.7, 6.4), 6.3, kw), (:corridor, 5.2, (4.9, 6.0), 5.8, kw),
+                                         (:average, 6.0, (5.7, 6.4), 6.3, (;)))
+            val(z) = picket_irradiance(at(z), :wall; pk..., measure = meas)
+            cv = picket_ceiling(ref, :wall; pk..., measure = meas, limit = val(zl))
             zr = root(z -> val(z) - only(cv.limit), zl - 0.2, zl + 0.2)
             rv = optimize_pointing(sh, pull; x0 = [z0], lower = [zbox[1]], upper = [zbox[2]], constraints = (cv,),
                                    feasibility = 1e-6)

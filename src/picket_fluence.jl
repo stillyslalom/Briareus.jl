@@ -324,7 +324,9 @@ effective beams (`ev.effective`, after the scenario's laser–plasma model at it
 `time`, e.g. net of a [`Backscatter`](@ref) and after a transfer), at their own powers
 (`pulses` and `power` are then an error); otherwise the laser–plasma model does not
 enter, and backscatter or transfer is taken off the powers given. One deposition per
-call. Generic in the number type (ForwardDiff duals through the pointing and powers).
+call, or none on an evaluation inside [`optimize_pointing`](@ref) that already holds
+the groups' element powers at their own powers ([`picket_ceiling`](@ref)). Generic in
+the number type (ForwardDiff duals through the pointing and powers).
 
 **The published quantity** (`:average`). Callahan et al., PoP 25, 056305 (2018) divide
 the outer cones' picket energy by the one-side outer spot area of NIF's phase plates,
@@ -372,11 +374,29 @@ function picket_irradiance(ev::Evaluation, names::Symbol...; pulses = nothing, w
 end
 
 # The element powers (TW) of the evaluation's setup beams (or with `lpi` its effective
-# beams) at their picket powers.
-_picket_map(ev::Evaluation, power, gs, lpi::Bool) =
-    lpi ? _picket_map(ev.scenario.deposition, power, gs, ev.effective) :
-          _picket_map(ev.scenario.deposition, power, gs, ev.beams)
+# beams) at their picket powers: at their own powers, the evaluation's own deposition of
+# the groups where it kept them (`_split_map`), else a deposition of those beams.
+function _picket_map(ev::Evaluation, power, gs, lpi::Bool)
+    P = _split_map(ev, power, gs, lpi)
+    P === nothing || return P
+    return lpi ? _picket_map(ev.scenario.deposition, power, gs, ev.effective) :
+                 _picket_map(ev.scenario.deposition, power, gs, ev.beams)
+end
 _picket_map(op::DepositionOperator, power, gs, beams) = deposit(op, _picket_beams(power, gs, beams)).element
+
+# The element powers of the groups `gs` from the evaluation's own deposition, which kept
+# them (`Scenario`'s split, set by the optimizer for the constraints that read them), or
+# `nothing`. They serve the beams at their own powers when the evaluation deposited those
+# beams as `deposit` does: its effective beams (`lpi`), or its setup beams when the
+# laser–plasma model left them as they are. The same sums as the deposition in
+# `_picket_map`, bit for bit (`_GroupSplit`).
+function _split_map(ev::Evaluation, power, gs, lpi::Bool)
+    sp = getfield(ev, :_split)
+    (sp === nothing || !(power isa _OwnPower)) && return nothing
+    lpi || ev.effective === ev.beams || return nothing
+    j = findfirst(==(_group_set(gs)), sp.sets)
+    return j === nothing ? nothing : sp.element[j]
+end
 
 function _picket_measure(P, t::Target, es, m::_PicketMeasure, beams)
     m.measure === :peak && return _peak(P, t, es)
@@ -519,7 +539,11 @@ laser–plasma model enters only with `lpi = true`; then the reference, on its o
 or another, must share the scenario's model and time, as for [`irradiance_ceiling`](@ref)
 and [`mode_gate`](@ref): evaluating the constraint with another model, or at another time
 with a model, throws an `ArgumentError`. One deposition per evaluation, in the
-evaluation's number type. For a phase other than the
+evaluation's number type; inside [`optimize_pointing`](@ref), with the beams at their own
+powers (no `pulses` or `power`), none: the evaluation's own deposition keeps the
+groups' element powers in the same pass, the same sums bit for bit (unless the
+scenario's laser–plasma model deposits light itself, or with `lpi = false` changes the
+beams). For a phase other than the
 optimized scenario's (a trough, a foot), give the phase's powers by `pulses` and
 `window` or `power`, or build the constraint on an evaluation of that phase.
 
@@ -622,6 +646,11 @@ function _exact_value(c::_PicketValue, ev::Evaluation)
     t, es = _picket_parts(c, ev)
     return _peak(Float64.(ForwardDiff.value.(_picket_map(ev, c.power, c.groups, c.lpi))), t, es)
 end
+
+# The group set a ceiling reads, for the optimizer's split (`_with_split`): the beams at
+# their own powers only (other powers are not the evaluation's).
+_split_sets(c::_PicketValue) =
+    c.power isa _OwnPower ? _SplitRequest([nothing => _group_set(c.groups)]) : _SplitRequest()
 
 # ---------------------------------------------------------------------------------------
 # The bubble that follows the pointing's picket fluence
