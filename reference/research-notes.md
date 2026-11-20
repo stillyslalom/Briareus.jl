@@ -14865,3 +14865,30 @@ evaluations at `iterations = 3`), which phase 1 (on by default) gives in 20. Wit
 caps above every inner run (the default `iterations` and no `inner_evaluations` on every
 other test) nothing changes. Confidence: closed forms, one start each; the rule is an
 engineering reading of the method's premise, not a published rule.
+
+### 3. Phase 1's budget
+
+Phase 1's single L-BFGS-B run took the inner runs' cap, `iterations`. On the study
+variant with `iterations = 100` it ended on that cap, neither converged nor stalled: no
+verdict, the display read "no design within the limits", and the main run started from
+the unchanged start (the code adopted phase 1's design only when it met the limits; a
+capped phase 1 was not foreseen). With a cap ten times larger the same phase 1 reached
+its verdict. `iterations` caps the augmented
+Lagrangian's subproblems, so that the multipliers change often; phase 1 has none, and
+its own ends are its convergence, its stall rule (1 % over 100 evaluations) and the
+run's `evaluations`, time limit and callback. Phase 1 is no longer capped by
+`iterations`; it now ends at a verdict, within the limits, or stopped by the budget, the
+time limit or the callback, which ends the whole run at its design of least violation
+(§ 1), so the main run never starts from a phase 1 short of both. `phase1.reason` names
+the end (`:feasible`, `:converged`, `:stalled`, or the stop), and the display says when
+a stop came before a verdict.
+
+Closed form (the 120 TW cap against the drive floor, `feasibility = 1e-8`; scratch
+script, one thread): with `iterations = 3`, c40cb98's phase 1 stopped after 7
+evaluations without a verdict and the augmented Lagrangian reached `:infeasible_box`
+after 12 outer iterations (61 evaluations); now phase 1 gives the verdict in 20, the
+evaluations and the design of the default `iterations` exactly (violations 0.0237667 and
+0.0252364 of their scales, as the main run's). Runs whose phase 1 ended within its
+iteration cap are bit for bit (every constrained run of the four test files above).
+`test/constraints.jl` checks the verdict at `iterations = 3` and the stop at a budget of
+5 evaluations, with its line in the display.

@@ -507,7 +507,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         constraint must be relaxed alone for the rest to hold (`Relaxation`; on the
         study within 2 % of the gate multiples found by hand). `phase1` is on by
         default since 2026-11-19 ("Defaults changed (2026-11-19)"; `relaxation`
-        stays off). Left: relaxations cost one solve per constraint and can outlast
+        stays off). Since 2026-11-20 phase 1 has its own budget (not the inner runs'
+        `iterations`, which had cut it short of a verdict on a study variant) and
+        names what ended it ("Least violation, capped inner runs and phase 1's
+        budget"). Left: relaxations cost one solve per constraint and can outlast
         the time limit; the stall rule's defaults (1 % over 100 evaluations);
       - a keep-out given as a penalty gives way silently (by 0.07–0.37 mm there) once
         the multipliers grow: `clearance_floor` as a constraint held;

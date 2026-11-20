@@ -1452,7 +1452,11 @@ violates a constraint starts its main run from phase 1's design and can end at a
 design of a flat family than one started at `x0`; `phase1 = false` starts the main run
 at `x0`. A start that already meets every constraint, and a restart with `from`, skip
 phase 1. The
-callback's `outer` is 0 during phase 1. On the dropped-bundle test case made
+callback's `outer` is 0 during phase 1. Phase 1's L-BFGS-B run is not capped by
+`iterations` (which caps the augmented Lagrangian's subproblems): it ends on its
+convergence, its stall rule, the run's `evaluations`, the time limit or the callback,
+and a stop before a verdict is named in the result (`phase1.reason`) and its display.
+On the dropped-bundle test case made
 infeasible, phase 1 reached the verdict in 577 evaluations where the augmented
 Lagrangian had none after 2,195, and on feasible starts it cost 8 % fewer to 29 % more
 evaluations (research notes, "A verdict on conflicting constraints"); on the test
@@ -1840,8 +1844,11 @@ otherwise.
 **Phase 1 and relaxations** (`phase1 = true`, `relaxation = true`). `phase1` is
 `nothing` when phase 1 did not run, else a named tuple of its `evaluations` and
 `iterations` (included in the totals), `feasible` (it reached a design within the
-limits, where the main run started), `verdict` (it converged above `feasibility`: the
-run ended there, `outer` 0) and its design `x`. `relaxations` holds one
+limits, where the main run started), `verdict` (it converged or stalled above
+`feasibility`: the run ended there, `outer` 0), its design `x` and `reason`, what ended
+it: `:feasible`, `:converged` or `:stalled` (a verdict, or within the limits), or the
+stop that came first, `:evaluations`, `:time_limit` or `:callback` (no verdict; the run
+ends there with its design of least violation). `relaxations` holds one
 [`Relaxation`](@ref) per constraint violated or active at a verdict's design, with
 `relaxation = true` (empty otherwise); their evaluations count in `evaluations`. The
 display lists them under the constraints.
@@ -1911,8 +1918,11 @@ function _bound_side(x, lo, hi)
     return x - lo <= tol ? -1 : hi - x <= tol ? 1 : 0
 end
 
+# (`x`, the values and Optim's `result` unspecialized: the calls from the constrained run's
+# several exits, whose argument types are inferred differently, share one body)
 Base.@nospecializeinfer function _pointing_result(
-        s::_AbstractScenario, x, value, initial_value, iterations, evaluations, stopped, reason, result,
+        s::_AbstractScenario, @nospecialize(x), @nospecialize(value), @nospecialize(initial_value),
+        iterations, evaluations, stopped, reason, @nospecialize(result),
         lower, upper; constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
         @nospecialize(state = nothing), @nospecialize(objective = nothing),
         gradients::Union{Nothing,NTuple{2,Vector{Float64}}} = nothing, stationarity::Float64 = NaN,
@@ -2068,12 +2078,14 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
            "ended by the budget, the time limit or the callback"
     p1 = r.phase1
     if p1 !== nothing && p1.verdict
-        @printf(io, "\n  phase 1 (%d evaluations): no design meets every constraint from this start; the least infeasibility found:",
-                p1.evaluations)
+        @printf(io, "\n  phase 1 (%d evaluations, %s): no design meets every constraint from this start; the least infeasibility found:",
+                p1.evaluations, get(p1, :reason, :converged) === :stalled ? "stalled" : "converged")
     else
-        p1 === nothing ||
-            @printf(io, "\n  phase 1: %s in %d evaluations", p1.feasible ? "a design within the limits" :
-                    "no design within the limits", p1.evaluations)
+        if p1 !== nothing
+            p1.feasible ? @printf(io, "\n  phase 1: a design within the limits in %d evaluations", p1.evaluations) :
+                          @printf(io, "\n  phase 1 (%d evaluations): no design within the limits and no verdict; %s ended it first",
+                                  p1.evaluations, _phase1_stop_text(get(p1, :reason, :converged)))
+        end
         @printf(io, "\n  %d outer iterations", r.outer)
         r.capped > 0 && @printf(io, " (%d ended on the inner cap)", r.capped)
         print(io, ": ", what)
@@ -2106,6 +2118,11 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
     end
     return nothing
 end
+
+# What stopped a phase 1 short of a verdict, in words.
+_phase1_stop_text(why::Symbol) = why === :evaluations ? "the evaluation budget" :
+                                 why === :time_limit ? "the time limit" : why === :callback ? "the callback" :
+                                 string(why)
 
 # A relaxation in words: the relaxed limits in the constraint's units, and as a multiple
 # of the limit where the scale is the limit's magnitude.

@@ -177,6 +177,18 @@
         @test v.evaluations == v.phase1.evaluations + r1.evaluations + r2.evaluations
         shown = sprint(show, MIME"text/plain"(), v)
         @test occursin("no design meets every constraint", shown) && occursin("relaxed alone", shown)
+        # Phase 1's budget is its own, not the inner runs' `iterations`: with inner runs
+        # capped at 3 iterations it still reaches the verdict, at the same violations
+        # (before, it stopped at 3 iterations without one and the main run began at the
+        # start). Stopped by the run's evaluation budget first, it says so.
+        v3 = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
+                               feasibility = 1e-8, iterations = 3, evaluations = 3000)
+        @test v3.phase1.verdict && v3.outer == 0 && v3.phase1.reason in (:converged, :stalled)
+        @test [r.violation for r in v3.constraints] ≈ [r.violation for r in v.constraints] rtol = 1e-4
+        v5 = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
+                               feasibility = 1e-8, evaluations = 5)
+        @test !v5.phase1.verdict && v5.phase1.reason === :evaluations && v5.outcome === :evaluations
+        @test occursin("the evaluation budget ended it first", sprint(show, MIME"text/plain"(), v5))
         # no verdict on a feasible run from far outside the cap: the KKT point as without
         # phase 1, its main run started from phase 1's first design within the limits
         far = optimize_pointing(s, f; x0 = clamp.(2.5 .* P0, lo, hi), lower = lo, upper = hi,

@@ -203,11 +203,11 @@ Base.@nospecializeinfer function _constrained_pointing(
     # from the start, ignoring the objective; a verdict when it stays above `feasibility`,
     # else the main run starts from its first design within the limits
     if phase1 && state === nothing && maximum(g; init = -Inf) > feasibility
-        r1 = _phase1(s, cs, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
+        r1 = _phase1(s, cs, x0, xs, lower, upper; evaluations, show_trace, g_tol,
                      callback, feasibility, deadline, inner_reltol)
         ne, ni = r1.evaluations, r1.iterations
         p1 = (; evaluations = r1.evaluations, iterations = r1.iterations, feasible = r1.feasible,
-              x = copy(r1.x), verdict = r1.verdict)
+              x = copy(r1.x), verdict = r1.verdict, reason = r1.why)
         ev1 = evaluate(s, r1.x)
         rec1 = _iterate_record(cs, ev1, r1.x, Float64(ForwardDiff.value(objective(ev1))), 0, feasibility)
         _less_violating(rec1, least, feasibility) && (least = rec1)
@@ -502,7 +502,7 @@ function _hinge2(g::AbstractVector{T}) where {T}
 end
 
 Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs::Tuple), x0, xs, lower, upper;
-                                         iterations::Integer, evaluations::Integer, show_trace::Bool,
+                                         evaluations::Integer, show_trace::Bool,
                                          g_tol, @nospecialize(callback), feasibility::Float64,
                                          deadline::Float64, inner_reltol::Float64)
     thr = feasibility^2 / 2
@@ -517,8 +517,12 @@ Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs:
         n > W && best[n] > (1 - _PHASE1_STALL) * best[n-W] && (stalled[] = true; return true)
         return callback === nothing ? false : callback(merge(st, (; outer = 0))) === true
     end
-    r = _lbfgsb(s, _Infeasibility(cs), x0, xs, lower, upper; iterations, evaluations, show_trace,
-                g_tol, callback = stop, f_reltol = inner_reltol, deadline)
+    # phase 1's own budget: no cap on its iterations (the inner runs' `iterations` caps the
+    # augmented Lagrangian's subproblems, which phase 1 is not), so that it ends on
+    # convergence, its stall rule, the run's evaluation budget, the time limit or the
+    # callback
+    r = _lbfgsb(s, _Infeasibility(cs), x0, xs, lower, upper; iterations = typemax(Int), evaluations,
+                show_trace, g_tol, callback = stop, f_reltol = inner_reltol, deadline)
     # converged, or stalled: a local minimum of ψ, or as near one as the stall rule tells
     ended = !r.stopped && r.reason === :converged || r.stopped && r.reason === :callback && stalled[]
     feasible = found[] || r.value <= thr
@@ -527,8 +531,11 @@ Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs:
     # an ended phase 1 whose violations are all within `feasibility` (many components each
     # just inside it) counts as feasible
     feasible |= ended && !verdict
-    return (; r.x, r.value, r.iterations, r.evaluations,
-            stopped = r.stopped && !found[] && !stalled[], r.reason, r.result, feasible, verdict)
+    stopped = r.stopped && !found[] && !stalled[]
+    # what ended it: `:feasible`, `:converged` or `:stalled` (a verdict, or within the limits
+    # at its end), else the stop's reason (`:evaluations`, `:time_limit`, `:callback`)
+    why = found[] || r.value <= thr ? :feasible : stalled[] ? :stalled : stopped ? r.reason : :converged
+    return (; r.x, r.value, r.iterations, r.evaluations, stopped, r.reason, r.result, feasible, verdict, why)
 end
 
 # Phase 1's stall rule (engineering defaults): it ends when its least infeasibility has
