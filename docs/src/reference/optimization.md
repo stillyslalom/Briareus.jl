@@ -86,7 +86,8 @@ keep-out's [`clearance_floor`](@ref) takes every phase at once. A phase's albedo
 time come from a drive history with `Phase(name, scenario; history, time)`, and a
 reference at the same time from `remake(scenario; history, time)`.
 `bounds(scenario.param; power_max)` caps every beam in every phase at the laser's
-limit, [`phase_beams`](@ref) puts reference beams at each phase's powers,
+limit and [`pulse_ceiling`](@ref) holds the pulses written for a design
+([`scaled_pulse`](@ref)) within it between the phase samples, [`phase_beams`](@ref) puts reference beams at each phase's powers,
 [`power_scales`](@ref) reads the scales inside an objective (differentiable),
 [`power_scale_objective`](@ref) holds them near a reference drive (each scale weighted
 by the beams it governs) and [`power_scale_table`](@ref) tabulates them per key and

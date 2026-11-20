@@ -14919,21 +14919,89 @@ phase carried a cone's pulse past its laser limit between that phase and the pea
 Layers considered: a clip in `scaled_pulse` or the table writer (changes the pulse's
 energy, so the delivered drive is no longer the optimized one: rejected); a check that
 reports (kept: `scaled_pulse(...; power_max)` and `shape_pulses(...; power_max)` throw
-an `ArgumentError` naming the time, the power and the excess); and the design's box. The
-exact condition, `(1 − w) mᵢ + w mᵢ₊₁ ≤ L / base(τ)` for every τ between two phase
-times, couples neighboring scales (a linear constraint per interval, not a box). The box
-used instead, `mᵢ ≤ L / max(base on [tᵢ₋₁, tᵢ₊₁])` (the pulse's start before the first
-phase, `peak` or its end after the last), is sufficient: on each interval the
-interpolated multiplier lies between two capped scales (or the ramp's 1), each below
-`L` over the base's maximum there. It is exact where the base pulse peaks at a phase
-time or inside the `peak` ramp: a scale above 1 before a ramp to 1 exceeds the limit at
-the base pulse's maximum whatever the ramp, so a phase just before a peak at the limit
-can carry no multiplier above 1. It is conservative where the base peaks between two
-phases away from both. `bounds(...; pulses, times, peak)` builds it (`pulses` a
-`PulseShape` or a function of a beam; each phase's power must be its pulse's at its
-time, checked to 1e-9 relative); without `pulses` the box is as before, bitwise.
-Checked (`test/pulse_shapes.jl`) against the scaled pulse sampled every 1e-4 ns and the
-closed-form caps of the mock-up.
+an `ArgumentError` naming the time, the power and the excess); and the design's limits.
+
+*Superseded the same day* (§ 4a): the first version bounded each scale by
+`mᵢ ≤ L / max(base on [tᵢ₋₁, tᵢ₊₁])` (the pulse's start before the first phase, `peak`
+or its end after the last), a box that is sufficient but excludes designs whose written
+pulse is within the limit.
+
+### 4a. The exact condition as a constraint
+
+The written pulse (`scaled_pulse`) is tabulated at the base pulse's points and the phase
+times and is linear between them, so its maximum lies at a point. At a point τ between
+the phases at tᵢ and tᵢ₊₁ the multiplier is `(1 − w) mᵢ + w mᵢ₊₁`, `w = (τ − tᵢ)/(tᵢ₊₁ −
+tᵢ)`, so the condition `base(τ) ((1 − w) mᵢ + w mᵢ₊₁) ≤ L` is linear in two neighboring
+scales; before the first phase it bounds m₁ alone, and after the last mₙ alone (on the
+`peak` ramp `(1 − w) mₙ + w ≤ L/base(τ)`; the pulse from `peak` on carries no scale).
+Between two phases the line `(1 − w) mᵢ + w mᵢ₊₁` must lie below every point
+`(w, L/base(τ))`, which holds if and only if it lies below the vertices of their lower
+convex hull: those points carry the whole condition.
+
+The box excluded what it should not. On a multi-phase re-pointing study (scratch runs) a
+cone's base pulse rises steeply between the last two scaled phases and peaks at the
+laser's limit inside the `peak` ramp. The box capped the last scale at 1, which is exact
+(the ramp then crosses the base pulse's maximum), and also the scale before it at the
+limit over the base pulse at the end of its interval, although by then the delivered
+multiplier is interpolated down to the last scale's: every run under the box ended
+infeasible, a drive floor short, while a box that applied the interval rule to the last
+scales only converged with every limit met and the written pulses within the limit. No
+box is exact here: the condition couples two scales, and a box excludes the corner of
+the feasible polygon that a design trading one scale against its neighbor needs.
+
+Options weighed:
+
+- *A tighter box alone*: the exact caps on one scale (the sample times, the pulse before
+  the first phase, the ramp or the hold after the last) are necessary, not sufficient,
+  for a pulse that rises between two phases away from both; making them sufficient puts
+  back the exclusion. Kept as the box part.
+- *One component per key and interval*, its value the largest written power over the
+  interval: exact, but a maximum over points, with a kink wherever the point of the
+  maximum changes, which the augmented Lagrangian's L-BFGS-B handles poorly.
+- *A smooth stand-in* (a p-norm over the interval, the exact value reported, as
+  `irradiance_ceiling`): smooth, but the working limit has to be lowered after
+  convergence, and the stand-in is not needed when the exact condition is linear.
+- *One component per hull vertex* (chosen): each linear in two scales, so smooth and
+  exact, and few: on the mock-ups of `test/pulse_shapes.jl` 5 and 6 components for 9
+  table points, and 16 for a 141-point random pulse (keys sharing a pulse share the
+  points).
+
+`pulse_ceiling(scenario; pulses, times, power_max, peak)` builds it: a `Constraint`
+named `:pulse`, a component per hull vertex and per key, the value the written power at
+the point (TW) against `power_max`, labeled by key and time; it takes the scales from the
+evaluation through `power_scales` (generic in the number type; a case in
+`test/inference.jl`). `bounds(...; pulses, times, peak)` now holds the conditions on one
+scale alone, and on each interval the cap that follows with the neighboring scale at its
+least value in the box (both exact: they exclude no design within the limit). Without
+`pulses` the box is unchanged. The augmented Lagrangian holds the coupled components to
+within the run's `feasibility` (1e-3 of the limit by default); a ceiling at
+`(1 − feasibility) L` leaves the written pulse within `L`.
+
+The table is the deliverable: the product of the two linear pieces (base and multiplier)
+between table points is quadratic and can exceed the table, which `scaled_pulse` does
+not write (on the rise mock-up below, by at most 0.0004 TW at 2 TW over 300 random
+designs; at the corners of the former box on the mock-up above, 0.08 TW).
+
+Checks (`test/pulse_shapes.jl`, against the written pulse sampled every 1e-4 ns, every
+table point on that grid): on 300 random designs for each of three mock-ups (a steep
+rise between the last two phases to a peak at the limit inside the ramp, a hump between
+two phases away from both, a 141-point random pulse), a design meets the constraint if
+and only if its sampled pulse stays within the limit (239, 240 and 99 within), and the
+box contains every design within the limit; the analog of the study's case (the
+earlier scales at 1.06, the last at 0.99, where the former box capped the third at
+1.031) is admitted with its pulse within the limit, and a design over the limit at the
+hump, inside the box, is reported at that point. `test/phased.jl` runs the largest
+scales under the constraint and the box (a linear program, closed form `m_picket = 7/3`,
+`m_step = 1.5`, above the former box's 2.0 for the picket).
+
+On the study (scratch runs, 8 threads; values not recorded here): the per-beam rung
+rerun from its converged design with `pulse_ceiling` and the new box in place of the
+hand-made box converged inside the box with every limit met, in 3% fewer evaluations
+than the hand-made run, to the same scales at three decimals and the same written
+pulses; the constraint (48 components for two cone keys on measured pulses) ended
+satisfied, its closest component 0.6% below the limit (the last scale set below its cap
+by its drive floor and the objective, not by the laser's limit). The former box had capped the scale
+before the rise below what the design needs, and every run under it ended infeasible.
 
 ### 5. On the study (scratch runs, 8 threads; values not recorded here)
 

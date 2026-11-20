@@ -200,6 +200,32 @@
         @test only(rv.relaxations).name == "step.drive" && only(rv.relaxations).status in (:relaxed, :stopped)
     end
 
+    # The laser's limit between the phase samples in a run: the largest scales (a linear
+    # program) under `pulse_ceiling` and the box of `bounds(...; pulses)`. Each cone's
+    # base pulse peaks at 1 TW between the picket (0 ns) and the step (2.5 ns) and reaches
+    # 1.6 TW on the ramp to the peak (3.5 ns), so the written pulse is within 2 TW where
+    # 0.6 s_picket + 0.4 s_step ≤ 2 and 0.5 s_step + 0.5 ≤ 2/1.6: the optimum is s_step =
+    # 1.5 (the box) and s_picket = 7/3 (the constraint), above the 2.0 of a cap on the
+    # largest base power between the two phases.
+    @testset "the laser's limit between the phases in a run" begin
+        base = Dict(g => PulseShape([0.0, 1.0, 2.5, 3.0, 4.0],
+                                    [g in (:inner23, :inner30) ? 0.1 : 0.4, 1.0, pulses[g](2.5), 1.6, 2.0])
+                    for g in keys(pulses))
+        kw = (; pulses = b -> base[b.group], times = (picket = 0.0, step = 2.5), peak = 3.5)
+        c = pulse_ceiling(psg; kw..., power_max = 2.0)
+        lo, hi = bounds(psg.param; scale = Inf, scale_min = 0.5, power_max = 2.0, kw..., z = 0.5, phi = 0.5)
+        ns = psg.param.n
+        @test hi[ns+5:end] ≈ fill(1.5, 4) rtol = 1e-12                  # the step's scales: the ramp's cap
+        r = optimize_pointing(psg, ev -> -sum(power_scales(psg, ev)); lower = lo, upper = hi, constraints = (c,),
+                              evaluations = 600)
+        s = power_scale_table(psg, r)
+        @test r.outcome in (:interior, :box) && all(row -> row.status !== :violated, r.constraints)
+        @test isapprox(s.scales[:, 1], fill(7 / 3, 4); rtol = 2e-3) && isapprox(s.scales[:, 2], fill(1.5, 4); rtol = 1e-9)
+        # every written pulse within the limit (to the run's feasibility, 1e-3)
+        written = [scaled_pulse(base[g], [0.0, 2.5], s.scales[i, :]; peak = 3.5) for (i, g) in enumerate(s.keys)]
+        @test all(q -> maximum(q, 0.0:1e-4:4.0) <= 2.0 * (1 + 1e-3), written)
+    end
+
     @testset "per-phase quantities and subsets" begin
         ev = evaluate(ps, y)
         e0 = evaluate(ps, initial_parameters(pp))

@@ -179,6 +179,9 @@ end
     regw = power_scale_objective(pph2; reference = 1.1, weight = b -> b.group === :outer44 ? 2.0 : 1.0)
     augph2 = Briareus._Augmented(regph, (clf, in_phase(:a, dcl)), (fill(0.1, length(quads)), [0.2]), 3.0)
     clfa = clearance_floor(keepout[1])     # an aperture keep-out over the phases (one skipped)
+    # the laser's limit on the written pulse of a phased design
+    pcap = pulse_ceiling(pph2; pulses = PulseShape([0.0, 1.0, 2.0, 3.0], [3.0, 4.0, 5.0, 5.0]), times = (a = 1.0,),
+                         power_max = 8.0, peak = 2.0)
     sw = Scenario(tw, p)
     pcross = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
     # ceilings at the beam powers read from the deposition in the evaluation (the
@@ -402,6 +405,7 @@ end
             @test (@inferred augph2(ev)) isa T
             @test (@inferred dcl.f(ev[:a])) isa T && (@inferred gsh.f(ev[:a])) isa Vector{T}
             @test (@inferred regw(ev)) isa T && (@inferred mode_departure(ev[:a], c_ref; m = :zero)) isa Vector{T}
+            @test (@inferred pcap.f(ev)) isa Vector{T}
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -648,6 +652,7 @@ end
                 VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, clfa.f, ev)
                 @test _inf_jet_clean(JET.report_call, dcl.f, ev[:a]) && _inf_jet_clean(JET.report_call, gsh.f, ev[:a])
                 @test _inf_jet_clean(JET.report_call, regw, ev) && _inf_jet_clean(JET.report_opt, regw, ev)
+                @test _inf_jet_clean(JET.report_call, pcap.f, ev) && _inf_jet_clean(JET.report_opt, pcap.f, ev)
                 @test _inf_jet_clean(JET.report_opt, (e, c) -> mode_departure(e, c; m = :nonzero), flux_ylm(ev[:a]), c_ref)
             end
             # a warm restart from a constrained result

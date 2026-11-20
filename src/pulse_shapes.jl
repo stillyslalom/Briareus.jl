@@ -431,10 +431,11 @@ quantity.
 `power_max` (TW per beam) checks the result against the laser's limit: a pulse above it
 anywhere (the table's points, where its maximum lies) is an `ArgumentError` naming the
 time, the power and the excess. Multipliers within the limit at the phase times can
-still exceed it between them, where the base pulse rises (a peak before `peak`):
-[`bounds`](@ref)`(scenario.param; power_max, pulses, times, peak)` caps the power scales
-of a phased design so that this pulse stays within the limit. A table is not clipped:
-clipping would change the pulse's energy and the drive the design was optimized for.
+still exceed it between them, where the base pulse rises: [`pulse_ceiling`](@ref)`(scenario;
+pulses, times, power_max, peak)` holds this pulse within the limit as a constraint of a
+phased design, and [`bounds`](@ref)`(scenario.param; power_max, pulses, times, peak)` the
+conditions on one scale alone as a box. A table is not clipped: clipping would change the
+energy of the pulse and the drive the design was optimized for.
 """
 function scaled_pulse(base::PulseShape, times, multipliers; peak = nothing,
                       power_max::Union{Nothing,Real} = nothing)
@@ -461,7 +462,7 @@ function _check_power_max(q::PulseShape, L::Float64)
     q.p[i] <= L * (1 + 1e-12) && return nothing
     throw(ArgumentError("the scaled pulse reaches $(round(q.p[i]; sigdigits = 6)) TW at $(q.t[i]) ns, " *
                         "$(round(100 * (q.p[i] / L - 1); sigdigits = 3))% above power_max = $L TW " *
-                        "(cap the design's scales between the phases: bounds(...; power_max, pulses, times, peak))"))
+                        "(hold the design's pulses within it: pulse_ceiling(scenario; pulses, times, power_max, peak))"))
 end
 
 """

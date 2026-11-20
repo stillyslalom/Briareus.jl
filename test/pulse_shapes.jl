@@ -163,43 +163,82 @@ end
                                                 power_max = Dict(:inner => 2.0, :outer => 1.0))
     end
 
-    # The laser's limit between the phase samples. A base pulse that peaks between the
-    # last phase (5 ns) and the end of the `peak` ramp (5.5 ns): multipliers within the
-    # limit at every phase time exceed it at 5.2 ns, where the base is at the limit. The
-    # box from `bounds(...; pulses, times, peak)` caps each scale at the limit over the
-    # base's largest power on the interval its multiplier governs (closed form below);
-    # checked against the scaled pulse sampled every 1e-4 ns.
+    # The laser's limit between the phase samples. `pulse_ceiling` holds every point of the
+    # written pulse (`scaled_pulse` of the base with the scales as multipliers, ramped to 1
+    # at `peak`) within the limit; checked against the written pulse sampled every 1e-4 ns
+    # (every point of the tables below lies on that grid), on random designs: a design
+    # meets the constraint if and only if its sampled pulse stays within the limit. The box
+    # of `bounds(...; pulses, times, peak)` holds the conditions on one scale alone and
+    # excludes no design within the limit.
     @testset "power cap between the phases" begin
-        base = PulseShape([0.0, 4.0, 5.0, 5.2, 6.0, 8.0], [0.1, 0.5, 1.8, 2.0, 1.9, 1.9])
-        p = scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], [1.05, 1.05, 1.05, 1.03]; peak = 5.5)
-        @test maximum(p.p) > 2.03 && p.t[argmax(p.p)] == 5.2
-        @test_throws ArgumentError scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], [1.05, 1.05, 1.05, 1.03];
-                                                peak = 5.5, power_max = 2.0)
         quads = nif_quads(power = 1.0)[1:4]
-        times = (a = 1.0, b = 2.0, c = 3.0, d = 5.0, peak = 6.0)
+        tph = [1.0, 2.25, 3.75, 5.0]
+        times = (a = 1.0, b = 2.25, c = 3.75, d = 5.0, peak = 6.0)
         names = collect(keys(times))
-        pw = [fill(base(times[k]), 4) for k in names]
-        pp = PhasedPointing(GroupPointing(quads; by = :quad, fields = (:z,)), names, pw;
-                            scaled = names[1:4], by = b -> :all)
+        pk, L = 5.5, 2.0
         dense(q) = maximum(q, 0.0:1e-4:8.0)
-        # at the phase times only: every sample within the limit, the pulse above it
-        _, hi0 = bounds(pp; scale = Inf, power_max = 2.0)
-        s0 = hi0[pp.n+1:end]
-        @test all(k -> isapprox(s0[k], 2.0 / pw[k][1]; rtol = 1e-14), 1:4)
-        @test dense(scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], s0; peak = 5.5)) > 2.1
-        # over the governed intervals: (-∞, 2], [1, 3], [2, 5], [3, 5.5] (the ramp to 1)
-        _, hi = bounds(pp; scale = Inf, power_max = 2.0, pulses = base, times, peak = 5.5)
-        sc = hi[pp.n+1:end]
-        @test sc ≈ 2.0 ./ [base(2.0), base(3.0), base(5.0), 2.0] rtol = 1e-14
-        q = scaled_pulse(base, [1.0, 2.0, 3.0, 5.0], sc; peak = 5.5, power_max = 2.0)
-        @test dense(q) <= 2.0 * (1 + 1e-12)
+        phased(base, pw = [fill(base(times[k]), 4) for k in names]) =
+            PhasedPointing(GroupPointing(quads; by = :quad, fields = (:z,)), names, pw; scaled = names[1:4], by = b -> :all)
+        # a steep rise between the last two phases to a peak at the limit inside the ramp (as
+        # on a multi-phase study); a hump between two phases away from both; a pulse of 141
+        # random points, a measured table's density
+        rise = PulseShape([0.0, 1.0, 2.25, 3.75, 4.5, 5.0, 5.15, 5.5, 8.0], [0.1, 0.2, 0.2, 0.6, 1.2, 1.94, 2.0, 1.98, 1.98])
+        hump = PulseShape([0.0, 1.0, 1.6, 2.25, 3.0, 3.75, 5.0, 8.0], [0.1, 0.3, 1.9, 0.5, 1.7, 0.6, 1.5, 1.5])
+        tr = collect(0.0:0.05:7.0)
+        rough = PulseShape(tr, ifelse.(tr .< pk, 0.2 .+ 1.7 .* rand(Random.Xoshiro(3), length(tr)), 1.9))
+        rng = Random.Xoshiro(11)
+        for (base, smax) in ((rise, 1.12), (hump, 1.3), (rough, 1.3))
+            pp = phased(base)
+            c = pulse_ceiling(pp; pulses = base, times, power_max = L, peak = pk)
+            lo, hi = bounds(pp; scale = Inf, scale_min = 0.5, power_max = L, pulses = base, times, peak = pk)
+            S = [0.5 .+ (smax - 0.5) .* rand(rng, 4) for _ in 1:300]
+            meets = [all(c.f(apply(pp, [zeros(pp.n); s])) .<= c.limit .* (1 + 1e-12)) for s in S]
+            within = [dense(scaled_pulse(base, tph, s; peak = pk)) <= L * (1 + 1e-12) for s in S]
+            @test meets == within && 30 < count(within) < 270
+            @test all(k -> !within[k] || all(lo[pp.n+1:end] .<= S[k] .<= hi[pp.n+1:end]), eachindex(S))
+            # the hull keeps fewer points than the tables carry
+            @test length(c.limit) < length(scaled_pulse(base, tph, ones(4); peak = pk).t)
+        end
+        # the study's case: the earlier scales at 1.06, the last below 1; the former rule (each
+        # scale under the largest base on the interval it governs) capped the step's at
+        # 2/1.94, while the written pulse stays within the limit
+        pr = phased(rise)
+        c = pulse_ceiling(pr; pulses = rise, times, power_max = L, peak = pk)
+        _, hi = bounds(pr; scale = Inf, power_max = L, pulses = rise, times, peak = pk)
+        s = [1.06, 1.06, 1.06, 0.99]
+        @test L / maximum(rise, 2.25:1e-4:5.0) < 1.04 && all(s .<= hi[pr.n+1:end])
+        @test all(c.f(apply(pr, [zeros(pr.n); s])) .<= c.limit) && dense(scaled_pulse(rise, tph, s; peak = pk)) <= L
+        @test scaled_pulse(rise, tph, s; peak = pk, power_max = L) isa PulseShape
+        # the last scale at the peak inside the ramp: at most 1, exactly
+        @test isapprox(hi[end], 1.0; rtol = 1e-12)
+        @test c.name === :pulse && all(==(L), c.limit) && "all, 5.15 ns" in c.labels
+        # a design over the limit at the hump between the first two phases, inside the box:
+        # the constraint reports it at 1.6 ns, and the table check refuses the pulse
+        ph = phased(hump)
+        c = pulse_ceiling(ph; pulses = hump, times, power_max = L, peak = pk)
+        lo, hi = bounds(ph; scale = Inf, scale_min = 0.5, power_max = L, pulses = hump, times, peak = pk)
+        s = [1.1, 1.1, 1.0, 1.0]
+        v = c.f(apply(ph, [zeros(ph.n); s]))
+        @test all(lo[ph.n+1:end] .<= s .<= hi[ph.n+1:end]) && c.labels[argmax(v .- c.limit)] == "all, 1.6 ns"
+        @test maximum(v) ≈ 1.9 * 1.1 rtol = 1e-14
+        @test_throws ArgumentError scaled_pulse(hump, tph, s; peak = pk, power_max = L)
+        # generic in the number type: the components' gradient, the constant coefficients
+        x = [zeros(ph.n); s]
+        J = ForwardDiff.jacobian(y -> c.f(apply(ph, y)), x)
+        k = findfirst(==("all, 1.6 ns"), c.labels)
+        w = (1.6 - 1.0) / 1.25
+        @test isapprox(J[k, ph.n+1:end], [1.9 * (1 - w), 1.9 * w, 0, 0]; rtol = 1e-12) && all(iszero, J[:, 1:ph.n])
         # a vector of times in the phases' order, and a function of the beam, alike
-        @test bounds(pp; scale = Inf, power_max = 2.0, pulses = b -> base, times = collect(values(times)),
-                     peak = 5.5) == bounds(pp; scale = Inf, power_max = 2.0, pulses = base, times, peak = 5.5)
+        c2 = pulse_ceiling(ph; pulses = b -> hump, times = collect(values(times)), power_max = b -> L, peak = pk)
+        @test c2.limit == c.limit && c2.labels == c.labels && c2.f(apply(ph, x)) == v
+        @test bounds(ph; scale = Inf, power_max = L, pulses = b -> hump, times = collect(values(times)), peak = pk) ==
+              bounds(ph; scale = Inf, power_max = L, pulses = hump, times, peak = pk)
         # the phases' powers must be the base pulse's at their times
-        bad = PhasedPointing(GroupPointing(quads; by = :quad, fields = (:z,)), names, [[pw[1] .* 1.1]; pw[2:end]];
-                             scaled = names[1:4], by = b -> :all)
-        @test_throws ArgumentError bounds(bad; power_max = 2.0, pulses = base, times, peak = 5.5)
-        @test_throws ArgumentError bounds(pp; power_max = 2.0, pulses = base)
+        pw = [fill(hump(times[k]), 4) for k in names]
+        bad = phased(hump, [[pw[1] .* 1.1]; pw[2:end]])
+        @test_throws ArgumentError bounds(bad; power_max = L, pulses = hump, times, peak = pk)
+        @test_throws ArgumentError pulse_ceiling(bad; pulses = hump, times, power_max = L, peak = pk)
+        @test_throws ArgumentError bounds(ph; power_max = L, pulses = hump)
+        @test_throws ArgumentError pulse_ceiling(ph; pulses = hump, times, power_max = L, peak = 4.0)
     end
 end

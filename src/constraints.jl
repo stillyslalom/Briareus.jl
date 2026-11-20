@@ -27,7 +27,8 @@ limit); a zero limit needs a `scale`.
 
 Ready-made constraints: [`irradiance_ceiling`](@ref), [`mode_gate`](@ref),
 [`clearance_floor`](@ref) (a keep-out's clearance per beam), [`light_ceiling`](@ref)
-and [`light_floor`](@ref) (the laser light on named parts). Any other quantity of the
+and [`light_floor`](@ref) (the laser light on named parts), [`pulse_ceiling`](@ref)
+(the limit of the laser on the pulses of a phased design). Any other quantity of the
 beams alone is `Constraint(:name, ev -> quantity(ev.beams); lower = minimum)`.
 """
 struct Constraint{F,L}
