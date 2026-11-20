@@ -623,7 +623,13 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       (one default inner run took 795) at 6e-4 less drive, and 30 needed more than 30
       outer iterations ("Inner-run options, a wall-loss scenario warning and laser
       delivery figures"). *Left:* a converged run of the study under the doubling
-      schedule or a cap before any default changes (user);
+      schedule or a cap before any default changes (user). Since 2026-11-20 a capped
+      inner run that ends above the limits no longer raises the penalty (on a study
+      variant every capped run had, ending the run at the penalty's ceiling after
+      nine, and on a feasible closed form with a false verdict), and a run
+      that ends above its limits returns its iterate of least violation, with
+      `least_violation`, `last_feasible` and `capped` in the result ("Least violation,
+      capped inner runs and phase 1's budget");
     - the engineering defaults `feasibility = 1e-3`, `p = 64`, `outer = 30` (user review);
     - the scales of the ready-made constraints (`clearance_floor`: 1 mm; `light_ceiling`
       and `light_floor`: the limit, at least 1e-3 of the delivered power) are engineering

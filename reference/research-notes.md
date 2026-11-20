@@ -14784,3 +14784,84 @@ the start's drive is a fraction of the reference's,
 linear in the beams' powers; with CBET or another power-dependent laser–plasma model a
 single ratio is a first step of an iteration. Left as a few lines of a study (no design
 obvious enough for a public name).
+
+## Least violation, capped inner runs and phase 1's budget (2026-11-20) *measured*
+
+A variant of a multi-phase re-pointing study (scratch runs) whose limits admit no design
+exposed three defects of `optimize_pointing(...; constraints)`. Its start met the
+entrance-hole keep-out (a `clearance_floor`) and the peak-irradiance ceiling and lay far
+over the picket's mode gates; the run, phase 1 off and every inner run stopped by the
+caller's `iterations`, ended "infeasible at the largest penalty" and returned a design
+inside the keep-out on many beams and over the ceiling: worse than its start on the two
+limits the start met.
+
+### 1. The iterate of least violation
+
+The returned design was the last outer iterate (the best augmented-Lagrangian point of
+the last inner run, at the largest penalty); nothing else was kept. Now every iterate
+(the start, phase 1's design, the design after each inner run, a stopped inner run's
+best design) is recorded with its largest normalized violation over the reported rows,
+`max(0, maxⱼ (±(value − limit)/scale))`, the measure of `ConstraintRow.violation` and of
+`feasibility` (an exact ceiling's exact value against its limit). `least_violation` is
+the least of them, violations within `feasibility` counting as equal and the lower
+objective then preferred; `last_feasible` is the latest within `feasibility`. A run that
+ends above its limits (at the penalty's ceiling, `outer`, the evaluation budget, the
+time limit or the callback) returns `least_violation`; `state.x` keeps the last iterate,
+whose multipliers `state` holds, and a restart with `from` continues there. Chosen over
+ψ = ½ Σ max(0, gᵢ)² (phase 1's measure) because the largest violation is what the rows,
+the outcome and `feasibility` judge; a run that met the limits at some iterate returns a
+design within them. Cost: one constraint evaluation per outer iteration (no deposition).
+
+Checks (`test/constraints.jl`): the conflicting closed form without phase 1 (a 120 TW
+cap against a drive floor 5 % above the cap's largest drive) returns an iterate whose
+largest violation is at most the last iterate's (0.0252364 either way; outer iteration
+10 of 11, the objective 1.3e-8 relative from the last's); a budget stop of the quadratic
+program started on its cap (8 evaluations) returns a design within the cap where the
+last iterate exceeds it. Every other constrained run of `test/constraints.jl`,
+`test/phased.jl`, `test/picket_fluence.jl` and `test/pointing_summary.jl` (54 runs
+logged at c40cb98 and after) is bit for bit, design and evaluation count: they end
+within their limits, or at a verdict whose design is the least violating.
+
+### 2. Inner runs ended by their cap
+
+ALGENCAN raises the penalty tenfold when V = maxᵢ |max(gᵢ, −λᵢ/μ)| has not halved
+(Andreani, Birgin, Martínez and Schuverdt, SIAM J. Optim. 18, 1286, 2008; Birgin and
+Martínez 2014, Algorithm 4.1), a test of the outer method that presumes the subproblem
+solved to its tolerance (step 1 there; the ω_k of Conn, Gould and Toint, SIAM J. Numer.
+Anal. 28, 545, 1991). An inner run stopped by `iterations` or `inner_evaluations` has
+not solved it, and on the study every such run raised the penalty, by 10⁸ in nine
+capped runs, then the verdict. Neither source states a rule for a capped subproblem
+(the theory assumes step 1 succeeds); four were measured on the closed forms of
+`test/constraints.jl` (8 threads; distance relative to the closed-form KKT point):
+
+- *hold*: after a capped run, the multipliers updated (λ ← max(0, λ + μ g)), the
+  penalty, the inner tolerance and the test's reference V held;
+- *hold μ*: the same, the tolerance tightened and the reference updated;
+- *separate*: the penalty test as before, but the infeasible verdict only after a
+  completed inner run (the penalty held at its ceiling meanwhile);
+- *hold above the limits* (chosen): *hold* after a capped run that ends above the
+  limits, the usual test after one that ends within them.
+
+| case | before (c40cb98) | hold | hold μ | separate | hold above the limits |
+|---|---|---|---|---|---|
+| KKT problem, `inner_evaluations = 20` | `:interior`, 97, 7.0e-5 | `outer` (100) reached, 1,958, 5.8e-5 | `outer` reached, 1,960 | as before | as before |
+| the same, 10 | `:interior`, 75, 4.8e-4 | `:interior`, 273, 2.6e-6 | 147, 6.5e-5 | as before | as before |
+| the same, `iterations = 3` | `:interior`, 254, 0.24 | 524, 1.6e-2 | 270, 3.2e-2 | as before | 187, 0.23 |
+| quadratic program, `iterations = 2`, phase 1 off | `:infeasible` (false verdict), 213 | `:interior`, 194, 4.1e-6 | 187, 4.1e-6 | 1,121, 2.4e-4 | `:interior`, 170, 4.0e-5 |
+| the same, `inner_evaluations = 5` | `:infeasible` (false verdict), 105 | `:interior`, 283, 4.0e-6 | 251, 3.9e-6 | `outer` reached, 500 | `outer` reached, 500, 1.8e-4 |
+| conflict, `iterations = 3`, phase 1 off | `:infeasible_box`, 54 | 268 | 403 | 54 | 268 |
+| conflict, `inner_evaluations = 10` | `:infeasible_box`, 58 | 94 | 91 | 58 | 94 |
+
+The false verdicts are the study's defect on a feasible problem: capped runs that end
+above the limits raise the penalty to its ceiling. Holding the penalty there removes
+them; holding it also within the limits leaves the dual ascent at the first penalty,
+too slow for the run to converge where every inner run is capped (the KKT problem at
+20 evaluations), while the usual test there converges as before: within the limits V is
+the complementarity, which the penalty's growth sharpens, and no verdict can follow from
+a design within the limits. *Separate* keeps the verdict away but not the growth (10⁹ on
+the quadratic program, its design 60 times farther from the KKT point). Chosen: hold
+above the limits; the cost is a slower verdict on a true conflict (268 against 54
+evaluations at `iterations = 3`), which phase 1 (on by default) gives in 20. With the
+caps above every inner run (the default `iterations` and no `inner_evaluations` on every
+other test) nothing changes. Confidence: closed forms, one start each; the rule is an
+engineering reading of the method's premise, not a published rule.

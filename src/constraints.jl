@@ -161,6 +161,18 @@ end
 # ends when an iteration changes its value by less than `inner_reltol` relative (1e-10 by
 # default: the drive objectives are flat along the constraints, and without it an inner
 # run creeps for hundreds of iterations at a 1e-6 gain).
+#
+# An inner run ended by its cap (`iterations` or `inner_evaluations`) has not solved its
+# subproblem, the premise of the penalty test (ALGENCAN's step 1, and the inner
+# tolerance ω_k of Conn, Gould and Toint, SIAM J. Numer. Anal. 28, 545, 1991): after one
+# that ends above the limits, the multipliers are updated as after any inner run, and the
+# penalty, the inner tolerance and the reference V of the penalty test are held, so that
+# a cap never grows the penalty toward the infeasible verdict; one that ends within the
+# limits takes the usual test (`capped` counts both). The largest normalized violation of the reported rows is recorded at the
+# start, at phase 1's design and after every inner run: a run that ends with a
+# violation above `feasibility` (the penalty's ceiling, `outer`, the budget, the time
+# limit, the callback) returns the iterate of least violation (`least_violation`), and
+# the latest iterate within the limits is kept as `last_feasible`.
 Base.@nospecializeinfer function _constrained_pointing(
         s::_AbstractScenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
@@ -182,6 +194,11 @@ Base.@nospecializeinfer function _constrained_pointing(
     lens = map(c -> length(_violations(c, ev)), cs)
     x, ne, ni, k = copy(xs), 0, 0, 0
     p1 = nothing
+    # the iterates of least violation and the latest within the limits (outer 0: the
+    # start or phase 1's design)
+    least = rec0 = _iterate_record(cs, ev, xs, f0, 0, feasibility)
+    feas = least.violation <= feasibility ? least : nothing
+    rec1, ev1 = rec0, ev           # phase 1's record and evaluation, when it runs
     # phase 1 (a fresh run whose start violates a constraint): the smallest infeasibility
     # from the start, ignoring the objective; a verdict when it stays above `feasibility`,
     # else the main run starts from its first design within the limits
@@ -191,22 +208,29 @@ Base.@nospecializeinfer function _constrained_pointing(
         ne, ni = r1.evaluations, r1.iterations
         p1 = (; evaluations = r1.evaluations, iterations = r1.iterations, feasible = r1.feasible,
               x = copy(r1.x), verdict = r1.verdict)
+        ev1 = evaluate(s, r1.x)
+        rec1 = _iterate_record(cs, ev1, r1.x, Float64(ForwardDiff.value(objective(ev1))), 0, feasibility)
+        _less_violating(rec1, least, feasibility) && (least = rec1)
+        rec1.violation <= feasibility && (feas = rec1)
         if r1.verdict || (r1.stopped && !r1.feasible)
             # infeasible (phase 1 converged above `feasibility`), or stopped by the budget,
-            # the time limit or the callback before a design within the limits
-            ev1 = evaluate(s, r1.x)
+            # the time limit or the callback before a design within the limits: the
+            # design of least violation, phase 1's unless the start's is less
+            xr = least.x
+            ev1 = xr === r1.x ? ev1 : evaluate(s, xr)
             rows = _constraint_rows(ev1, cs, nothing, feasibility)
             rel = Relaxation[]
             if r1.verdict && relaxation
-                rel = _relaxations(s, cs, rows, lens, collect(Float64, x0), collect(Float64, r1.x),
+                rel = _relaxations(s, cs, rows, lens, collect(Float64, x0), collect(Float64, xr),
                                    lower, upper; iterations,
                                    evaluations = evaluations - ne, show_trace, g_tol,
                                    feasibility, outer, deadline, inner_reltol, inner_evaluations)
                 ne += sum(r -> r.evaluations, rel; init = 0)
             end
-            return _pointing_result(s, r1.x, Float64(ForwardDiff.value(objective(ev1))), f0, ni, ne,
+            return _pointing_result(s, xr, Float64(ForwardDiff.value(objective(ev1))), f0, ni, ne,
                                     r1.stopped, r1.verdict ? :converged : r1.reason, r1.result,
-                                    lower, upper; constraints = rows, phase1 = p1, relaxations = rel)
+                                    lower, upper; constraints = rows, phase1 = p1, relaxations = rel,
+                                    least_violation = least, last_feasible = feas)
         end
     end
     # the main run's start: phase 1's design within the limits, if any (its objective and
@@ -214,9 +238,8 @@ Base.@nospecializeinfer function _constrained_pointing(
     fμ = f0
     if p1 !== nothing && p1.feasible
         x = copy(p1.x)
-        evs = evaluate(s, x)
-        fμ = Float64(ForwardDiff.value(objective(evs)))
-        g = _all_violations(cs, evs)
+        fμ = rec1.value
+        g = _all_violations(cs, ev1)
     end
     # the constraints as the inner problems see them: an exact ceiling's stand-in at a
     # working limit, lowered while the exact value ends above the limit
@@ -240,6 +263,8 @@ Base.@nospecializeinfer function _constrained_pointing(
     last = nothing
     reason = :converged
     evx = ev
+    capped = 0
+    rec = least
     limits(w) = [copy(c.limit) for c in w]
     while true
         k += 1
@@ -258,11 +283,29 @@ Base.@nospecializeinfer function _constrained_pointing(
         V = maximum(abs, max.(g, -λ ./ μ); init = 0.0)
         λinner = λ
         λ = max.(0.0, λ .+ μ .* g)
+        rec = _iterate_record(cs, evx, x, Float64(ForwardDiff.value(objective(evx))), k, feasibility)
+        _less_violating(rec, least, feasibility) && (least = rec)
+        rec.violation <= feasibility && (feas = rec)
         if r.stopped
             reason = r.reason
             # a restart resumes the interrupted inner problem
-            state = (; λ = λinner, μ, μmax, tol, Vold, limits = limits(work))
+            state = (; λ = λinner, μ, μmax, tol, Vold, limits = limits(work), x = copy(x))
             break
+        end
+        # an inner run ended by its cap (`iterations`, `inner_evaluations`): its subproblem
+        # unsolved. Above the limits, the multipliers are updated and the penalty, the
+        # tolerance and the penalty test's reference held (V not halved there measures the
+        # cap, and the penalty's growth would lead to the infeasible verdict); within them,
+        # the usual test (V is then the complementarity, and no verdict can follow)
+        capped_run = r.reason === :iterations
+        capped += capped_run
+        if capped_run && maximum(g; init = -Inf) > feasibility
+            state = (; λ, μ, μmax, tol, Vold, limits = limits(work), x = copy(x))
+            if k >= outer
+                reason = :iterations
+                break
+            end
+            continue
         end
         feasible = maximum(g; init = -Inf) <= feasibility
         # converged: feasible and complementary, with the inner problem solved at the final
@@ -274,7 +317,7 @@ Base.@nospecializeinfer function _constrained_pointing(
             # limit/exact, and the run continued from here with the same multipliers
             lowered = _lower_exact_limits(cs, work, evx, feasibility)
             if lowered === nothing
-                state = (; λ, μ, μmax, tol, Vold = V, limits = limits(work))
+                state = (; λ, μ, μmax, tol, Vold = V, limits = limits(work), x = copy(x))
                 break
             end
             work = lowered
@@ -284,15 +327,26 @@ Base.@nospecializeinfer function _constrained_pointing(
         # the next outer iteration's penalty and tolerance (what a restart continues with)
         μnext = V > Vold / 2 && V < Inf ? 10μ : μ
         tolnext = max(Float64(g_tol), tol / 10)
-        state = (; λ, μ = μnext, μmax, tol = tolnext, Vold = V, limits = limits(work))
+        state = (; λ, μ = μnext, μmax, tol = tolnext, Vold = V, limits = limits(work), x = copy(x))
         if k >= outer
             reason = :iterations
             break
         end
         μ = μnext
-        !feasible && μ > μmax && break                    # infeasible at the largest penalty
+        if !feasible && μ > μmax
+            # infeasible at the largest penalty; after an iterate within the limits the
+            # penalty's ceiling ends the run as its outer budget does
+            feas === nothing || (reason = :iterations)
+            break
+        end
         Vold = V
         tol = tolnext
+    end
+    # a run ended with a violation above `feasibility` returns its iterate of least
+    # violation (the start, phase 1's design or an outer iterate)
+    if rec.violation > feasibility && least !== rec
+        x = copy(least.x)
+        evx = evaluate(s, x)
     end
     # the reported multipliers: those that best satisfy stationarity at the design (the
     # iteration's own, in `state`, are what a restart continues from)
@@ -303,7 +357,25 @@ Base.@nospecializeinfer function _constrained_pointing(
     return _pointing_result(s, x, Float64(ForwardDiff.value(objective(evx))), f0, ni, ne,
                             stopped, reason, last.result, lower, upper; constraints = rows,
                             outer = k, state, objective, phase1 = p1, gradients = kkt.gradients,
-                            stationarity = kkt.stationarity)
+                            stationarity = kkt.stationarity, least_violation = least,
+                            last_feasible = feas, capped)
+end
+
+# The record of an iterate for `least_violation` and `last_feasible`: its parameters, its
+# largest normalized violation over the reported rows (an exact ceiling's exact value;
+# zero when every component holds), its objective and its outer iteration (0: the start
+# or phase 1's design).
+function _iterate_record(cs::Tuple, ev, x, value::Float64, outer::Int, feasibility::Float64)
+    rows = _constraint_rows(ev, cs, nothing, feasibility)
+    v = max(0.0, maximum(r -> r.violation, rows; init = 0.0))
+    return (; x = collect(Float64, x), violation = v, value, outer)
+end
+
+# Whether iterate `a` has less violation than `b`: violations within `feasibility` count as
+# equal, and then the lower objective is less.
+function _less_violating(a, b, feasibility::Float64)
+    va, vb = max(a.violation, feasibility), max(b.violation, feasibility)
+    return va < vb || va == vb && a.value < b.value
 end
 
 # The multipliers reported at the end of a constrained run: the nonnegative least-squares

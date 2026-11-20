@@ -1386,7 +1386,16 @@ be met ends the run at phase 1's verdict (below), or with `phase1 = false` once 
 penalty has grown by 10⁸ without progress. `outer` caps the outer
 iterations, `iterations` caps each inner run and `evaluations` is the budget of the
 whole run (the result counts both over all inner runs). The multipliers change only
-between inner runs, so the cap sets how long the run works with each set of them. The
+between inner runs, so the cap sets how long the run works with each set of them. An
+inner run ended by its cap has not solved its subproblem, which the penalty's test
+(has the infeasibility–complementarity measure halved?) presumes: after one that ends
+above the limits the multipliers are updated, while the penalty, the inner tolerance
+and the test's reference are held, so that a cap never grows the penalty toward the
+infeasible verdict; one that ends within the limits takes the usual test (the result's
+`capped` counts both; research notes, "Least violation, capped inner runs and phase
+1's budget"). A run that ends above its limits (infeasible, or stopped
+by a budget, the time limit or the callback) returns its iterate of least violation,
+not its last ([`PointingResult`](@ref): `least_violation`, `last_feasible`). The
 public cases of up to about a hundred parameters converge with a large cap (the
 dropped-bundle tutorial passes 1,000) in about a thousand evaluations; small early
 caps, measured as an alternative, saved evaluations on some of them and cost drive on
@@ -1469,7 +1478,8 @@ already tapered) are optimized as they are. A [`PhasedScenario`](@ref) is tapere
 phase by phase.
 
 **Restarts.** `from`, a previous run's [`PointingResult`](@ref), continues that run:
-`x0`, `lower` and `upper` default to its `x` and box, and a constrained run starts from
+`x0`, `lower` and `upper` default to its last iterate (`state.x` of a constrained run,
+its `x` otherwise and whenever the run returned its last iterate) and box, and a constrained run starts from
 its multipliers, penalty parameter, inner tolerance and working limits (`result.state`)
 instead of learning them again from zero. A run cut short by `evaluations` (or by the
 callback) and continued with `from` resumes the interrupted inner problem; the counts of
@@ -1489,7 +1499,7 @@ re-pointing").
 Base.@nospecializeinfer function optimize_pointing(
                            s::_AbstractScenario, @nospecialize(objective);
                            @nospecialize(from = nothing),
-                           x0 = from === nothing ? initial_parameters(s.param) : from.x,
+                           x0 = from === nothing ? initial_parameters(s.param) : _restart_x(from),
                            lower = from === nothing ? bounds(s.param, x0)[1] : from.lower,
                            upper = from === nothing ? bounds(s.param, x0)[2] : from.upper,
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
@@ -1534,6 +1544,16 @@ Base.@nospecializeinfer function optimize_pointing(
                 callback, deadline)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
                             r.stopped, r.reason, r.result, lower, upper; objective)
+end
+
+# A restart's start: the iterate whose multipliers the result's `state` holds (`state.x`;
+# the result's `x` unless the run ended above its limits and returned its iterate of
+# least violation), else the result's `x`.
+# Declared `Vector{Float64}`: `from` is not specialized on, and an inferred `Any` here would
+# compile `optimize_pointing`'s body a second time.
+function _restart_x(r)::Vector{Float64}
+    st = r.state
+    return st isa NamedTuple && haskey(st, :x) ? st.x : r.x
 end
 
 # The gradient of `F(evaluate(s, x))` at `x`, through the optimizer's dual tag and chunks
@@ -1756,8 +1776,10 @@ objective's own values, without the constraint terms.
 constrained run, a named tuple of the multipliers `λ` (normalized units, one per
 constraint component in the order of `constraints`), the penalty parameter `μ` and its
 ceiling `μmax`, the inner runs' tolerance `tol`, the last infeasibility–complementarity
-measure `Vold` and the working limits `limits` (an exact ceiling's lowered stand-in
-limit; see [`irradiance_ceiling`](@ref)); `nothing` without constraints. A run ended by
+measure `Vold`, the working limits `limits` (an exact ceiling's lowered stand-in
+limit; see [`irradiance_ceiling`](@ref)) and the iterate `x` they belong to (the
+result's `x` unless the run returned its iterate of least violation, below); `nothing`
+without constraints. A run ended by
 its budget, time limit or callback keeps the state of the interrupted inner problem,
 so that the restart resumes it.
 
@@ -1823,6 +1845,30 @@ run ended there, `outer` 0) and its design `x`. `relaxations` holds one
 [`Relaxation`](@ref) per constraint violated or active at a verdict's design, with
 `relaxation = true` (empty otherwise); their evaluations count in `evaluations`. The
 display lists them under the constraints.
+
+**Least violation and the last design within the limits** (constrained runs; `nothing`
+without constraints). The run records each iterate's largest normalized violation over
+the reported rows, `max(0, maxⱼ violation)` of [`ConstraintRow`](@ref) (an exact
+ceiling's exact value against its limit; zero when every component holds), at the
+start, at phase 1's design and after every inner run. `least_violation` is the iterate
+of least violation, violations within `feasibility` counting as equal and the lower
+objective then preferred, and `last_feasible` the latest iterate with every violation
+within `feasibility` (`nothing` when none had), each a named tuple `(; x, violation,
+value, outer)`: its parameters, its largest violation, its objective and its outer
+iteration (0 for the start or phase 1's design). A run that ends with a violation above
+`feasibility` (`outcome` `:infeasible` or `:infeasible_box`, or a budget, time limit or
+callback stop above the limits) returns `least_violation` as `x`, its beams, value and
+rows, rather than its last iterate, which can be worse than the start on the limits it
+met; `state.x` is then the last iterate, the one the multipliers of `state` belong to,
+where a restart with `from` continues. When an earlier iterate met the limits, the
+returned design meets them and a run that ended at the penalty's ceiling reads `reason`
+and `outcome` `:iterations`. Under VisRad's hard cut (`tapered_value` finite) the
+records are the tapered run's.
+
+`capped` counts the outer iterations whose inner run ended on its cap (`iterations`, or
+`inner_evaluations`) instead of converging: after each that ended above the limits the
+multipliers were updated and the penalty, the inner tolerance and the penalty test's
+reference held ([`optimize_pointing`](@ref)); the display gives the count.
 """
 struct PointingResult{B}
     x::Vector{Float64}
@@ -1848,6 +1894,9 @@ struct PointingResult{B}
     relaxations::Vector{Relaxation}
     stationarity::Float64
     tapered_value::Float64
+    least_violation::Union{Nothing,NamedTuple}
+    last_feasible::Union{Nothing,NamedTuple}
+    capped::Int
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1867,7 +1916,8 @@ Base.@nospecializeinfer function _pointing_result(
         lower, upper; constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
         @nospecialize(state = nothing), @nospecialize(objective = nothing),
         gradients::Union{Nothing,NTuple{2,Vector{Float64}}} = nothing, stationarity::Float64 = NaN,
-        @nospecialize(phase1 = nothing), relaxations::Vector{Relaxation} = Relaxation[])
+        @nospecialize(phase1 = nothing), relaxations::Vector{Relaxation} = Relaxation[],
+        @nospecialize(least_violation = nothing), @nospecialize(last_feasible = nothing), capped::Int = 0)
     x = collect(Float64, x)
     names = _names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
@@ -1888,7 +1938,7 @@ Base.@nospecializeinfer function _pointing_result(
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
                           collect(Float64, lower), collect(Float64, upper), atb,
                           constraints, outcome, outer, state, gf, gL, phase1, relaxations, stationarity,
-                          NaN)
+                          NaN, least_violation, last_feasible, capped)
 end
 
 # What ended a run: the stop's reason, or at convergence whether the constraints are met
@@ -1968,7 +2018,8 @@ Base.@nospecializeinfer function _hard_cut_result(s::_AbstractScenario, r::Point
     return PointingResult(r.x, r.beams, value, initial, r.iterations, r.evaluations, r.stopped,
                           r.reason, r.result, r.names, r.lower, r.upper, r.at_bounds, rows,
                           _outcome(r.reason, rows, r.at_bounds), r.outer, r.state, r.bound_gradient,
-                          r.bound_sensitivity, r.phase1, r.relaxations, r.stationarity, r.value)
+                          r.bound_sensitivity, r.phase1, r.relaxations, r.stationarity, r.value,
+                          r.least_violation, r.last_feasible, r.capped)
 end
 
 function Base.show(io::IO, r::PointingResult)
@@ -2023,10 +2074,23 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
         p1 === nothing ||
             @printf(io, "\n  phase 1: %s in %d evaluations", p1.feasible ? "a design within the limits" :
                     "no design within the limits", p1.evaluations)
-        @printf(io, "\n  %d outer iterations: %s", r.outer, what)
+        @printf(io, "\n  %d outer iterations", r.outer)
+        r.capped > 0 && @printf(io, " (%d ended on the inner cap)", r.capped)
+        print(io, ": ", what)
         isnan(r.stationarity) ||
             @printf(io, "\n  stationarity: largest |∂L/∂x| inside the box %.2e (objective units per parameter unit)",
                     r.stationarity)
+    end
+    lv, lf = r.least_violation, r.last_feasible
+    if lv !== nothing && r.state !== nothing && haskey(r.state, :x) && r.x == lv.x && r.state.x != r.x
+        @printf(io, "\n  returned the iterate of least violation (%s, largest violation %.3g), not the last (`state.x`)",
+                lv.outer == 0 ? "the start or phase 1's design" : "outer iteration $(lv.outer)", lv.violation)
+    end
+    if lf === nothing
+        r.outcome in (:interior, :box) || print(io, "\n  no iterate met every limit")
+    elseif r.x != lf.x
+        @printf(io, "\n  the last iterate within the limits: %s, objective %.4g (`last_feasible`)",
+                lf.outer == 0 ? "the start or phase 1's design" : "outer iteration $(lf.outer)", lf.value)
     end
     _show_constraint_rows(io, r.constraints)
     # an exact ceiling's row reads the exact value (inside its limit) while its multiplier

@@ -187,6 +187,37 @@
         @test res.phase1.feasible && !res.phase1.verdict && isempty(res.relaxations)
         @test today.phase1 === nothing
 
+        # The iterate of least violation. Without phase 1 the conflicting run ends at the
+        # penalty's ceiling: it returns its iterate of least violation (the largest
+        # normalized violation of its rows, against `check_constraints` at its last
+        # iterate, `state.x`), and no iterate met both limits.
+        lastrows = check_constraints(evaluate(s, today.state.x), (cap120, above); feasibility = 1e-8)
+        @test today.least_violation.x == today.x && today.last_feasible === nothing
+        @test today.least_violation.violation == maximum(r.violation for r in today.constraints)
+        @test today.least_violation.violation <= maximum(r.violation for r in lastrows)
+        @test occursin("no iterate met every limit", sprint(show, MIME"text/plain"(), today))
+        # A run stopped by its budget above a limit that its start met: the start on the
+        # cap, the objective pulling the powers above it. The last iterate (`state.x`)
+        # exceeds the cap; the result is the iterate of least violation, here one within
+        # the cap, and a restart continues from the last iterate.
+        Pa = P0 .* (cap / sum(P0))
+        cut = optimize_pointing(s, f; x0 = Pa, lower = lo, upper = hi, constraints = (total,),
+                                evaluations = 8, phase1 = false)
+        @test cut.outcome === :evaluations && cut.least_violation.x == cut.x
+        @test only(check_constraints(evaluate(s, cut.state.x), total)).status === :violated
+        @test only(cut.constraints).status !== :violated && cut.last_feasible !== nothing
+        @test occursin("returned the iterate of least violation", sprint(show, MIME"text/plain"(), cut))
+        @test Briareus._restart_x(cut) == cut.state.x
+
+        # Inner runs ended by their cap above the limits hold the penalty (the result's
+        # `capped` counts the capped runs): with two iterations per inner run the feasible
+        # quadratic program still converges to the KKT point, where escalating the penalty
+        # after every capped run ended it at the penalty's ceiling with a false verdict.
+        two = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs2, feasibility = 1e-8,
+                                iterations = 2, evaluations = 3000, outer = 100, phase1 = false)
+        @test two.outcome === :interior && two.capped > 0 && norm(two.x - Pstar) / norm(Pstar) < 1e-3
+        @test res.capped == 0 && res.last_feasible.x == res.x == res.state.x
+
         # a drive floor active at the solution: the least total power that keeps 0.9 of the
         # start's drive, a fill of the quads in decreasing `m`
         ref0 = evaluate(s, P0)
@@ -204,6 +235,7 @@
         # without constraints: the plain run, its outcome from the box alone
         plain = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi)
         @test plain.outcome === :interior && isempty(plain.constraints) && plain.outer == 0
+        @test plain.least_violation === plain.last_feasible === nothing && plain.capped == 0
         @test sum(plain.x) > cap
         @test isempty(plain.bound_sensitivity) && isempty(plain.bound_gradient) && isnan(plain.stationarity)
 
