@@ -568,7 +568,9 @@ end
     rms(beams) = (ev = evaluate(sub, beams); H = solve(sub.model, ev.deposition).H[sub.observed];
                   rms_nonuniformity(H, sub.target.elem_area[sub.observed]))
     @test r.before.face.rms ≈ rms(sess.beams.beams[][r.indices]) rtol = 1e-9
-    @test r.after.face.rms ≈ rms(r.beams) rtol = 1e-9
+    # the optimized RMS is a residue of cancellation (3e-7 of the mean flux here): two
+    # evaluations agree to rounding in the flux, an absolute 1e-15 or so in the RMS
+    @test r.after.face.rms ≈ rms(r.beams) atol = 1e-12
     # weight 1 weighs the start's nonuniformity as 1: the objective starts at 1 plus the
     # penalties (10 × the squared clipped, missed and direct fractions; the held drive at 0)
     ev0 = evaluate(sub, sess.beams.beams[][r.indices])
