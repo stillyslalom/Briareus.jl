@@ -14283,7 +14283,8 @@ with fixes 1–4, 6 and 8 (before fix 5): 3.1, 69, 71, and 14.0 and 12.0 ms.
 Case A, per evaluation (ms): `evaluate` 9.0–9.4 on one thread in every version; the
 serial-chunk gradient 152, 149, 157, 158, 162, 181 and 165 (fixed); the optimizer per
 evaluation on one thread 163, 163, 171, 172, 173, 194 and 178 (fixes 1–9: 151 and
-160, at 8 threads 22–23 ms); the keep-out's gradient
+160, at 8 threads 22–23 ms; fix 11, measured beside fixes 1–10 in another session: the
+gradient 164 to 141 ms, the optimizer 187 to 156 ms, at 8 threads 21.6 to 19.8 ms); the keep-out's gradient
 2.7, 2.7, 10.0, 9.7, 9.7, 28.2 and 14.1 (1.5 since fix 5). Building the operator takes 2.1–2.4 s and the
 radiation model 5.7 s (10-22), 7.2 s (0.1.0) and 7.7–8.1 s since (one thread; build
 time, not per evaluation; the step at 0.1.0 not bisected: the near-field view-factor
@@ -14397,14 +14398,8 @@ quadrature changed in those days).
    1.32 s (the optimizer's augmented Lagrangian), on one thread 6.45 and 7.44 s (10.8
    and 15.7 s with fixes 1–4).
 
-   *Measured, not landed:* the same coordinates on the f-cone model (the dual beam's
-   from its values with shared partials) take its Dual{12} depositions on the 12 cases
-   from 722 to 638 ms (Float64 unchanged) and case A's serial-chunk gradient from 163 to
-   147 ms, at 1.3e-15 of the largest element (values and partials). The round-off moves
-   the dropped-bundle tutorial's long constrained runs (about 1,000 evaluations each)
-   onto other designs (its assertions still hold; the run within limits, which holds no
-   keep-out, then ends with one quad 19 µm into a cap instead of 2 µm clear), whose
-   quoted numbers would need re-deriving; left for a change that re-derives them.
+   The same coordinates on the f-cone model, measured here and held back while the
+   dropped-bundle tutorial quoted its long runs' own digits, landed as fix 11.
    Building VisRad's frames once per beam instead of per work unit showed no difference
    beyond the machine's noise (about 10 %) and allocated 8 % more per gradient: not
    landed.
@@ -14444,13 +14439,38 @@ quadrature changed in those days).
    1.87 GB), the 20-evaluation run 27.0 to 13.3 s; on one thread the dual pass's
    evaluation 138 to 52 ms (Float64: 81 to 27 ms), the objective's gradient 7.11 to
    2.65 s and the augmented Lagrangian's 7.85 to 3.29 s.
+11. The f-cone model's point coordinates taken once (2026-11-20), as fix 8 (d) does for
+   VisRad's: a point's (s, u₀, v₀) in the beam frame are computed on values, serve the
+   screens, and a dual beam's are built from them with the partials of the origin's
+   coordinates, which every point shares (`_cone_coords`). Results change at rounding:
+   on the f-cone model's six cases of fix 4's set (48 quads and 192 beams at h = 0.2,
+   moved and defocused aims) Float64 depositions move by at most 4.8e-14 of an element's
+   own value (3.4e-16 of the largest), Dual{12} values and partials by 1.3e-15 of the
+   largest element's, per-beam totals by 2.2e-16 and their partials by 1.6e-15 of the
+   beam's power. Case A's objective prints the same 15 digits and its six-iteration run
+   takes the same 8 evaluations to the same value (12 digits). Timings (one thread unless
+   stated; another job held the second lock slot): the six cases' Dual{12} depositions
+   779 to 721 ms (Float64 386 and 384 ms), case A's serial-chunk gradient 164 to 141 ms,
+   the optimizer per evaluation 187 to 156 ms and at 8 threads 21.6 to 19.8 ms. The
+   dropped-bundle tutorial's long constrained runs end elsewhere in their families, as
+   any rounding moves them, within the ranges its text gives ("The dropped-bundle
+   tutorial's long runs under rounding (2026-11-20)", where both trees' runs are among
+   the 13 starts); every assertion holds. The beam-errors tutorial's tuning (200
+   iterations) ends nearer its optimum (P₂/P₀ +0.000 % against −0.023 %, the l = 1
+   budget 0.236 % against 0.233 %): its text now reads 0.23–0.24 %. The
+   diagnostic-windows tutorial's pair re-pointing ends elsewhere on its flat family, 134
+   and 98 µm rms in z and along the wall, the largest move 0.267 mm (before 141, 93 and
+   0.247 mm), l = 1–3 still restored to 0.02 %: its text now reads 0.25–0.27 mm; its
+   power trim converges in 106 iterations instead of 111, its printed cone factors moving
+   by at most 0.01 (none quoted in the text), and the pulse table's entries by at most
+   0.01 (within the text's ranges). The backlighter-sweep tutorial prints the same output.
 
 Together, on case B the optimizer's evaluation costs 0.21 of 0.3.0's on one thread (56
 against 273 ms) and 0.18–0.19 at 8 threads (9.0–9.2 against 47.6–50.6 ms), 0.24–0.29
 of v0.1.0's, and about the 2026-10-22 tree's on one thread (1.04; 0.5 at 8 threads), all
 nine fixes measured together on 2026-11-20 (case A: 160 ms on one thread, 22–23 ms at 8).
 Fixes 1–4 alone (0.52–0.62 of 0.3.0's) left every result bit for bit 0.3.0's; fixes
-6–8 and 10 change depositions at the rounding level only, and fix 9 nothing. The keep-out's
+6–8, 10 and 11 change depositions at the rounding level only, and fix 9 nothing. The keep-out's
 gradient, 6 times v0.1.0's after fixes 1–4 (the refined rim and the window), is 0.53 of
 it after fix 5. On a multi-phase study's evaluation (scratch runs: six phases, 552
 parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient fell from
@@ -14468,6 +14488,21 @@ fix 9's on one thread (2.65 and 3.29 s) and to 0.38 and 0.47 at 8 threads (0.46�
 0.74 s; fix 10 does not enter cases A and B, one scenario each). The gradient's chunks run threaded on the
 phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
 at 16, fast and slow cores).
+
+**The end state, on a quiet machine** (2026-11-20, on the tree at the end of that day's
+work, whose commits after fix 11 do not enter an evaluation; the timings of fixes 6–11
+above were taken while another job held the machine's second slot). The multi-phase
+study's gradients (552 parameters, the same scratch harness, best of several): on one
+thread the objective's 30.3 s (0.3.0) to 2.29 s and the augmented Lagrangian's 49.7 to
+4.98 s; at 8 threads 0.58 s and 0.78 s, the latter against 7.9 s on 0.3.0. The harness
+builds the augmented Lagrangian outside `optimize_pointing`, so its three picket
+ceilings still deposit (15 ms each per dual pass on one thread, the whole of the
+constraints' cost there beside the keep-out's 4.5 ms): inside a run fix 7 removes them,
+and the run's gradient is nearer the objective's. One dual pass of `evaluate` is 47 ms
+on one thread and 11 ms at 8. A study script's penalty re-pointing with VisRad's
+profile (scratch runs, 30 iterations at 8 threads, v0.1.0 beside the end state in one
+session): 0.123 to 0.036 s per evaluation at 92 parameters and 0.478 to 0.145 s at 368
+(0.3.0, measured the day before: 0.148 and 0.711).
 
 **By design, not changed.** Phase 1 (on by default in constrained runs since 2026-11-19)
 adds its own evaluations before the main run, not cost per evaluation; each lowering of

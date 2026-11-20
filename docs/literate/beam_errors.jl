@@ -252,7 +252,8 @@ println("  design      P₂/P₀     P₄/P₀    rms from the errors: l = 1    
 budget_row("example", x3)
 tuned_budget = budget_row("tuned", tuned.x);
 
-# The tuned design leaves less to the errors (l = 1 from 0.28% to 0.23%). It has also
+# The tuned design leaves less to the errors (l = 1 from 0.28% to 0.23–0.24%, the third
+# digit depending on where rounding takes the tuning run). It has also
 # moved power from the inner cones, whose errors weigh most per beam (above), to the
 # outer ones. With
 # `uncertainty`, [`symmetry_objective`](@ref) minimizes instead the expected value of

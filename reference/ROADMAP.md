@@ -391,10 +391,11 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       study-sized evaluation at 0.18–0.21 of 0.3.0's with every fix; and a phased
       scenario's phases on one mesh deposited in one pass, the profile evaluated once per
       mesh and scaled by each phase's powers (a multi-phase study's gradients at 0.37–0.47
-      of before on one and 8 threads, results at rounding). *Left:* the
-      same coordinate reuse on the f-cone model (−12 % per dual deposition, measured; it
-      moves the dropped-bundle tutorial's long constrained runs, whose quoted numbers
-      then need re-deriving); the keep-out's rim search on values, repeated in every chunk of a gradient
+      of before on one and 8 threads, results at rounding); and the same coordinate reuse
+      on the f-cone model (case A's gradient −14 %, results at rounding; the
+      dropped-bundle tutorial quotes its long runs' ranges since "The dropped-bundle
+      tutorial's long runs under rounding (2026-11-20)"). *Left:* the keep-out's rim
+      search on values, repeated in every chunk of a gradient
       (now its whole cost: 1.8 ms for 46 quads on one thread; a cache across chunks would
       cut that to about a fifth, at the price of state in the keep-out); the
       envelope-radius test behind fix 1 (about 3 ms a dual pass on 184 beams over five

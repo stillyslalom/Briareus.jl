@@ -474,6 +474,11 @@ end
     vp(c) = reduce(vcat, [[ForwardDiff.value(y); collect(ForwardDiff.partials(y))] for y in c])
     @test all(x -> isapprox(vp(Briareus._vr_coords(fd, x, Briareus._vr_coords(fv, x))), vp(Briareus._vr_coords(fd, x));
                             atol = 1e-13), xs[1:7:end])
+    # the same on the f-cone model's frames (`_cone_coords`)
+    cd, cv = Briareus.BeamFrame(bd), Briareus.BeamFrame(Briareus._value_beam(bd))
+    oc = Briareus._origin_coords(cd)
+    @test all(x -> isapprox(vp(Briareus._cone_coords(cd, oc, x, Briareus._cone_coords(cv, x))),
+                            vp(Briareus._cone_coords(cd, x)); atol = 1e-13), xs[1:7:end])
     @test_throws ArgumentError VisRadProfile(; envelope = 0)
     @test_throws ArgumentError VisRadProfile(; envelope = Dict("b" => -1.0))
     # the same spot with its axes swapped (a < b, turned 90°) is the same beam

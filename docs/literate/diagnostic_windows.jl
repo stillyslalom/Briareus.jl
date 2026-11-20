@@ -698,7 +698,8 @@ ev = evaluate(S_pairs, repoint.x)
         join((@sprintf("%.3f", d) for d in departure(ev)), ", "), 100 * (flux_ylm(ev)[1] / ref[1] - 1))
 
 # Moves of 0.09–0.14 mm rms (two to three times NIF's 50 µm rms pointing
-# specification, the largest 0.25 mm) restore ``l = 1``–``3`` to 0.02%, better
+# specification, the largest 0.25–0.27 mm; the run ends elsewhere on a flat family of
+# designs as rounding takes it) restore ``l = 1``–``3`` to 0.02%, better
 # than the powers, and leave the same ``l = 4``; pointing alone cannot give back the
 # 3.4% of drive the windows take.
 #

@@ -795,7 +795,9 @@ end
 
 # The deposition loop: `sink(destination, power)` for every point of beam `bi` in `r`
 # that receives light (`destination` > 0 an element, < 0 a component's back side), and
-# the sum of those powers (of type `T`); `η` the `absorption` of `deposit`.
+# the sum of those powers (of type `T`); `η` the `absorption` of `deposit`. A point's
+# coordinates in the beam frame are taken once, on values (for the screens), and a dual
+# beam's are built from them with the partials every point shares (`_cone_coords`).
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
                              fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}, η = nothing) where {F,T}
     prof = op.profile
@@ -805,40 +807,59 @@ end
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)
+    o = _origin_coords(f)
     acc = zero(T)
     @inbounds for q in r
-        _beyond(fv, αmax, βmax, P[q]) && continue
-        m = T === Float64 ? M[q] : _live_directions(fv, α, β, M[q], P[q])
+        x = P[q]
+        suv = _cone_coords(fv, x)
+        _beyond(fv, αmax, βmax, suv) && continue
+        m = T === Float64 ? M[q] : _live_directions(fv, α, β, M[q], suv)
         m == 0 && continue
-        val = W[q] * _cone_intensity(f, ds, α, β, κ, m, P[q], Nr[q], η)
+        val = W[q] * _cone_intensity(f, ds, α, β, κ, m, _cone_coords(f, o, x, suv), Nr[q], η)
         sink(D[q], val)
         acc += val
     end
     return acc
 end
 
-# Whether every cone direction's ray through `x` crosses the focal plane outside the
-# profile's cutoff: the crossing (u₀ - sαⱼ, v₀ - sβⱼ) is at least |u₀| - |s| max|α| and
-# |v₀| - |s| max|β| off axis (with a relative allowance for rounding).
-@inline function _beyond(f::BeamFrame{Float64}, αmax, βmax, x)
+# A point's (s, u₀, v₀) in a beam frame: along the beam from best focus and across it.
+@inline function _cone_coords(f::BeamFrame, x)
     d = x - f.focus
-    s = abs(dot(d, f.k))
-    u = max(abs(dot(d, f.e1)) - s * αmax, 0.0)
-    v = max(abs(dot(d, f.e2)) - s * βmax, 0.0)
+    return dot(d, f.k), dot(d, f.e1), dot(d, f.e2)
+end
+
+# The same in the frame `f` from those in its Float64 frame (`suv`, of the beam's values):
+# on duals the values with the partials of the origin's coordinates `o`
+# (`_origin_coords`), which every point shares (the frame's axes carry none), instead of
+# three dual dot products per point.
+@inline _origin_coords(f::BeamFrame) = _cone_coords(f, zero(Vec3))
+@inline _cone_coords(f::BeamFrame{Float64}, o, x, suv) = suv
+@inline function _cone_coords(f::BeamFrame{ForwardDiff.Dual{G,Float64,N}}, o, x, suv) where {G,N}
+    D = ForwardDiff.Dual{G,Float64,N}
+    return D(suv[1], ForwardDiff.partials(o[1])), D(suv[2], ForwardDiff.partials(o[2])),
+           D(suv[3], ForwardDiff.partials(o[3]))
+end
+@inline _cone_coords(f::BeamFrame, o, x, suv) = _cone_coords(f, x)
+
+# Whether every cone direction's ray through `x` (or through the point at coordinates
+# `(s, u₀, v₀)`, `_cone_coords`) crosses the focal plane outside the profile's cutoff:
+# the crossing (u₀ - sαⱼ, v₀ - sβⱼ) is at least |u₀| - |s| max|α| and |v₀| - |s| max|β|
+# off axis (with a relative allowance for rounding).
+@inline _beyond(f::BeamFrame{Float64}, αmax, βmax, x) = _beyond(f, αmax, βmax, _cone_coords(f, x))
+@inline function _beyond(f::BeamFrame{Float64}, αmax, βmax, (s, u0, v0)::NTuple{3,Float64})
+    s = abs(s)
+    u = max(abs(u0) - s * αmax, 0.0)
+    v = max(abs(v0) - s * βmax, 0.0)
     _outside(c) = u^2 / c.a2 + v^2 / c.b2 > c.qcut * (1 + 1e-9)
     return _outside(f.core) && (!f.has_halo || _outside(f.halo))
 end
 
-# The visible directions `m` whose ray through `x` crosses the focal plane inside the
-# profile's cutoff, from the beam's values: the others contribute exact zeros (value
-# and partials), so dual arithmetic is spent only on the ~1/6 of point-direction pairs
-# under the spot. (A Float64 beam is not screened: `_cone_intensity` tests the cutoff
-# itself.)
-@inline function _live_directions(f::BeamFrame, α, β, m::UInt16, x)
-    d = x - f.focus
-    s = dot(d, f.k)
-    u0 = dot(d, f.e1)
-    v0 = dot(d, f.e2)
+# The visible directions `m` whose ray through a point (its coordinates `(s, u₀, v₀)`)
+# crosses the focal plane inside the profile's cutoff, from the beam's values: the others
+# contribute exact zeros (value and partials), so dual arithmetic is spent only on the
+# ~1/6 of point-direction pairs under the spot. (A Float64 beam is not screened:
+# `_cone_intensity` tests the cutoff itself.)
+@inline function _live_directions(f::BeamFrame, α, β, m::UInt16, (s, u0, v0))
     live = UInt16(0)
     for j in eachindex(α)
         (m >> (j - 1)) & 0x1 == 0x1 || continue
@@ -892,12 +913,8 @@ _deposit_beam!(Ec, Lc, op::DepositionOperator, bi, f::BeamFrame) =
 # at shadow edges. (Giving each sub-beam a share of the f-cone spread would smooth the
 # footprint but break that consistency: 0.6% of a beam clipped by an LEH edge is lost.)
 # With `η` (the `absorption` of `deposit`), each direction's incidence factor carries
-# its absorbed fraction η_a.
-@inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, x, n, η = nothing)
-    d = x - f.focus
-    s = dot(d, f.k)
-    u0 = dot(d, f.e1)
-    v0 = dot(d, f.e2)
+# its absorbed fraction η_a. `(s, u₀, v₀)`: the point's coordinates (`_cone_coords`).
+@inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, (s, u0, v0), n, η = nothing)
     acc = zero(_absorbed(η, f.core.power_norm * s))
     for j in eachindex(ds)
         (m >> (j - 1)) & 0x1 == 0x1 || continue
