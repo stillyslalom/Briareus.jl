@@ -1,14 +1,14 @@
 # Mode-1 Green's function G(t) for the final hot-spot velocity of NIF shot N170827 (km/s per %
 # of flux mode 1 per ns), from C. V. Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 5
 # (LLNL-JRNL-807170 accepted manuscript): panel b (red "GF") and panel d (blue "N170827"), two
-# independent readings of the same curve. 59 2D capsule-only HYDRA runs with a 2.5 %, 120 ps
+# independent readings of the same curve. 59 2D capsule-only HYDRA runs with a 2.5%, 120 ps
 # c10 impulse every 140 ps from 0.2 to 8.32 ns. Digitized 2026-10-24 from the embedded raster
 # (1211 x 311 px): time from the panel frames (0 and 8 ns: panel b 294 and 494 px, panel d 898
 # and 1197 px), G from the frames (-5 and 65 at 260 and 28 px; the dashed zero line falls at
 # 243 px, 0.4 px from the axis). Each value is the median row of the stroke over +/-1 px of
 # columns (+/-0.04 ns in b, +/-0.03 ns in d). The two readings agree to ~1 km/s/%/ns rms
 # (reading error ~1, up to ~3 on the steep 4.2-4.6 ns rise); NaN where another stroke covers
-# the curve; 7.75 and 7.875 ns are read as 0 (the curve runs on the dashed zero line). Integral over the pulse: ~117 km/s per % (b and d within 0.5 %).
+# the curve; 7.75 and 7.875 ns are read as 0 (the curve runs on the dashed zero line). Integral over the pulse: ~117 km/s per % (b and d within 0.5%).
 # Columns: t (ns); panel_b, panel_d (km/s per % per ns)
 t,panel_b,panel_d
 0.250,-2.28,NaN

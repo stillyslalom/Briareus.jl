@@ -1,4 +1,4 @@
-# The material library: entries against the package's own defaults, sources, printing.
+# The material library: entries against the package defaults, sources, printing.
 
 # Field-by-field equality, recursing into structs (`Material`'s albedo models and
 # conversions hold vectors, which `===` compares by identity).

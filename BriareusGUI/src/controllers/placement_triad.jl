@@ -76,7 +76,7 @@ end
     triad_frame(parts, i) -> Frame
     triad_frame(ts::TargetSetup, i) -> Frame
 
-Where the placement triad of part `i` is drawn: at the part's own origin, with the axes
+Where the placement triad of part `i` is drawn: at the part origin, with the axes
 of the frame it is placed in ("Placed in"), along which its arrows move the part and
 about which its rings turn it.
 """

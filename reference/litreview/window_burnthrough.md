@@ -59,10 +59,10 @@ whether Nova's burnthrough foils had a backing.
   seen from outside, at the detection level of a background-subtracted difference.
 - Eq. 3: ΔP₂/P₀ ≈ (2.5 n A S₂ / 4πr²)(Δα/α)(F/(F + 1)), Δα/α the window's fractional
   albedo change, F a "recirculation factor", S₂ a geometric smoothing factor, n windows
-  of area A; for two 2.5 µm windows "a drive ΔP₂ of approximately −0.9 %" and ΔM₂/M₀
-  below 1.5 %. S₂, F and r are not given.
-- Core shape: reference shot P2 9 % prolate, the window shot −1 %; neutron M2/M0 12 %
-  along the window axis against 0 % (their Table/Fig. 5–6). They attribute part of the M2
+  of area A; for two 2.5 µm windows "a drive ΔP₂ of approximately −0.9%" and ΔM₂/M₀
+  below 1.5%. S₂, F and r are not given.
+- Core shape: reference shot P2 9% prolate, the window shot −1%; neutron M2/M0 12%
+  along the window axis against 0% (their Table/Fig. 5–6). They attribute part of the M2
   to gaps around the windows.
 
 ## 3. Low-Z burnthrough rates (Ol07, Ol11)
@@ -73,7 +73,7 @@ whether Nova's burnthrough foils had a backing.
   burnthrough-time difference. Samples of ~3.5–4.5 mg/cm², the areal mass of the
   windows' backings.
 - Rates **H-img** (read by eye, mg/cm²/ns at Dante Tr): polyimide (C₂₂H₁₀N₂O₅) 2.4 at
-  170 eV, 4.3 at 188, 4.6 at 193; CH + 1 % Ge 3.5–3.8 at 156–158 eV; pure and Cu-doped Be
+  170 eV, 4.3 at 188, 4.6 at 193; CH + 1% Ge 3.5–3.8 at 156–158 eV; pure and Cu-doped Be
   3.1–4.5 at 161–170, 5.5 at 188, 5.8–7.3 at 202–215, 7–9 at 225–230, 8.8–11.4 at
   239–243; HDC 2.3 at 175, 3.7–3.8 at 201–207, 4.8 at 220, 7–8.8 at 237–254.
 - Fits ṁ = A (Tr/200 eV)³ (**L**, ours): polyimide A = 4.8 (3.9–5.4 over its three
@@ -88,7 +88,7 @@ whether Nova's burnthrough foils had a backing.
 - In mass coordinates the diffusion flux is F = −(c/3κ) ∂(aT⁴)/∂m, so density enters the
   front's mass only through κ(ρ) and e(ρ). With HR03's fits (κ ∝ ρ^0.2, e ∝ ρ^−0.14) a
   diffusion front at fixed density heats m ∝ (κe)^(−1/2) ∝ ρ^(−0.03): holding the gold
-  at 1 g/cm³ rather than letting it expand to 0.1 g/cm³ changes the heated mass by 7 %
+  at 1 g/cm³ rather than letting it expand to 0.1 g/cm³ changes the heated mass by 7%
   (*L*, derived). The ablative solution has no initial-density dependence at all (its
   m₀ is a mass per area).
 - The Nova foils (FTI **H**, Li04 **H-img**): gold foils of 1–3 µm in the wall of a

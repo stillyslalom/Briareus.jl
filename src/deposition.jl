@@ -517,7 +517,7 @@ result is differentiable in every beam's `aim`, `power`, `defocus` and spot axes
 Power that strikes no opaque surface (e.g. passes through a hohlraum and out the
 other LEH) is `delivered - sum(per_beam)`.
 Threads share the work dynamically, and every sum is taken in a fixed order: the result
-is the same, bit for bit, on any number of threads.
+is bitwise identical on any number of threads.
 
 By default every ray deposits all its power where it lands. `absorption = η⊥`
 (0 < η⊥ ≤ 1) keeps only the fraction
@@ -533,11 +533,11 @@ Kruer's text. It is a model for hard-sphere direct-drive illumination, derived f
 profile, not a measured or calibrated absorption: η⊥ has no default and is the user's
 estimate. It holds only for thin coronas (scale length L ≪ the critical radius ``r_c``):
 measured against ray tracing through a spherical exponential corona, an oblique ray's
-absorption approaches ``η_a`` only as ``L/r_c`` → 0 (at sin ψ = 0.9: 4 % off at
-``L/r_c`` = 0.0025, 13 % at 0.01, and 0.33 against ``η_a`` = 0.18 at 0.1), and rays that
+absorption approaches ``η_a`` only as ``L/r_c`` → 0 (at sin ψ = 0.9: 4% off at
+``L/r_c`` = 0.0025, 13% at 0.01, and 0.33 against ``η_a`` = 0.18 at 0.1), and rays that
 miss the critical sphere still absorb. On a 40-beam OMEGA PDD pointing with
-``L/r_c`` = 0.2, ``η_a`` on a hard sphere at ``r_c`` gives σ = 5.7 % (l ≤ 30) where the
-corona gives 10.4 % (research notes, "Corona model prototype: impact-parameter kernels vs
+``L/r_c`` = 0.2, ``η_a`` on a hard sphere at ``r_c`` gives σ = 5.7% (l ≤ 30) where the
+corona gives 10.4% (research notes, "Corona model prototype: impact-parameter kernels vs
 3-D ray tracing"). Polar direct drive gets its equatorial drive from exactly those
 grazing rays.
 The unabsorbed light is dropped (no reflection is followed), so `element`, `backside`
@@ -555,7 +555,7 @@ deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
 # so each column is exactly `deposit` of that group's beams alone (the others at zero
 # power add exact zeros), with the same `absorption`. With `split` a `_GroupSplit`, the
 # same in the deposition's number type for sets of groups. The deposition itself is
-# `deposit`'s, bit for bit.
+# bitwise identical to that of `deposit`.
 function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
                   absorption::Union{Nothing,Real} = nothing)
     length(beams) == length(op.ports) || throw(DimensionMismatch("beam count changed"))
@@ -597,7 +597,7 @@ _with_eltype(T, η) = promote_type(T, typeof(η))
 
 # The power a ray at incidence cos ψ = `c` absorbs, per unit of incident flux along it:
 # `c` (all of it), or `η_a(ψ) c` with `η_a` of MN17 Eq. 29 (see `deposit`). `nothing`
-# leaves the expressions it enters as they were without the option (bit for bit).
+# leaves the expressions it enters as they were without the option (bitwise).
 _absorbed(::Nothing, c) = c
 _absorbed(η, c) = (1 - (1 - η)^(c^3)) * c
 
@@ -631,7 +631,7 @@ end
 # type, for `evaluate` (`Scenario`'s split): `element[j]` sums the beams whose group is
 # in `sets[j]` (sorted, unique), those of `cols[bi]` holding beam `bi`. Each set's
 # element powers are summed in the order `deposit` sums them, so `element[j]` is `deposit`
-# of that set's beams with the others at zero power, bit for bit (the zero-power beams
+# of that set's beams with the others at zero power, bitwise (the zero-power beams
 # are skipped); the deposition itself is unchanged.
 struct _GroupSplit{T}
     sets::Vector{Vector{Symbol}}
@@ -653,7 +653,7 @@ _group_set(gs) = sort!(unique!(collect(Symbol, gs)))
 # `splits[k]` (a `_GroupSplit` with no sets keeps none). A beam's deposition is its power
 # times that of the beam at unit power (the profile's shape, cut-off and screens do not
 # read the power), so each point's intensity is evaluated once, at unit power, and every
-# set adds it times its own beam's power: set k's deposition is `deposit(op, sets[k])` to
+# set adds it times the power of its beam: set k's deposition is `deposit(op, sets[k])` to
 # rounding (the power enters as a last factor instead of through the profile's peak). A
 # beam at exactly zero power in a set (value and partials) adds nothing to that set, as
 # `deposit` skips it.
@@ -697,7 +697,7 @@ function _deposit_sets(op::DepositionOperator, sets::Vector{Vector{Beam{T}}},
 end
 
 # Function barrier for `_deposit_sets`' threaded loop over `op.plan`'s work units: each
-# unit writes its own elements of every set (and their group sets), or its own back-side
+# unit writes only its elements of every set (and their group sets), or only its back-side
 # piece.
 function _deposit_sets_units!(E::Vector{Vector{T}}, PB::Matrix{T}, LB::Vector{Matrix{T}}, SB::Vector{T},
                               op::DepositionOperator, frames, screens, slopes, P::Vector{Vector{T}},
@@ -872,11 +872,11 @@ end
 end
 
 # VisRad's profile: each stored point sees the beam axis (the operator's one direction)
-# and absorbs the profile at its own distance from focus times |n·k|. Points outside
+# and absorbs the profile at its distance from focus times |n·k|. Points outside
 # the envelope (on values) contribute exact zeros: every beam skips a run of `_TILE`
 # points whose ball a bound without logarithms puts beyond the cut-off, then each point
-# the bound puts there (`_vr_far`: on case B of the research notes 99 % of the points
-# beyond the cut, and 90 % of the points left lit); the law evaluates the rest, and is
+# the bound puts there (`_vr_far`: on case B of the research notes 99% of the points
+# beyond the cut, and 90% of the points left lit); the law evaluates the rest, and is
 # exactly zero, value and partials, at those beyond its cut (screening them on values
 # first costs more than the few it would skip). A point's coordinates are taken once, on
 # values; a dual beam's carry the partials every point shares (`_vr_coords(f, x, uvs)`).
@@ -1004,7 +1004,7 @@ function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspo
     return M
 end
 
-# Each spot component (core, halo) is sampled on its own nspot × nspot grid spanning
+# Each spot component (core, halo) is sampled on a separate nspot × nspot grid spanning
 # `extent` 1/e radii (default: out to where the component falls to 1e-12 of its peak).
 function _raytrace_beam!(E, L, t::Target, b::Beam, nspot, ncone, extent)
     val = ForwardDiff.value

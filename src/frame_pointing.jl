@@ -22,11 +22,11 @@ beam `i` aims at `to_chamber(frame_i, (u, v, w))`, `R * SVector(u, v, w) + origi
 A group shares local coordinates, not chamber aims: beams of one group in different
 frames aim at the same local point of each. Two entrance holes' frames, the bottom one
 the top one mirrored through the equator, so give a mirrored pointing with no `mirror`
-flag. Aim coordinates that are not parameters keep each beam's own (its template aim in
+flag. Aim coordinates that are not parameters keep the value of each beam (its template aim in
 its frame); with no aim field at all the template aims are kept exactly.
 
-`relative = true` makes the aim fields shifts added to each beam's own local
-coordinates, so a group moves rigidly in its frame; its initial aim parameters are then
+`relative = true` makes the aim fields shifts added to the local coordinates
+of each beam, so a group moves rigidly in its frame; its initial aim parameters are then
 zero. The other fields stay absolute.
 
 `apply` is generic in the number type (frames are Float64, parameters may be

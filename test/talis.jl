@@ -45,7 +45,7 @@
     # A plate crossed by the beam between its vertices (one quad, corners ≥ 50 mm off
     # the axis): the minimum over the whole triangle, on the axis, not at the vertices.
     # Exact: −ρ1 − 2/16 (inside the envelope) less the error stack and 2·tan(0.5°). At
-    # the default rtol the bound lies within 1 % of its distance from the 0.5 mm rule.
+    # the default rtol the bound lies within 1% of its distance from the 0.5 mm rule.
     wide = Component(:plate, translate(rectangle_mesh(100.0, 100.0; nu = 1, nv = 1), (8.0, 8.0, 2.0)), gold();
                      two_sided = true)
     cw = trow(talis_check(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), wide), [b];
@@ -84,8 +84,8 @@
               for (θ, st, i) in incs)
 
     # 1ω footprint, analytic: one NIF beamlet aimed at TCC. A 0.1 mm square in the 3ω
-    # focal plane with its far edge δ inside the 4.45 mm clear radius on the beamlet's own
-    # side; the focus error moves the near edge by 0.027 mm per mm (cone to the 1ω focus).
+    # focal plane with its far edge δ inside the 4.45 mm clear radius on the side
+    # of the beamlet; the focus error moves the near edge by 0.027 mm per mm (cone to the 1ω focus).
     nb = nif_beams()
     bl = first(nb)
     k = direction(bl)
@@ -133,7 +133,7 @@
     @test lowerbound(trow(ro, :clearance_1w, :other).nominal, δ)
 
     # Uncleared flat plate facing the beamlet: the specular 1ω goes straight back along
-    # the port, at the beamlet-to-quad-axis angle from its own quad's FOA.
+    # the port, at the beamlet-to-quad-axis angle from the FOA of its quad.
     pl = Component(:mirror, transform(rectangle_mesh(4.0, 4.0; nu = 2, nv = 2), Rm, 8.0 * ô), gold())
     rm = talis_check(Target(pl), [bl]; capture = (), open_ports = [pq])
     cm = trow(rm, :clearance_1w, :mirror)
@@ -182,7 +182,7 @@
     @test trow(talis_check(Target(ub), [bl]; capture = (), open_ports = [-k]), :management_1w, :ball).status === :review
 
     # NIF ignition-style "sombrero": an annular 1ω shield in the LEH plane around a
-    # hohlraum. Flat, it mirrors each quad into the conjugate FOA of its own hemisphere and
+    # hohlraum. Flat, it mirrors each quad into the conjugate FOA of its hemisphere and
     # fails; flagged as spherically dimpled (radius < 5 mm) it passes.
     th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   nz = 12, nphi = 24, nr_cap = 2)
@@ -327,7 +327,7 @@ end
     @test req(:diagnostic_1w) == "diagnostics ≥ 10 mm (at TCC) to 25 mm (at 1 m) from 1ω light"
     @test req(:tas_stay_in) == "≤ 6 mm beyond the extreme aim points (TAS)"
     @test req(:other) == "other"
-    # a report prints the requirement of each rule it checked, from its own settings
+    # a report prints the requirement of each rule it checked, from its settings
     b = Beam("b"; theta = 0, phi = 0, power = 1.0, spot = SuperGaussianSpot(0.3; order = 4.0), fnumber = 8.0)
     t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8))
     r = talis_check(t, [b]; capture = (:f,), rtol = 0)

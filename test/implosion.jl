@@ -14,13 +14,13 @@
     @test mode1_vector(c) ≈ 0.0044 * n rtol = 2e-3
     v = hotspot_velocity(c)
     @test normalize(v) ≈ -n rtol = 1e-6                # away from the high-flux side
-    # Young et al. 2020, N170601: 0.44 % → 37.6 km/s (3D HYDRA), 44.7 km/s (VF + G)
+    # Young et al. 2020, N170601: 0.44% → 37.6 km/s (3D HYDRA), 44.7 km/s (VF + G)
     @test 37.6 <= norm(v) <= 44.7
     @test abs(norm(v) / 44.7 - 1) < 0.02
-    # Kritcher et al. 2024, N230729: ~0.7 % → 70–75 km/s burn-off
+    # Kritcher et al. 2024, N230729: ~0.7% → 70–75 km/s burn-off
     @test 70 * (1 - 2e-3) <= norm(hotspot_velocity(dipole(0.007))) <= 75
-    # Spears et al. 2014: 2 % at peak → 120 km/s, saturated; the linear default
-    # (valid below ~0.75 %, Young) over-predicts it
+    # Spears et al. 2014: 2% at peak → 120 km/s, saturated; the linear default
+    # (valid below ~0.75%, Young) over-predicts it
     @test norm(hotspot_velocity(dipole(0.02))) > 1.5 * 120
 
     # Hurricane et al. 2020, Table I (v_imp = 380 km/s, near ignition, χ ≈ 1–2): the
@@ -52,7 +52,7 @@
     # shape term: Eq. 2 (2D fit) is continuous at 0.35 to the printed digits
     @test shape_amplification(0.0) ≈ 0.71
     @test abs(shape_amplification(0.35 - 1e-9) - shape_amplification(0.35 + 1e-9)) < 5e-3
-    # Table I (3D): its nodes, the equatorial fold, and N130530 of Table IV (P2 −2 %,
+    # Table I (3D): its nodes, the equatorial fold, and N130530 of Table IV (P2 −2%,
     # flow at 90°: 1/Vhs_amp^shape = 0.965)
     @test shape_amplification(-0.5656, 0.0) ≈ 0.046
     @test shape_amplification(0.4028, 30.0) ≈ 1.027
@@ -64,7 +64,7 @@
 end
 
 @testset "implosion metrics: kernels and swing" begin
-    # a mode-1 ramp along z, 0 → 1 % over 10 ns, on steps that miss the kernel's edges
+    # a mode-1 ramp along z, 0 → 1% over 10 ns, on steps that miss the kernel's edges
     times = collect(0.0:1.5:10.5)
     ε = 0.001 .* times
     ylm = zeros(4, length(times))
@@ -81,7 +81,7 @@ end
     g(t) = sin(t)
     ref = -100 * sum(g(τ) * 0.001τ for τ in range(0, 10.5; length = 200_001)[1:end-1] .+ 10.5 / 400_000) * 10.5 / 200_000
     @test hotspot_velocity(hist; kernel = g)[3] ≈ ref rtol = 1e-4
-    # the flat kernel: a constant 1 % over the window gives per_percent
+    # the flat kernel: a constant 1% over the window gives per_percent
     flat = (; time = times, ylm = vcat(ones(1, length(times)), zeros(1, length(times)),
                                       fill(0.01 / sqrt(3), 1, length(times)), zeros(1, length(times))),
             moments = nothing)
@@ -117,7 +117,7 @@ end
     K = flat_kernel(2.0, 7.0; total = 110.0)
     @test (K(1.9), K(2.0), K(4.5), K(7.0), K(7.1)) == (0.0, 22.0, 22.0, 22.0, 0.0)
     @test_throws ArgumentError flat_kernel(3.0, 3.0)
-    # Hurricane et al. 2020 Table I (χ = 2, a = 3.3): f = 0.08 and 0.16 keep 95 % and 80 % of
+    # Hurricane et al. 2020 Table I (χ = 2, a = 3.3): f = 0.08 and 0.16 keep 95% and 80% of
     # the yield (f to two digits), as the product of the no-α and α factors
     @test abs(yield_factor(0.08) * alpha_factor(0.08, 2.0) - 0.95) < 0.01
     @test abs(yield_factor(0.16) * alpha_factor(0.16, 2.0) - 0.80) < 0.01
@@ -242,7 +242,7 @@ end
 end
 
 @testset "Young et al. 2020: static view factors and their Green's function" begin
-    # N170827's static model (radii at 85 % of Table II, albedos 0.8 / 0.3, conversion
+    # N170827's static model (radii at 85% of Table II, albedos 0.8 / 0.3, conversion
     # 0.9, no windows), the requested per-beam pulses (Fig. 2e) and the mode-1 Green's
     # function (Fig. 5), all digitized; the pointing is the tutorials' scaled to the
     # 11.3 mm length (N170827's is not published). Research notes, "Young 2020 validation".

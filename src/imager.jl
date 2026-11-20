@@ -143,7 +143,7 @@ end
 const _IMAGER_T = exp.(range(log(1.0), log(5000.0), 600))
 
 # ⟨R⟩(T) over [lo, hi) as a function, by a table linear in log ⟨R⟩ and log T (⟨R⟩ of a
-# band far above T falls as e^{−E/T}: linear in ⟨R⟩ it is 1 % off between nodes)
+# band far above T falls as e^{−E/T}: linear in ⟨R⟩ it is 1% off between nodes)
 function _mean_response(im::XrayImager, lo = 0.0, hi = Inf)
     tab = _planck_means(im, lo, hi, _IMAGER_T)
     lT = log.(_IMAGER_T)

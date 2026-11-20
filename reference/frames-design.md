@@ -1,7 +1,7 @@
 # Frames, placement and frame-relative pointing: design (2026-10-28)
 
 The user asked for component frames and relative positioning that hold up in practice:
-- optimize a backlighter's beam pointing in the foil's own coordinates, then step the
+- optimize a backlighter's beam pointing in foil coordinates, then step the
   foil along an axis and check for clipping;
 - place a foil relative to other components (facing a radiography snout, parallel to
   another component's surface).
@@ -42,7 +42,8 @@ was built.
      - `Frame(origin; z, x = θ̂ of z)`.
      - `port_frame(θ, φ; roll)`: z toward the port, x = θ̂. That x̂ is assumed, at
        confidence L, until a sample workspace shows it.
-     - `foil_frame(los; …)`, onto which `backlighter_foil` is refactored, bit for bit.
+     - `foil_frame(los; …)`, onto which `backlighter_foil` is refactored, with bitwise
+       identical results.
      - `component_frame(t, part)` for script targets: the centroid, then the axis of the
        analytic surface, else the area-weighted normal, else the principal axes, with
        the ambiguity documented.
@@ -85,7 +86,7 @@ was built.
      - `apply` computes `aim = R*SVector{3,T}(u,v,w) + origin`;
      - a shared local aim in `:leh_top` and `:leh_bottom` gives mirrored pointing
        without a flag;
-     - `GroupPointing`'s non-aim tail moves into a shared helper, bit for bit;
+     - `GroupPointing`'s non-aim tail moves into a shared helper, bitwise unchanged;
      - `bounds`, `initial_parameters` and `parameter_names` as in `GroupPointing`;
      - inference and JET cases in `test/inference.jl`.
    - The GUI optimize fields gain `:u, :v, :w` (exclusive with the chamber aim fields).
@@ -133,7 +134,7 @@ was built.
    number, the ghost of the selected sweep step). Departures: `FrameDef.steps` apply
    after the offset and rotation, so the fields keep the free degrees of freedom; a
    conflict is a raised residual of an earlier relation, not a subspace test; a sweep
-   re-resolves the frames per value and moves each changed part by its own rigid map
+   re-resolves the frames per value and moves each changed part by the rigid map of that part
    (also a translation sweep when other parts' steps refer to the moving part).
 3. **User frames:** landed in c1f64de (core: `port_frame(facility, port)`,
    `port_angles(facility, port)`, `transform_point`) and the GUI commit after it (the
@@ -145,8 +146,8 @@ was built.
    table's (NIF quads at the port table's angles); the transform's *Create frame*
    places the new frame in the To frame (at the point with the From frame's axes, or at
    the origin with z along a direction).
-4. **VisRad frames,** import and export. (`_vrw_rotation` was unified in phase 1, bit
-   for bit.)
+4. **VisRad frames,** import and export. (`_vrw_rotation` was unified in phase 1,
+   bitwise unchanged.)
 5. **(Optional)** The foil template becomes a rectangle part with the foil role. That
    changes mesh counts: measure it and say so.
 

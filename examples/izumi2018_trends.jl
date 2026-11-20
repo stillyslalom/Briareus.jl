@@ -1,6 +1,6 @@
 # Izumi 2018 (LLNL-PROC-751038) single-parameter SymCap changes against Briareus's flux
 # P2 with `BubbleAbsorption`, turned into hot-spot P2 with Callahan et al. 2018's 2.7 µm
-# per 1 % cone fraction over Briareus's own d(flux P2/P0)/dCF. A trend check, not blind
+# per 1% cone fraction over the Briareus d(flux P2/P0)/dCF. A trend check, not blind
 # (the bubble model was fitted to Izumi's data). Research notes, "Young 2020 validation".
 #
 #     julia --project=. -t auto examples/izumi2018_trends.jl     # ~5 min on 4 threads
@@ -29,7 +29,7 @@ cf0 = let i = sum(P.inner.(times[pk])), o = sum(P.outer.(times[pk])); i / (i + 2
 cfp = let i = 1.05 * sum(P.inner.(times[pk])), o = sum(P.outer.(times[pk])); i / (i + 2o) end
 s = (run(; finner = 1.05, cache) - base) / (100 * (cfp - cf0))     # % flux P2 per % CF
 k = 2.7 / s                                                      # hot-spot µm per % flux P2
-@printf("base peak flux P2/P0 %.2f %%; CF %.3f; d(P2 %%)/d(CF %%) = %.3f; transfer 2.7 µm/%%CF -> %.2f µm per %% flux P2\n", base, cf0, s, k)
+@printf("base peak flux P2/P0 %.2f%%; CF %.3f; d(P2%%)/d(CF %%) = %.3f; transfer 2.7 µm/%%CF -> %.2f µm per %% flux P2\n", base, cf0, s, k)
 for (name, kw, meas) in (("1.5x picket", (; energy = 1.5), "-21 to -24"), ("1.18x capsule", (; rcap = 1.064), "-21 to -24"),
                          ("1.18x capsule, no bubble change", (; rcap = 1.064, bubble = :novf), ""), ("0.15 mg/cc fill", (; fill = 0.15), "+10 to +15"))
     if get(kw, :bubble, true) === :novf

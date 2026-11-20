@@ -10,7 +10,7 @@
     wall = gold()
     core(prof) = hohlraum(; profile = prof, leh_radius = 1.55, capsule_radius = 0.0, wall, h,
                           leh_open_radius = 0.84 * 1.55)
-    # a frustraum: the end radius filled in on the switch (60 % of the waist radius, at
+    # a frustraum: the end radius filled in on the switch (60% of the waist radius, at
     # least 1.2 times the LEH radius)
     @test edit_part!(ts, i, :profile, "1")
     p = ts.parts[][i]
@@ -115,7 +115,7 @@ end
     quads = nif_quads(power = 8.0)
     cone = Controllers._cone_pointing(quads, Controllers.NIF_CONE_POINTING)
     fz = Controllers._cone_pointing(quads, Controllers.FRUSTRAUM_CONE_POINTING)
-    # the starter at TCC: the frustraum pointing's own aims, in its holes' frames
+    # the starter at TCC: the aims of the frustraum pointing, in its holes' frames
     s = DesignSession(starter = :frustraum, resolution = :coarse)
     @test s.beams.beams[] == fz && all(s.beams.enabled[])
     # File ▸ New target from the default design loads the preset again for the frustraum

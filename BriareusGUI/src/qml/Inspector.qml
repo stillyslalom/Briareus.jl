@@ -63,7 +63,7 @@ Pane {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
-        // the selection's name heads the page (the panel needs no caption of its own)
+        // the selection's name heads the page (the panel needs no separate caption)
         RowLayout {
             spacing: 6
             Layout.fillWidth: true

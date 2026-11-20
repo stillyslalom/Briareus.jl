@@ -75,7 +75,7 @@ end
     kshell_ce_data() -> NamedTuple
 
 The He-α conversion-efficiency compilation behind [`kshell_ce_model`](@ref)
-(`data/kshell_ce.csv`, sources and provenance in its header): columns `element`, `Z`,
+(`data/kshell_ce.csv`, sources in its header): columns `element`, `Z`,
 `hnu` (keV), `irradiance` (10¹⁵ W/cm²), `pulse` (ns), `class` (`"foil"` or
 `"prepulsed"`), `ce` and `u` (%; `u` is NaN where the paper gives none), `fit` (1 if
 fitted), `facility`, `source` and `note`. Workman & Kyrala (2001; OMEGA, 1 ns,
@@ -112,8 +112,8 @@ Each line's CE is a parabola in `ln I` of shared curvature `d`, peaking at the o
 irradiance ``I^* \\propto (h\\nu)^s`` (`Y* = −c_c/2d`). The peak CE falls as
 ``(h\\nu)^b`` above the saturation energy ``h\\nu_s = 10\\ \\mathrm{keV}\\, e^{L_s}`` and is
 flat below it. The class `c`, `:foil` (one main pulse) or `:prepulsed` (a pre-pulse or
-picket ahead of the main drive), carries its own amplitude `a_c` and `c_c` (so its own
-peak and optimum); `b`, `d`, `s` and `hνₛ` are shared. Fitted: `b = −3.33 ± 0.25`
+picket ahead of the main drive), sets a per-class amplitude `a_c` and `c_c` (hence a
+per-class peak and optimum); `b`, `d`, `s` and `hνₛ` are shared. Fitted: `b = −3.33 ± 0.25`
 (Workman & Kyrala report `hν^-(2.5–4)`, Barrios et al. `hν^-(3–4)`), `s = 2.5 ± 0.4`,
 `hνₛ = 6.1 ± 0.4 keV`, between Cr and Fe; foil optimum 1.2e15 W/cm² for Cr, 1.8e15 for
 Fe, 5.2e15 for Ge, peak 3.2% at and below hνₛ; prepulsed optimum 2.0e15 for Ge.
@@ -147,7 +147,7 @@ factor of 1.43); outside the data the parameters' covariance adds to it (see
 **Pulse length and spot size** do not enter. The foil data are 1 ns (OMEGA) except
 Coppari et al.'s Fe at 0.6 and 2 ns; a `ln τ` term on the foil class fits
 `CE ∝ τ^(0.6 ± 0.2)`, but only through Coppari's 2 ns Fe against Workman's 1 ns Fe (within
-Coppari's own shots the 1 ns Fe point lies above the 2 ns ones), so the pulse length
+Coppari's shots the 1 ns Fe point lies above the 2 ns ones), so the pulse length
 stays confounded with the source and, in the prepulsed class, with the picket. Every
 source varies the irradiance through the spot size, so the spot size is confounded with
 the irradiance.
@@ -155,9 +155,9 @@ the irradiance.
 **Below Cr** the plateau is an extrapolation. The one held-out Ti foil (OMEGA, 1 ns,
 1.3e15 W/cm²; `fit = 0`) measured 1.6% (the He-α share of a 4–6 keV band, *inferred*;
 2.3% for the whole band) where the fit gives 3.0% ×/÷ 1.48: −0.63 in `ln CE`, 1.1σ with
-the point's own 42%. Ti foils on Gekko XII and Shenguang II gave 1.4–1.8% in the band, so
-the data may turn over below Cr rather than level off; the fit does not separate the
-two. Ti is
+the 42% error bar of that point. Ti foils on Gekko XII and Shenguang II gave 1.4–1.8% in
+the band, so the data may turn over below Cr rather than level off; the fit does not
+separate the two. Ti is
 flagged `extrapolated`; pass a measured `ce` for Ti backlighters when one exists. The
 fitted Fe peak (2.3%) sits below Coppari et al.'s two-sided Fe (2.8–3.25%) and
 Workman's 3.0% at 3.5e15, but agrees with Workman's Fe near 1e15 (2.4%): the sources
@@ -177,7 +177,7 @@ function kshell_ce_model()
     return _KSHELL_MODEL[]
 end
 
-# relative error in ln CE taken for a row without its own error bar: Workman & Kyrala's
+# relative error in ln CE taken for a row without an error bar: Workman & Kyrala's
 # stated ±10% relative error and 20% reproducibility in quadrature
 const _KSHELL_UNSTATED = sqrt(0.1^2 + 0.2^2)
 
@@ -203,7 +203,7 @@ function _kshell_wls(A, y, s, dof)
 end
 
 # For each (s, Lₛ) the other six parameters are a weighted linear least-squares fit with
-# its own τ; (s, Lₛ) minimize the Gaussian −2 ln L, Σ ln(sᵢ² + τ²) + χ², on a grid refined
+# a separate τ; (s, Lₛ) minimize the Gaussian −2 ln L, Σ ln(sᵢ² + τ²) + χ², on a grid refined
 # four times (s in 0–5, hνₛ between the data's lowest and highest line). The covariance is
 # (JᵀWJ)⁻¹, J the gradient of ln CE in all eight parameters at the data.
 function _fit_kshell_ce(d)
@@ -551,7 +551,7 @@ in degrees, or a direction vector, from `center` toward the detector).
    the incident power, as Briareus deposits it), over a flat-top pulse of `pulse` ns.
 2. **Conversion.** The CE comes from [`kshell_ce`](@ref) for `line` (an element
    `Symbol` or keV). With `irradiance = :mean`, it is evaluated at the foil's
-   power-weighted mean irradiance. With `:element`, each element gets the CE at its own
+   power-weighted mean irradiance. With `:element`, each element gets the CE at its
    irradiance, but σ is still the mean's. `ce = value` overrides the model (σ = 0).
    The He-α energy into 4π is `E = CE · E_laser`.
 3. **Angular distribution** (an assumption):

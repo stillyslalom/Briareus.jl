@@ -43,7 +43,7 @@ ColumnLayout {
         PropRow { label: "Focus error"; value: app.rv_focus; unit: "± mm"
                   tip: "Shift of best focus along each beam, both ways"
                   onEdited: (text) => Julia.br_rv_edit("focus", text) }
-        CheckLine { text: "Far-field wings (1 % halo, 10⁻³ scatter)"; checked: app.rvWings; onToggled: Julia.br_rv_wings(checked)
+        CheckLine { text: "Far-field wings (1% halo, 10⁻³ scatter)"; checked: app.rvWings; onToggled: Julia.br_rv_wings(checked)
                     tip: "Count the NIF far-field wings in the envelope" }
         RowLayout {
             spacing: 8

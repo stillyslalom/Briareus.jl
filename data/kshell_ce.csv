@@ -40,7 +40,7 @@
 #        Values DIGITIZED here from Fig. 16 (rendered at 600 dpi; reading ~0.0003 in CE,
 #        ~0.02e15 in irradiance); Fe irradiances and pulse lengths from Table I (whose
 #        facility-to-irradiance columns print one row below their shot numbers; aligned
-#        here by the paper's own checks: s72639 = 7.8 kJ at 2e15, s77768 = 0.3e15, 0.6 ns),
+#        here by the checks in the paper: s72639 = 7.8 kJ at 2e15, s77768 = 0.3e15, 0.6 ns),
 #        Table II exact: Ge s74705 0.006 at 1.3e15 (pre-pulse), Cu s67792 0.01 at 1.1e15, Fe
 #        s77768 0.008 at 0.3e15. Omega shots irradiate both sides of the foil, EP shots one
 #        side (two-sided is ~1.3x one-sided per B14's Ge pair); Ge/Cu pulse lengths are taken

@@ -63,7 +63,7 @@ julia -e 'using Pkg; Pkg.Apps.develop(path="BriareusGUI")'   # `briareus` from t
 installed from the registry copies its `Project.toml` into the app environment and
 resolves relative `[sources]` paths against the installed tree, dropping only those that
 do not exist there. From `~/.julia/packages/BriareusGUI/<slug>/`, `..` exists (the
-package's own folder, with no `Project.toml`), so it would stay Briareus's source and the
+package folder itself, with no `Project.toml`), so it would stay Briareus's source and the
 install would fail to resolve. CI checks that the entry is absent. The manifest keeps the
 developed Briareus, but Pkg writes the entry again whenever it rewrites `Project.toml`
 (`add`, `rm`, `update` in this environment); `git checkout BriareusGUI/Project.toml`
@@ -71,7 +71,7 @@ after such a change, or `git diff` before committing it, keeps it out.
 
 The tests drive every controller without a window and render the canvases offscreen
 (they need a GL context; on a headless Linux machine wrap them in `xvfb-run`). The Qt
-window test runs in its own process when `BRIAREUSGUI_QT_TESTS=true` is set on a
+window test runs in a separate process when `BRIAREUSGUI_QT_TESTS=true` is set on a
 machine with a display (`test/qt_window.jl`, also runnable alone; set
 `BRIAREUSGUI_SHOTS` to keep its window images). `BRIAREUSGUI_NO_WORKLOAD=true` skips
 the precompile workload for faster rebuilds while developing. `test/test_app.jl` checks
@@ -93,7 +93,7 @@ app; the app closes the splash through a status file once its window shows.
 The package follows HammerheadGUI's architecture: all state and logic lives in the
 framework-free `Controllers` submodule (Briareus + Observables, testable without a GL
 context), the Makie canvases (`src/canvas/`) create every plot up front and only update
-their inputs (the 3D view sets its own camera matrices from a `CadCamera`, which takes
+their inputs (the 3D view sets its camera matrices from a `CadCamera`, which takes
 its gestures from the scene's mouse and keyboard events and picks by ray casting into
 the target's BVH), and `src/qt/shell.jl` bridges controllers to the QML pages (`src/qml/`)
 through one property map, item models and `br_*` callbacks. Background jobs run on

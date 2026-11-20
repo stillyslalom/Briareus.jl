@@ -2,7 +2,7 @@
 # BriareusGUI`, whose `@main` is below. `julia -m` loads the whole package first (15-20 s,
 # most of it GLMakie's and QML's package images), so a bare `briareus` in a terminal shows
 # nothing until the window. A desktop launch goes through a script that `briareus
-# --shortcut` writes (`install_shortcut`): it shows a splash with Qt's own `qml` tool
+# --shortcut` writes (`install_shortcut`): it shows a splash with the `qml` tool that ships with Qt
 # within about a second, runs the app with `--from-shortcut` and the splash's status file
 # in `BRIAREUS_SPLASH`, and sends the app's output to `log_path()`. The app writes its
 # stage to that file, "quit" once the window shows, and "error: <message>" on a failure,
@@ -81,7 +81,7 @@ function splash_env()
     dirs = vcat(Qt6Declarative_jll.LIBPATH_list,
                 joinpath(Qt6Declarative_jll.artifact_dir, Sys.iswindows() ? "bin" : "lib"))
     if Sys.isapple()
-        # Qt's frameworks: the tool's rpaths name each framework folder of its own artifact
+        # Qt's frameworks: the tool's rpaths name each framework folder of the artifact holding the tool
         # (`@loader_path/../lib/QtCore.framework`), so dyld's fallback needs those folders
         frameworks = [joinpath(d, f) for d in dirs if isdir(d) for f in readdir(d) if endswith(f, ".framework")]
         append!(dirs, frameworks)

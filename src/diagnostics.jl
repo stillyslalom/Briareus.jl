@@ -33,7 +33,7 @@ end
 DiagnosticField(type; required::Bool = false, doc::AbstractString = "") =
     DiagnosticField(type, required, String(doc))
 
-# keys every table may carry: provenance
+# keys every table may carry: source, confidence and note
 const _PROVENANCE_KEYS = Dict("source" => DiagnosticField(String; doc = "citation"),
                               "confidence" => DiagnosticField(String; doc = "H, M or L"),
                               "note" => DiagnosticField(String))
@@ -156,7 +156,7 @@ resolved table, CSV paths made absolute). [`diagnostic`](@ref) builds the instru
 `data["instrument"]`, when a file of the chain gives it, names the instrument the
 definition is one configuration of (NIF Dante 1's channel sets of several years and
 shots share `instrument = "NIF Dante 1"`); a definition that extends another inherits
-it, and one without it is its own instrument ([`diagnostic_instrument`](@ref)).
+it, and one without it is a separate instrument ([`diagnostic_instrument`](@ref)).
 """
 struct DiagnosticDefinition
     id::String
@@ -175,7 +175,7 @@ Base.show(io::IO, d::DiagnosticDefinition) =
 """
     diagnostic_instrument(d::DiagnosticDefinition) -> String
 
-The instrument `d` is a configuration of: its `instrument` key (its own, or inherited
+The instrument `d` is a configuration of: its `instrument` key (set directly, or inherited
 through `extends`), else its `name`. A list of diagnostics shows each instrument once
 and offers its definitions as configurations.
 """
@@ -499,7 +499,7 @@ function _checked(raws::Dict{String,_Raw}, issues)
         spec = _DIAGNOSTIC_KINDS[d.kind].schema
         body = Dict(k => v for (k, v) in d.data if !haskey(_HEADER_KEYS, k) && !haskey(_PROVENANCE_KEYS, k) &&
                     k != "remove_channels")
-        # the file's own keys first (so an error names it), then the resolved whole
+        # the keys the file sets first (so an error names it), then the resolved whole
         own = Dict(k => v for (k, v) in raws[id].data if !haskey(_HEADER_KEYS, k) &&
                    !haskey(_PROVENANCE_KEYS, k))
         _check_table!(issues, d.file, "", own, spec; required = false)
@@ -661,7 +661,7 @@ end
 
 The keys whose values differ between two definitions (as in [`DiagnosticIssue`](@ref),
 e.g. `channel[6].filters`), sorted; empty when they define the same instrument and
-provenance. CSV files are compared by content, not path; `name` and `public` count.
+sources. CSV files are compared by content, not path; `name` and `public` count.
 """
 function diagnostic_diff(a::DiagnosticDefinition, b::DiagnosticDefinition)
     fa, fb = _flat(diagnostic_table(a)), _flat(diagnostic_table(b))
@@ -718,7 +718,7 @@ const _CHANNEL_SPEC = Dict(
     "cathode" => DiagnosticField(String; doc = "XRD cathode: Al, Cr or Ni"),
     "sensitivity_csv" => DiagnosticField(String; doc = "measured detector sensitivity (energy eV, V/GW)"),
     "response_csv" => DiagnosticField(String; doc = "measured whole-channel response (energy eV, V/GW)"),
-    "field_of_view_mm" => DiagnosticField(Real; doc = "the channel's own collimated field, in place of the view's"))
+    "field_of_view_mm" => DiagnosticField(Real; doc = "collimated field of the channel, in place of the view field"))
 
 # a line of sight: a NIF diagnostic port by name, or its angles
 const _LOS_SPEC = Dict(

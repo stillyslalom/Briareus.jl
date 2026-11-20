@@ -68,7 +68,7 @@ end
     # the triad's commit is turn_part! itself
     t2 = _triad_design()
     @test turn_part!(t2.target, i, θ; frame = :tcc, axis = :x) && _same_parts(t2.target.parts[], d.target.parts[])
-    # a part placed in a tilted frame turns about that frame's axes, through its own origin
+    # a part placed in a tilted frame turns about that frame's axes, through its origin
     j = part_index(d.target, :plate)
     F0 = part_frames(d.target)
     @test commit_triad!(d.target, j, (:turn, 3), -45.0)

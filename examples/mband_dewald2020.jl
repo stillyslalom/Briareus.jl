@@ -18,7 +18,7 @@
 # start of its plateau), not at the 5.5 ns since the pulse start (research notes,
 # "Energetics defaults and the capsule share (2026-10-25)").
 #
-# Their numbers: Dante sees 12 % of the flux above 1.8 keV at the 290 eV peak (15 % in
+# Their numbers: Dante sees 12% of the flux above 1.8 keV at the 290 eV peak (15% in
 # their Fig. 3); the wall M-band P2/P0 is +0.53 (Mo-sphere P2 0.15 / smoothing 0.28),
 # which with outer spots at 40° requires F_M ≈ 2 (recirculating / laser-produced M-band);
 # at the HDC ablation front the smoothing is 0.4 (their Fig. 6), so ≈ +0.21 there, and
@@ -109,4 +109,4 @@ for cf in (1 / 3, 0.25)
                 wallP2(band_flux(s, 1800.0; field = :B)), ds.mband_fraction, ds.color_temperature)
     end
 end
-println("\nDewald 2020: F_M ≈ 2; wall M-band P2/P0 +0.53; ≈ +0.21 at the ablation front (×0.4), +0.28 at the inner HDC surface; Dante 12 % above 1.8 keV at 290 eV")
+println("\nDewald 2020: F_M ≈ 2; wall M-band P2/P0 +0.53; ≈ +0.21 at the ablation front (×0.4), +0.28 at the inner HDC surface; Dante 12% above 1.8 keV at 290 eV")

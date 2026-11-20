@@ -55,25 +55,25 @@ N210808-like hohlraum (gold wall of radius 3.2 mm and length 11.24 mm, open LEHs
 wall triangles of about 0.6 mm), its capsule, two window patches, a foil tilted 20°
 and LEH shields, with 192 NIF beams and VisRad's built-in phase plates. One workspace
 is a reference pointing, the other a re-pointing of it. Briareus read each workspace,
-built the same target and beams, and compared its own deposition per element with the
+built the same target and beams, and compared the Briareus deposition per element with the
 direct laser source VisRad wrote into the file.
 
 The beam profile away from focus is the one piece taken from VisRad.
-[`VisRadProfile`](@ref) is VisRad's own law. Its semi-axes, exponent, square blend and
+[`VisRadProfile`](@ref) is the law VisRad uses. Its semi-axes, exponent, square blend and
 square half-width follow the parameters VisRad exports at each beam–target hit. Two
 constants, the square's exponent and the cut-off, were fitted to VisRad's deposition on
-48 plates normal to single beams, each plate within 0.22 % rms per element. Against
+48 plates normal to single beams, each plate within 0.22% rms per element. Against
 VisRad's deposition on surfaces that played no part in the fit, per element (elements
-above 1 % of VisRad's peak):
+above 1% of VisRad's peak):
 
-- 32 plates tilted up to 53° and normal plates up to 15 mm past focus: 0.12–0.27 % rms;
-- hohlraum walls: 0.62 % rms (N210808-like, reference pointing), 0.69 % (re-pointing)
-  and 0.45 % on a 38 000-element wall; window patches 0.20 %; a foil 0.55 %;
-- total wall power is 0.07 % below VisRad's.
+- 32 plates tilted up to 53° and normal plates up to 15 mm past focus: 0.12–0.27% rms;
+- hohlraum walls: 0.62% rms (N210808-like, reference pointing), 0.69% (re-pointing)
+  and 0.45% on a 38 000-element wall; window patches 0.20%; a foil 0.55%;
+- total wall power is 0.07% below VisRad's.
 
 With the tabulated profile this law replaced, the absolute capsule P2 and P4 from the
 two codes' depositions, through the same Briareus radiosity, agreed to 0.014 and 0.004
-percentage points. The re-pointing's change of P2 was 0.104 % against VisRad's 0.092 %.
+percentage points. The re-pointing's change of P2 was 0.104% against VisRad's 0.092%.
 
 The numbers, the setup and what remains open (VisRad's per-beam renormalization, and its
 shadowing, which is not along the beam axis) are in

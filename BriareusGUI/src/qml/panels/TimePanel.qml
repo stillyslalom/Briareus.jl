@@ -76,7 +76,7 @@ Item {
                         tip: modelData.tip
                     }
                 }
-                // as tall as the buttons (the style's own is taller, and sets the row's height)
+                // as tall as the buttons (the style separator is taller, and sets the row's height)
                 ToolSeparator { height: 26 }
                 // the pulses the beams fire: a pulse table, or a published shape
                 Button {

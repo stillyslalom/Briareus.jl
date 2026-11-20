@@ -53,7 +53,7 @@
     @test maximum(abs.(rt.drive .- 1)) < 1e-3
     tuned = drive_history(m, opk, τ -> with_pulses(kept, rt.pulses, τ; by = :quad), ref.time;
                           lmax = 4, ylm = true)
-    # the per-time linear model is the history's own: same albedos to the solve's tolerance
+    # the per-time linear model is that of the history: same albedos to the solve's tolerance
     @test maximum(abs.(rt.shape .- tuned.ylm[1:25, :] ./ tuned.ylm[1:1, :])) < 1e-4
     # and the dropped bundle's mode 1 is gone, the drive restored
     @test maximum(amp1(dropped)) > 0.01
@@ -77,7 +77,7 @@ end
 
 @testset "retune with unconverted light" begin
     # constant albedos and conversion: each step of a history is one linear solve, so the
-    # retune's linear prediction is the history's own to rounding
+    # retune's linear prediction is that of the history to rounding
     t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                  wall = Material(:Au; albedo = 0.8, conversion = 0.8),
                  nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
@@ -103,7 +103,7 @@ end
                          :inner23 => τ -> 0.0, :inner30 => τ -> 0.01),)
     ref = drive_history(m, op, τ -> with_pulses(quads, pul, τ), times; lmax = 4, ylm = true, keep_albedo = true,
                         mband = nothing, unconverted = uc, prepulse = pre, colors = mock)
-    # the reference retuned to itself, by group: at its own powers (pinned by the limits)
+    # the reference retuned to itself, by group: at its powers (pinned by the limits)
     # the prediction is its drive and shape (measured 9e-16, 2e-16), and the free retune
     # returns those powers to the bounded least-squares solver's tolerance (measured 1e-9;
     # 1e-8 for the same retune of the 3ω-only reference)
@@ -114,7 +114,7 @@ end
     Pref = [pul[k](τ) for k in self.keys, τ in times]
     @test isapprox(self.power, Pref; rtol = 1e-7) && maximum(abs.(self.drive .- 1)) < 1e-12
     # a reference with unconverted light needs it in the retune; here it raises the drive
-    # by 5 % over the 3ω-only history
+    # by 5% over the 3ω-only history
     @test_throws ArgumentError retune_drive(cm, op, quads, ref)
     ref3 = drive_history(m, op, τ -> with_pulses(quads, pul, τ), times; lmax = 4, ylm = true, keep_albedo = true,
                          mband = nothing)
@@ -146,7 +146,7 @@ end
     @test isapprox(rv.drive .* ref4.ylm[1, :], tv.ylm[1, :]; rtol = 1e-12)
     # (the light is not vacuous: it raises the drive over the 3ω-only history)
     @test all(ref4.ylm[1, :] .> ref3.ylm[1, :])
-    # zero fractions: the retune without unconverted light, bit for bit
+    # zero fractions: the retune without unconverted light, bitwise
     r0 = retune_drive(cm, opk, kept, ref3; by = :quad, limits = cap)
     rz0 = retune_drive(cm, opk, kept, ref3; by = :quad, limits = cap, unconverted = (omega1 = 0.0, omega2 = 0.0),
                  colors = mock)
@@ -181,7 +181,7 @@ _rms_at_level(v1, v2, A, L, ρ) =
     spot = [e for e in elements(t, :bl) if norm(t.elem_centroid[e]) <= 0.6]
     A = t.elem_area[spot]
     irr(P) = deposit(op, [remake(b; power = P[i]) for (i, b) in enumerate(beams)]).element[spot] ./ A
-    # the reference's own distribution: the second pulse's scale recovered
+    # the distribution of the reference: the second pulse's scale recovered
     rt = retune_drive(q, op, beams, ref)
     @test rt.keys == [:g1, :g2]
     @test isapprox(rt.power, [pul[k](τ) for k in rt.keys, τ in times]; rtol = 1e-7)
@@ -216,7 +216,7 @@ end
 @testset "retune a flat face's x-ray drive" begin
     # a halfraum closed at the bottom, whose bottom cap is the observed face, lit through
     # the top hole; constant albedo and conversion, so each step of a history is one linear
-    # solve and the retune's linear prediction is the history's own to rounding
+    # solve and the retune's linear prediction is that of the history to rounding
     t = hohlraum(; length = 4.0, radius = 1.5, leh_radius = 1.2, capsule_radius = 0.0, nz = 8, nphi = 16,
                  bottom_end = :closed, wall = Material(:Au; albedo = 0.8, conversion = 0.8))
     beams = [Beam("b1"; theta = 35, phi = 0, group = :g1, aim = (-0.3, 0.0, 0.5)),

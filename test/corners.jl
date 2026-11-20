@@ -4,7 +4,7 @@ using Briareus, LinearAlgebra, Test
 
 @testset "rounded hohlraum corners" begin
     kw = (; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
-    # rc = 0 is the square-cornered hohlraum, element for element
+    # rc = 0 is the square-cornered hohlraum at every element
     t0, tz = hohlraum(; kw..., h = 0.5), hohlraum(; kw..., h = 0.5, corner_radius = 0)
     @test t0.elem_centroid == tz.elem_centroid && t0.elem_area == tz.elem_area
 

@@ -88,7 +88,7 @@
 
         # warm restarts. Split at an outer iteration (each inner run starts its L-BFGS-B
         # afresh, from the state the result carries), the continued run is the
-        # uninterrupted one bit for bit. Split inside an inner run by the evaluation budget,
+        # uninterrupted one bitwise. Split inside an inner run by the evaluation budget,
         # the restart loses that run's L-BFGS-B memory and takes another path to the same
         # strictly convex optimum: the designs agree to the convergence tolerance
         # (feasibility 1e-8; the run lies 1e-8 from the KKT point), tested at 1e-6.
@@ -132,7 +132,7 @@
         # Phase 1 and the relaxations on a conflict with closed forms. The drive
         # (`mean_flux`) is linear in the powers, `m` per quad by unit powers, so the largest
         # drive at a total power and the least total power for a drive are fills of the
-        # quads in decreasing `m` to the box's 20 TW. A cap of 120 TW and a drive floor 5 %
+        # quads in decreasing `m` to the box's 20 TW. A cap of 120 TW and a drive floor 5%
         # above the cap's largest drive: the floor relaxed alone falls to that drive (by
         # 1 - 1/1.05 of itself), the cap relaxed alone rises to the floor's least power.
         m = [mean_flux(evaluate(s, Float64.(1:48 .== i))) for i in 1:48]
@@ -177,7 +177,7 @@
         @test v.evaluations == v.phase1.evaluations + r1.evaluations + r2.evaluations
         shown = sprint(show, MIME"text/plain"(), v)
         @test occursin("no design meets every constraint", shown) && occursin("relaxed alone", shown)
-        # Phase 1's budget is its own, not the inner runs' `iterations`: with inner runs
+        # Phase 1 has a budget separate from the inner runs' `iterations`: with inner runs
         # capped at 3 iterations it still reaches the verdict, at the same violations
         # (before, it stopped at 3 iterations without one and the main run began at the
         # start). Stopped by the run's evaluation budget first, it says so.
@@ -267,7 +267,7 @@
             fd = (opt(u + δ).value - opt(u - δ).value) / 2δ
             @test r0.bound_sensitivity[j] < 0
             @test r0.bound_sensitivity[j] ≈ fd rtol = 1e-4
-            # the objective's own derivative, against its central difference at the result
+            # the derivative of the objective, against its central difference at the result
             fx(h) = f(evaluate(s, r0.x .+ h .* (1:48 .== i)))
             @test r0.bound_gradient[j] ≈ (fx(1e-4) - fx(-1e-4)) / 2e-4 rtol = 1e-6
             @test isempty(c) ? r0.bound_gradient == r0.bound_sensitivity :
@@ -397,8 +397,8 @@
         @test only(rbnd.bound_sensitivity) < 0
 
         # The inner value tolerance (`inner_reltol`): its default given explicitly is the
-        # default run bit for bit. With the plain `c` the inner cones' cap of 130 TW binds
-        # with a small multiplier; at the default the run ends 0.8 % from the KKT point
+        # default run bitwise. With the plain `c` the inner cones' cap of 130 TW binds
+        # with a small multiplier; at the default the run ends 0.8% from the KKT point
         # (research notes), and continued through `from` with the value tolerance off
         # (inner runs to `g_tol`) it reaches the KKT point and multipliers. Any converged
         # run of this strictly convex problem does, so no rounding-dependent path is tested.
@@ -417,7 +417,7 @@
         @test_throws ArgumentError optimize_pointing(s, f0; from = r0, constraints = cs, inner_reltol = -1.0)
 
         # An inner evaluation cap (`inner_evaluations`). Above every inner run (more than
-        # the whole run's evaluations) it leaves the run bit for bit; at 20, below the
+        # the whole run's evaluations) it leaves the run bitwise unchanged; at 20, below the
         # default run's longest inner runs (about 40), every inner run stays within it
         # (the callback's evaluations per outer iteration) and the run still converges to
         # the KKT point.
@@ -510,7 +510,7 @@
         # complementarity of the reported multipliers: zero for every gate inside its
         # limit by more than `feasibility`. The exact ceiling's multiplier is its
         # stand-in's at the working limit, which can be active while the peak the row
-        # reports ends inside the limit (1.2 % inside under one CI rounding): only its
+        # reports ends inside the limit (1.2% inside under one CI rounding): only its
         # sign is tested.
         @test all(r -> r.multiplier >= 0, res.constraints)
         @test all(r -> r.status !== :satisfied || r.multiplier == 0, res.constraints[2:end])
@@ -620,7 +620,7 @@
         @test !isempty(act) && all(r -> startswith(r.name, "clearance[Q") && r.multiplier > 0, act)
         @test all(r -> abs(r.value - r.limit) <= 1e-6, act)
         @test all(r -> r.status !== :violated, rk.constraints)
-        # the light on the caps: a ceiling at 0.1 % of the delivered power
+        # the light on the caps: a ceiling at 0.1% of the delivered power
         ceil_ = light_ceiling(1e-3, caps...)
         zl = root(z -> 1e-3 - light_fraction(at(z), caps...), 4.0, 5.01)
         rl = optimize_pointing(sh, pull; lower = [4.0], upper = [5.3], constraints = [ceil_],
@@ -655,9 +655,9 @@
     end
 
     # VisRad's hard cut (`smooth_cut`, the default): the run on the profile tapered below
-    # the cut, on the same operator's points, reported under the scenario's own cut. The
+    # the cut, on the same operator's points, reported under the scenario cut. The
     # reference: the same run on a scenario built with the tapered profile (its operator
-    # built afresh), bit for bit.
+    # built afresh), bitwise.
     @testset "VisRad's hard cut optimized tapered" begin
         t = hohlraum(; geom..., nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
         quads = nif_quads(power = 8.0)

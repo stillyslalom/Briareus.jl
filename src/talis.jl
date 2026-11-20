@@ -120,7 +120,7 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
 
 # Rules
 
-- `:capture_3w` — the `capture_contour` (10 %)-of-peak contour must lie ≥
+- `:capture_3w` — the `capture_contour` (10%)-of-peak contour must lie ≥
   `capture_margin` (0.5 mm) inside the landing component's substrate edge: the minimum
   over the edge of the transverse distance to the beam envelope (best-focus contour grown
   by the f-cone at each point's axial position, see `BeamEnvelope`). Substrate edges are
@@ -128,21 +128,21 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
   another component are not edges). A beam whose axis
   misses every capture component fails with component `:none`.
 - `:incidence_3w` — incidence < `max_incidence` (70°) to the target normal, the maximum
-  over the landing component's surface inside the worst-case 10 % footprint (visible
+  over the landing component's surface inside the worst-case 10% footprint (visible
   from the beam; exact normals on `SphereSurface`/`CylinderSurface` components). The
   angle is that of the f-cone's steepest ray, the beam axis's angle plus the cone's
   half-angle atan(1/(2f#)) (1.38° at NIF), as VisRad's capture report measures it (VisRad
   21 reads tilt + 1.384–1.390° on plates tilted 68–69.7° toward either spot axis).
   Incidence takes the error set but not the rule tolerance; the capture margin and the
   clearances take both.
-- `:clearance_3w` — the `clearance_contour` (1 %)-of-peak contour must clear each
+- `:clearance_3w` — the `clearance_contour` (1%)-of-peak contour must clear each
   `hardware` component other than the landing component by > `clearance_margin`
   (0.5 mm); hardware downstream of the landing point is skipped, and everything along
   the beam is checked if the beam lands on no capture component. Capture and clearance
   failures carry the TaLIS consequence: blow-by assessment by the backscatter working
   group. On an `leh` component the rule is an LEH-clearance assessment: not clearing it
   is a `:review`, not a `:fail` (see "Entrance-hole edges").
-- `:clearance_1w` — the 10 % contour of the 1ω footprint must clear each
+- `:clearance_1w` — the 10% contour of the 1ω footprint must clear each
   `omega1_components` component by > `omega1_margin` (0.2 mm). Not clearing is a
   `:review` (TaLIS: evaluate unconverted-light management), decided by the next rule.
 - `:management_1w` — for each surface the 1ω footprint does not clear: pass if its
@@ -180,11 +180,11 @@ The 1ω rules apply to beams whose `quad` is a NIF quad name (or that have an `o
 entry). A NIF quad-level beam (port within 0.1° of its quad port, as from `nif_quads`)
 is expanded into its four beamlets (LMF beam table) sharing its aim and defocus. Each
 beamlet's 1ω footprint at its 3ω best-focus plane is a square of side `omega1_size`
-whose nearest edge is `omega1_edge` = 4.45 mm (TaLIS: the 10 % contour) from the 3ω
-axis, displaced along the beamlet's own side of its quad in φ̂ (the side of the quad
+whose nearest edge is `omega1_edge` = 4.45 mm (TaLIS: the 10% contour) from the 3ω
+axis, displaced in φ̂ toward the beamlet side of its quad (the side of the quad
 axis its port lies on; NIF User Guide Fig. 4-12 — *derived*, confidence medium). The
 default side is the User Guide's 22 mm footprint grown by 4.8 − 4.45 = 0.35 mm per
-side, so its near edge is the TaLIS 10 % contour (22.7 mm). Away from that plane the
+side, so its near edge is the TaLIS 10% contour (22.7 mm). Away from that plane the
 footprint is the cone converging to the 1ω focus `omega1_focus` (default 460 mm, from
 `nif_unconverted`) beyond the 3ω focus, with its center on the chief ray from the lens
 center `lens_distance` (7.7 m) upstream: at axial position `s` the near edge is
@@ -197,13 +197,13 @@ focus error moves the footprint with the 3ω focal plane; shadowing is ignored
 
 # Entrance-hole edges
 
-The TaLIS document states 3ω clearance "to target features" without distinguishing a
-target's own entrance holes from hardware, and gives every 3ω violation the same
+The TaLIS document states 3ω clearance "to target features" without distinguishing the
+entrance holes of a target from hardware, and gives every 3ω violation the same
 consequence: the configuration "must be assessed for blow-by by the backscatter working
 group", an assessment rather than a prohibition. Reporting LEH edges as `:review` while
 hardware proper (shields, stalks, diagnostics, closed windows) stays `:fail` **is an
 assumption of Briareus, not a TaLIS statement**. Its basis: no NIF hohlraum with
-3.1 mm-diameter LEHs meets the rule on its LEH edge. The best-focus 1 % contour of an
+3.1 mm-diameter LEHs meets the rule on its LEH edge. The best-focus 1% contour of an
 inner (23.5°) quad has a semi-axis of 1.145 mm along φ̂, which is horizontal and
 orthogonal to the beam; with the axis through the LEH center that leaves
 1.55 − 1.145 = 0.405 mm to the lip before the f-cone, any error or the tolerance
@@ -243,7 +243,7 @@ from below. The reported worst and nominal values are those lower bounds, never 
 the exact minimum and within `resolution` (mm) or `rtol` times the value's distance from
 the rule's threshold, whichever is larger: a bound never crosses the threshold, so the
 status is exact (up to `resolution`), and only large margins are reported coarser
-(1 % by default). A plate crossed by a beam between its vertices fails. The incidence
+(1% by default). A plate crossed by a beam between its vertices fails. The incidence
 and specular-reflection rules take each of the `4^level` sub-triangles of a component
 (with its normal) that has any point inside the footprint, decided the same way.
 Clearance-only far-field wings (`nif_wings`) are not used: the TaLIS rules refer to

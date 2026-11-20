@@ -4,8 +4,8 @@ Every check is judged on the worst case over pointing, target positioning, hardw
 tolerance and focus errors, never on the nominal beams. [`clearance`](@ref) gives the
 worst-case beam-to-hardware clearance, power and intensity, with intensity-contour
 envelopes, clearance-only spot wings ([`nif_wings`](@ref)) and pass, review and fail
-tiers; its thresholds and wing models are engineering defaults, not facility criteria,
-and a facility's own review requirements and measured far fields should replace them.
+tiers; its thresholds and wing models are engineering defaults, which the
+review requirements and measured far fields of a facility should replace.
 [`talis_check`](@ref) applies NIF's published target-configuration rules (3ω capture and
 incidence, 3ω and 1ω clearance, unconverted-light management, the TAS stay-in zone), and
 [`unconverted_light_check`](@ref) covers the 1ω and 2ω footprints and the 32 mm zone, and
@@ -18,7 +18,7 @@ Guide's 10⁸ W/cm² plasma-onset guideline for metals.
 [`ApertureKeepOut`](@ref) puts each beam's worst-case clearance from its entrance hole
 into an optimization objective, [`SphereKeepOut`](@ref) its clearance from the capsule
 and [`HardwareKeepOut`](@ref) its clearance from named hardware; each clearance is also a
-quantity of its own ([`keepout_clearance`](@ref)) for a hand-written objective or
+separate quantity ([`keepout_clearance`](@ref)) for a hand-written objective or
 constraint, as are the fractions of the laser power on named parts
 ([`clipped_fraction`](@ref) beside [`power_fraction`](@ref)). The TaLIS rules that carry
 a margin are such quantities too, each checked against `talis_check`: the 3ω clearance

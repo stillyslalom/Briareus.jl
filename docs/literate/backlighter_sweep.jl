@@ -7,7 +7,7 @@
 # the beams that heat it also pass closer to that hardware. Far from it, the foil's
 # emission spreads over a larger solid angle before it reaches the object.
 #
-# This tutorial designs the pointing of an OMEGA-style backlighter in the foil's own
+# This tutorial designs the pointing of an OMEGA-style backlighter in foil
 # coordinates, then moves the foil along the line of sight with its beams following
 # and checks every step for beam clearance, an unobstructed line of sight and the power
 # the foil captures. It introduces frames ([`Frame`](@ref), [`foil_frame`](@ref)),
@@ -69,7 +69,7 @@ beams = [remake(b; aim = to_chamber(F, ring(i))) for (i, b) in enumerate(beams)]
 [(b.name, round(acosd(dot(b.port, d)); digits = 1)) for b in beams]
 
 # A [`FramePointing`](@ref) makes each beam's aim a pair of parameters ``(u, v)`` in
-# the foil's frame. Every beam is its own group (`by = :beam`), so there are twelve
+# the foil's frame. Each beam is a group of one (`by = :beam`), so there are twelve
 # parameters, and each maps to the chamber as ``R\,(u, v, 0) + o``: the parameters keep
 # their meaning wherever the foil goes.
 

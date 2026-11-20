@@ -229,7 +229,7 @@ end
 # Position of (l, m ≥ 0) in the zonal-kernel ordering (m-major, l = m…L).
 @inline _zonal_index(l, m, L) = m * (L + 1) - (m * (m - 1)) ÷ 2 + (l - m) + 1
 
-# Harmonic kernel of a ray in its own frame (pole -d, azimuth 0 along the impact vector):
+# Harmonic kernel of a ray in the ray frame (pole -d, azimuth 0 along the impact vector):
 # κ[(l, m)] = Σ f Ȳ_lm(α), so that a ray at impact azimuth ψ contributes κ cos mψ to the
 # frame coefficient (l, m) and κ sin mψ to (l, -m). A deposit past the antipode (α > π)
 # lies at polar angle 2π - α and azimuth π.
@@ -338,8 +338,8 @@ in proportion to the number of shells.
 [`ablation_pressure_proxy`](@ref) sums the shells with a density weight.
 
 Scope and limits:
-- **Spherical corona only.** A non-spherical corona is outside the model: a P₂ of 4 % in
-  the critical radius moves σ₂ by about 3 % of its value and the absorption by 1 point
+- **Spherical corona only.** A non-spherical corona is outside the model: a P₂ of 4% in
+  the critical radius moves σ₂ by about 3% of its value and the absorption by 1 point
   (measured by 3-D ray tracing; research notes, "Corona model prototype").
 - **Bare sphere only.** Nothing but the corona interacts with the light: no other target
   parts, stalks or shields, which would need their own shadowing; the profile must reach
@@ -676,7 +676,7 @@ end
 # with 2L + 2 nodes and 4L + 4 uniform azimuths: the projection is exact for results up
 # to degree 3L + 3 (higher degrees alias), and a ring's azimuthal mean is exact. The grid
 # depends on L only, so the output for Lout < L is the first (Lout + 1)² coefficients of
-# the output for Lout = L, bit for bit (the map acts on the whole field, then the result
+# the output for Lout = L, bitwise (the map acts on the whole field, then the result
 # is filtered).
 function _sphere_transform(g::G, c::AbstractVector, L::Integer, Lout::Integer = L) where {G}
     T = eltype(c)
@@ -741,8 +741,8 @@ the sum over their hydrodynamic cells, ``Σ_r r^2 n_r^{2/3} I_r / (R_{351}^2 n_{
 with ``r^2 I_r`` the cell's absorbed power per steradian, so with a snapshot's cell edges
 as `shells` this is their sum; finer shells converge to the radial integral, with an
 error of second order in the shell width (on an OMEGA case, shells of an eighth of the
-density scale length L out to 4L past the critical radius put σ₂ within 0.1 % of its
-converged value, a quarter of L within 1 %; research notes). ``n_c`` is the critical
+density scale length L out to 4L past the critical radius put σ₂ within 0.1% of its
+converged value, a quarter of L within 1%; research notes). ``n_c`` is the critical
 density of the profile's wavelength, Ba24's ``n_{351}`` at 351 nm. `exponent` replaces the outer 2/3
 and `density_exponent` the density weight's 2/3.
 
@@ -753,7 +753,7 @@ a Gauss–Legendre product grid for that degree, and the result projected back t
 returns the leading coefficients of the full-degree result), and ``F`` must be positive
 everywhere (an `ArgumentError` otherwise).
 
-Provenance: an engineering proxy, not a facility criterion. The 2/3 power follows
+An engineering proxy with no facility criterion behind it. The 2/3 power follows
 Manheimer et al. (Phys. Fluids 25, 1644, 1982; Ba24's Ref. 33); the density weight is
 empirical, chosen by Ba24 to match pressures and asymmetries of their 3-D
 radiation-hydrodynamics runs; the prefactor 24.7 Mbar is Ba24's. CBET-free, as the
@@ -818,7 +818,7 @@ grid for that degree, and the result is projected back to degree `lmax`, so it i
 filtered to l ≤ `lmax` (a smaller `lmax` returns the leading coefficients of the
 full-degree result). ``E`` must be positive everywhere (an `ArgumentError` otherwise).
 
-Provenance: an engineering proxy, not a facility criterion: the 0.72 power is from
+An engineering proxy with no facility criterion behind it: the 0.72 power is from
 implosion simulations (Ye21's Ref. 47, an LLE report), close to an experimental 0.71
 that Ye21 cite.
 Generic in the number type of `ylm`.

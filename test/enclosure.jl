@@ -75,7 +75,7 @@ end
     @test all(<(0.05), enc.flux[.!enc.kept])
     @test all(>=(0.05), enc.flux[enc.kept])
     # the outer wall gets no flux at all, the outer caps only what the mount face returns
-    # (0.9 × its own × its view of them); the cavity about the reference
+    # (0.9 × its flux × its view of them); the cavity about the reference
     @test all(iszero, enc.flux[t.comp_elems[component_index(t, :outer)]])
     @test maximum(enc.flux[t.comp_elems[component_index(t, :cap_out)]]) < 0.1 * only(enc.flux[near])
     @test 0.3 < minimum(enc.flux[t.comp_elems[component_index(t, :inner)]])

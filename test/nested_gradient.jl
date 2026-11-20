@@ -14,8 +14,8 @@ ForwardDiff.tagcount(::Type{ForwardDiff.Tag{_EarlyTag,V}}) where {V} = UInt(0)
     p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :power))
     s = Scenario(t, p; observe = :capsule)
     Q(ev) = sum(ev.deposition.element) / 100 + 1e-3 * sum(abs2, ev.flux)
-    # d/du sin(Q u) at u = 1 is Q cos Q, by ForwardDiff inside the objective, with its
-    # own tag (`derivative`) or one that counts before the optimizer's
+    # d/du sin(Q u) at u = 1 is Q cos Q, by ForwardDiff inside the objective, with a
+    # separate tag (`derivative`) or one that counts before the optimizer's
     inner(ev) = ForwardDiff.derivative(u -> sin(Q(ev) * u), 1.0)
     function early(ev)
         g(v) = sin(v[1] * Q(ev))              # (the inner dual first: either order nests)

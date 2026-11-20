@@ -10,7 +10,7 @@
 # fitness also holds σ₂ and the ablation pressure of a 4-ns plasma with CBET, which need
 # Stages 1–3 of the review's plan; here only its σ₁ term is optimized, CBET-free, over
 # its 16 parameters (per cone pair: surface polar angle θ_s, azimuth offset Δφ_s from the
-# port, defocus 0–10 mm, power 2–4 TW/quad, Ba24's bounds) with Briareus's own beams:
+# port, defocus 0–10 mm, power 2–4 TW/quad, Ba24's bounds) with the Briareus beams:
 # LMF-measured CPP spots, f-cone defocus, all four beams of a quad aimed at the quad's
 # surface point (Ba24's overlap assumption). Research notes, "Hard-sphere direct-drive
 # illumination", "Ba24 σ₁ comparison and optimization".
@@ -59,8 +59,8 @@ lower = repeat([0.0, -180.0, 0.0, 2.0], 4)
 upper = repeat([90.0, 180.0, 10.0, 4.0], 4)
 sphere(n) = Target(Component(:capsule, icosphere_mesh(R; n), Material(:CH); surface = SphereSurface(R)))
 
-# σ₁ on an n = 20 icosphere (8000 elements; σ 0.6 % low against n = 30 at the OC and
-# 1.2 % against the extrapolation, a smooth bias the optimum barely feels), rechecked at
+# σ₁ on an n = 20 icosphere (8000 elements; σ 0.6% low against n = 30 at the OC and
+# 1.2% against the extrapolation, a smooth bias the optimum barely feels), rechecked at
 # n = 30. The bounds are Ba24's but do not enforce their "visible half of the target"
 # rule: an aim behind the limb is still a well-defined axis, which first meets the
 # sphere elsewhere.
@@ -77,7 +77,7 @@ S30 = setup(30)
 @printf("setup (operators and Y_lm weights, n = 20 and 30): %.1f s\n", time() - t0)
 σ30(x) = S30.σ1(evaluate(S30.s, x))
 σ20(x) = S20.σ1(evaluate(S20.s, x))
-@printf("OC: σ₁ = %.3f %% (n = 20), %.3f %% (n = 30); Ba24 6.03 %%\n", 100σ20(x_oc), 100σ30(x_oc))
+@printf("OC: σ₁ = %.3f%% (n = 20), %.3f%% (n = 30); Ba24 6.03%%\n", 100σ20(x_oc), 100σ30(x_oc))
 
 show_x(x) = join([@sprintf("%s θ %.2f Δφ %.2f d %.2f P %.2f", k, x[4i-3:4i]...)
                   for (i, k) in enumerate(pq.quads.keys)], " | ")
@@ -87,11 +87,11 @@ function run_lbfgs!(results)
     σ20(x_oc); t0 = time()
     marks = (10, 25, 50, 100, 150, 200)
     progress(st) = (st.evaluations in marks &&
-                    @printf("  L-BFGS-B: %d evaluations, best σ₁ %.3f %% (%.0f s)\n", st.evaluations,
+                    @printf("  L-BFGS-B: %d evaluations, best σ₁ %.3f%% (%.0f s)\n", st.evaluations,
                             100st.best_value, time() - t0); false)
     r = optimize_pointing(S20.s, S20.σ1; x0 = x_oc, lower, upper, iterations = 200, callback = progress)
     wall = time() - t0
-    @printf("L-BFGS-B from the OC: σ₁ %.3f %% -> %.3f %% (n = 20), %.3f %% at n = 30; %d evaluations, %d iterations, %s, %.0f s\n",
+    @printf("L-BFGS-B from the OC: σ₁ %.3f%% -> %.3f%% (n = 20), %.3f%% at n = 30; %d evaluations, %d iterations, %s, %.0f s\n",
             100r.initial_value, 100r.value, 100σ30(r.x), r.evaluations, r.iterations, r.reason, wall)
     println("  ", show_x(r.x))
     push!(results, ("L-BFGS-B from OC", r.value, σ30(r.x), r.evaluations, wall))
@@ -105,12 +105,12 @@ function run_multistart!(results; nstart = 4, budget = 75)
         x0 = lower .+ rand(rng, length(lower)) .* (upper .- lower)
         r = optimize_pointing(S20.s, S20.σ1; x0, lower, upper, iterations = 150, evaluations = budget)
         total += r.evaluations
-        @printf("  start %d: σ₁ %.2f %% -> %.3f %% in %d evaluations (%s)\n", k, 100r.initial_value,
+        @printf("  start %d: σ₁ %.2f%% -> %.3f%% in %d evaluations (%s)\n", k, 100r.initial_value,
                 100r.value, r.evaluations, r.reason)
         r.value < best.value && (best = (value = r.value, x = r.x))
     end
     wall = time() - t0
-    @printf("multistart (%d random starts): best σ₁ %.3f %% (n = 20), %.3f %% at n = 30; %d evaluations in all, %.0f s\n",
+    @printf("multistart (%d random starts): best σ₁ %.3f%% (n = 20), %.3f%% at n = 30; %d evaluations in all, %.0f s\n",
             nstart, 100best.value, 100σ30(best.x), total, wall)
     println("  ", show_x(best.x))
     push!(results, ("L-BFGS-B, $nstart random starts", best.value, σ30(best.x), total, wall))
@@ -130,14 +130,14 @@ function run_dfo!(results, name; budget = 1200)
         count[] += 1
         v = σ20(unscale(u))
         v < bestv[] && (bestv[] = v; bestu[] = copy(u))
-        count[] in marks && @printf("  %s: %d evaluations, best σ₁ %.3f %%\n", name, count[], 100bestv[])
+        count[] in marks && @printf("  %s: %d evaluations, best σ₁ %.3f%%\n", name, count[], 100bestv[])
         return v
     end
     t0 = time()
     optimize(f, scale(x_oc), method, Optim.Options(; f_calls_limit = budget, iterations = budget))
     wall = time() - t0
     xb = unscale(bestu[])
-    @printf("%s from the OC: best σ₁ %.3f %% (n = 20), %.3f %% at n = 30 after %d evaluations, %.0f s\n",
+    @printf("%s from the OC: best σ₁ %.3f%% (n = 20), %.3f%% at n = 30 after %d evaluations, %.0f s\n",
             name, 100bestv[], 100σ30(xb), count[], wall)
     println("  ", show_x(xb))
     push!(results, ("$name from OC", bestv[], σ30(xb), count[], wall))
@@ -151,5 +151,5 @@ PART in ("all", "pso") && run_dfo!(results, "particle swarm")
 println("\n| run | σ₁ (n = 20) | σ₁ (n = 30) | evaluations | wall (s) |")
 println("|---|---|---|---|---|")
 for (name, v20, v30, ne, w) in results
-    @printf("| %s | %.3f %% | %.3f %% | %d | %.0f |\n", name, 100v20, 100v30, ne, w)
+    @printf("| %s | %.3f%% | %.3f%% | %d | %.0f |\n", name, 100v20, 100v30, ne, w)
 end

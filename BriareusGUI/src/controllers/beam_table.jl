@@ -81,8 +81,8 @@ const FRUSTRAUM_CONE_POINTING = Dict(:inner23 => (-1.09, 4.16), :inner30 => (-1.
 The beam table: `beams` (every beam of the table, in table order), `enabled` (one flag
 per beam; disabled beams are kept but deliver no power), `cluster` (each beam's group
 name, as VisRad's beam clusters: the beam's cone `group` by default; a group edit,
-`:group` rows and the optimizer's per-group parameters follow it, while the beam's own
-`group` stays its cone for the laser–plasma models), `preset` (one of
+`:group` rows and the optimizer's per-group parameters follow it, while the beam
+`group` field stays its cone for the laser–plasma models), `preset` (one of
 [`BEAM_PRESETS`](@ref), or `:custom` for an imported or scripted table), `by` (row
 grouping, one of [`BEAM_GROUPINGS`](@ref)), `path` (the last imported or exported
 file), `error` (the last rejected edit), `warnings` (what the last VisRad import warned
@@ -196,7 +196,7 @@ enabled.
   a hohlraum part carries its beams. The NIF beams keep the offsets of the example cone
   pointing (`NIF_CONE_POINTING`, set for the 10.1 mm default) from the default
   hohlraum part's entrance holes at TCC, the OMEGA beams aim at the holes' centers. For
-  the default hohlraum part at TCC the aims are the cone pointing's own, bit for bit. In
+  the default hohlraum part at TCC the aims are bitwise those of the cone pointing. In
   the holes of a frustraum part the NIF beams keep instead the offsets of the frustraum
   pointing (`FRUSTRAUM_CONE_POINTING`, derived for the frustraum starter: each cone's
   spot at the cylinder pointing's fractional wall height where the hole allows it) from
@@ -313,7 +313,7 @@ function _hole_profile(target, f::Symbol)
 end
 
 # The aim `a`, an offset from the reference frame `ref`, carried to frame `F`; `a` itself
-# when `F` is the reference (the default hohlraum at TCC: bit for bit).
+# when `F` is the reference (the default hohlraum at TCC: bitwise).
 _reaim(a, F::Frame, ref::Frame) = F == ref ? Vec3(a) : Vec3(to_chamber(F, to_frame(ref, a)))
 
 # Point each cone at (r, z) with top/bottom mirroring, each quad's beams at one point
@@ -608,7 +608,7 @@ function _with_unit_power!(bs, bt::BeamTable, idx, v::Real)
 end
 
 # Rows group by cluster with z mirrored top/bottom (one value describes a cone); per
-# quad or beam, z is the aim's own coordinate.
+# quad or beam, z is the aim coordinate.
 _mirror(by::Symbol) = by === :group
 
 # The `GroupPointing` key of a grouping: `:group` rows follow the table's clusters.
@@ -662,7 +662,7 @@ function beam_rows(bt::BeamTable; by::Symbol = bt.by[])
 end
 
 """
-Columns the beam table sorts by: `:row` (the table's own order), `:key` (the row's name,
+Columns the beam table sorts by: `:row` (the table order), `:key` (the row's name,
 numbers within it in numeric order: Q31B before Q115B), `:count`, `:theta`, `:phi` (port
 angles), `:aim_frame` (the frame's name; mixed frames last), `:z`, `:r`, `:phi_offset`,
 `:defocus`, `:power` and `:enabled` (off, some on, on).
@@ -961,7 +961,7 @@ function _check_set(bt::BeamTable, idx)
 end
 
 # A set spanning both hemispheres describes z as a cone does (mirrored); a set in one
-# hemisphere uses the aim's own z.
+# hemisphere uses the aim z.
 _set_mirror(bs, idx) = any(i -> bs[i].port[3] > 0, idx) && any(i -> bs[i].port[3] < 0, idx)
 
 function _set_pointing(bt::BeamTable, idx, fields)

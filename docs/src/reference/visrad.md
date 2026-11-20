@@ -6,7 +6,7 @@ beam powers, element and power-summary tables, workspaces (`.vrw`: target compon
 with bundled CAD, and beams) — and a benchmark kit that writes
 everything needed to rebuild a Briareus case in VisRad together with Briareus's results
 for comparison. Formats follow the [VisRad manual](https://prism-cs.com/Manuals/VisRad/);
-the provenance and confidence of each detail are in `reference/research-notes.md`
+the sources and confidence of each detail are in `reference/research-notes.md`
 ("VisRad interchange formats").
 
 ```@autodocs

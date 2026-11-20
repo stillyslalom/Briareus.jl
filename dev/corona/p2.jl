@@ -27,7 +27,7 @@ G = C.AngGrid(720, 30)
 E, inc, nr, _ = C.trace_beams(C.P2ExpProfile(rc, L, νc, rc + 14L, ε), beams, G; ncone = 7, hlat, hτ)
 c = C.ylm_coeffs(E, G)
 σb, σc = mode_power(ylm_matrix(d.ylm, 30)), mode_power(ylm_matrix(c, 30))
-@printf("spherical operator: absorbed %.5f, σ (l ≤ 30) %.4f %%, σ₂ %.4f %%, c₂₀/c₀₀ %+.5f\n",
+@printf("spherical operator: absorbed %.5f, σ (l ≤ 30) %.4f%%, σ₂ %.4f%%, c₂₀/c₀₀ %+.5f\n",
         sum(d.per_beam) / d.delivered, 100mode_rms(d.ylm, 30), 100σb[3], d.ylm[mode_index(2, 0)] / d.ylm[1])
-@printf("3-D trace, ε = %+.3f (%d rays): absorbed %.5f, σ %.4f %%, σ₂ %.4f %%, c₂₀/c₀₀ %+.5f\n", ε, nr,
+@printf("3-D trace, ε = %+.3f (%d rays): absorbed %.5f, σ %.4f%%, σ₂ %.4f%%, c₂₀/c₀₀ %+.5f\n", ε, nr,
         sum(E) / inc, 100mode_rms(c, 30), 100σc[3], c[mode_index(2, 0)] / c[1])

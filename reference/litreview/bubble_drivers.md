@@ -34,16 +34,16 @@ inference. Cite-only papers: numbers with citations, no text or figures reproduc
   182 ± 11 µm/ns from 2.47 ± 0.24 ns). No published trajectory shows the peak's higher
   irradiance accelerating the tip in a pulse that rises gently.
 - **The exponent is weak.** Speed ∝ (fluence)^0.2 ± 0.03 (Iz21, fitted to the seven
-  shots; a 1.5× picket +160 µm, a 27 % lower fluence from split quads −120 µm at
+  shots; a 1.5× picket +160 µm, a 27% lower fluence from split quads −120 µm at
   x̄ ≈ 1.8 mm); ∝ I^0.36 (Ra18, from an isothermal-expansion model with the laser and
   x-ray terms taken equal at 0.6 mg/cc; the data fit equally over I^1/3 to I^2/3, with I
-  measured as the picket fluence); size ∝ (E/A)^0.5 in Ca18's 39-shot metric (R² 84 %;
-  exponents 1/3 and 2/3 give 76 % and 79 %). Iz23 adds that the wall's mass ablation rate
+  measured as the picket fluence); size ∝ (E/A)^0.5 in Ca18's 39-shot metric (R² 84%;
+  exponents 1/3 and 2/3 give 76% and 79%). Iz23 adds that the wall's mass ablation rate
   and exhaust speed go as the laser intensity to the 1/3 and the x-ray drive as
-  T_r^1.8 and T_r^0.7 (about I_x^0.5 and I_x^0.2), and that 10 % less laser-ablated mass
+  T_r^1.8 and T_r^0.7 (about I_x^0.5 and I_x^0.2), and that 10% less laser-ablated mass
   would extend adequate inner-beam propagation by ~0.4 ns.
 - **The fluence on the wall, not only per beam (Iz21, H; the reading, L).** Splitting the outer quads
-  lowers the wall fluence by 27 % at fixed beam energy and slows the tip as E^0.2 predicts
+  lowers the wall fluence by 27% at fixed beam energy and slows the tip as E^0.2 predicts
   (−120 µm): the overlap of spots on the wall, which a re-pointing changes, enters as
   fluence does (**L** for the re-pointing case: no published re-pointing study).
 - **The peak drives the bubble when the picket does not (Iz23; H).** In a low-trough
@@ -54,7 +54,7 @@ inference. Cite-only papers: numbers with citations, no text or figures reproduc
   foot-to-peak intensity contrast below ~15×.
 - **Cone and material (Ra21, Sc15).** Ra21 (H): on the 5.75 mm Au basecamp hohlraum
   (0.3 mg/cc, N190325 and repeats) the Au bubble moves in at 364 km/s averaged from t = 0,
-  a Ta₂O₅-lined wall's 399 km/s (~10 % faster); the 50° beams start at more than twice the
+  a Ta₂O₅-lined wall's 399 km/s (~10% faster); the 50° beams start at more than twice the
   inner beams' intensity. Sc15 (M): the bubble under the 50° quads grows faster than
   under the interleaved 44.5° quads, varying with laser intensity and CBET (no numbers in
   the indexed text).
@@ -67,10 +67,10 @@ inference. Cite-only papers: numbers with citations, no text or figures reproduc
   with exponent 0.2–0.5 on the speed or size; the epoch is the picket for pulses below
   ~15× foot-to-peak contrast, and the main drive as well for low-trough pulses.
 - At fixed beam powers a re-pointing changes the wall irradiance only through incidence
-  angle and spot overlap; at exponent 0.2 a 20 % rise in local picket fluence is a 3.7 %
+  angle and spot overlap; at exponent 0.2 a 20% rise in local picket fluence is a 3.7%
   faster tip (~0.07 mm at 1.9 mm), which on N221204 moves the swing's crossing by about
   −0.15 ns if the collision time follows E as the model has it (E^-0.16; scaled from
-  the research notes' E = 1.23 run, −0.09 ns for +12 %).
+  the research notes' E = 1.23 run, −0.09 ns for +12%).
 - What Briareus already models: `BubbleAbsorption` takes the picket fluence ratio as a
   scalar input (`picket_ratio`, speed ∝ E^0.2, Iz21) and computes the clipping from the
   actual outer pointing (the bubble plane where the 50° axes reach the wall) and the

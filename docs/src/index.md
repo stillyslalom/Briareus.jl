@@ -36,20 +36,20 @@ pointing = GroupPointing(quads; by = ring, fields = (:z, :power), relative = tru
 scenario = Scenario(target, pointing; observe = :capsule)
 
 x0 = initial_parameters(pointing)    # no aim shift, 8 TW per quad
-report(evaluate(scenario, x0))       # 384 TW, Tr = 262.7 eV, P2/P0 = -15.737 %
+report(evaluate(scenario, x0))       # 384 TW, Tr = 262.7 eV, P2/P0 = -15.737%
 
 drive = mean_flux(evaluate(scenario, x0))    # mean capsule flux, held fixed
 keepout = (ApertureKeepOut(target), SphereKeepOut(target))
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive, keepout)
-lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60 % of power
+lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60% of power
 result = optimize_pointing(scenario, objective; x0, lower, upper)  # 20 iterations
-report(evaluate(scenario, result.x)) # 422.1 TW, P2/P0 = -0.000 %, P4/P0 = +0.000 %
+report(evaluate(scenario, result.x)) # 422.1 TW, P2/P0 = -0.000%, P4/P0 = +0.000%
 ```
 
-The starting P2/P0 of −15.7 % is expected: equal power per quad puts 1/3 of it on the
+The starting P2/P0 of −15.7% is expected: equal power per quad puts 1/3 of it on the
 inner cones, near HYBRID-E's peak cone fraction, and a static solve without cross-beam
 energy transfer or the hohlraum's dynamics is not balanced there. The N221204 benchmark
-has a static P2/P0 of −26 % at 5.5 ns; the shot's balance comes from wavelength-detuned
+has a static P2/P0 of −26% at 5.5 ns; the shot's balance comes from wavelength-detuned
 transfer, wall motion, the gold bubble and closing entrance holes, which
 [`drive_history`](@ref) models. The optimum lowers the inner-cone fraction to 0.15 and
 stops where the 30° beams reach the entrance-hole keep-out.
@@ -151,11 +151,11 @@ in the port's (``\hat\theta``, ``\hat\phi``) frame.
 Away from focus, the spot is the focal profile convolved with the f-cone. The deposition
 operator samples that convolution at the cone directions: each surface point receives,
 from each cone direction that reaches it unobstructed, the focal profile where that ray
-crosses the best-focus plane, weighted by the ray's own incidence angle. Power is
+crosses the best-focus plane, weighted by the incidence angle of that ray. Power is
 conserved at any distance from focus and incidence, and shadows near focus are
 correlated with the part of the spot they block.
 
-## Provenance
+## Sources
 
 Facility data and physics defaults are sourced in `reference/research-notes.md` in the
 repository, with a confidence level for each number and the data each calibration was

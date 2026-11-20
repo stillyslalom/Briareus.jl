@@ -1,5 +1,5 @@
 # Absolute energetics: the wall-material factor of `WallLossAlbedo` (Au-lined DU against
-# Döppner 2015's 6.5 % peak-power equivalence), time- and intensity-dependent laser →
+# Döppner 2015's 6.5% peak-power equivalence), time- and intensity-dependent laser →
 # x-ray conversion (closed-form Marshak balance, Dewald 2008's table, ForwardDiff), the
 # capsule's effective-radius albedo and the time-integrated `energy_budget` of a
 # `drive_history`. Research notes, "Wall material, conversion and capsule energetics
@@ -26,7 +26,7 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
 
 @testset "wall material factor" begin
     g = WallLossAlbedo()
-    # the defaults are gold's, bit for bit, and the factor scales gold's clamped loss
+    # the defaults are bitwise gold's, and the factor scales gold's clamped loss
     for (τ, T) in ((0.05, 90.0), (1.0, 150.0), (8.0, 313.0), (14.0, 300.0))
         loss = g.coefficient * (T / 100)^g.temperature_exponent * max(τ, g.t0)^g.time_exponent
         @test albedo(g, τ, T) === clamp(1 - loss, g.range...)
@@ -68,10 +68,10 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     @test conversion_efficiency(nif_uranium().conversion, 5.0) == conversion_efficiency(nif_conversion(), 5.0)
     @test conversion_efficiency(nif_gold().conversion, 8.0) == conversion_efficiency(nif_conversion(), 8.0)
 
-    # Döppner 2015: an Au-lined DU wall is worth 6.5 % of peak laser power on the NIF
+    # Döppner 2015: an Au-lined DU wall is worth 6.5% of peak laser power on the NIF
     # high-foot hohlraum (5.75 × 9.43 mm, 3.1 mm LEHs) at peak, the wall loss at its
     # effective time 2.5 ns (`drive_history`'s wall history; the calibration mesh was
-    # h = 0.4, here a coarser one: the ratio moves by < 0.3 %)
+    # h = 0.4, here a coarser one: the ratio moves by < 0.3%)
     R, h = 2.875, 0.5
     mk(alb) = hohlraum(; length = 9.43, radius = R, leh_radius = 1.55, capsule_radius = 1.125, h,
                        capsule_h = h / 3, wall = Material(:w; albedo = alb, conversion = 0.9),
@@ -118,13 +118,13 @@ end
     P = zeros(nelements(t0))
     w = elements(t0, :wall)
     P[w] .= range(0.0, 2.0, length(w))
-    # a constant Conversion reproduces the number, bit for bit
+    # a constant Conversion reproduces the number bitwise
     s1 = solve(RadiationModel(mats(0.75)), P; time = 3.0)
     m2 = RadiationModel(mats(Conversion(efficiency = 0.75)))
     s2 = solve(m2, P; time = 3.0)
     @test s1.source == s2.source && s1.H == s2.H
     @test conversions(m2.target, 3.0) == conversions(s1.model.target)
-    # the default efficiency is gold()'s, bit for bit
+    # the default efficiency is bitwise gold()'s
     @test conversion_efficiency(Conversion()) === gold().conversion === 0.9
     s3 = solve(RadiationModel(mats(Conversion()); F = s1.model.F), P; time = 3.0)
     @test s3.source == solve(RadiationModel(mats(0.9); F = s1.model.F), P; time = 3.0).source
@@ -194,8 +194,8 @@ wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold(
     @test all(isapprox(radius_fraction(nested, 0.55t), 0.8 * radius_fraction(tab, t); rtol = 1e-12) for t in ts)
     @test occursin("derived", sc.source)
     @test_throws ArgumentError ScaledRadius(tab; time_scale = 0.0)
-    # the example's schedules, bit for bit against the tables it built before the types:
-    # N221204's own and the Zylstra pair's (N210808 capsule, minimum moved to bang)
+    # the example's schedules, bitwise against the tables it built before the types:
+    # those of N221204 and the Zylstra pair (N210808 capsule, minimum moved to bang)
     k = kritcher2024_capsule()
     ok = findall(isfinite, k.n210808)
     ya = TabulatedAlbedo([0.0, 6.0, 9.0], [0.05, 0.16, 0.4])
@@ -246,7 +246,7 @@ end
     P[w] .= 300.0 / length(w)
     sol = solve(m, P; time = 7.0)
     c = elements(t, :capsule)
-    # E_cap: the smaller sphere's absorption at its own (iterated) albedo
+    # E_cap: the smaller sphere's absorption at its (iterated) albedo
     αc = [albedo(ta, 7.0, radiation_temperature(sol.H[e])) for e in c]
     @test energy_balance(sol).absorbed[:capsule] ≈
           sum((1 .- αc) .* 0.75^2 .* sol.H[c] .* t.elem_area[c]) rtol = 1e-3
@@ -321,7 +321,7 @@ end
     rec = sol -> (T = radiation_temperature.(sol.H),
                   F = (1 .- sol.albedo) .* sol.H .-
                       (sol.source .- conversions(t, sol.time) .* sol.laser ./ t.elem_area))
-    # a rising drive: no element falls below its running maximum, bit for bit
+    # a rising drive: no element falls below its running maximum, so the albedo is bitwise unchanged
     rise = PulseShape([0.0, 0.2, 4.0, 4.2, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6])
     times = [0.5:0.5:4.0; 4.25; 4.5:0.5:9.0]
     on = drive_history(m, op, τ -> with_pulses(beams, rise, τ), times; keep_albedo = true)
@@ -330,7 +330,7 @@ end
     @test on.albedo == off.albedo && on.Tr == off.Tr && on.moments == off.moments
     @test all(iszero, on.released[:wall]) && energy_budget(on).released[:wall] == 0
 
-    # a 40 % droop after a flat peak
+    # a 40% droop after a flat peak
     drop = PulseShape([0.0, 0.2, 4.0, 4.2, 7.0, 7.5, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6, 0.96, 0.96])
     times = [0.5:0.5:7.0; 7.1:0.1:9.0]
     on = drive_history(m, op, τ -> with_pulses(beams, drop, τ), times; record = rec, tol = 1e-10)

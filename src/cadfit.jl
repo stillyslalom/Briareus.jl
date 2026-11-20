@@ -338,7 +338,7 @@ end
 # ā = p₀ × a, (x × n)·a + n·ā = 0 (a linear complex). Minimizing the weighted squares
 # over ā for each a leaves a 3 × 3 form in a whose two least eigenvectors are
 # candidates (one is the axis; on a small patch the other can be, its normals also
-# nearly meeting the patch's own normal line), with the cone's two (the axis of the
+# nearly meeting the normal line of the patch), with the cone's two (the axis of the
 # circle the normals trace, the direction they are perpendicular to). A torus whose
 # major or minor radius exceeds 1000 extents is left to the cylinder or the cone.
 function _fit_torus(X, N, W, Cn, m, ext)
@@ -1277,7 +1277,7 @@ planar CAD faces).
 The pieces record their part (`part`), so the split is computational only:
 `elements(target, :part)`, the other name-taking functions and the reports
 (`energy_balance`, `component_power`, `write_results`, `report`) see the part, and
-each piece stays reachable by its own name (see [`parts`](@ref)).
+each piece stays reachable by its name (see [`parts`](@ref)).
 """
 function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere, :torus), regions = nothing,
                            maxradius::Real = Inf, minfraction::Real = 1e-3, kwargs...)

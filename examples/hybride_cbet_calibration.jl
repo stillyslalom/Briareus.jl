@@ -75,7 +75,7 @@ cal = [(; beams_at = s.beams_at, data = [(t, s.post(t)) for t in s.ts], delay = 
        for s in shots]
 
 # The Δλ null constraint: with N221204's peak beams the inner cones must not gain at
-# `lo` and must gain at `hi`. Squared hinge on the inner-power ratio, weight 10 (a 1 %
+# `lo` and must gain at `hi`. Squared hinge on the inner-power ratio, weight 10 (a 1%
 # violation costs as much as ~3 cone-fraction residuals of 0.01).
 peak_beams = [(t, ref.beams_at(t)) for t in (5.6, 7.0)]
 # NC24's 1–1.55 Å (`constrained`, `clamp`) is the detuning that minimized hot-spot P2 in
@@ -147,7 +147,7 @@ function report(io, name, m)
         @printf(io, "  N221204 beams %.1f ns: null %.2f Å; CF at Δλ 0 / 1 / 1.8 / 2.5 / 2.75 Å: %.3f / %.3f / %.3f / %.3f / %.3f; dCF/dΔλ 1–1.8 %.3f, 2.5–2.75 %.3f per Å\n",
                 t, nl, c(0.0), c(1.0), c(1.8), c(2.5), c(2.75), (c(1.8) - c(1.0)) / 0.8, (c(2.75) - c(2.5)) / 0.25)
     end
-    # cross-shot check against HYDRA: each shot's own beams at peak
+    # cross-shot check against HYDRA: each shot with its beams at peak
     for t in (5.6, 7.0)
         @printf(io, "  %.1f ns, each shot's beams: ", t)
         for s in shots

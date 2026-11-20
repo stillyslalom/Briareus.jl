@@ -1,12 +1,12 @@
 # Flux mode 1 on the capsule (%, the norm of the three l = 1 components, 100 a1m/a00) for NIF
 # shot N170827 with the requested (azimuthally symmetric) pulses and one quad dropped from each
-# cone, from the static view-factor model (hohlraum, LEH and capsule radii at 85 %, albedo 0.8
+# cone, from the static view-factor model (hohlraum, LEH and capsule radii at 85%, albedo 0.8
 # wall / 0.3 capsule, no windows) of C. V. Young et al., Phys. Plasmas 27, 082702 (2020),
 # Fig. 10a (LLNL-JRNL-807170 accepted manuscript). Digitized 2026-10-24 from the embedded
 # raster (1200 x 399 px): time from the panel frame (0 and 8 ns at 50 and 381 px), mode 1 from
-# the frame (0 and 5 % at 344 and 30 px; the 1 % tick falls within 1 px). Each value is the
+# the frame (0 and 5% at 344 and 30 px; the 1% tick falls within 1 px). Each value is the
 # median row of the stroke color (black 23.5, orange 30, blue 44.5, brown 50 deg) over +/-2 px
-# (+/-0.05 ns) of columns, the legend box excluded. Reading error ~0.03 % (stroke 0.04 %);
+# (+/-0.05 ns) of columns, the legend box excluded. Reading error ~0.03% (stroke 0.04%);
 # NaN where another stroke covers the curve. Fig. 10c (the hot-spot velocities from these
 # traces with the N170827 Green's function, km/s; markers read as blob centroids, +/-2 km/s):
 # requested 316.9 / 336.9 / 169.7 / 145.9, delivered 347.5 / 358.0 / 203.2 / 181.2 for

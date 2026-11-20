@@ -46,8 +46,8 @@ scenario = Scenario(target, quads; observe = :capsule, viewfactor_kw = (; closed
 # Write the capsule's incident flux in real spherical harmonics, ``c_{lm}`` (see the
 # radiography tutorial), and its shape as ``c_{lm}/c_{00}``. A beam's errors are its
 # displacement transverse to the beam, along the two axes of its elliptical spot, and
-# a fractional power error. Each beam's deposition depends on its own errors only, so
-# [`mode_sensitivity`](@ref) differentiates every beam's contribution with three
+# a fractional power error. The deposition of a beam depends on the errors of that beam
+# only, so [`mode_sensitivity`](@ref) differentiates every beam's contribution with three
 # dual numbers in one pass, exactly. Against central differences of full evaluations:
 
 lmax = 4

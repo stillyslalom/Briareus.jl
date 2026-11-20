@@ -21,7 +21,7 @@ using Briareus, Test
     im = sxi()
 
     @testset "detected radiance and the image's total" begin
-        # the response over a 200 eV Planckian by a direct trapezoid on its own grid
+        # the response over a 200 eV Planckian by a direct trapezoid on its grid
         E = collect(range(50.0, 29_990.0; length = 100_001))
         Rr = [filter_transmission(filters, e / 1000; table = :henke) *
               (1 - filter_transmission([:Si => 0.015], e / 1000; table = :henke)) for e in E]

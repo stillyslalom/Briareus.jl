@@ -171,9 +171,9 @@ fig
 
 # ## What this checks
 #
-# - The per-time linear model is the drive history's own: the retuned pulses' history,
+# - The per-time linear model is that of the drive history: the retuned pulses' history,
 #   with albedos that follow the drive, reproduces the predicted shape to better than
-#   1e-4 (the test suite checks 1e-4 on its own mesh).
+#   1e-4 (the test suite checks 1e-4 on a separate mesh).
 # - Each quad stays within its limits and the drive level within 0.1% of the
 #   reference's at every time (test suite), and the dropped bundle's mode 1 falls by
 #   more than an order of magnitude.

@@ -52,7 +52,7 @@ wall_radius(w::WallMotion, R0, t) = R0 - wall_displacement(w, t)
     young2020_radii() -> NamedTuple
 
 The LLNL dynamic view-factor model's radii for N170827 against time: Young et al., PoP
-27, 082702 (2020), Fig. 3a, digitized (`data/young2020_fig3a.csv`, provenance in its
+27, 082702 (2020), Fig. 3a, digitized (`data/young2020_fig3a.csv`, sources in its
 header). Columns `t` (ns, 0–8 every 0.25), `wall` (the hohlraum radius, the average of
 HYDRA's laser-absorption and x-ray-emission surfaces), `leh` (from SXI: only the end
 value is measured), `capsule` (ablation front), all in mm, and their reading errors
@@ -67,7 +67,7 @@ young2020_radii() = _data_table("young2020_fig3a.csv")
 
 The LLNL dynamic view-factor model's albedos for N170827 against time: Young et al.,
 PoP 27, 082702 (2020), Fig. 3a top panel, digitized (`data/young2020_fig3a_albedo.csv`,
-provenance in its header). Columns `t` (ns, 0–8 every 0.25, plus 0.55–0.65 on the wall's
+sources in its header). Columns `t` (ns, 0–8 every 0.25, plus 0.55–0.65 on the wall's
 drop), `wall` and `capsule` (quasi-1D HYDRA albedos of gold and the HDC ablator) and
 their reading errors `u_wall`, `u_capsule` (0.03; 0.05 where the static line hides the
 curve or on the drop). The static model uses 0.8 and 0.3. With [`young2020_radii`](@ref)
@@ -81,7 +81,7 @@ young2020_albedos() = _data_table("young2020_fig3a_albedo.csv")
 Measured effective LEH radius against time on five HDC basecamp shots (5.75 × 10.13 mm Au
 hohlraum, 3.37 mm LEHs, r₀ = 1.685 mm, ~400 TW from ~4.2 to 6 ns): H. Chen et al., Phys.
 Plasmas 27, 022702 (2020), Fig. 27, read from the accepted manuscript's vector graphics
-(`data/chen2020_fig27.csv`, provenance in its header). Columns `shot` (N171010, N171212,
+(`data/chen2020_fig27.csv`, sources in its header). Columns `shot` (N171010, N171212,
 N180102, N180103, N180117), `kind` (`"gleh"`: the gated LEH imager's edge, analysis
 error 10–20 µm; `"lasnex_f003_regional"`, `"lasnex_f003_global"`, `"lasnex_f015_global"`:
 LASNEX images analyzed the same way; `"laser"`: the total delivered power), `t` (ns)
@@ -94,7 +94,7 @@ chen2020_leh() = _data_table("chen2020_fig27.csv")
 
 The inner edge of the wall material at 6 ns in the HYDRA simulations of N210808 and
 N221204 drawn in PRE 109, 025204 (2024) Fig. 1a, digitized (`data/pre109_fig1a_wall.csv`,
-provenance in its header). Columns `z` (mm from the waist, every 0.1 mm), `n210808`,
+sources in its header). Columns `z` (mm from the waist, every 0.1 mm), `n210808`,
 `n221204` (edge radius, mm; initial wall 3.2 mm) and `region` (`"waist"`, `"inner"`,
 `"collision"`, `"outer"`, `"bubble"`, `"lip"`). Laser rays are drawn over the plasma, so
 the edge is where they end (the laser-absorption surface) or, under crossing rays, an
@@ -107,7 +107,7 @@ pre109_fig1a_wall() = _data_table("pre109_fig1a_wall.csv")
     kritcher2024_capsule() -> NamedTuple
 
 HYDRA's scaled capsule radius R/R(0) against time on N221204's 2.05 MJ drive: Kritcher et
-al., PoP 31, 070502 (2024) Fig. 1, digitized (`data/kritcher2024_fig1.csv`, provenance in
+al., PoP 31, 070502 (2024) Fig. 1, digitized (`data/kritcher2024_fig1.csv`, sources in
 its header). Columns `t` (ns, 0–9.5 every 0.25), `n221204` (the as-shot, thicker capsule),
 `n210808` (the thinner N210808 capsule on the same drive; NaN after its minimum at
 9.18 ns) and `u` (reading error of `n221204`). Which radius is not stated: it holds

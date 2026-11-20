@@ -24,7 +24,7 @@
     save_session(path, s)
     @test occursin("BriareusGUI session", read(path, String))
 
-    # a fresh session restored from the file has the same design, bit for bit
+    # a fresh session restored from the file has bitwise the same design
     s2 = DesignSession()
     load_session!(s2, path)
     @test session_state(s2) == session_state(s)
@@ -107,7 +107,7 @@ end
     edit_beams!(s.beams, 1, :power, "5.5"; by = :beam)
     record!(s)
     @test s.beams.beams[][1].power == 5.5
-    # a selection is not an edit; a view change (the beam drawing) is a step of its own,
+    # a selection is not an edit; a view change (the beam drawing) is a separate step,
     # undone without rebuilding the target
     select!(s.view, "beams")
     @test !record!(s)
@@ -878,7 +878,7 @@ end
 
 @testset "CAD parts that are one cylinder or sphere (no GL)" begin
     dir = mktempdir()
-    # an STL tube of 400 slivers (r = 1.5 mm): its cylinder, under its own name
+    # an STL tube of 400 slivers (r = 1.5 mm): its cylinder, under its name
     tube = joinpath(dir, "tube.stl")
     write_stl(tube, cylinder_mesh(1.5, -2.0, 2.0; nz = 1, nphi = 400); binary = false)
     ts = TargetSetup(starter = :none)
@@ -896,7 +896,7 @@ end
                                 disk_mesh(1.0, 1.0; nr = 2, nphi = 200)); binary = false)
     @test add_part!(ts, :mesh; name = :can, file = can, h = 0.4, x = -4.0)
     @test only(c for c in ts.target[].components if c.name === :can).surface === nothing
-    # the drive fits a part of several faces (the can: its wall and its lid) in its own
+    # the drive fits a part of several faces (the can: its wall and its lid) in a separate
     # target; the pieces map back to the part's elements, and the drive reports the part
     t = ts.target[]
     refs = Controllers._fit_references(t, ts.mesh[], ts.parts[])
@@ -951,7 +951,7 @@ end
                                            cavity = (Briareus.Vec3(0, 0, 0), Set{Symbol}()))
     end
     rowsums(o) = vec(sum(o.s.model.F; dims = 2))
-    # no apertures: open (two LEHs, ~4 % of the rays)
+    # no apertures: open (two LEHs, ~4% of the rays)
     o = drive()
     @test !o.closed && !o.leak.apertures && o.leak.fraction > 0.02
     @test occursin("add apertures", Controllers._closure_note(o.leak, o.closed))

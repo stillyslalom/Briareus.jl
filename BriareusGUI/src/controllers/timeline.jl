@@ -69,7 +69,7 @@ _pulse_shares(beams, by::Symbol, unit::Symbol) =
     by === :beam || unit === :beam ? ones(length(beams)) : _quad_shares(beams)
 
 # `beams` at time τ of the pulse table `table` keyed by `by`, each firing its `shares` of
-# its column (`_pulse_shares`; all ones: `with_pulses`, bit for bit).
+# its column (`_pulse_shares`; all ones: bitwise `with_pulses`).
 function _table_beams(beams, table, τ; by, shares)
     bs = with_pulses(beams, table, τ; by)
     all(==(1.0), shares) && return bs
@@ -82,7 +82,7 @@ delivered laser power of a NIF shot against time, read from a figure
 ([`PULSE_SHAPE_LABELS`](@ref) names the paper): `:n221204` (Pak et al., PRE 109, 025203
 (2024) Fig. 1, `n221204_pulse`), `:n191118` and `:n210601` (Zylstra et al., PRE 106,
 025202 (2022) Fig. 2, `zylstra2022_fig2`). Only the total is published: every beam
-follows the shape, scaled to its own power at the peak.
+follows the shape, scaled to its power at the peak.
 """
 const PULSE_SHAPES = (:n221204, :n191118, :n210601)
 
@@ -133,7 +133,7 @@ _state_pulses(d) =
     use_pulse_shape!(sess::DesignSession, shape = :n221204; step = 0.2) -> sess
 
 Fire the beams with a published pulse shape (one of [`PULSE_SHAPES`](@ref); N221204's
-delivered pulse by default) scaled so that each beam reaches its own power at the peak:
+delivered pulse by default) scaled so that each beam reaches its power at the peak:
 a NIF pulse for a first look when no pulse table is at hand (the published curves are
 the total of the 192 beams; every beam follows the shape here). The history is solved
 every `step` ns.
@@ -172,7 +172,7 @@ _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], 
 # of the 3ω power (`unconverted_ratios`), `(; omega1, omega2)`, one number when it is
 # the same on every beam of `idx`, else a vector with one per beam of the table (zero on
 # the beams whose light does not take part); `nothing` when no unconverted light of the
-# beams `idx` takes part (the history is then the 3ω one, bit for bit).
+# beams `idx` takes part (the history is then bitwise the 3ω one).
 function _history_unconverted(sess::DesignSession, idx = findall(sess.beams.enabled[]))
     u = unconverted_ratios(sess)
     u === nothing && return nothing
@@ -256,7 +256,7 @@ end
 # `drive_history`'s keywords for the unconverted light: the fractions `u`
 # (`_history_unconverted`, zero for both colors when only a prepulse is set) and the
 # prepulse `pp` (`_history_prepulse`) of `beams`, keyed by `by`. None without either,
-# so that the history is the 3ω one bit for bit.
+# so that the history is bitwise the 3ω one.
 _light_kw(::Nothing, ::Nothing, beams; by = :beam) = (;)
 function _light_kw(u, pp, beams; by = :beam)
     kw = (; unconverted = something(u, (omega1 = 0.0, omega2 = 0.0)), colors = nif_unconverted())
@@ -1234,7 +1234,7 @@ function _with_view_parts(def, vp::AbstractDict)
 end
 
 # The ticked diagnostics whose view names a part the design lacks: `(id, key, name)` per
-# such name (the session's own, `time.view_parts`, where it has one).
+# such name (the session name, `time.view_parts`, where it has one).
 function _missing_view_parts(sess::DesignSession)
     names = Symbol[component_names(sess.target.target[])...; [p.name for p in sess.target.parts[]]...]
     out = Tuple{String,String,String}[]

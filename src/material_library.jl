@@ -4,7 +4,7 @@
 """
     SourcedValue(value, basis, source, uncertainty)
 
-One quantity of a [`MaterialDefault`](@ref) with its provenance: `value` (a number, an
+One quantity of a [`MaterialDefault`](@ref) with its sources: `value` (a number, an
 `AlbedoModel` or a [`Conversion`](@ref)), `basis` (how the value was obtained, one of
 [`MATERIAL_BASES`](@ref)), `source` (the citation, and the research-notes section that
 records it) and `uncertainty` (the stated or estimated spread, or the published values
@@ -31,7 +31,7 @@ How a [`SourcedValue`](@ref) was obtained:
   as printed;
 - `:range`: a round value inside a published range, not itself a published number;
 - `:calibrated`: fitted in Briareus to the published data the source names;
-- `:derived`: Briareus's own arithmetic on published inputs;
+- `:derived`: arithmetic in Briareus on published inputs;
 - `:definition`: true by construction (a perfect absorber);
 - `:suggested`: no published measurement exists; the value is a stated point (the
   midpoint) of a suggested range bracketed by published values of related materials or
@@ -64,10 +64,10 @@ function MaterialDefault(name::Symbol, description, material_name::Symbol, albed
     return MaterialDefault(name, String(description), m, albedo, conversion, collect(Pair{Symbol,SourcedValue}, other))
 end
 
-# Shared provenance strings. Each names the citation and the research-notes section that
+# Shared source strings. Each names the citation and the research-notes section that
 # records the number.
 const _SRC_YOUNG_STATIC = "Young et al., Phys. Plasmas 27, 082702 (2020): the static VisRad model of " *
-    "N170827 (albedo 0.8 Au, 0.3 ablator, conversion 0.9, radii at 85 %); research notes, " *
+    "N170827 (albedo 0.8 Au, 0.3 ablator, conversion 0.9, radii at 85%); research notes, " *
     "\"Young 2020 validation (2026-10-24)\" and \"Literature review against Kritcher et al. 2024 (2026-10-22)\""
 const _UNC_GOLD_ALBEDO = "published static and 0-D wall albedos 0.77 (Swadling 2025, VisRad calibrated to " *
     "Dante at 400 TW) to 0.84 (Swadling 2025 0-D, 288 eV); Lindl's loss gives 0.88-0.94 at a NIF peak; " *
@@ -79,10 +79,10 @@ const _SRC_LINDL_LOSS = "Lindl et al., Phys. Plasmas 11, 339 (2004), eq. 4-31: 1
     "(T in heV, t in ns); re-emission `release` 1.0 calibrated against 1-D ablating-wall " *
     "radiation hydrodynamics; research notes, \"Gold wall loss and thin-foil burnthrough (2026-10-16)\" " *
     "and \"Capsule absorption, conversion and the ablating-wall release (2026-10-25)\" sec. 1"
-const _UNC_LINDL_LOSS = "Hammer & Rosen 2003 and Shussman & Heizler 2015 losses within about 10 % of " *
+const _UNC_LINDL_LOSS = "Hammer & Rosen 2003 and Shussman & Heizler 2015 losses within about 10% of " *
     "Lindl's over 1-3 heV and 1-10 ns (derived); release 1.0, range 0.84-1.07"
 const _SRC_DU = "du_wall_loss(): Rosen, OSTI 885380 (2005) sec. VI and Schein et al., PRL 98, 175003 " *
-    "(2007) for the T^-0.2 scaling; factor 0.836 at 300 eV calibrated to the 6.5 % peak-power " *
+    "(2007) for the T^-0.2 scaling; factor 0.836 at 300 eV calibrated to the 6.5% peak-power " *
     "equivalence of Döppner et al., PRL 115, 055001 (2015); 0.7 µm gold liner from the same paper; " *
     "research notes, \"Energetics defaults and the capsule share (2026-10-25)\" and \"Wall material, " *
     "conversion and capsule energetics (2026-10-24)\" sec. 1"
@@ -128,7 +128,7 @@ The others are published alternatives:
   the 1ω cold reflectance recorded.
 
 Package defaults without a source are not in the library: the capsule's laser → x-ray
-conversion 0.3 ([`ablator`](@ref)) and `Material`'s own 0/0. `ablator`'s albedo 0.3 has
+conversion 0.3 ([`ablator`](@ref)) and the 0/0 of `Material`. `ablator`'s albedo 0.3 has
 a source (Young 2020's static model) but its conversion has none, so the material is
 left out whole.
 """
@@ -155,7 +155,7 @@ function material_library()
         MaterialDefault(:nif_uranium, "Au-lined DU wall of a NIF drive history (nif_uranium())", :DU, du, nifconv),
         MaterialDefault(:gold_swadling2025, "gold wall of the published VisRad energetics calibration", :Au,
                         SourcedValue(0.77, :published, swadling,
-                                     "a fitted value: an albedo error of 0.02 is a 10 % capsule-drive error " *
+                                     "a fitted value: an albedo error of 0.02 is a 10% capsule-drive error " *
                                      "in the same paper's 0-D model, which gives 0.84 at 288 eV"),
                         SourcedValue(0.95, :published, swadling,
                                      "set, not fitted; at the 1e14 W/cm² plateau of Dewald 2008")),
@@ -236,7 +236,7 @@ default of [`foil`](@ref) and [`backlighter_foil`](@ref) is `foil_material()`.
   elements. The conversion range lies below gold's open-disk 0.51–0.59 and the 0.35–0.60
   total conversion of laser-heated Fe-oxide aerogels at 351 nm (Pérez et al., PoP 19,
   083101 (2012); steel-lined cavities 0.60–0.75), and its floor 0.1 under the 0.13–0.26
-  that Eidmann & Kishimoto's 2 % (Be) to ~50 % (heaviest) at 0.53 µm (APL 49, 377
+  that Eidmann & Kishimoto's 2% (Be) to ~50% (heaviest) at 0.53 µm (APL 49, 377
   (1986)) give linearly in Z over Z 22–47 (the measured dependence oscillates with Z).
   The albedo range lies between the static albedos of a low-Z ablator (0.3) and gold
   (0.8) (Young 2020). The value is each range's midpoint: a foil's x-ray emission is a
@@ -244,7 +244,7 @@ default of [`foil`](@ref) and [`backlighter_foil`](@ref) is `foil_material()`.
   conservative.
 
 The conversion here is the broadband laser → x-ray conversion (the radiosity source);
-the He-α line signal is [`kshell_ce`](@ref)'s, fitted to its own data.
+the He-α line signal comes from [`kshell_ce`](@ref), fitted to separate data.
 """
 function foil_material(element::Symbol = :Au)
     element === :Au && return Material(:Au; albedo = _FOIL_ALBEDO_AU, conversion = _FOIL_CONVERSION_AU)
@@ -280,7 +280,7 @@ function _midz_foil_default(element::Symbol, name::AbstractString, z::Integer)
                         "Fig. 16), the 0.35-0.60 total conversion of laser-heated Fe-oxide aerogels at 351 nm " *
                         "(Pérez et al., Phys. Plasmas 19, 083101 (2012), Table I; steel-lined cavities " *
                         "0.60-0.75), and Eidmann & Kishimoto, Appl. Phys. Lett. 49, 377 (1986) (0.53 µm, 3 ns, " *
-                        "planar targets: 2 % for Be rising to nearly 50 % for the heaviest elements, oscillating " *
+                        "planar targets: 2% for Be rising to nearly 50% for the heaviest elements, oscillating " *
                         "in Z); research notes, \"Material defaults and their sources (2026-11-18)\"",
                         "suggested range $lo-$hi (Z = $z), the value its midpoint; not a measurement")
     alo, ahi = _MIDZ_ALBEDO_RANGE

@@ -1,5 +1,5 @@
 // An ⓘ beside a heading or a control. Hovering shows a one-line hint (`tip` when given,
-// else the Help topic's own short `tip`, else its title); a click opens the Help window
+// else the short `tip` of the Help topic, else its title); a click opens the Help window
 // at `topic` (see help.js), where the explanation is.
 import QtQuick
 import QtQuick.Controls

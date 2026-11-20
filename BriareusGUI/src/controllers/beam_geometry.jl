@@ -128,7 +128,7 @@ best-focus plane: `edge` (mm from the 3ω axis to its near edge), `size` (side, 
 `focus` (its focus, mm beyond the 3ω focus) and `lens` (the lens distance, mm before the
 3ω focus). These are `nif_unconverted`'s nominal footprints (1ω: 22 mm at 4.8 mm; 2ω:
 12 mm at 2.9 mm), the geometry `unconverted_deposition` deposits with; `talis_check`'s
-1ω rule uses the same square grown to its 10 % contour (near edge 4.45 mm).
+1ω rule uses the same square grown to its 10% contour (near edge 4.45 mm).
 """
 function unconverted_footprint(h::Integer)
     1 <= h <= 2 || throw(ArgumentError("unconverted light is harmonic 1 or 2"))

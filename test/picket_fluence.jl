@@ -120,7 +120,7 @@ end
         fl = picket_fluence(s.deposition, ev.beams, pulses, w)        # kJ/mm² over 1 ns
         @test picket_irradiance(ev, :wall; kw...) ≈ fl.peak rtol = 1e-12
         @test picket_irradiance(ev, :wall; kw..., measure = :weighted) ≈ fl.mean rtol = 1e-12
-        # a picket power per beam, or the beams' own powers (the outer cones' deposition)
+        # a picket power per beam, or the beam powers (the outer cones' deposition)
         f3 = picket_fluence(s.deposition, [remake(b; power = 3.0) for b in ev.beams])
         @test picket_irradiance(ev, :wall; power = b -> 3.0, measure = :weighted) ≈ f3.mean rtol = 1e-12
         outer = b -> b.group in (:outer44, :outer50) ? 1.0 : 0.0
@@ -187,7 +187,7 @@ end
         @test picket_irradiance(evaluate(sb, x), :wall; lpi = true, measure = :average) ≈ sum(Pb[es]) / 53 rtol = 1e-12
         @test picket_irradiance(ev, :wall; lpi = true, measure = :weighted) == picket_irradiance(ev, :wall; measure = :weighted)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., lpi = true)
-        # with lpi = true a ceiling on the reference's own target checks the reference's
+        # with lpi = true a ceiling on the reference target checks the reference's
         # model and time, as on another target: another model, none against one, or a model
         # at another time is an error; a model built alike is the same model
         refb = evaluate(sb, x0)
@@ -250,12 +250,12 @@ end
     end
 
     # Inside a constrained run the evaluations keep the element powers of the group sets
-    # that ceilings at the beams' own powers read (`_with_split`, per phase on a phased
+    # that ceilings at the beam powers read (`_with_split`, per phase on a phased
     # scenario), and the ceilings read them instead of depositing: the sums of their own
-    # deposition (bit for bit where the compiler builds both loops alike; held here to
+    # deposition (bitwise where the compiler builds both loops alike; held here to
     # 1e-12 in values and partials), and the deposition unchanged. Other powers, and
     # setup beams that the laser–plasma model changed, deposit as before.
-    @testset "the evaluation's own deposition serves the ceilings" begin
+    @testset "the deposition in the evaluation serves the ceilings" begin
         x = x0 .+ 0.05 .* sin.(1:length(x0))
         xd = [ForwardDiff.Dual{:split}(x[i], (sin(i), cos(i))) for i in eachindex(x)]
         sb = remake(s; lpi = Backscatter(:outer50 => 0.5))
@@ -315,8 +315,8 @@ end
         @test rm.outcome === :interior && abs(only(rm.x) - zm) < 1e-5
         @test only(rm.constraints).status === :active && only(rm.constraints).multiplier > 0
         # the peak: its hottest element rises over 4.8–4.6 mm as the 50° spots cross the
-        # 44° ones. Its stand-in (exact = false) ends active at its own root; the exact
-        # peak ends at or below the limit (here 0.4 % below: the stand-in runs above the
+        # 44° ones. Its stand-in (exact = false) ends active at its root; the exact
+        # peak ends at or below the limit (here 0.4% below: the stand-in runs above the
         # peak near this limit, and the working limit is only lowered), no lower than
         # the peak's root
         peak_at(z) = picket_irradiance(at(z), :wall; kw...)
@@ -337,7 +337,7 @@ end
         @test zp - 1e-6 <= only(rp.x) < zp + 0.01
         # the spatially averaged fluence falls as the 50° spots clip on the holes (above
         # ~5.6 mm); the corridor's mean falls as they move away from the inner beams' paths
-        # (and the average at the beams' own powers, which the run's evaluations serve from
+        # (and the average at the beam powers, which the run's evaluations serve from
         # their own deposition)
         for (meas, zl, zbox, z0, pk) in ((:average, 6.0, (5.7, 6.4), 6.3, kw), (:corridor, 5.2, (4.9, 6.0), 5.8, kw),
                                          (:average, 6.0, (5.7, 6.4), 6.3, (;)))
@@ -356,7 +356,7 @@ end
         linked = PicketLinkedBubble(bubble, t, quads; kw...)
         @test length(linked.beams) == count(b -> b.group in (:outer44, :outer50), quads)
         @test occursin("PicketLinkedBubble", sprint(show, linked))
-        # at the reference: the bubble itself, bit for bit
+        # at the reference: bitwise the bubble itself
         lb = linked_bubble(linked, quads)
         @test lb.picket_ratio === bubble.picket_ratio && lb.collision === bubble.collision
         for τ in (5.0, 7.0)
@@ -380,7 +380,7 @@ end
         @test evaluate(st, design).deposition.element ≈
               evaluate(remake(s; lpi = byhand, time = 7.0), design).deposition.element rtol = 1e-12
         @test bubble_fractions(linked, design, 6.0).absorbed == bubble_fractions(ld, design, 6.0).absorbed
-        # in a chain after another model; a dropped bundle deposits nothing of its own
+        # in a chain after another model; a dropped bundle deposits nothing itself
         @test evaluate(remake(st; lpi = (Backscatter(:outer44 => 0.0), linked)), design).deposition.element ==
               evaluate(st, design).deposition.element
         bundle = nif_bundles(quads)["11"]
@@ -406,7 +406,7 @@ end
         @test_throws ArgumentError PicketLinkedBubble(bubble, t, quads; kw..., groups = (:none,))
         @test_throws ArgumentError Briareus._ridge_split(linked, s.deposition, quads[1], 7.0)
 
-        # in a drive history: the resolved bubble's, bit for bit (E is the same number)
+        # in a drive history: bitwise the resolved bubble's (E is the same number)
         t8 = hohlraum(; geom..., h = 0.8, capsule_h = 0.4, wall = Material(:Au; albedo = 0.9, conversion = 0.8))
         model, op8 = RadiationModel(t8), DepositionOperator(t8, quads)
         times = [1.0, 6.0, 7.0]

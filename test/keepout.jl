@@ -146,8 +146,8 @@ end
 
     # a dual beam's rim is searched on its values, and the smooth minimum's sensitivities
     # to the focus and the envelope's semi-axes are carried to its partials by the chain
-    # rule: the value is the Float64 beam's bit for bit, the partials those of evaluating
-    # the terms found in the beam's own dual type (to rounding)
+    # rule: the value is bitwise the Float64 beam's, the partials those of evaluating
+    # the terms found in the dual type of the beam (to rounding)
     function in_beam_type(k, b)
         j = argmax([dot(c, b.port) for c in k.centers])
         terms, imin = Briareus._rim_terms(k, k.rims[j], k.samples[j], Briareus._RimFrame(k, Briareus._value_beam(b)))
@@ -190,7 +190,7 @@ end
 
 @testset "hardware keep-out against direct geometry" begin
     sp = SuperGaussianSpot(0.3; order = 4.0)
-    ρ = log(100)^(1 / 4)                          # 1 % contour, 1/e radii
+    ρ = log(100)^(1 / 4)                          # 1% contour, 1/e radii
     F = 8.0
     cone = 1 / (2F)
     tr = 0.05 + 0.025                             # pointing + target offset (defaults)

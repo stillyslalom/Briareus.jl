@@ -144,8 +144,8 @@ end
     @test _vr_rotation(nif_spot(:outer44), :beam) == 0 == _vr_rotation(nif_spot(:outer44), :target)
     # VisRad's rotation is relative to the quad's horizontal: at rotation 0 a NIF beam's
     # major axis lies along φ̂ of its quad's port, which for B111 is turned -1.60° from
-    # its own φ̂ (VisRad 21 deposition on a plate normal to B111 fitted -1.58°); quads and
-    # beams of no quad keep their own φ̂
+    # the beam φ̂ (VisRad 21 deposition on a plate normal to B111 fitted -1.58°); quads and
+    # beams of no quad keep their φ̂
     b111 = nb[findfirst(b -> b.name == "B111", nb)]
     ref = _vr_reference_angle(b111)
     @test rad2deg(ref) ≈ -1.60 atol = 0.01
@@ -245,7 +245,7 @@ end
     @test A ≈ [9.7, 0, 2.5, 0, 0.13]
     Y = visrad_ylm_fit(θ, φ, f; lmax = 4)
     @test Y[mode_index(0, 0)] ≈ 9.7 && Y[mode_index(2, 0)] ≈ 2.5 / sqrt(5) && Y[mode_index(4, 0)] ≈ 0.13 / 3
-    @test abs(1.143 * sqrt(5) - 2.563) / 2.563 < 0.005      # the manual's own example pair
+    @test abs(1.143 * sqrt(5) - 2.563) / 2.563 < 0.005      # the example pair in the manual
     g = 1 .+ 0.2 .* sind.(θ) .* cosd.(φ) .- 0.1 .* sind.(θ) .^ 2 .* sind.(2 .* φ)
     Yg = visrad_ylm_fit(θ, φ, g; lmax = 2)
     @test Yg[mode_index(1, 1)] ≈ 0.2 / sqrt(3)               # Y_11 = √3 sinθ cosφ
@@ -266,7 +266,7 @@ end
     # SST and summary in the kit reproduce the beams
     rq = read_visrad_sst(kit.files[:sst]; template = q)
     @test all(isapprox(a.aim, b.aim; atol = 1e-9) for (a, b) in zip(rq, q))
-    # a VisRad element export made from Briareus's own elements compares to zero
+    # a VisRad element export made from the Briareus elements compares to zero
     _, er = read_csv(kit.files[:elements])
     io = IOBuffer()
     println(io, "Radius (cm)  Polar ang (deg)  Azim. ang (deg)  Flux In (TW/cm2)")
@@ -304,7 +304,7 @@ end
     @test cad.mesh.vertices ≈ [Vec3(Rz * (10 .* collect(v))) + Vec3(0, 1, 2) for v in tn]
     @test cad.mesh.triangles == [(1, 3, 2), (1, 2, 4), (1, 4, 3), (2, 3, 4)]
     @test cad.albedo == 0.5 && cad.radiosity && !ws.objects[3].radiosity
-    # VisRad's own element counts for these primitives (power-source table of the
+    # The VisRad element counts for these primitives (power-source table of the
     # workspace they come from): 81 for the rectangle, 216 for the hohlraum
     t = visrad_target(ws)
     @test [c.name for c in t.components] == [:Rectangle_0, :Cyl_Hohlraum_0_wall, :Cyl_Hohlraum_0_cap_top,
@@ -393,8 +393,8 @@ end
     @test visrad_profile(ws).envelope["B113"] == 1.53645
     @test_throws ArgumentError read_visrad_workspace(vrfile("not.vrw", "{\"json\": 1}"))
 
-    # written back into the workspace: new pointing, focus, power and on/off, in each
-    # row's own frame; everything else unchanged
+    # written back into the workspace: new pointing, focus, power and on/off, in the
+    # frame of each row; everything else unchanged
     edited = [remake(b1; aim = Vec3(0.3, -0.2, 5.5), defocus = 0.25, power = 2.5),
               remake(b2; aim = cad.position + Vec3(0.1, 0.0, 0.0)),        # in CAD_0's frame
               remake(b3; power = 1.5)]                                       # was off
@@ -470,7 +470,7 @@ end
     P2 = @test_logs (:warn, r"Rectangle_0") match_mode = :any visrad_deposition(wc, t2)
     @test P2[t2.elem_side .== 1] ≈ qcad .* t2.elem_area[1:4] ./ 100 && all(iszero, P2[t2.elem_side .== -1])
     # VisRad's hohlraum element order is unknown: refused when it has laser power,
-    # unless left out of the target; elements not VisRad's own are refused
+    # unless left out of the target; elements not from VisRad are refused
     wh = read_visrad_workspace(computed(; hohl = ones(216)))
     @test_throws ArgumentError visrad_deposition(wh)
     th = visrad_target(wh; select = o -> o.kind in (:rectangle, :mesh))
@@ -478,8 +478,8 @@ end
     @test_throws ArgumentError visrad_deposition(wc, visrad_target(wc; select = o -> o.kind === :mesh, remesh = 0.3))
     @test_throws ArgumentError visrad_deposition(wc, Target(visrad_component(wc.objects[1]; primitive_h = 0.5)))
 
-    # the writer never overwrites VisRad's results: a computed text workspace (also as its
-    # own template) or a JSON one is refused unless `overwrite = true`; a JSON template is refused
+    # the writer never overwrites VisRad's results: a computed text workspace (also as the
+    # template) or a JSON one is refused unless `overwrite = true`; a JSON template is refused
     @test_throws ArgumentError write_visrad_workspace(pc, p, edited)
     @test_throws ArgumentError write_visrad_workspace(pc, pc, edited)
     qo = vrfile("overwritten.vrw", read(pc, String))
@@ -637,7 +637,7 @@ end
         println(io, "0.05  ", k - 1, "  ", radiation_temperature(f[k] / 100), "  ", f[k])
     end
     pcap = vrfile("capsule.sed", String(take!(io)))
-    # the tetrahedron's export: 1-based indices, reversed, Flux Out 2 % above Briareus's
+    # the tetrahedron's export: 1-based indices, reversed, Flux Out 2% above Briareus's
     B = sol.B[ec]
     io = IOBuffer()
     println(io, "Surf Index  Flux Out (TW/cm2)")
@@ -663,7 +663,7 @@ end
     @test all(abs(row("mode amplitude l=$l [Capsule_0]").visrad) < 0.3 for l in (3, 4))
     @test row("Rad T [Capsule_0]").visrad ≈ radiation_temperature(f0 / 100) rtol = 1e-3
     @test row("Incident Rad Pwr [Capsule_0]").briareus ≈ sum(sol.H[es] .* t.elem_area[es]) rtol = 1e-12
-    # the tetrahedron: 2 % above everywhere, so the rms is 0.02 B over the mean of 1.02 B
+    # the tetrahedron: 2% above everywhere, so the rms is 0.02 B over the mean of 1.02 B
     s = stat("CAD_0", "Flux Out")
     A = t.elem_area[ec]
     @test s.n == 4
@@ -671,7 +671,7 @@ end
     @test s.max ≈ maximum(0.02B) / (sum(A .* 1.02B) / sum(A)) rtol = 1e-12
     @test s.correlation ≈ 1
     @test row("Emitted Rad Pwr [CAD_0]").relative ≈ 0.02 rtol = 1e-9
-    # laser deposition from the power sources: VisRad's own here, so no difference
+    # laser deposition from the power sources: from VisRad here, so no difference
     @test row("Laser Pwr Dep [CAD_0]").visrad ≈ sum(qcad .* A ./ 100) rtol = 1e-12
     @test row("Laser Pwr Dep [CAD_0]").difference == 0 && stat("CAD_0", "Laser").rms == 0
     @test !any(r -> occursin("Rectangle_0", r.quantity), cmp.rows)               # not in the target

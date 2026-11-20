@@ -106,7 +106,7 @@
         clf = clearance_floor(ko; name = :leh)
         rows = check_constraints(ev, clf)
         @test length(rows) == length(quads) && all(r -> startswith(r.name, "leh["), rows)
-        # a keep-out at a fraction of the peak: every phase's clearance, bit for bit
+        # a keep-out at a fraction of the peak: bitwise the clearance of every phase
         @test clf.f(ev) == in_phase(:picket, clf).f(ev) == keepout_clearance(ko, ev[:peak].beams)
         # at an absolute intensity the envelope widens with the power: the brightest phase
         # sets each beam's clearance
@@ -116,7 +116,7 @@
         # under the optimizer's duals (partials in an aim and a power scale, so the phases'
         # powers differ in value and partials): the phases the keep-out sees as the first
         # are skipped, and the value is the least over every phase, values and partials
-        # bit for bit; at an intensity the third phase is not skipped
+        # bitwise; at an intensity the third phase is not skipped
         yd = [ForwardDiff.Dual{:ko}(v, Float64(i == 1), Float64(i == length(y))) for (i, v) in enumerate(y)]
         evd = evaluate(ps, yd)
         perd = [keepout_clearance(ko, e.beams) for e in evd]
@@ -140,7 +140,7 @@
         @test phase_powers(ps, :picket) == [picket_power(q) for q in quads]
         @test phase_powers(ps, :step) == [b.power for b in with_pulses(quads, pulses, 2.5)]
         @test phase_powers(ps, :peak) == fill(2.0, length(quads))
-        # a key dark in its phase reads 1; a phase on the pointing's own powers has no
+        # a key dark in its phase reads 1; a phase on the pointing powers has no
         # powers to read the scales against
         dark = PhasedScenario(gq, Phase(:dark, sP; power = b -> inner(b) ? 0.0 : 0.4); by = :quad)
         xd = vcat(zeros(nq), fill(1.3, length(quads)))
@@ -205,7 +205,7 @@
         @test sum(length, pf[:picket].deposition.pts) != sum(length, ps[:picket].deposition.pts)
         @test all(k -> pf[k].model === ps[k].model && pf[k].moment_response === ps[k].moment_response &&
                        pf[k].target === ps[k].target && pf[k].time == ps[k].time, keys(ps))
-        # the phases on one mesh share the rebuilt operator's points (each on its own
+        # the phases on one mesh share the rebuilt operator's points (each on its
         # target) and deposit in one pass
         @test pf._mesh == [1, 1, 1] && pf[:step].deposition === pf[:peak].deposition
         @test pf[:picket].deposition.pts === pf[:step].deposition.pts && pf[:step].deposition.target === tK
@@ -225,7 +225,7 @@
         bs = apply(pp, y)
         sm = pointing_summary(ps, bs; drive_reference = e0, gates = cs, floor = floors)
         @test all(k -> sm[k].gate == fill(0.01, 4) && sm[k].floor == floors[k], keys(ps))
-        # a gate's own departure (the peak's from its shifted shape), the others' the summary's
+        # the departure of a gate (the peak's from its shifted shape), the others' the summary's
         @test sm[:picket].gate_departure ≈ sm[:picket].departure rtol = 1e-12
         @test sm[:peak].gate_departure ≈ mode_departure(ev[:peak], shift_modes(flux_ylm(e0[:peak]; lmax = 4), 2 => 0.01)) rtol = 1e-12
         @test sm[:peak].departure ≈ mode_departure(ev[:peak], flux_ylm(e0[:peak])) rtol = 1e-12

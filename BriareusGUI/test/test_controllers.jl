@@ -215,7 +215,7 @@ end
     @test_throws ArgumentError edit_window!(ts, 3, :z, "1")
     @test_throws ArgumentError remove_window!(ts, 3)
 
-    # accepted edits rebuild; a closed window re-emits with its own material
+    # accepted edits rebuild; a closed window re-emits with a separate material
     @test edit_window!(ts, 1, :z, "1.5") && ts.error[] == "" && ts.target[] !== t
     @test edit_window!(ts, 1, :albedo, "0.3") && edit_window!(ts, 1, :conversion, "0.1")
     tw = ts.target[]
@@ -536,7 +536,7 @@ end
     @test all(i -> bt.beams[][i].aim ≈ Briareus.Vec3(0.5, -1.0, 6.0), idx)
     v = beam_set_values(bt, idx)
     @test v.aim ≈ Briareus.Vec3(0.5, -1.0, 6.0) && v.count == 2 && v.enabled === true
-    # a relative edit on a set in one hemisphere uses the aim's own z
+    # a relative edit on a set in one hemisphere uses the aim z
     up = findall(b -> b.port[3] > 0 && b.group === :inner23, bt.beams[])
     @test !beam_set_values(bt, up).mirrored
     @test edit_beam_set!(bt, up, :z, "2.5") && all(i -> bt.beams[][i].aim[3] ≈ 2.5, up)

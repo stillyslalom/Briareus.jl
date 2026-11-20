@@ -77,11 +77,11 @@ of sight to the point is blocked; lines of sight (and the rays from the point) p
 through surfaces seen from behind, so the point may lie inside the capsule. The
 iteration (Gauss–Seidel in element order, to 10⁻⁶) starts from `E⁰`. Elements with
 `E ≥ threshold × E_ref` are kept, where `E_ref` is the mean flux on the element sides
-that `point_rays` rays from the point (a Fibonacci lattice) first hit: the cavity's own
-scale. `enc.flux` holds `E/E_ref`. On a NIF CAD workspace (155k elements) this takes
+that `point_rays` rays from the point (a Fibonacci lattice) first hit: the scale of
+the cavity. `enc.flux` holds `E/E_ref`. On a NIF CAD workspace (155k elements) this takes
 about 3 s on 8 threads.
 
-Each element gathers through its own rays, which sample its whole view whatever its
+Each element gathers through separate rays, which sample its whole view whatever its
 size or shape, so a small patch or a sliver deep in a recess or behind a shield is
 found through the surfaces around it, which see the cavity. Surfaces outside, such as
 outer walls and the far sides of mounts, get no flux at all. A surface that sees the
@@ -416,7 +416,7 @@ sides when `two_sided`), through these steps:
    elements ([`coarsen_mesh`](@ref)). Give at most one. Only the kept facets are
    divided, which is much cheaper when most of an assembly lies outside the cavity.
    With `inside`, the selection is then repeated on the elements: an element straddling
-   the edge of the lit region averages its flux over its own area.
+   the edge of the lit region averages its flux over its area.
 4. `fit` (by default on when `remesh` is given; or a named tuple of keywords of
    [`curved_components`](@ref) and [`fit_surfaces`](@ref), such as `minfraction = 0`
    to fit even the curved faces of under 10⁻³ of a part's area, which stay flat by
@@ -437,9 +437,9 @@ visibility a single centroid ray sets to all or nothing.
 view factors (`enforce_closure!`): pass it when apertures (`aperture` components among
 the `parts`) cover every opening of the cavity kept ([`open_fraction`](@ref) shows where
 facets leak). On a remeshed, fitted CAD cavity with 0.1 mm bores and a 20 µm waist gap
-closed by apertures, balancing brings the LEH and gap loss from 0.7–0.8 % above a
-continuum Monte Carlo to within 0.2 %, and the capsule drive within 0.06 % (raw: up to
-0.16 %), and moves its a₂/a₀ by under 0.08 pp, toward the reference at 0.5 mm (research
+closed by apertures, balancing brings the LEH and gap loss from 0.7–0.8% above a
+continuum Monte Carlo to within 0.2%, and the capsule drive within 0.06% (raw: up to
+0.16%), and moves its a₂/a₀ by under 0.08 pp, toward the reference at 0.5 mm (research
 notes, "Closure on bored, windowed and CAD cavities"). The default is `false` (raw view
 factors): a cavity selected from CAD is open wherever no aperture was given.
 
@@ -494,7 +494,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
             redone[i] = true
         end
         if select
-            # select again at the elements' own granularity
+            # select again at element granularity
             enc = enclosure(comps, inside; enclosure_kw...)
             s = _survivors(enc)
             comps, cad, facets, redone = enc.target.components, cad[s], facets[s], redone[s]

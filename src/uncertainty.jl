@@ -8,14 +8,14 @@ struct _ErrorTag end
     mode_sensitivity(scenario, beams; lmax = 4) -> NamedTuple
 
 Sensitivity of the observed flux's real spherical-harmonic shape `c_lm/c_00`
-(`mode_index` order, through `lmax ≤ 6`) to each beam's own errors: a pointing
+(`mode_index` order, through `lmax ≤ 6`) to the errors of each beam: a pointing
 displacement of its aim transverse to the beam (mm, along the spot's `a` and `b` axes)
 and a relative power error. Returns `(; J, c, names)`: `J` is `(lmax+1)² × 3nb`,
 column `3(b-1) + k` the derivative with respect to error `k` of beam `b` (`k` = 1, 2
 the two transverse directions, 3 the relative power), `c` the nominal `c_lm/c_00`, and
 `names` the column labels.
 
-Each beam's deposition depends on its own errors only, so the derivatives come from
+Each beam's deposition depends on its errors only, so the derivatives come from
 one forward-mode pass per beam with three dual partials: exact (to round-off), and
 about the cost of one gradient of an objective. The beams are the scenario's setup
 beams; a laser–plasma model is applied before the errors (the errors are in the

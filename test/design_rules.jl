@@ -1,5 +1,5 @@
 # Capture and clearance rules as quantities of an evaluation (src/design_rules.jl and the
-# keep-outs' public penalty): each against the objectives' own terms, against independent
+# keep-outs' public penalty): each against the terms of the objectives, against independent
 # power totals, and its gradient against finite differences.
 
 @testset "design rules: the objectives' penalty terms" begin
@@ -224,7 +224,7 @@ end
     @test all(all(c[j][medial[j]] .<= onaxis[j][medial[j]] .+ 1e-9) for j in 1:2)
 
     # derivatives in each beam's aim, defocus and spot axes against central differences,
-    # the tolerance about TCC and about the beam's own aim point
+    # the tolerance about TCC and about the beam aim point
     err = 0.0
     for pivot in (:tcc, :aim), part in (:shield, :stalk)
         k = HardwareKeepOut(t, part; targets = (:wall, :capsule), tolerance = 0.5, pivot, miss = :all)

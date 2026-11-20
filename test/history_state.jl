@@ -22,7 +22,7 @@ using Briareus, Test
     tb = h.burnthrough[:window_1]
     @test all(isfinite, tb) && times[1] < minimum(tb) && maximum(tb) + 0.4 < times[end]
 
-    # at a step's time: the step's own albedos, and a scenario with them gives the
+    # at a step's time: the albedos of that step, and a scenario with them gives the
     # history's capsule flux moments at the history's beams (a linear solve against the
     # history's iterated one)
     for τ in (0.5, 1.25, 2.5)                       # picket, trough, peak

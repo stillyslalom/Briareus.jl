@@ -14,7 +14,7 @@ T.ComboBox {
     implicitHeight: Math.max(26, implicitContentHeight + topPadding + bottomPadding)
     FontMetrics { id: metrics; font: box.font }
     // the widest entry of a list model, a JavaScript array or a list from Julia (an item
-    // model: the box's own width)
+    // model: the box width)
     readonly property real widestEntry: {
         if (model === null || model === undefined || typeof model.length !== "number") return 0
         let w = 0

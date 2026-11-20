@@ -2,7 +2,7 @@
 # windows, the model tree and inspector, beams and VisRad files, the 3D view's camera
 # and picking, the drive on request, the optimization with the capsule keep-out,
 # clearance and TaLIS — and grabs window images with `request_grab` (run by
-# runtests.jl in its own process when BRIAREUSGUI_QT_TESTS=true; also runnable alone).
+# runtests.jl in a separate process when BRIAREUSGUI_QT_TESTS=true; also runnable alone).
 # Exits nonzero on failure.
 #
 #   julia --project=BriareusGUI -t 4 BriareusGUI/test/qt_window.jl

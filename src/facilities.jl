@@ -223,7 +223,7 @@ bundle `xy`, beam `z`; beams 1–4 form quad QxyT, 5–8 QxyB); `quad` is the qu
 within 0.004°.
 
 `spot` maps a cone to its spot, whose `angle` is measured in the frame `spot_frame`:
-`:beam`, the beam's own port θ̂ and φ̂; or `:quad`, its quad port's, the spot turned
+`:beam`, the port θ̂ and φ̂ of the beam; or `:quad`, its quad port's, the spot turned
 about the beam's axis by the angle between the quad port's φ̂ and the beam's (1.6–5.3°,
 its sign varying by beam), as VisRad orients a NIF beam's phase-plate spot. VisRad's
 beams are `nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)`
@@ -292,7 +292,7 @@ aim from a beam list: `Dict(q.quad => q.aim for q in nif_quads(beams))`. A split
 
 `spot` is `nothing` (each quad takes its first beam's spot) or a function of the cone;
 with `spot = nothing`, `spot_frame = :quad` reads that spot's `angle` in the quad frame
-and turns it back to the quad's own port (the inverse of `nif_beams(quads; spot_frame =
+and turns it back to the quad port (the inverse of `nif_beams(quads; spot_frame =
 :quad)`). Beams of one quad in different groups are an `ArgumentError`.
 """
 function nif_quads(beams::AbstractVector{<:Beam}; fnumber = 7.9, spot = nothing,
@@ -350,7 +350,7 @@ quads, with `group` the cone) re-aimed by cone, defocus 0; power, spot and `dlam
 kept. Each cone's quads share one rule in their own frame, mirrored top to bottom: the aim
 sits at `±z` (mm, the bottom hemisphere at `-z`), `r` along the quad's port azimuth
 (negative: across the axis, toward the opposite wall) and, for the outer cones, `±s` along
-the quad's φ̂, each beam aiming to the side opposite its own port
+the quad's φ̂, each beam aiming to the side opposite its port
 (`-sign(φ_beam − φ_quad) s`; the quad's beams cross). The quad azimuth is that of the
 mean port of its beams in `beams`, so a quad given as one beam (`nif_quads()`) gets no
 split.

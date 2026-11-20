@@ -28,7 +28,7 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
         @test o.patches == cube.patches && o.vertices == cube.vertices
     end
     # a thick hohlraum wall meshed as a closed solid (outer and inner cylinders joined by
-    # end annuli, each a separate mesh with its own vertices): out of the material, i.e.
+    # end annuli, each a separate mesh with unshared vertices): out of the material, i.e.
     # the inner wall faces the axis and the outer wall away from it
     R, r, L, nphi = 3.0, 2.875, 10.0, 24
     shell = merge_meshes(cylinder_mesh(R, -L / 2, L / 2; nz = 8, nphi, inward = false),
@@ -67,7 +67,7 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
     end
     @test_logs (:warn, r"non-manifold") orient_mesh(fan)
     # two closed cubes touching along an edge (an assembly's contact), both wound inward:
-    # each is still closed and faces out of its own volume, without a warning
+    # each is still closed and faces out of its volume, without a warning
     function box!(m, c)
         for (n, u, v) in ((Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)), (Vec3(0, 1, 0), Vec3(0, 0, 1), Vec3(1, 0, 0)),
                           (Vec3(0, 0, 1), Vec3(1, 0, 0), Vec3(0, 1, 0))), s in (1, -1)
@@ -96,7 +96,7 @@ end
 @testset "connected_pieces" begin
     # three disjoint parts merged into one mesh, as a CAD assembly exported whole: two
     # equal annuli mirrored in z (up at +5, down at -5) and a smaller disk. The mesh
-    # builders give every patch its own corner vertices, so each seam is duplicated and
+    # builders give every patch separate corner vertices, so each seam is duplicated and
     # the pieces are found only after welding.
     ring(z) = annulus_mesh(2.0, 4.0, z; nr = 3, nphi = 16, up = z > 0)
     parts = [ring(5.0), disk_mesh(1.0, 0.0; nr = 2, nphi = 12), ring(-5.0)]
@@ -164,7 +164,7 @@ end
     @test_throws ArgumentError coarsen_mesh(plate; size = 0)
 end
 
-# one patch per triangle with its own vertices, as an STL file has them
+# one patch per triangle with unshared vertices, as an STL file has them
 function facet_soup(tris)
     m = Mesh()
     foreach(t -> add_polygon!(m, collect(t)), tris)
@@ -214,7 +214,7 @@ end
 @testset "remesh_mesh" begin
     rng = Random.MersenneTwister(11)
     # a 4 × 2 mm plate tessellated as 40 strips of two slivers spanning its length
-    # (l²/A = 320), each facet with its own vertices, windings scrambled
+    # (l²/A = 320), each facet with unshared vertices, windings scrambled
     strips = vcat([[(Vec3(0, y, 0), Vec3(4, y, 0), Vec3(4, y + 0.05, 0)),
                     (Vec3(0, y, 0), Vec3(4, y + 0.05, 0), Vec3(0, y + 0.05, 0))] for y in 0:0.05:1.95]...)
     plate = orient_mesh(scramble(facet_soup(strips), rng); toward = (2, 1, 1))
@@ -237,7 +237,7 @@ end
     @test open_edges(r)[2] ≈ 12 && open_edges(r)[3] == 0
 
     # a closed can (radius 1, length 2) as one sheet: wall strips spanning its length,
-    # caps as fans of slivers from the axis, every facet with its own vertices, windings
+    # caps as fans of slivers from the axis, every facet with unshared vertices, windings
     # scrambled; every other wall strip is split at the midpoint of its bottom chord,
     # which the cap's facet does not have (a T-junction, as between CAD faces)
     nphi = 48

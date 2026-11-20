@@ -134,7 +134,7 @@ using Printf: @sprintf
         write(nohdr, vcat(fill(0x01, 80), reinterpret(UInt8, [UInt32(3)]), zeros(UInt8, 7)))
         @test_throws ArgumentError read_stl(nohdr)
 
-        # the fast number parser agrees with Base's parse bit for bit, in every format
+        # the fast number parser agrees with Base's parse bitwise, in every format
         rng = Random.MersenneTwister(7)
         xs = [randn(rng) * 10.0^rand(rng, -30:30) for _ in 1:2000]
         strs = vcat(string.(xs), [@sprintf("%e", x) for x in xs], [@sprintf("%.9E", x) for x in xs],

@@ -1,7 +1,7 @@
 # Young et al., PoP 27, 082702 (2020), Sec. II A: the static view-factor model (radii at
-# 85 %, albedos 0.8/0.3) against the dynamic one (Fig. 3a's radii and albedos against
+# 85%, albedos 0.8/0.3) against the dynamic one (Fig. 3a's radii and albedos against
 # time, on `Keyframes`) for N170827, with a proxy mode-1 source (N170827's delivered
-# per-beam powers are not published): a fixed 5 % rms per-quad imbalance, then the
+# per-beam powers are not published): a fixed 5% rms per-quad imbalance, then the
 # pieces of the dynamic model one at a time. Research notes, "Young 2020 validation".
 #
 #     julia --project=. -t auto examples/young2020_dynamic.jl     # ~10 min on 4 threads
@@ -31,7 +31,7 @@ K = young2020_kernel()
 m1(h) = reduce(hcat, [100 .* Briareus.mode1_vector(view(h.ylm, :, k)) for k in axes(h.ylm, 2)])
 pk = (times .>= 4.5) .& (times .<= 7.0)
 report(name, h) = (m = m1(h); n = vec(sqrt.(sum(abs2, m; dims = 1)));
-    @printf("%-40s |m| peak %.3f %%, v %.1f km/s, Tr peak %.0f eV\n", name, sum(n[pk]) / count(pk), norm(hotspot_velocity(h; kernel = K)), maximum(h.Tr)))
+    @printf("%-40s |m| peak %.3f%%, v %.1f km/s, Tr peak %.0f eV\n", name, sum(n[pk]) / count(pk), norm(hotspot_velocity(h; kernel = K)), maximum(h.Tr)))
 statm(t) = (m = RadiationModel(t; closed = true); (m, DepositionOperator(t, quads)))
 report("static (0.85 radii, 0.8/0.3)", drive_history(statm(stat)..., ba, times; ylm = true, lmax = 1))
 sdyn = hohlraum(; length = L, radius = 0.85R0, leh_radius = 0.85r0, capsule_radius = 0.85c0, corner_radius = 0.85rc0,

@@ -1,12 +1,12 @@
-# Fixes from the code survey (ROADMAP item 3): each analysis starts its own job, a renamed
+# Fixes from the code survey (ROADMAP item 3): each analysis starts a separate job, a renamed
 # part keeps what was keyed by its name, undo keeps a current optimization result, the
 # default cutaway follows the hohlraum parts, and one rule decides a flat observed face
 # (no GL).
 
 isdefined(@__MODULE__, :synthetic_workspace) || include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
 
-@testset "Run starts each analysis's own job (no GL)" begin
-    # with no beams every start refuses at once, on its own panel's status
+@testset "Run starts a separate job per analysis (no GL)" begin
+    # with no beams every start refuses at once, on the status of its panel
     sess = DesignSession(resolution = :coarse, beams = Briareus.Beam[])
     status = Dict(:drive => sess.drive.status, :optimize => sess.optimize.status,
                   :clearance => sess.review.status, :sweep => sess.sweep.status,

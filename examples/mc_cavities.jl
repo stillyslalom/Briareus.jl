@@ -57,7 +57,7 @@ function bored(hw, n; curved = true, matched = !curved)
 end
 
 # CAD-like facets of the same cavity: each half a closed solid (test/cadfit.jl's
-# `cad_half`, its waist ring at the half gap), every facet its own vertices
+# `cad_half`, its waist ring at the half gap), no vertices shared between facets
 function cad_quad!(F, a, b, c, d, facing)
     dot(cross(b - a, c - a), facing) < 0 && ((a, b, c, d) = (d, c, b, a))
     push!(F, (a, b, c), (a, c, d))
@@ -176,7 +176,7 @@ end
 
 for key in ("bored", "windowed")
     ref = reference(key)
-    @printf("\n%s reference: a₀ %.6f ± %.6f, a₂/a₀ %+.3f ± %.3f, a₄/a₀ %+.3f ± %.3f %%, loss %.5f ± %.5f (open fraction %.1e)\n",
+    @printf("\n%s reference: a₀ %.6f ± %.6f, a₂/a₀ %+.3f ± %.3f, a₄/a₀ %+.3f ± %.3f%%, loss %.5f ± %.5f (open fraction %.1e)\n",
             key, ref.a[1], ref.err[1], ref.a[2], ref.err[2], ref.a[3], ref.err[3], ref.esc, ref.esc_err, ref.open)
     println("  model − reference: a₀ and loss in %, moments in pp")
     for (k, name, build, vis) in MODELS

@@ -49,7 +49,7 @@ end
     vals = (inner23 = (z = 3.09, r = -1.09, phi = 0.2), inner30 = (z = 3.63, r = -0.6, phi = -0.1),
             outer44 = (z = 5.2, r = 0.4, phi = 0.0), outer50 = (z = 5.01, r = 0.0, phi = 0.3))
     fields = (:z, :r, :phi)
-    # quads held as one beam: the same either way, bit for bit
+    # quads held as one beam: bitwise identical either way
     pb, pq = GroupPointing(quads; fields, unit = :beam), GroupPointing(quads; fields)
     x = parameters(pb; vals...)
     @test initial_parameters(pb) == initial_parameters(pq) && pq.radial == pb.radial
@@ -94,7 +94,7 @@ end
     @test all(isfinite, g) && any(!=(0), g)
     @test Briareus._subset_param(p4, 1:8).unit === :quad && pb.unit === :beam && pq.unit === :quad
     @test Briareus._subset_param(p1, 1:8).unit === :beam
-    # a beam without a quad name keeps its own azimuth
+    # a beam without a quad name keeps its azimuth
     om = omega_beams()
     @test GroupPointing(om; fields).radial == GroupPointing(om; fields, unit = :beam).radial
     @test_throws ArgumentError GroupPointing(quads; unit = :cone)
@@ -136,7 +136,7 @@ end
     # moved in z keep their ±s
     xz = initial_parameters(ph) .+ [f == "z" ? 0.1 : 0.0 for f in last.(split.(parameter_names(ph), '.'))]
     @test maximum(norm(a.aim - b.aim - Vec3(0, 0, 0.1 * sign(b.port[3]))) for (a, b) in zip(apply(ph, xz), hyb)) < 1e-12
-    # relative: a shift of each beam's own split, the members' differences kept
+    # relative: a shift of the split of each beam, the members' differences kept
     pr = GroupPointing(hyb; by = :quad, fields = (:phi, :split), relative = true)
     δ = [0.02 * cos(i) for i in 1:nparams(pr)]
     atr(q, f) = δ[findfirst(==(string(q, '.', f)), parameter_names(pr))]
@@ -149,7 +149,7 @@ end
     J = ForwardDiff.jacobian(s -> apply(p, [i == 4 ? s[1] : oftype(s[1], x[i]) for i in eachindex(x)])[1].aim, [x[4]])
     @test J[:, 1] ≈ side(beams[1]) * eφ(beams[1]) rtol = 1e-14
     # a quad held as one beam gets no split; a split per beam, without quads or in the
-    # beam's own frame is refused, and spherical fields exclude it
+    # beam frame is refused, and spherical fields exclude it
     q = nif_quads()
     pq = GroupPointing(q; by = :quad, fields = (:z, :split))
     @test [b.aim for b in apply(pq, fill(0.3, nparams(pq)))] == [b.aim for b in apply(pq, repeat([0.3, 0.0], 48))]

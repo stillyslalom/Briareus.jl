@@ -10,7 +10,7 @@
 Element sizes (mm): `h` for hohlraum walls, end caps and LEHs (`hohlraum_counts`) and
 the parts; `capsule_h` for the surface whose drive is studied: a sphere meshed as a
 capsule (`capsule_counts`, see [`SPHERE_VALUES`](@ref)) and a starter's backlighter foil
-when it is inserted. A part may override `h` with its own.
+when it is inserted. A part may override `h` with a separate value.
 """
 struct MeshSpec
     h::Float64
@@ -74,7 +74,7 @@ A diagnostic window cut into a hohlraum part's wall (a core `WallWindow`): cente
 azimuth `phi` (degrees from the part's +x) and axial position `z` (mm, in the part's
 frame); `round` (the default, as diagnostic windows usually are) a disk of diameter
 `width` mm on the unrolled wall, otherwise a rectangle `width` mm of arc by `height` mm
-along the axis. A closed window (`open = false`) is an opaque wall patch with its own
+along the axis. A closed window (`open = false`) is an opaque wall patch with a separate
 x-ray `albedo` and laser → x-ray `conversion` (by default the hohlraum wall's, core
 `gold()`); an open one is a hole (an aperture: laser light and x-rays leave through it).
 Window `k` of part `name` is the component `<name>_window_k`.
@@ -126,7 +126,7 @@ file, such as a CAD export), `:visrad` (an object of a VisRad workspace) and `:h
 (a cylindrical hohlraum, `Briareus.hohlraum`, in pieces: see [`hohlraum_pieces`](@ref)).
 `:frame` is a user frame: a named frame with no geometry, placed like a part
 ([`add_frame!`](@ref), [`add_port_frame!`](@ref)); the model tree lists it under Frames.
-`:assembly` is an assembly of the model tree: a named frame with no geometry of its own,
+`:assembly` is an assembly of the model tree: a named frame with no geometry,
 placed like a part, whose members are the parts and assemblies that name it as their
 `assembly` ([`add_assembly!`](@ref)).
 """
@@ -252,7 +252,7 @@ end
 """
 Values of a `:sphere` part besides its radius (`key => default`): `capsule_mesh` (1:
 meshed as a capsule, the geodesic mesh of `Briareus.hohlraum`'s capsule with elements of
-the target's capsule size, `MeshSpec.capsule_h`, unless the part sets its own `h`; 0,
+the target's capsule size, `MeshSpec.capsule_h`, unless the part sets a separate `h`; 0,
 the default: the latitude–longitude `sphere_mesh` with elements of `h`). The starter
 hohlraum's capsule sets it, so it meshes as the former hohlraum template's capsule did.
 """
@@ -321,10 +321,10 @@ piece_name(name::Symbol, piece::Symbol) = Symbol(name, :_, piece)
 
 """
 Placement and material fields of every part: `(key, label, unit, default)`. The part
-is rotated by `rotation` about its own axis, then tilted to polar angle `theta` and
+is rotated by `rotation` about its axis, then tilted to polar angle `theta` and
 azimuth `phi` (VisRad's Polar/Azimuthal/Rotation order: the axis then points along
 `(θ, φ)`), then moved to `(x, y, z)`. `h` (mm) overrides the mesh element size (0:
-the target's; for a VisRad primitive, VisRad's own grid, see [`part_size_unit`](@ref)).
+the target's; for a VisRad primitive, the VisRad grid, see [`part_size_unit`](@ref)).
 """
 const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm", 0.0),
                      (:theta, "Axis polar θ", "°", 0.0), (:phi, "Axis azimuth φ", "°", 0.0),
@@ -335,7 +335,7 @@ const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm",
 """
 Labels of the named frames that are not a part's: `:tcc`, the target chamber (VisRad's
 reference frame), the base every part is placed in by default and beams aim in. Every
-part has its own frame too, named after the part, and a hohlraum part its pieces'
+part also has a frame named after the part, and a hohlraum part its pieces'
 ([`part_frames`](@ref)): a part placed in one moves and turns with it.
 """
 const FRAME_LABELS = Dict(:tcc => "Target chamber (TCC)")
@@ -445,7 +445,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   assembly::Symbol = TOP_LEVEL, sections = NTuple{2,Float64}[],
                   piece_roles = Dict{Symbol,Symbol}())
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
-    _own_frame_name(Symbol(name), frame) && throw(ArgumentError("a part cannot be placed in its own frame"))
+    _own_frame_name(Symbol(name), frame) && throw(ArgumentError("a part cannot be placed in the frame named after it"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
     kind === :mesh && isempty(file) && throw(ArgumentError("a mesh part needs an STL file"))
     kind === :visrad && (isempty(file) || isempty(object)) &&
@@ -465,7 +465,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
         v[k] = x
     end
     any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
-        throw(ArgumentError("a part's placement step cannot refer to its own frame"))
+        throw(ArgumentError("a placement step cannot refer to the frame of its part"))
     return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
                                   coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
                                   collect(WindowSpec, windows), assembly,
@@ -514,7 +514,7 @@ part_axis(p::PartSpec) = Vec3(sind(p.values[:theta]) * cosd(p.values[:phi]),
 "Center of a part in its frame."
 part_center(p::PartSpec) = Vec3(p.values[:x], p.values[:y], p.values[:z])
 
-# The part's own frame in the chamber before its placement steps, placed in its parent's
+# The part frame in the chamber before its placement steps, placed in its parent's
 # chamber frame `frame`: the rotation `euler_rotation(theta, phi, rotation)` (VisRad's
 # order) at its center.
 _own_frame(p::PartSpec, frame::Frame = CHAMBER) =
@@ -523,7 +523,7 @@ _own_frame(p::PartSpec, frame::Frame = CHAMBER) =
 """
     part_frame_def(p::PartSpec) -> FrameDef
 
-A part's own frame as placed in its parent `p.frame`: origin at its center
+The frame of a part as placed in its parent `p.frame`: origin at its center
 ([`part_center`](@ref)), axes turned by its `theta`, `phi` and `rotation`
 (`euler_rotation`), so its `z` axis is the part's axis; then moved by its placement
 `steps`.
@@ -536,7 +536,7 @@ part_frame_def(p::PartSpec) =
     part_frames(parts) -> Dict{Symbol,Frame}
     part_frames(ts::TargetSetup) -> Dict{Symbol,Frame}
 
-Every named frame of a design in the chamber: `:tcc`, each part's own
+Every named frame of a design in the chamber: `:tcc`, each part frame
 ([`part_frame_def`](@ref), named after the part) and its pieces'
 ([`piece_frame_defs`](@ref)), resolved with `resolve_frames`, so a part placed in
 another part's frame follows every ancestor exactly. Throws `ArgumentError` for a part
@@ -560,14 +560,14 @@ _frame_defs(parts) = Pair{Symbol,FrameDef}[d for p in parts for d in (p.name => 
 """
     piece_frame_defs(p::PartSpec) -> Vector{Pair{Symbol,FrameDef}}
 
-The child frames of a part's pieces, placed in the part's own frame: for a `:hohlraum`
+The child frames of a part's pieces, placed in the part frame: for a `:hohlraum`
 part `name` of length `L`, the entrance holes' `name.leh_top` (origin at the top end's
 center `(0, 0, L/2)`, the part's axes, so `z` points out of the hohlraum) and
 `name.leh_bottom` (at `(0, 0, −L/2)`, turned 180° about the part's `x`: `z` out of the
 hohlraum, `y` reversed, so one placement or aim mirrors between the two ends, as the
 former template's entrance-hole frames did), and each window's `name.window_k` (origin at the
 window's center on the wall, the part's axes). The ends' frames serve their caps too (a
-cap's centroid is its end's center), and the wall aims in the part's own frame (its
+cap's centroid is its end's center), and the wall aims in the part frame (its
 centroid is the part's center). Other kinds have none.
 """
 function piece_frame_defs(p::PartSpec)
@@ -590,7 +590,7 @@ end
 
 The frame component `name` of part `part` aims in as a piece of it: a hohlraum part's
 wall in the part's frame, its caps and entrance holes (and their lips) in its ends'
-frames (`part.leh_top`, `part.leh_bottom`), a window in its own (`part.window_k`), see
+frames (`part.leh_top`, `part.leh_bottom`), a window in a separate frame (`part.window_k`), see
 [`piece_frame_defs`](@ref); any other component in its part's frame.
 """
 function piece_frame(name::Symbol, part::Symbol)
@@ -608,7 +608,7 @@ _count(len, h; min = 1, multiple = 1) = multiple * max(cld(min, multiple), ceil(
 # The azimuthal patch count of a disk, washer, cylinder or cone of radius `r` with
 # elements of `h`: core `hohlraum_counts`'s rule (a multiple of 8, at least 8), so a part
 # of a hohlraum part's radius meshed with its element size meets the wall's end ring
-# vertex for vertex (a package disk closing a halfraum's open end leaves no gap at the
+# at shared vertices (a package disk closing a halfraum's open end leaves no gap at the
 # seam; with multiples of 4 the standard size left a 36-gon inside the wall's 40-gon).
 _nphi(r, h) = _count(2π * r, h; min = 8, multiple = 8)
 
@@ -616,8 +616,8 @@ _nphi(r, h) = _count(2π * r, h; min = 8, multiple = 8)
     part_component(p::PartSpec, h; frame) -> Component
 
 The core component of a part, meshed with elements of size `h` (mm) unless the part
-gives its own, carrying its exact curved surface (sphere, disk, washer, cylinder) for
-the view factors, and placed in the chamber by `frame`, the part's own chamber `Frame`
+sets a separate size, carrying its exact curved surface (sphere, disk, washer, cylinder) for
+the view factors, and placed in the chamber by `frame`, the chamber `Frame` of the part
 (its entry in [`part_frames`](@ref), placement steps included). By default the part is
 placed by its placement fields in the chamber frame, without its steps.
 """
@@ -630,23 +630,23 @@ end
 """
     part_components(p::PartSpec, h; frame, raw = false) -> Vector{Component}
 
-The core components of a part, placed by its own chamber `frame` as in
+The core components of a part, placed by its chamber `frame` as in
 [`part_component`](@ref): one for every kind but `:visrad`, whose object can be a
-primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its own place
+primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its place
 in the chamber (VisRad's frames), moved further by the part's placement; its windings
 are repaired and its CAD surface remeshed into elements of the part's size. A VisRad
 primitive (rectangle, sphere, cylindrical hohlraum) keeps VisRad's grid, which
-reproduces VisRad's element table, unless the part sets its own element size. With `raw`
+reproduces VisRad's element table, unless the part sets a separate element size. With `raw`
 a VisRad CAD part keeps its file's facets as they are (no winding repair, no remeshing:
 for drawing a part left out of the calculations, at no meshing cost).
 
 A sphere with `capsule_mesh` set (value 1, see [`SPHERE_VALUES`](@ref)) is meshed as a
 capsule: the geodesic mesh of `Briareus.hohlraum`'s capsule (`icosphere_mesh`,
 `capsule_mesh = :compact`) with elements of `capsule_h` (the target's capsule size,
-[`MeshSpec`](@ref)) unless the part gives its own. A `:hohlraum` part is core `hohlraum(...)` without a capsule, meshed with
+[`MeshSpec`](@ref)) unless the part sets a separate size. A `:hohlraum` part is core `hohlraum(...)` without a capsule, meshed with
 elements of `h`, its components named and grouped as in [`hohlraum_pieces`](@ref); at
-the chamber frame it is not moved at all, so it equals the former template's hohlraum bit for
-bit.
+the chamber frame it is not moved at all, so it equals the former template's hohlraum
+bitwise.
 """
 function part_components(p::PartSpec, h::Real; frame::Frame = _own_frame(p), raw::Bool = false,
                          capsule_h::Real = h)
@@ -771,7 +771,7 @@ end
 
 # A VisRad object's components in the chamber frame (windings repaired toward `toward`,
 # CAD surfaces remeshed into elements of `h`; with `raw` the file's facets as they are;
-# primitives on VisRad's grid unless the part sets its own element size), kept per
+# primitives on VisRad's grid unless the part sets a separate element size), kept per
 # workspace version and settings: every edit rebuilds the target, and remeshing a CAD
 # part of 10⁵ facets takes tens of seconds.
 const _VRW_PARTS = Dict{Any,Vector{Component}}()
@@ -830,7 +830,7 @@ function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
     _cached(_VRW_PARTS, key) do
         mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
         # one component per CAD part (`fit = false`): the window shows and keys the parts;
-        # the drive fits their curved faces in its own target (`_fitted_target`)
+        # the drive fits their curved faces in a separate target (`_fitted_target`)
         cs = raw ? visrad_component(o; material = mat, two_sided = p.two_sided) :
              visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
                               toward, remesh = cad ? h : nothing, primitive_h = ph, fit = false)
@@ -855,7 +855,7 @@ end
     part_size_unit(p::PartSpec) -> String
 
 The unit text of a part's element-size field, with what 0 means for it (the target's
-size, or for a VisRad primitive VisRad's own grid).
+size, or for a VisRad primitive the VisRad grid).
 """
 function part_size_unit(p::PartSpec)
     p.kind === :visrad || return "mm (0: target's)"
@@ -932,7 +932,7 @@ tessellated in slivers otherwise carries hundreds of facets per element, and its
 factors cost ~20× more on the flat path (research notes, "Finely faceted curved CAD on
 the flat path"). A part of several faces (a hohlraum half: its bore, walls, ends) stays
 one flat component in the window, which shows and keys parts; the drive splits it into
-its fitted pieces in its own target (`_fitted_target`).
+its fitted pieces in a separate target (`_fitted_target`).
 """
 function _whole_surface(m::Mesh, ref::Mesh)
     npatches(m) >= 6 && length(ref.triangles) >= 6 || return nothing
@@ -1001,7 +1001,7 @@ function _stl_solids(file::AbstractString)
     return _cached(() -> read_stl_solids(file), _STL_SOLIDS, key)
 end
 
-# Whether part `p` (element size `h`, placed by its own chamber `frame`) is meshed
+# Whether part `p` (element size `h`, placed by its chamber `frame`) is meshed
 # already: CAD parts (VisRad CAD, STL) remesh for seconds to minutes and are cached; the
 # other kinds mesh at once. A part the geometry rejects counts as ready (the build says why).
 function _part_ready(p::PartSpec, h::Real, frame::Frame)
@@ -1715,7 +1715,7 @@ end
     set_window_open!(ts::TargetSetup, k, open::Bool; part = nothing) -> Bool
 
 Make window `k` of hohlraum part `part` (by default the first) an open hole (`true`) or
-a closed wall patch with its own albedo and conversion (`false`).
+a closed wall patch with a separate albedo and conversion (`false`).
 """
 function set_window_open!(ts::TargetSetup, k::Integer, open::Bool; part = nothing)
     _on_window_part(ts, part) do i
@@ -2030,7 +2030,7 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
 end
 
 # Hohlraum part `p` with values `vals`, whose `profile` changed: a frustraum without an end
-# radius gets one (60 % of the waist radius, at least 1.2 times the LEH radius, to the
+# radius gets one (60% of the waist radius, at least 1.2 times the LEH radius, to the
 # micrometer), and a section list without breaks starts from the current profile's
 # (`_default_sections`: a cylinder in four equal sections).
 function _switched_profile(p, vals)
@@ -2170,7 +2170,7 @@ end
 
 Place part `i` in another frame (`:tcc`, another part's or a hohlraum part's piece
 frame: see [`part_frames`](@ref)). With `keep` the part stays where it is in the
-chamber: its own frame is re-expressed in the new one (its center, and the angles of
+chamber: the part frame is re-expressed in the new one (its center, and the angles of
 its rotation there; the angles stay as they are when the two frames have the same
 axes); otherwise its placement values are kept and it moves
 with the frame. A frame that leads back to the part is a loop: refused, with `error`
@@ -2181,7 +2181,7 @@ function set_part_frame!(ts::TargetSetup, i::Integer, frame::Symbol; keep::Bool 
     p = ts.parts[][i]
     p.frame === frame && return true
     try
-        _own_frame_name(p.name, frame) && throw(ArgumentError("a part cannot be placed in its own frame"))
+        _own_frame_name(p.name, frame) && throw(ArgumentError("a part cannot be placed in the frame named after it"))
         trial = copy(ts.parts[])
         trial[i] = _with(p; frame)
         part_frames(trial)                     # a loop, a missing frame
@@ -2329,7 +2329,7 @@ function add_part_step!(ts::TargetSetup, i::Integer, kind::Symbol; ref::Union{No
     return _step_edit(ts) do
         fr = part_frames(ts)
         r = something(ref, p.frame)
-        r === p.name && throw(ArgumentError("a part's placement step cannot refer to its own frame"))
+        r === p.name && throw(ArgumentError("a placement step cannot refer to the frame of its part"))
         haskey(fr, r) || throw(ArgumentError("no frame named $r"))
         _set_steps!(ts, i, [p.steps; _step_default(kind, r, fr[p.name], fr)])
     end
@@ -2365,7 +2365,7 @@ end
     edit_part_step!(ts::TargetSetup, i, k, key, value) -> Bool
 
 Set a field of placement step `k` of part `i`: `:ref` (a frame name; `""` for none: the
-part's own axes for an offset, a relative roll), `:px`/`:py`/`:pz` (the point in `ref`,
+part axes for an offset, a relative roll), `:px`/`:py`/`:pz` (the point in `ref`,
 mm), `:dx`/`:dy`/`:dz` (an offset, mm), `:distance` (mm; `""` for none on an on-axis
 step), `:angle` (degrees), `:axis` (`"x"`, `"y"` or `"z"`), `:flip` (Bool) or `:side`
 (`"front"` or `"back"`); numbers as text. A rejected value sets `error`.
@@ -2383,7 +2383,7 @@ function edit_part_step!(ts::TargetSetup, i::Integer, k::Integer, key::Symbol, v
             s = strip(string(value))
             hasfield(typeof(st), :ref) || throw(ArgumentError("a $kind step has no frame"))
             isempty(s) && !(st isa Union{Roll,Offset}) && throw(ArgumentError("a $kind step needs a frame"))
-            Symbol(s) === p.name && throw(ArgumentError("a part's placement step cannot refer to its own frame"))
+            Symbol(s) === p.name && throw(ArgumentError("a placement step cannot refer to the frame of its part"))
             isempty(s) ? delete!(d, "ref") : (d["ref"] = s)
         elseif haskey(coord, key)
             f, c = coord[key]
@@ -2542,7 +2542,7 @@ end
 
 Turn part `i` by `θ` degrees (right-handed) about `axis` (`:x`, `:y`, `:z`, or a vector,
 normalized) of the frame named `frame` ([`part_frames`](@ref); by default the frame the
-part is placed in), through the part's own origin, as one edit: the angles of its
+part is placed in), through the part origin, as one edit: the angles of its
 rotation (`theta`, `phi`, `rotation`) are re-expressed in the frame it is placed in, its
 origin and that frame stay. A part without placement steps ends where a `Rotate` step
 about the same chamber axis would put it (to round-off in the angles). Parts placed in
@@ -2710,7 +2710,7 @@ end
 """
     set_piece_role!(ts::TargetSetup, name::Symbol, role::Symbol) -> Bool
 
-Give piece `name` of a hohlraum part (its component, `<part>_<piece>`) a role of its own
+Give piece `name` of a hohlraum part (its component, `<part>_<piece>`) a separate role
 (one of [`PIECE_ROLES`](@ref)) in place of its default ([`piece_role`](@ref)): a cap
 `:observed` becomes the observed surface ([`observed_name`](@ref): a flat face, its face
 map and flux statistics) and leaves the wall role, so its cavity's wall temperature
@@ -2989,7 +2989,7 @@ _held_sets(ts::TargetSetup, t::Target = ts.target[]) =
     (; walls = Set(setdiff(_landing(ts, t).capture, foil_components(ts, t))),
      observed = Set(_with_parts(t, observed_components(ts, t))))
 
-# The object kind a part stands for (a VisRad object's own kind).
+# The object kind a part stands for (the kind of a VisRad object).
 function _part_shape(p::PartSpec)
     p.kind === :visrad || return p.kind
     k = _visrad_object(p.file, p.object).kind
@@ -3081,7 +3081,7 @@ it is attached to): a sphere fitted to every point (weighted least squares, alge
 then refitted to the points within 0.3, then four times within `inlier`, × its radius.
 Robust to a minority of the weight off the sphere. A shell modeled with both faces
 fits between them; the radius returned is the outer face's (the weighted 75th
-percentile of the distances within 20 % of the fit).
+percentile of the distances within 20% of the fit).
 """
 function fit_sphere(points::AbstractVector, weights::AbstractVector = ones(length(points));
                     inlier::Real = 0.1)
@@ -3246,7 +3246,7 @@ The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame nam
   holes of 1.55 mm radius, wall albedo 0.8 and conversion 0.9, core `gold()`) and,
   placed in its frame at its center, the sphere `capsule` (radius 0.9 mm, albedo and
   conversion 0.3: the ablator's, meshed as a capsule, `capsule_mesh`) with the observed
-  role. At TCC it meshes as the former hohlraum template did, element for element.
+  role. At TCC it meshes as the former hohlraum template did, at every element.
 - `:foil`: the rectangle `foil` (2 mm square, albedo and conversion 0.8, core
   `foil_material()`, a gold foil; its element size the target's capsule size
   `capsule_h` at the insert), 6 mm from the frame's origin
@@ -3413,7 +3413,7 @@ end
 
 # A diagnostic's view (`Briareus.diagnostic`) on a target with components `names`: the
 # components it refers to (`through`, `center`, `area`) resolved with `_piece_named`, with
-# a cache of its own; the view itself when it refers to none the target lacks.
+# a separate cache; the view itself when it refers to none the target lacks.
 function _view_on(v, names)
     T = typeof(v)
     refs = (:through, :center, :area)

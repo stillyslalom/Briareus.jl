@@ -10,7 +10,7 @@ const A = BriareusGUI
 
     @testset "icons" begin
         @test all(isfile, joinpath.(icons, ("briareus.ico", "briareus.png", "briareus.icns")))
-        # ICNS: big-endian lengths, the file's in its header, each entry's own included
+        # ICNS: big-endian lengths, the file's in its header, each entry length including the entry header
         b = read(joinpath(icons, "briareus.icns"))
         len(i) = Int(ntoh(reinterpret(UInt32, b[i:i+3])[1]))
         @test String(b[1:4]) == "icns" && len(5) == length(b)
@@ -29,7 +29,7 @@ const A = BriareusGUI
 
     @testset "the session briareus() starts without one" begin
         # the keywords briareus() passes on construct a session (a renamed keyword once
-        # broke the launch with no session while every test built its own)
+        # broke the launch with no session while every test built a separate session)
         s = A._launch_session(; starter = :hohlraum, resolution = :coarse, preset = nothing, beams = nothing)
         @test s isa DesignSession && :hohlraum in [p.name for p in s.target.parts[]]
         s = A._launch_session(; starter = :none, resolution = :coarse, preset = :nif_quads, beams = nothing)
@@ -151,7 +151,7 @@ end
 
 # The Help topics (qml/common/help.js) against the QML that shows them: every topic an ⓘ,
 # a section heading, the inspector's title, a menu or the Help window names exists; every
-# topic is shown by one of them, but for those of the Help window's own first page
+# topic is shown by one of them, but for those of the first page of the Help window
 # (Getting around), which its page list reaches; each has a one-line hint for the hover
 # and a text in short paragraphs; and the topics of the survey's pages are there.
 @testset "Help topics" begin

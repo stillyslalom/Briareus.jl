@@ -184,7 +184,7 @@ struct Doc
 end
 key(d::Doc) = (d.mod, d.name, d.sig)
 
-# Every docstring of the documented modules. A module's own docstring is held by
+# Every docstring of the documented modules. The docstring of a module itself is held by
 # `Binding(M, nameof(M))`.
 function docstrings(mods = MODULES)
     out = Doc[]

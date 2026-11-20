@@ -28,8 +28,8 @@ backlighter design: real backlighter dimensions and standoffs are shot-specific.
 The default `material` is [`foil_material`](@ref)`()`, directly irradiated gold (albedo
 0.8, conversion 0.8); `foil_material(:Ti)` and the other mid-Z elements give a suggested
 point inside a suggested range, not a measurement (the table there). The foil's x-ray
-emission set by this conversion is broadband radiosity; the He-α line signal is
-[`kshell_ce`](@ref)'s, fitted to its own data.
+emission set by this conversion is broadband radiosity; the He-α line signal comes
+from [`kshell_ce`](@ref), fitted to separate data.
 """
 function backlighter_foil(los; standoff::Real, width::Real = 2.0, height::Real = width,
                           tilt::Real = 0.0, tilt_toward::Real = 0.0, rotation::Real = 0.0,

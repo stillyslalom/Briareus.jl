@@ -17,7 +17,7 @@
 # a placement sweep of the foil); stages wait for their jobs, so a slower machine gives
 # the same images. Qt's high-DPI scaling is switched off so that the window has its
 # default size (1640 × 1000) in screen pixels on any display scale; on a screen whose free area is
-# smaller than about 1820 × 1110 pixels the window opens at 90 % of that area instead.
+# smaller than about 1820 × 1110 pixels the window opens at 90% of that area instead.
 # Each grab is quantized to a 256-color palette by Pillow through uv (`uv run --python
 # 3.12 --with pillow`), which keeps each PNG near 200 kB; without uv the grabs are copied
 # as they are. Rerun after a change to the window's layout or canvases.
@@ -147,7 +147,7 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 14 && !s.talis.running[] && after(1.5)
         grab(sh, "talis"); next!()
     elseif k == 15 && grabbed("talis")
-        # the beam matrix: illustrative 1ω and 2ω power ratios of 5 % each (as in the
+        # the beam matrix: illustrative 1ω and 2ω power ratios of 5% each (as in the
         # VisRad workspaces seen so far; the NIF User Guide gives no fraction), and the
         # unconverted light of one inner quad drawn, its properties beside the tree's dots
         B.br_beam_color("group")

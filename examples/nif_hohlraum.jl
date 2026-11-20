@@ -13,7 +13,7 @@ target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radi
 display(target)
 
 # 48 quads at 8 TW; cone pointing in hohlraum (r, z) coordinates (mm). Positive r points
-# toward the quad's own port azimuth, so the inner cones' aims across the axis are
+# toward the port azimuth of the quad, so the inner cones' aims across the axis are
 # negative. These aims are an illustrative example, not a facility or shot pointing
 # (research notes, "Example NIF cone pointing: unsourced (2026-10-27)").
 cones = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
@@ -35,7 +35,7 @@ report(evaluate(scenario, x0))
 a0 = mean_flux(evaluate(scenario, x0))
 keepout = (ApertureKeepOut(target), SphereKeepOut(target))
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive = a0, keepout)
-lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60 % of power
+lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60% of power
 result = optimize_pointing(scenario, objective; x0, lower, upper)
 display(result)   # lists any parameter left at a bound
 

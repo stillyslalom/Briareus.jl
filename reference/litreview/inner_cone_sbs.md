@@ -32,7 +32,7 @@ citations, no text or figures reproduced.
   light per quad.
 - **Energies**: 2.8 kJ per quad (23°) and 0.9 kJ per quad (30°); eight quads per cone, so
   ~22 + 7 ≈ 30 kJ of inner SBS on N210808 (**L**, arithmetic). Single-shot error "up to
-  100 %" (lens fraction and calibration); N210808 repeats vary by 30–50 %.
+  100%" (lens fraction and calibration); N210808 repeats vary by 30–50%.
 - **Time history** (digitized, `kemp2026_sbs()`, ±0.03 TW, ±0.02 ns): both cones start
   as the inner power reaches its peak (23° at 4.6 ns with a sharp rise the authors call
   a possible processing artifact; 30° at 4.8 ns). The pre-CBET inner power per quad on
@@ -41,7 +41,7 @@ citations, no text or figures reproduced.
   at 5.75, 0.46 at 6.2, zero by 6.7–7.0 ns. FWHM ~1.4 ns (23°, 4.8–6.15 ns) and ~0.8 ns (30°, 5.4–6.2 ns, above its 0.4 TW shoulder); the
   inner power stays at peak to ~8.8 ns, so inner SBS covers only the first ~2 ns of a
   ~4 ns peak.
-- Peak instantaneous fraction of the pre-CBET quad power: 23° 24 %, 30° 10 % (**L**).
+- Peak instantaneous fraction of the pre-CBET quad power: 23° 24%, 30° 10% (**L**).
 - Axis- vs equator-side beams of a quad: peak in-lens SBS ratio ~10 for both cones on
   HYBRID-E (Fig. 8a: the 30° in-lens total 0.26 TW at 5.75 ns, nearly all axis side).
 - FABS (Q31B, 30°) spectra were not recorded on N210808; N211031 is used instead.
@@ -52,12 +52,12 @@ citations, no text or figures reproduced.
 
 - pF3D on frozen 2D LASNEX (LHT) plasma maps, 4–6 snapshots per shot, post-CBET quad
   power (inline CBET, |δn/n| clamp 3.6 × 10⁻³) as the boundary condition; the post-shot
-  hydro matches drive with wall-opacity multipliers rather than the 85 % laser power of
+  hydro matches drive with wall-opacity multipliers rather than the 85% laser power of
   earlier work (K24o).
 - **Single-species hydro (SSH)** over-predicts: 30° quad 2.42 TW at 6.0 ns against the
   measured 0.90 at 5.75 (Fig. 4); reflectivities R = 0.08 / 0.21 / 0.003 at 5 / 6 / 7 ns
   (K25s). "Seemingly no plausible adjustments to CBET" fix it (K25s); the CBET power
-  differs by < 5 % between SSH and MSH.
+  differs by < 5% between SSH and MSH.
 - **Multispecies hydro (MSH**, 13-moment, Pearson-IV closure): He interpenetrates the Au
   bubble over tens of µm, Landau damping of the ion-acoustic waves rises, SBS falls
   exponentially with the He fraction. 30° quad: R = 0.06 / 0.09 / 10⁻⁶ at 5 / 6 / 7 ns
@@ -119,7 +119,7 @@ citations, no text or figures reproduced.
   lenses* of one 50° quad (Fig. 3, read by eye, ±10 J): HYBRID-E N210808 ~50 J
   (pF3D 40 J); N190218 ~10, N190320 ~55, N200125 ~105, N191110 ~230 (2019–2021 HYBRID-E
   shots; pF3D 140, 180, 145, 300 J); BigFoot/Hybrid-B N170702 ~125, N170601 ~265,
-  N180429 ~175, N180319 ~540, N180128 ~715 J (pF3D 25, 85, 215, 310, 410). Errors ~30 %
+  N180429 ~175, N180319 ~540, N180128 ~715 J (pF3D 25, 85, 215, 310, 410). Errors ~30%
   (simulation sampling) and the measured spread around the cone; model and measurement
   agree to within a factor ~2.
 - **Peak reflectivity** (Fig. 1, R_peak = max over time of P_SBS / P_net, P_net the
@@ -132,17 +132,17 @@ citations, no text or figures reproduced.
   inner SBS has ended. Integrated 6–8 ns: 170 J per quad, 50 J into the lens (×1/3.4).
   pF3D peaks ~0.5 ns earlier (R < 10⁻⁴ at 6 ns, 0.024 at 7 ns, from the Au LEH liner's
   expansion at 7 ns) and gives 40 J into the lens. On a ~9 TW pre-CBET quad (Fig. 4a:
-  the outer cones' 32 quads carry ~300 TW), 0.2 TW is ~2 % at peak (**L**).
+  the outer cones' 32 quads carry ~300 TW), 0.2 TW is ~2% at peak (**L**).
 - **Scale** (**L**): 16 quads at 50° × 170 J ≈ 2.7 kJ of outer SBS on N210808 (unknown at
-  44°; ≤ 5.4 kJ if the same), against ~30 kJ on the inner cones: ~10–20 %, consistent
+  44°; ≤ 5.4 kJ if the same), against ~30 kJ on the inner cones: ~10–20%, consistent
   with AS24's "mostly on the inner cones" for N221204.
 - K26: outer-cone SBS originates deeper in the Au bubble and MSH changes it less.
 - **Use in Briareus** (**L**): the outer history is one quad on one shot, at one of the two
   outer cones, with the noise floor at a quarter of its peak; it is not cone-averaged and
   N221204's is unpublished. `backscatter=history` therefore stays inner-only. Its
-  effect would be small: ~2 % of the 50° power for ~0.7 ns near 7.4 ns raises the
+  effect would be small: ~2% of the 50° power for ~0.7 ns near 7.4 ns raises the
   post-CBET cone fraction by < 1 point there, ≲ 0.003 in flux P2/P0 by the
-  −0.29 %/% sensitivity, after the swing's zero crossing.
+  −0.29%/% sensitivity, after the swing's zero crossing.
 
 ## 6. Bearing on Briareus
 

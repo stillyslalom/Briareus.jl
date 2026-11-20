@@ -18,7 +18,7 @@ source; the path continues diffusely with its weight multiplied by the element's
 (Russian roulette below 1/20), and ends on an aperture (escape), a one-sided surface's
 back, or a miss. A closing lip (`aperture(...; closure)`, a `GapClosure`) is the
 exception among apertures: like a surface, it re-emits diffusely the fraction `albedo`
-of what reaches it (its own ``α(t) = s α_{after}``, from `albedos(target, time)` as `solve`
+of what reaches it (its ``α(t) = s α_{after}``, from `albedos(target, time)` as `solve`
 uses) and lets the rest escape; it has no source. Apertures stay transparent to laser
 rays and lines of sight elsewhere; here the lip plane is the enclosure's boundary.
 `albedo` defaults to the albedos at time 0; pass `albedos(target, time)` (or a
@@ -35,7 +35,7 @@ Geometry is the facets throughout: a `CurvedSurface` is ignored, so compare agai
 target with flat elements (the same meshes without surfaces). `H` is the mean over
 `batches` independent batches of `paths ÷ batches` paths per receiver (`batch`, one
 row per batch, gives statistical errors of any functional of `H`). Batch `b` draws from
-its own `Xoshiro` stream (from `seed` and `b`) and batches run on threads: results do
+a separate `Xoshiro` stream (from `seed` and `b`) and batches run on threads: results do
 not depend on the thread count.
 """
 function montecarlo_incident(t::Target, P::AbstractVector, receivers::AbstractVector{<:Integer};

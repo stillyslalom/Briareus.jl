@@ -129,7 +129,7 @@ end
     @test sum(tw.elem_area[e1]) ≈ w * ht rtol = 1e-14
     @test sum(tw.elem_area[elements(tw, :hole)]) ≈ 1.0 * 0.8 rtol = 1e-14
     @test sum(tw.elem_area[elements(tw, :wall, :window_1, :hole)]) ≈ 2π * R * L rtol = 1e-14
-    # caps share the wall's azimuthal grid: the rims meet vertex for vertex
+    # caps share the wall's azimuthal grid: the rims meet at shared vertices
     rim(m, z) = sort([atan(v[2], v[1]) for v in unique(m.vertices) if abs(v[3] - z) < 1e-12 && abs(hypot(v[1], v[2]) - R) < 1e-12])
     @test rim(tw.components[1].mesh, h) ≈ rim(tw.components[2].mesh, h) atol = 1e-12
     # watertight: rays from inside toward the wall rims and the window's edge lines all
@@ -167,7 +167,7 @@ end
                                                               WallWindow(phi = 210, width = 2.0, height = 2.0,
                                                                          material = ablator())]))
     @test oddm(cpair_closed) < 1e-10
-    # a closed window of the wall's own material is just wall (up to the remeshing)
+    # a closed window of the wall material is just wall (up to the remeshing)
     cw = capsule_modes(hohlraum(; kw..., windows = [WallWindow(phi = 0, width = 2.0, height = 2.0)]))
     @test mode_amplitude(cw, 1) < 1e-3 && abs(cw[1] / c0[1] - 1) < 1e-3
     for (φw, wopen) in ((0.0, true), (0.0, false), (135.0, true))
@@ -438,9 +438,9 @@ end
     S2 = sum(μ -> K(μ) * (3μ^2 - 1) / 2, μs) / sum(K, μs)
     exact(key) = -S2 * (f * α * H / B̄) * b[key] / sqrt(4π)
     # The closed form is first order: it leaves out the capsule's shadow in the wall-to-wall
-    # exchange (each element sends x² = 4 % of its view to the capsule, and the opposed
-    # windows sit in each other's shadow), which moves the m = ±2 part by 3–4 % on meshes
-    # from 30 × 60 to 60 × 120 (m = 0 by 1 %).
+    # exchange (each element sends x² = 4% of its view to the capsule, and the opposed
+    # windows sit in each other's shadow), which moves the m = ±2 part by 3–4% on meshes
+    # from 30 × 60 to 60 × 120 (m = 0 by 1%).
     @test Δ(2, 0) ≈ exact(:m0) rtol = 0.03
     @test Δ(2, 2) ≈ exact(:p2) rtol = 0.05
     @test Δ(2, -2) ≈ exact(:m2) rtol = 0.05

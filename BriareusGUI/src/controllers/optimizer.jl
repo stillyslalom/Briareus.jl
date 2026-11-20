@@ -462,7 +462,7 @@ end
     parameter_rows(res::OptimizeResult) -> Vector{NamedTuple}
 
 Rows `(; name, start, optimized, lower, upper, at_bound)` of an optimization's
-parameters (mm, or TW per beam for power); `at_bound` flags a parameter within 0.1 %
+parameters (mm, or TW per beam for power); `at_bound` flags a parameter within 0.1%
 of the bound range from a bound.
 """
 function parameter_rows(res::OptimizeResult)

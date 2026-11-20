@@ -3,8 +3,8 @@
 A synthetic diagnostic is described by a definition file: one TOML file per instrument,
 holding its line of sight, its hardware and its recording, each value with its source.
 The public definitions ship with the package (`data/diagnostics`); a user group keeps
-its own, including details that are not public, in directories on a search path, and
-modifies a public definition by extending it rather than copying it.
+separate definitions, including details that are not public, in directories on a search
+path, and modifies a public definition by extending it rather than copying it.
 [`diagnostic`](@ref) builds the instrument of a definition (for the soft x-ray power
 kind, a [`DanteView`](@ref) for [`dante`](@ref)); [`check_diagnostics`](@ref) reports
 every problem in the files on the search path, by file and key.
@@ -33,7 +33,7 @@ user files do not change them; `diagnostic("nif_dante1")` takes the search path.
 Every file has a header: `schema` (the format version, [`DIAGNOSTIC_SCHEMA`](@ref)),
 `id`, and either `kind` or `extends`; optionally `name`, `facility`, `instrument`,
 `public` (`false` for non-public detail), `valid_from` and `valid_to` (dates), `shots`,
-and the provenance keys `source`, `confidence` (H, M or L, as in the research notes) and
+and the source keys `source`, `confidence` (H, M or L, as in the research notes) and
 `note`, which every table may also carry. `instrument` names the instrument a
 definition is one configuration of: the Dante 1 channel sets of several years and shots
 all carry `instrument = "NIF Dante 1"`, and a file that extends one of them inherits it
@@ -50,7 +50,7 @@ The kind `xray_power` (Dante, Sentinel) takes:
 | `[line_of_sight]` (required) | `port`, a NIF diagnostic port by name (`"P143-274"`, with `facility = "NIF"`; the angles of [`NIF_DIAGNOSTIC_PORTS`](@ref), the User Guide's Table 5-1), or `theta_deg` and `phi_deg`: the instrument's direction from TCC |
 | `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it the view looks through `through` alone), `center_part` or `center_mm` (the field's center, a part's centroid or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area), `area_part` (Tr over that part's visible projected area), `area_open = true` (Tr over the hole's open area at each time, from the model's entrance-hole closure) or `area_history_csv` (a measured area history: time in ns, area in mm²) |
 | `[recording]` | `mode = "history"` |
-| `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the response's peak); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these; `field_of_view_mm` (the channel's own field, in place of the view's: Dante 1's multilayer channel, 12 mm) |
+| `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the response's peak); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these; `field_of_view_mm` (a per-channel field, in place of the view field: Dante 1's multilayer channel, 12 mm) |
 | top level | `remove_channels` (numbers dropped from the definition extended) |
 
 The kind `xray_imager` (the SXI, G-LEH and gated imagers) builds an

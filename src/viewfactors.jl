@@ -63,12 +63,12 @@ A pair that sees each other only partly, past the rim of an entrance-hole bore o
 or around the capsule, is all or nothing by its centroid ray. `visibility = :sampled`
 (the default for targets with rims: `cad_target`, `visrad_target`) estimates the visible fraction instead: up to four probe rays per element (from points
 near its extremes to the other's centroid) test whether the pair straddles an occluder;
-if they all agree with the centroid ray, the factor is the `:centroid` one bit for bit,
+if they all agree with the centroid ray, the factor is bitwise the `:centroid` one,
 and otherwise rays between the `visibility_grid²` sample points of each element (its
 area lumped into a g × g grid of its tangent plane) give the kernel-weighted visible
 fraction, which scales the unobstructed factor (reciprocity is kept). On an element
 folded across more than two facets (remeshed CAD) the samples are put on its facets, and
-its own facets do not occlude them. On a hohlraum with
+its facets do not occlude them. On a hohlraum with
 0.1 mm LEH bores and a 20 µm waist gap at 0.5 mm, it brings the largest row-sum error
 before balancing from 1.0% to 0.19% on the walls and from 5.9% to 0.7% on the LEH
 apertures, for 2–4× the time; features narrower than a sample cell (the gap's slot) are
@@ -138,7 +138,7 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
     # The centroid facing test is relaxed by that spread (`slack`, a sine), so a pair the
     # curved patches exchange across is not culled; the point kernels then apply the
     # exact per-point facing. A visibility ray admitted only by the slack (heading behind
-    # its own facet's plane) starts that much farther off the facet, so it clears the
+    # the plane of its facet) starts that much farther off the facet, so it clears the
     # facet; every other ray starts ε off it, as for flat elements (lifting all origins
     # would bias them toward the middle of a cavity, and into the capsule's shadow).
     slack = zeros(N)
@@ -203,9 +203,9 @@ function _vf_visible(ctx, i, j)
     skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
     blocked = any_hit(bvh, oi, oj - oi, 1 - 1e-9, skip)
     vis === nothing && return blocked ? 0.0 : 1.0, d, r2
-    # a folded element's own facets do not occlude its samples: the element model
+    # the facets of a folded element do not occlude its samples: the element model
     # radiates from its mean plane, and on a convex part each sample's rays toward
-    # the horizon of its own facet would be blocked by that facet or its fold
+    # the horizon of its facet would be blocked by that facet or its fold
     # neighbors (all of the reduced capsule rows on a remeshed CAD sphere)
     own(k, e) = multi[e] && (t.tri_front[k] == e || t.tri_back[k] == e)
     skipv = multi[i] || multi[j] ? (k -> skip(k) || own(k, i) || own(k, j)) : skip
@@ -219,7 +219,7 @@ end
 # cosines and the ends lifted off the facets (by ε, and by the facing slack used). One
 # compiled instance for every caller (`@noinline`, concrete arguments): StaticArrays'
 # `dot` is an `@simd` reduction, rounded as its caller is compiled, and the H-matrix's
-# certificates (`_hvis_bundle`) must start from the same ends, bit for bit.
+# certificates (`_hvis_bundle`) must start from bitwise identical ends.
 @noinline function _vf_ends(C::Vector{Vec3}, Nrm::Vector{Vec3}, size::Vector{Float64}, slack::Vector{Float64},
                             ε::Float64, i::Int, j::Int)
     d = C[j] - C[i]
@@ -249,7 +249,7 @@ end
 
 # The quadrature tier of the pair i, j at centroid distance² r2 (`_vf_kernel`): within
 # `near` element sizes (the larger of the two), within `mid`, or beyond. G jumps where a
-# pair crosses a tier boundary (by the rules' difference: 0.5 % on a capsule's polar
+# pair crosses a tier boundary (by the rules' difference: 0.5% on a capsule's polar
 # sliver at the far boundary).
 function _vf_tier(ctx, i, j, r2)
     s2 = max(ctx.size[i], ctx.size[j])^2
@@ -297,7 +297,7 @@ end
 # tangent plane (area-weighted mean point and area per cell), and up to four probes, the
 # samples farthest along ±e₁ and ±e₂. Probe rays go from each probe of one element to
 # the other's centroid. A pair whose probes all agree with its centroid ray keeps the
-# centroid's verdict, so the factor is the `:centroid` one bit for bit; otherwise rays
+# centroid's verdict, so the factor is bitwise the `:centroid` one; otherwise rays
 # between every pair of samples give the visible fraction, weighted by the point kernel
 # cosθᵢ cosθⱼ / r² (by area / r² if no sample pair faces), and the factor of the
 # unobstructed pair is scaled by it. The fraction is computed once per unordered pair
@@ -336,11 +336,11 @@ function _visibility_samples(t::Target, e, g)
     weights = vec(W)[keep]
     # A folded element (remeshed CAD: facets within a few degrees of one plane) has its
     # cell means off its facets, behind them on a convex part (a capsule), where their
-    # rays start inside the solid and are blocked by the element's own facets. Each is
+    # rays start inside the solid and are blocked by the facets of the element. Each is
     # moved along the normal onto the facet that line meets, as `Target` moves the
     # centroid (`_onto_patch`), or, if it meets none (a cell mean outside a non-convex
     # outline), to the nearest sub-triangle point of its cell. Planar elements, and those
-    # of one or two facets (every primitive), keep their samples bit for bit.
+    # of one or two facets (every primitive), keep bitwise identical samples.
     tris = t.elem_tris[e]
     if length(tris) > 2
         h = maximum(norm(p - C) for p in pts)
@@ -412,7 +412,7 @@ end
 
 # The kernel and area weights of the sample pair p, q (weights wp, wq), unless they
 # coincide. One compiled instance for every `seen` (`@noinline`, concrete arguments: see
-# `_vf_ends`), so `_visible_fraction` is bit for bit whichever decides the segments.
+# `_vf_ends`), so `_visible_fraction` is bitwise identical whichever decides the segments.
 @noinline function _vis_weight(p::Vec3, q::Vec3, wp::Float64, wq::Float64, ni::Vec3, nj::Vec3)
     d = q - p
     r2 = dot(d, d)
@@ -999,12 +999,12 @@ end
 # ---------------------------------------------- vectorized sector contour (H-matrix)
 #
 # A polar sector's boundary loop has 2m + 2 = 34 edges, and its contour (one `atan` per
-# edge, which does not vectorize) took ~45 % of an H-matrix assembly of a hohlraum (wall
+# edge, which does not vectorize) took ~45% of an H-matrix assembly of a hohlraum (wall
 # and capsule points onto the end caps' sectors). The H-matrix assembly gives sector
 # receivers their loop as component arrays and takes the contour in one `@simd` loop
 # with a branch-free `atan`: 2.4× faster per contour. The terms are summed in another
-# order and the `atan` is within 2 ulp of `Base.atan`, so its factors agree with
-# `_contour_vf`'s to round-off, not bit for bit; `view_factors` itself keeps `_Receiver`.
+# order and the `atan` is within 2 ulp of `Base.atan`, so its factors differ from
+# those of `_contour_vf` by rounding error only; `view_factors` itself keeps `_Receiver`.
 
 # A sector receiver with its loop as x, y, z arrays, closed (the first vertex repeated).
 struct _SoAReceiver
@@ -1106,7 +1106,7 @@ end
 #
 # The cell rule of a near pair refines toward the receiver down to maxdepth, so a pair
 # sharing an edge costs the edge's length over the finest cell (10³–10⁴ point-to-polygon
-# factors: 60–90 % of the view-factor time of boxes, remeshed CAD and sliver tubes), and
+# factors: 60–90% of the view-factor time of boxes, remeshed CAD and sliver tubes), and
 # its one-point cells away from the edge still leave ~5e-4. Two flat surfaces that see
 # each other wholly from in front exchange exactly
 #
@@ -1115,15 +1115,15 @@ end
 # over the directed edges a of i's outline and b of j's (Stokes twice: the contour form
 # of the point-to-polygon factor, then of its integral over i; Sparrow 1963, Mitalas &
 # Stephenson 1966), which holds for a folded element as well as a planar one (interior
-# edges cancel) as long as no facet hides another: every facet lies in front of every
-# other facet's plane, of its own element and of the partner. The inner integral is
+# edges cancel) as long as no facet hides another: every facet lies in front of the
+# plane of every other facet, of its element and of the partner. The inner integral is
 # closed form and the outer one adaptive Gauss–Kronrod, with the s ln s of two edges
 # meeting at a point subtracted, edges on one line in closed form, an edge split where
 # the other ends on it, and product Gauss–Legendre for edges far apart for their lengths.
 # The constant part of ln r integrates to zero over closed outlines, so coordinates are
 # scaled to the pair's size (no large logarithms to cancel). Exact for the facets, where
 # the cell rule emits from the element's mean plane: on remeshed CAD walls, neighbors
-# folded by a few degrees exchanged 10–70 % off (research notes, "Near flat pairs by the
+# folded by a few degrees exchanged 10–70% off (research notes, "Near flat pairs by the
 # double contour").
 
 struct _Outline
@@ -1589,7 +1589,7 @@ end
 # walls are ≤ 2.5, geodesic capsules 1.5, latitude-longitude polar caps 5.2) is instead
 # cut across its length, which halves h as the midpoint split does, until its pieces are
 # no longer slivers. Triangles under the bound split as before into children similar to
-# them, so their factors are unchanged bit for bit.
+# them, so their factors are bitwise unchanged.
 const _SLIVER = 4.5
 
 # `f` summed over the pieces of the sliver (a, b, c): a needle (one edge under half the
@@ -1645,7 +1645,7 @@ _distance_to(p, r::_Receiver) = minimum(_point_triangle_distance(p, tri...) for 
 # cell); its loop in plane coordinates gives the distance in one pass (inside the
 # polygon: the height over its plane; else the nearest edge), which agrees with the
 # triangles' to round-off. Only a verdict within 1e-9 (relative) of d is left to the
-# triangles, so the refinement, and every factor, is unchanged bit for bit.
+# triangles, so the refinement, and every factor, is bitwise unchanged.
 function _closer_than(p, r::_Receiver, d)
     isempty(r.loop) && return _distance_to(p, r) < d
     x = p - r.o

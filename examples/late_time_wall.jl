@@ -16,8 +16,8 @@
 #   julia --project=. examples/late_time_wall.jl hohlraum [shot]    # ~15 min per shot
 #
 # `release`: the release factor (`WallLossAlbedo`'s `release`) the ablating wall needs
-# under prescribed drive drops, the closure given the ablating wall's own constant-T
-# scaling (as `wall_reemission.jl` does for the static wall).
+# under prescribed drive drops, the closure given the constant-T scaling of the
+# ablating wall (as `wall_reemission.jl` does for the static wall).
 # `hohlraum`: a 0-D hohlraum on the shot's measured pulse (`n191118`, `n210601`: Zylstra
 # 2022 Fig. 2; `n221204`: Pak 2024 Fig. 1), ηP = A_w F_wall(T) + A_open σT⁴ solved for T
 # every step, with the static wall, the ablating wall and `drive_history`'s closure
@@ -206,7 +206,7 @@ if mode == "release"
         i8 = findfirst(t -> t >= 8 - 1e-9, ts)
         ref = ∫(ts[i8:end], Fr[i8:end])
         E0, E1, Ed = (∫(grid[k8:end], closure_flux(f, TD)[k8:end]) for f in (0.0, 1.0, WallLossAlbedo().release))
-        @printf("  %2.0f %% over %.1f ns: stored at 8 ns %.4f; reference %+.4f; closure, release 0 %+.4f, %.2f %+.4f; release the reference needs %.3f\n",
+        @printf("  %2.0f%% over %.1f ns: stored at 8 ns %.4f; reference %+.4f; closure, release 0 %+.4f, %.2f %+.4f; release the reference needs %.3f\n",
                 100drop, fall, Es[i8], ref, E0, WallLossAlbedo().release, Ed, (E0 - ref) / (E0 - E1))
     end
 elseif mode == "rosen"

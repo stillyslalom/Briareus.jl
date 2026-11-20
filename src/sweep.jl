@@ -82,7 +82,7 @@ Each check runs when its keyword is given:
 
 `optimize`, a named tuple, re-optimizes the pointing at each step before the checks:
 `objective` (required), `scenario_kw` (keywords of [`Scenario`](@ref)), `bounds_kw`
-(keywords of `bounds`, a box about the step's own initial parameters), `warm` (default
+(keywords of `bounds`, a box about the initial parameters of the step), `warm` (default
 `true`: start from the previous step's optimum when it has the same number of
 parameters) and any keywords of [`optimize_pointing`](@ref). With a
 [`FramePointing`](@ref) in a frame that moves with the part, the parameters keep their
@@ -182,7 +182,7 @@ Base.@nospecializeinfer function _sweep(@nospecialize(design), values::Vector{Fl
         if opt !== nothing
             p = get(d, :pointing, nothing)
             p === nothing && throw(ArgumentError("re-optimizing needs the design's `pointing`"))
-            # the step's own keywords (its cavities' balancing, say) after the sweep's
+            # the keywords of the step (its cavities' balancing, say) after the sweep's
             s = Scenario(t, p; merge(get(opt, :scenario_kw, (;)), get(d, :scenario_kw, (;)))...)
             xi = initial_parameters(p)
             lo, hi = bounds(p, xi; get(opt, :bounds_kw, (;))...)

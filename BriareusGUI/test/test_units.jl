@@ -82,7 +82,7 @@ end
     qi = findall(b -> b.quad == q, bt.beams[])
     @test edit_beam_set!(bt, qi, :r, "-0.8") && spread(q) < 1e-12 && beam_set_values(bt, qi).r ≈ -0.8
     @test beam_set_values(bt, qi[1:1]).r ≈ -0.8 && beam_set_values(bt, qi[1:1]).phi ≈ 0.3
-    # pointing one beam apart is still possible, from its own row
+    # pointing one beam apart is still possible, from a separate row
     @test edit_beam_set!(bt, qi[1:1], :phi, "0.5") && isapprox(spread(q), 0.2; atol = 1e-9)
     # the 192-beam preset aims each quad's beams where the 48 quads aim
     load_preset!(s, :nif_beams)

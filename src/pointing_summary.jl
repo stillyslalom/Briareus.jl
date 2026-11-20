@@ -26,7 +26,7 @@ A pointing (e.g. the beams of a re-pointing result) against reference beams, fro
   `departure_nonzero` (`m ≠ 0`), whose squares add to `departure`'s; `NaN` and empty
   without one;
 - with `gates`: `gate`, the gate per degree, and `gate_departure`, the departure it
-  bounds (a [`mode_gate`](@ref)'s own value, from its reference's shape, shifted if so;
+  bounds (the value of a [`mode_gate`](@ref), from the shape of its reference, shifted if so;
   otherwise `departure`); with `floor`: `floor`, the pointing floor per degree, against
   which `departure` is shown. Empty without them;
 - with `moved` thresholds (mm): `moved_thresholds`, and `moved`, the number of groups
@@ -169,8 +169,8 @@ function _moved_groups(beams, shifts, moved, by)
     return th, [count(>(t), values(most)) for t in th], length(most)
 end
 
-# The summary's gates per degree and the departure they bound: a mode gate's own value
-# and limits, or gates (a vector, a `mode_uncertainty` floor) against `dep`.
+# The summary's gates per degree and the departure they bound: the value and limits of
+# a mode gate, or gates (a vector, a `mode_uncertainty` floor) against `dep`.
 _summary_gate(::Nothing, ev, dep, lmax) = (Float64[], Float64[])
 function _summary_gate(c::Constraint, ev::Evaluation, dep, lmax)
     v = _gate_value(c.f, ev)
@@ -270,7 +270,7 @@ function Base.show(io::IO, p::PointingSummary)
     isnan(p.drive_ratio) ||
         print(io, @sprintf("; drive %.5f of the reference, departure (l = 1–%d) ", p.drive_ratio,
                            length(p.departure)),
-              join((@sprintf("%.4f", 100d) for d in p.departure), " "), " %")
+              join((@sprintf("%.4f%%", 100d) for d in p.departure), " "))
     isempty(p.gate) || print(io, "; over the gates ", join((@sprintf("%.2f", d / g) for (d, g) in zip(p.gate_departure, p.gate)), " "))
     isempty(p.floor) || print(io, "; over the floor ", join((@sprintf("%.2f", d / f) for (d, f) in zip(p.departure, p.floor)), " "))
     isempty(p.moved_thresholds) ||

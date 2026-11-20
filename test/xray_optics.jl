@@ -1,5 +1,5 @@
 # Soft x-ray optics against closed forms: Henke photoabsorption against NIST's tabulated
-# μ/ρ at 1 keV (scattering < 0.1 % there), Beer–Lambert transmission from μ, Fresnel
+# μ/ρ at 1 keV (scattering < 0.1% there), Beer–Lambert transmission from μ, Fresnel
 # reflectivity at normal incidence and far above the critical angle, the Névot–Croce factor
 # between its limits, and tabulated curves exact on linear data. (dante_response.jl checks
 # Henke against NIST at 3 keV and the mirror cutoffs.)

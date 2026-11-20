@@ -21,7 +21,7 @@ const _ATOMIC_WEIGHT = Dict(:H => 1.008, :Be => 9.0122, :C => 12.011, :N => 14.0
                             :F => 18.998, :Ca => 40.078, :Sc => 44.956, :Mn => 54.938, :Ge => 72.630,
                             :Y => 88.906, :Mo => 95.95)
 # compounds: atoms per formula unit and the density (g/cm³) used for filters; the
-# densities marked *assumed* are typical values, not the Dante parts' own.
+# densities marked *assumed* are typical values, not those of the Dante parts.
 const _COMPOUNDS = Dict{Symbol,Tuple{Vector{Pair{Symbol,Int}},Float64}}(
     :CH => ([:C => 1, :H => 1], 1.05),                          # polystyrene, assumed
     :polystyrene => ([:C => 1, :H => 1], 1.05),
@@ -83,7 +83,7 @@ const _N_A = 6.02214076e23
 Photoabsorption mass attenuation coefficient of an element (`:Al`, `:Cr`, …) or compound
 (`:CH`, `:lexan`, `:parylene`, `:saran`, `:polyimide`, `:mylar`, `:SiO2`, …) at photon
 energy `E` (**eV**, 10–30 000) from Henke's f₂: μ/ρ = 2 ``r_e`` λ ``N_A`` Σ nᵢ f₂ᵢ / Σ nᵢ Aᵢ
-(CXRO tables, `data/henke/`; scattering is not included, < 1 % of μ below ~10 keV for
+(CXRO tables, `data/henke/`; scattering is not included, < 1% of μ below ~10 keV for
 the filter materials used here). Absorption edges are tabulated as point pairs 0.2 eV
 apart, so log–log interpolation keeps them sharp.
 """
@@ -145,9 +145,9 @@ interpolated log-log (`henke_mass_attenuation`), but a transmission tabulated fr
 and read back log-log (or as a power law in the attenuation) is not more accurate where
 an absorption edge falls between two points, which dominates the error of a channel's
 response: on the filters of 17 of the 18 Dante 1 channels tabulated at 167 points per
-decade, the worst Planck-weighted response error is 4 % read linearly and 9 % read
+decade, the worst Planck-weighted response error is 4% read linearly and 9% read
 log-log; log-log is far better only on smooth, steep curves (channel 16's 250 µm Al
-filter: 44 % against 0.3 %). Tabulate a curve at the edges' own energies (research notes, "Dante channel
+filter: 44% against 0.3%). Tabulate a curve at the edge energies (research notes, "Dante channel
 responses and the unfold", interpolation of tabulated curves).
 """
 struct TabulatedCurve

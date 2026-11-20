@@ -2,7 +2,7 @@
 # inner cones' power to the outer cones' footprint as the Au bubble grows into their path.
 #
 # Izumi et al., Phys. Plasmas 28, 022706 (2021), Eqs. 3 and 6, with the clipping taken
-# from Briareus's own beams instead of an annulus. See `reference/research-notes.md`,
+# from the Briareus beams instead of an annulus. See `reference/research-notes.md`,
 # "Inner-beam bubble absorption".
 
 # Calibration (research notes, "Hohlraum dynamics calibrated to published data
@@ -31,7 +31,7 @@ tip has moved
 in from the initial wall `radius` R (mm, ns; E = `picket_ratio`, the outer cones' picket
 fluence over that of the calibration platform, Izumi 2021's HDC basecamp, dimensionless;
 `fill` the gas fill in mg/cc) while it is ballistic. E is set by hand by default;
-[`picket_ratio`](@ref) computes it from a pointing's own picket fluence on the wall
+[`picket_ratio`](@ref) computes it from the picket fluence of a pointing on the wall
 ([`picket_fluence`](@ref)), for `remake(m; picket_ratio)`, and
 [`PicketLinkedBubble`](@ref) does so for the beams of every evaluation (both opt-in). It stagnates smoothly at the depth `stagnation` ``x_{max}``
 ([`bubble_depth`](@ref)): ballistic up to ``x_{max} - w`` (w = `stagnation_width`), then
@@ -108,12 +108,12 @@ the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
   (``x_{bub}``/1 mm)^0.5.
 - `opacity` ``τ_b`` 0.111 is *fitted* to the inner-power fraction absorbed in the bubble
   in Izumi's 2D HYDRA simulation of the 0.3 mg/cc basecamp (Fig. 10a: 0.02, 0.23, 0.55 at
-  4, 5, 6 ns), with this model's own clipping of NIF beams pointed for a 5.75 mm hohlraum
+  4, 5, 6 ns), with the clipping this model computes for NIF beams pointed for a 5.75 mm hohlraum
   and the bubble plane at Izumi's z = ±3 mm (`footprint_z = 3.0`): absorbed 0.03, 0.20,
   0.36, 0.56 at 4, 5, 5.5, 6 ns, χ² 1.1 at ±0.03. Statistical range 0.100–0.124; the
   plane (2.8–3.2 mm) and the launch move ``τ_b`` over 0.085–0.158 but leave the absorbed
   fraction within 0.01, which is the calibrated quantity. ``T_b`` at 5.5 ns is then 0.36 at
-  0.3 mg/cc and 0.58 at 0.15 (Izumi's own model: 0.29 and 0.54, with an annulus for f).
+  0.3 mg/cc and 0.58 at 0.15 (Izumi's model: 0.29 and 0.54, with an annulus for f).
 - `stagnation` 0.80 R, `stagnation_width` 0.08 R (*engineering*): the tip is exactly
   ballistic to 0.72 R (2.07 mm in a 2.88 mm hohlraum), past the measured depths at
   0.3 mg/cc (2.07 mm at 6.2 ns) and near those at 0.15 (up to 2.28 mm, 0.79 R). Izumi
@@ -202,7 +202,7 @@ end
 
 The model with new calibration parameters (e.g. ForwardDiff duals in a fit), or a new
 picket fluence ratio E (`picket_ratio`, e.g. from [`picket_ratio`](@ref) for a
-re-pointed design). A new E carries the model's own picket dependence into the ridge
+re-pointed design). A new E carries the picket dependence of the model into the ridge
 stop as the constructor does, ``t_c`` − `turn_on` ∝ E^-0.16: `collision` defaults to
 `turn_on + (m.collision − turn_on)·(E/m.picket_ratio)^-0.16` (the stored value
 when E is unchanged, whether the constructor derived it or it was given; `Inf` stays
@@ -218,8 +218,8 @@ function remake(m::BubbleAbsorption; speed = m.speed, opacity = m.opacity,
                             m.wall, m.footprint_z, m.edge, m.nr, m.nangle, m.ncone)
 end
 
-# The collision time at picket ratio E, scaled from the model's own (t_c − turn_on ∝ E^-0.16);
-# the stored value itself when E is the model's (bit for bit) or the ridge stop is off.
+# The collision time at picket ratio E, scaled from the stored one (t_c − turn_on ∝ E^-0.16);
+# exactly the stored value (bitwise) when E is the stored ratio or the ridge stop is off.
 function _rescaled_collision(m::BubbleAbsorption, E)
     E > 0 || throw(ArgumentError("picket_ratio must be positive"))
     (E === m.picket_ratio || isinf(m.collision)) && return m.collision + zero(E)
@@ -238,7 +238,7 @@ end
 
 Au bubble tip displacement from the initial wall against time on the HDC SymCap series of
 Izumi et al., PoP 28, 022706 (2021), Fig. 8 (5.75 mm Au hohlraum, outer turn-on 0.3 ns),
-extracted from the figure's vector graphics (`data/izumi2021_fig8.csv`, provenance in
+extracted from the figure's vector graphics (`data/izumi2021_fig8.csv`, sources in
 its header). Columns `shot`, `source` (`"data"`: measured, Fig. 8a, error bars ±40 µm;
 `"hydra"`: 2D HYDRA, Fig. 8b), `energy` (outer picket fluence over the basecamp's),
 `fill` (mg/cc), `capsule` (radius over the basecamp's), `t` (ns), `x_bub` (mm) and

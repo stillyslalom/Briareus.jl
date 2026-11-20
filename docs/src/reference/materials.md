@@ -4,7 +4,7 @@ A `Material` holds the two surface properties the radiation model uses: the x-ra
 (re-emitted over incident flux, a number or an albedo model) and the laser → x-ray
 conversion of the absorbed laser power (a number or a [`Conversion`](@ref)). The
 constructors [`gold`](@ref), [`uranium`](@ref), [`nif_gold`](@ref),
-[`nif_uranium`](@ref), [`ablator`](@ref) and [`BLACK`](@ref) build the package's own
+[`nif_uranium`](@ref), [`ablator`](@ref) and [`BLACK`](@ref) build the package
 defaults.
 
 [`material_library`](@ref) lists named material defaults whose every quantity has a
@@ -21,7 +21,7 @@ t = hohlraum(; wall = d.material)
 ```
 
 The entries named after a constructor build exactly the material that constructor builds,
-field for field, so a model built from the library gives the same results. The foil
+identical in every field, so a model built from the library gives the same results. The foil
 entries are the materials of [`foil_material`](@ref), the default of [`foil`](@ref) and
 [`backlighter_foil`](@ref): gold from published disk and sphere data, the mid-Z
 backlighter elements with the basis `:suggested` (a suggested range, not a

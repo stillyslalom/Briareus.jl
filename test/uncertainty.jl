@@ -71,7 +71,7 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         @test robust(ev) - nominal(ev) ≈ extra rtol = 1e-9
     end
     # correlated errors. One beam per group: a shared transverse displacement is the
-    # beam's own pointing error
+    # pointing error of that beam
     ug = mode_uncertainty(s, quads; pointing = 0.0, group_pointing = 0.02, groups = :name, lmax)
     up = mode_uncertainty(s, quads; pointing = 0.02, lmax)
     @test ug.covariance ≈ up.covariance rtol = 1e-9
@@ -168,7 +168,7 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
     @test_throws ArgumentError infer_errors(s, quads, ((1, 2) => 0.1,); sigma = 1e-3)
     @test_throws ArgumentError infer_errors(s, quads, (2 => [0.1],); sigma = 1e-3)
 
-    # and the Legendre one, with the moments' own sensitivities
+    # and the Legendre one, with the sensitivities of the moments
     sym = symmetry_objective(modes = (2 => 1.0, 4 => 1.0), odd = 0.0)
     symr = symmetry_objective(modes = (2 => 1.0, 4 => 1.0), odd = 0.0, uncertainty = errs)
     ev = evaluate(s, quads)

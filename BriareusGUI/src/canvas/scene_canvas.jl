@@ -818,7 +818,7 @@ end
 const WINDOW_COLORS = (closed = RGBAf(0.08, 0.08, 0.08, 1), open = RGBAf(0.9, 0.3, 0.1, 1))
 
 # Outline each diagnostic window of the hohlraum parts on their walls, just inside and
-# just outside them (an open window is a hole; a closed one is a patch colored as its own
+# just outside them (an open window is a hole; a closed one is a patch colored as a separate
 # component): arcs along φ at its z edges and axial lines at its φ edges, in the part's
 # frame.
 function _draw_windows!(c::SceneCanvas, sess::DesignSession)

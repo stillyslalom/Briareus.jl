@@ -1,6 +1,6 @@
 # Small helpers shared by the controllers: error messages, text-field parsing,
-# number display, and the background-job runner. (Long jobs cancel through the core's
-# own callbacks: `optimize_pointing` and `clearance` stop when theirs returns `true`.)
+# number display, and the background-job runner. (Long jobs cancel through the core
+# callbacks: `optimize_pointing` and `clearance` stop when theirs returns `true`.)
 
 # First line of an exception's message, for status lines.
 _errmsg(err) = first(split(sprint(showerror, err), '\n'))

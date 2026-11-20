@@ -6,7 +6,7 @@ using Briareus, LinearAlgebra, Test
 
 @testset "NIF quads and their beams" begin
     byname(bs) = sort(bs; by = b -> b.name)
-    # the beams of the quads are the facility beams, bit for bit
+    # the beams of the quads are bitwise the facility beams
     @test byname(nif_beams(nif_quads(power = 8.0))) == byname(nif_beams(power = 2.0))
 
     # a quad model's aim, defocus, power, detuning and group reach its four beams
@@ -55,7 +55,7 @@ using Briareus, LinearAlgebra, Test
     @test maximum(norm(b.aim - only(q for q in meanq if q.quad == b.quad).aim) for b in outer) ≈ 0.5 rtol = 1e-12
 
     # a per-beam pointing table on a quad model: the SST reader with the quads' beams as
-    # template keeps each beam's quarter power and detuning and takes its own aim
+    # template keeps each beam's quarter power and detuning and takes a separate aim
     path = tempname() * ".csv"
     write_visrad_sst(path, split)
     shot = read_visrad_sst(path; template = nif_beams(quads))

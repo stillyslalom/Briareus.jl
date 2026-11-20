@@ -22,8 +22,8 @@ ColumnLayout {
             // the name in the box, the accuracy and time in its list
             displayText: ["Coarse", "Standard", "Fine", "Custom element sizes"][currentIndex] ?? ""
             textRole: "text"; valueRole: "value"
-            model: [{ text: "Coarse · ≈0.5 % in P2, P4 · < 1 s", value: "coarse" },
-                    { text: "Standard · ≈0.1 % · seconds", value: "standard" },
+            model: [{ text: "Coarse · ≈0.5% in P2, P4 · < 1 s", value: "coarse" },
+                    { text: "Standard · ≈0.1% · seconds", value: "standard" },
                     { text: "Fine · converged · tens of s", value: "fine" },
                     { text: "Custom element sizes", value: "custom" }]
             currentIndex: Math.max(0, ["coarse", "standard", "fine", "custom"].indexOf(app.targetResolution))
@@ -34,7 +34,7 @@ ColumnLayout {
         label: "Element size"
         value: app.mesh_h
         unit: "mm (walls, caps, parts)"
-        tip: "Largest element side, unless a part sets its own"
+        tip: "Largest element side, unless a part sets another"
         onEdited: (text) => Julia.br_edit_mesh("h", text)
     }
     PropRow {

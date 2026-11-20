@@ -17,7 +17,7 @@
 #   objectives ([`VelocityPenalty`](@ref)).
 #
 # Each model is a published fit for particular NIF platforms. The sensitivities are
-# engineering defaults, to be replaced with a design's own numbers. Sources and
+# engineering defaults, to be replaced with design-specific numbers. Sources and
 # confidence are in `reference/research-notes.md` ("Implosion metrics").
 
 using Briareus
@@ -48,10 +48,10 @@ scenario = Scenario(target, quads; observe = :capsule, viewfactor_kw = (; closed
 # A dipole drive ``1 + \varepsilon\cos\gamma`` pushes the shell harder on its bright
 # side, so the hot spot moves away from it (Casey et al., PRL 126, 025002, 2021). The
 # published sensitivity is about 100 km/s per percent of ``\varepsilon`` over the rise
-# and peak. Young et al. (Phys. Plasmas 27, 082702, 2020) found 0.44 % of
+# and peak. Young et al. (Phys. Plasmas 27, 082702, 2020) found 0.44% of
 # rise-and-peak mode 1 on N170601. They predicted 44.7 km/s from view factors and
 # their Green's function, while 3D HYDRA gave 37.6 km/s. Kritcher et al. (2024) put
-# about 0.7 % on N230729, for 70–75 km/s without burn. `hotspot_velocity` uses
+# about 0.7% on N230729, for 70–75 km/s without burn. `hotspot_velocity` uses
 # [`HOTSPOT_VELOCITY_PER_PERCENT`](@ref) = 100 km/s per % by default. Its input is
 # [`mode1_vector`](@ref), ``\sqrt3\,(c_{11}, c_{1,-1}, c_{10})/c_{00}``, whose norm is
 # `mode_amplitude(c, 1)` (the ``\varepsilon`` of the papers). It is tested here on a
@@ -70,8 +70,8 @@ for (case, ε, published_v) in (("Young N170601", 0.0044, "37.6 (3D HYDRA), 44.7
 end
 
 # The first two land within the published ranges. Spears et al. (Phys. Plasmas 21,
-# 042702, 2014) applied 2 % in 2D and got 120 km/s. The linear rule gives 200 km/s
-# there, beyond its range: Young found the response linear only below about 0.75 %.
+# 042702, 2014) applied 2% in 2D and got 120 km/s. The linear rule gives 200 km/s
+# there, beyond its range: Young found the response linear only below about 0.75%.
 # Treat velocities above ~80 km/s from this rule as upper bounds.
 
 # ## A dropped quad and a displaced target
@@ -89,8 +89,8 @@ for g in (:inner23, :inner30, :outer44, :outer50)
 end
 
 # Here the inner quads give 1.3–1.6 times the outer quads' velocity, not 2. That is
-# this hohlraum, not the model: on Young's own setup (N170827's static model, an
-# 11.3 × 5.27 mm hohlraum with radii at 85 %, albedo 0.8, its requested pulses and its
+# this hohlraum, not the model: on Young's setup (N170827's static model, an
+# 11.3 × 5.27 mm hohlraum with radii at 85%, albedo 0.8, its requested pulses and its
 # digitized Green's function [`young2020_kernel`](@ref)) Briareus gives 336, 349, 161
 # and 152 km/s for the four cones against Young's 317, 337, 170 and 146, a ratio of 2.2
 # against 2.07 (test suite; research notes, "Young 2020 validation"). The same paper
@@ -104,7 +104,7 @@ for (axis, d) in (("vertical (z)", (0.0, 0.0, 1.0)), ("horizontal (x)", (1.0, 0.
     @printf("target offset %-15s %.2f km/s per µm\n", axis, u.rms / 1000)
 end
 
-# The vertical number is within 25 % of Young's; the horizontal ones are six times
+# The vertical number is within 25% of Young's; the horizontal ones are six times
 # larger. A horizontal offset moves the inner and outer footprints so that their
 # mode 1 opposes, and how well they cancel depends on the hohlraum and pointing: on
 # Young's N170827 setup Briareus gets 0.09 and 1.30 km/s per µm (Young 0.1 and 1.3),
@@ -123,7 +123,7 @@ end
 # - an α-heating factor ``\exp(-(a-1)\chi^{1.2} f^2)``, where ``\chi`` is the 1D
 #   generalized Lawson parameter.
 #
-# Their Table I lists the f and ``v_{HS}`` allowed for 5–20 % yield loss at
+# Their Table I lists the f and ``v_{HS}`` allowed for 5–20% yield loss at
 # ``v_{imp} = 380`` km/s, "near ignition" (``\chi \approx 1``–2).
 # [`mode1_tolerance`](@ref) inverts the loss. At ``\chi = 2`` it reproduces the table:
 
@@ -133,7 +133,7 @@ for (loss, f, v) in ((0.05, 0.08, 30), (0.10, 0.11, 40), (0.15, 0.14, 50), (0.20
     @printf("%.2f   %.3f (%.2f)   %4.1f km/s (%d)\n", loss, tol.f, f, tol.velocity, v)
 end
 
-# At ``\chi = 1.5`` the 5 % row would allow f = 0.09. The table's ``\chi`` is
+# At ``\chi = 1.5`` the 5% row would allow f = 0.09. The table's ``\chi`` is
 # about 2. [`implosion_metrics`](@ref) collects the factors for one velocity:
 
 m = implosion_metrics([0.0, 0.0, 75.0]; vimp = 380, chi = 1.0)
@@ -153,7 +153,7 @@ m = implosion_metrics([0.0, 0.0, 75.0]; vimp = 380, chi = 1.0)
 #
 # [`velocity_uncertainty`](@ref) carries `mode_uncertainty` to the hot-spot velocity:
 # its 3 × 3 covariance, its rms by error source, and the expected yield factor over
-# the errors. For NIF's 50 µm pointing, 3 % power imbalance, and 30 µm target
+# the errors. For NIF's 50 µm pointing, 3% power imbalance, and 30 µm target
 # positioning:
 
 ub = velocity_uncertainty(scenario, quads; pointing = 0.05, power = 0.03, positioning = 0.03,
@@ -162,7 +162,7 @@ ub = velocity_uncertainty(scenario, quads; pointing = 0.05, power = 0.03, positi
         ub.rms_by.beam, ub.rms_by.positioning, join((@sprintf("%.0f", x) for x in ub.sigma), ", "))
 @printf("expected yield factor: no α %.3f, with α (χ = 1) %.3f\n", ub.expected_yield, ub.expected_total)
 
-# MacGowan et al. (HEDP 40, 100944, 2021) found each source to be about 0.5 % of mode 1
+# MacGowan et al. (HEDP 40, 100944, 2021) found each source to be about 0.5% of mode 1
 # (~50 km/s), and the sources together up to 100 km/s. The expectation uses
 # ``(1-f^2)^a \approx e^{-a f^2}``, whose Gaussian average has a closed form. A Monte
 # Carlo of full evaluations checks it (the test suite does the same at a smaller
@@ -184,12 +184,12 @@ vmc = [hotspot_velocity(samples[:, k]) for k in axes(samples, 2)]
 # negative in the foot and dominated by the rise and peak. They printed it only as a
 # figure, so Briareus ships no ``G_1``. The default is
 # [`flat_kernel`](@ref): a flat weight over a window that gives 100 km/s for a constant
-# 1 %.
+# 1%.
 #
 # A pulse with a picket, a foot, and a peak. Each inner quad carries 0.8 of the
 # nominal quad power in the picket and 0.3 after it; each outer quad carries 1.2 and
-# then 1.7. In this hohlraum, equal quad powers drive the waist hot (P2/P0 ≈ −14 %),
-# and the peak's split brings P2 near −1 %. One inner quad loses a quarter of its
+# then 1.7. In this hohlraum, equal quad powers drive the waist hot (P2/P0 ≈ −14%),
+# and the peak's split brings P2 near −1%. One inner quad loses a quarter of its
 # power at 7 ns, during the peak:
 
 pulse_times = [0.0, 0.5, 1.5, 2.0, 5.0, 6.5, 9.0, 9.5]
@@ -227,8 +227,8 @@ v_peak = hotspot_velocity(evaluate(scenario, beams_at(8.0)))
 
 # The same convolution, with a kernel for an observable, applies to P2.
 # [`swing_metrics`](@ref) reports the time-averaged P2 over a window and its swing
-# (max − min). It compares the picket's average with the 7.5 % of Milovich et al.
-# (Phys. Plasmas 23, 032701, 2016), the early-time P2 that keeps margin loss under 10 %:
+# (max − min). It compares the picket's average with the 7.5% of Milovich et al.
+# (Phys. Plasmas 23, 032701, 2016), the early-time P2 that keeps margin loss under 10%:
 
 sw = swing_metrics(hist; window = (5.0, 9.25), picket = (0.25, 2.0))
 @printf("P2/P0 over the rise and peak: mean %+.2f%%, swing %.2f%%; picket mean %+.2f%% (within 7.5%%: %s)\n",
@@ -243,8 +243,8 @@ whole = swing_metrics(hist)
 # Without kernels `response` is empty. A flux P2 history does not give a hot-spot
 # shape in µm. Masse et al. (Phys. Plasmas 26, 2019) found that the hot spot's
 # response changes sign before about 4.5 ns while the shell's ρR does not. The same
-# flux history can therefore make an oblate hot spot and a prolate ρR. A platform's
-# own kernels are passed as `kernels = (; hotspot = …, rhoR = …)`.
+# flux history can therefore make an oblate hot spot and a prolate ρR. Kernels for
+# another platform are passed as `kernels = (; hotspot = …, rhoR = …)`.
 
 # ## Reading the errors back from a measured velocity
 #
@@ -254,7 +254,7 @@ whole = swing_metrics(hist)
 # It adds a capsule-thickness mode 1 as a nuisance error, which moves the hot spot
 # toward the thicker side at about 110 km/s per % of thickness (Casey et al. 2021),
 # the opposite sign to flux. A synthetic shot: the target sits 40 µm low, and the
-# shell is 0.3 % thicker toward +x:
+# shell is 0.3% thicker toward +x:
 
 shifted = [remake(b; aim = b.aim + [0.0, 0.0, 0.04]) for b in quads]
 v_meas = hotspot_velocity(evaluate(scenario, shifted)) + 100 * 110 * [0.003, 0.0, 0.0]
@@ -283,7 +283,7 @@ for σt in (0.003, 0.0005)
             100σt, (100 .* rk.thickness)..., 1000rk.positioning[3])
 end
 
-# A tight prior about zero recovers 30 of the 40 µm, but it also hides the real 0.3 %
+# A tight prior about zero recovers 30 of the 40 µm, but it also hides the real 0.3%
 # thickness along x, which then shows up in the residual. The prior is centered on
 # zero, so a measured thickness mode belongs in the nominal. Subtract its velocity,
 # `100 * 110 * t`, from the measurement before the inverse.
@@ -304,11 +304,11 @@ ev = evaluate(scenario, quads)
 
 # ## What this checks
 #
-# - A dipole drive of 0.44 % gives 44 km/s, between Young et al.'s 37.6 km/s (3D HYDRA)
-#   and 44.7 km/s (view factors and Green's function) for N170601. 0.7 % gives 70 km/s
+# - A dipole drive of 0.44% gives 44 km/s, between Young et al.'s 37.6 km/s (3D HYDRA)
+#   and 44.7 km/s (view factors and Green's function) for N170601. 0.7% gives 70 km/s
 #   against Kritcher et al.'s 70–75 km/s burn-off for N230729. The hot spot moves away
 #   from the bright side to 1e-6 in direction. Spears et al.'s saturated 120 km/s at
-#   2 % is over-predicted (200 km/s), as the linear range requires (test suite).
+#   2% is over-predicted (200 km/s), as the linear range requires (test suite).
 # - [`mode1_tolerance`](@ref) at ``\chi = 2`` reproduces Hurricane et al.'s Table I:
 #   f to two digits, and ``v_{HS}`` within the table's 10 km/s rounding
 #   (29.4/42.0/52.2/61.1 against 30/40/50/60). Casey et al.'s ``a = 6 - 1.5\ln T``
@@ -316,18 +316,18 @@ ev = evaluate(scenario, quads)
 # - On this hohlraum the dropped inner/outer quad ratio is 1.3–1.6 and the horizontal
 #   target offset ~0.6 km/s/µm, against Young's ~2 and 0.1 for N170827. On Young's
 #   static N170827 setup with his digitized pulses and Green's function, Briareus
-#   reproduces Fig. 10a's mode-1 histories to 0.05–0.21 % rms, the dropped-quad
-#   velocities within 6 % (ratio 2.2 against 2.07), and the four offset sensitivities
+#   reproduces Fig. 10a's mode-1 histories to 0.05–0.21% rms, the dropped-quad
+#   velocities within 6% (ratio 2.2 against 2.07), and the four offset sensitivities
 #   (0.09/1.30 target, 0.10/1.07 capsule, against 0.1/1.3 and 0.1/1.1 km/s/µm) (test
 #   suite).
 # - Kernel integrals are exact for tabulated kernels against hand integration (a step
 #   kernel on steps that miss its breakpoints), and match a 2×10⁵-point midpoint rule
 #   for a function kernel. A constant drive history reproduces the static velocity to
 #   1e-6. Swing metrics match dense sampling to 1e-6 (test suite).
-# - The velocity covariance matches a Monte Carlo of full evaluations to 8 %. Its
-#   closed-form expected yield factor matches the Monte Carlo mean to 3 % (5 % with
+# - The velocity covariance matches a Monte Carlo of full evaluations to 8%. Its
+#   closed-form expected yield factor matches the Monte Carlo mean to 3% (5% with
 #   α) at a ``v_{imp}`` where the factor is far from 1 (test suite).
 # - The velocity inverse recovers a 20 µm vertical target offset from a full
-#   evaluation's velocity to 5 %, and a thickness-only shot's thickness to 1 %. The
+#   evaluation's velocity to 5%, and a thickness-only shot's thickness to 1%. The
 #   penalty's dual-number gradient matches central differences to 1e-5, and its
 #   uncertainty term equals the propagated variance to 1e-8 (test suite).

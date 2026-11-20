@@ -1,5 +1,5 @@
 # Diagnostic definitions: the built-in Dante 1 against the hardware table it replaced
-# (bit for bit), extends and shadowing on a search path, measured CSV curves against the
+# (bitwise), extends and shadowing on a search path, measured CSV curves against the
 # models they tabulate, the schema checks, the configuration file and a registered kind.
 # Design: reference/diagnostics-design.md.
 
@@ -46,7 +46,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
                         end; name)
 
 @testset "diagnostic definitions" begin
-    @testset "built-in Dante 1, bit for bit" begin
+    @testset "built-in Dante 1, bitwise" begin
         new, old = dante1_responses(), old_dante1()
         @test [c.number for c in new] == 1:18
         @test all(new[i].R == old[i].R for i in 1:18)
@@ -57,7 +57,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         v = dante1()
         @test (v.theta, v.phi, v.through, v.pixels, v.area) == (143.25, 274.0, :leh_bottom, 400, nothing)
         @test all(v.channels .=== dante1_responses())
-        # the multilayer channel's own 12 mm field (Rubery 2022), the others the view's
+        # the 12 mm field of the multilayer channel (Rubery 2022), the others the view's
         @test [c.field_of_view for c in v.channels] == [n == 2 ? 12.0 : nothing for n in 1:18]
         @test dante1(pixels = 50).pixels == 50
         # Dante 2 from its definition (line of sight, the hole), with Dante 1's channels
@@ -117,13 +117,13 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             @test !defs["group_dante1"].public
             @test length(defs["group_dante1"].chain) == 3
             # the instrument a definition is a configuration of: stated, inherited through
-            # extends, or (without the key) the definition's own name
+            # extends, or (without the key) the definition name
             @test diagnostic_instrument(defs["nif_dante1_2012"]) == "NIF Dante 1" &&
                   diagnostic_instrument(defs["nif_dante1"]) == "NIF Dante 1" &&
                   diagnostic_instrument(defs["group_dante1"]) == "NIF Dante 1"
             @test diagnostic_instrument(DiagnosticDefinition("x", "A name", :xray_power, "", String[], true,
                                                              Dict{String,Any}())) == "A name"
-            # (the upper SXI extends the lower one and states its own)
+            # (the upper SXI extends the lower one and states a separate one)
             @test diagnostic_instrument(defs["nif_sxi_lower"]) == "NIF SXI lower" &&
                   diagnostic_instrument(defs["nif_sxi_upper"]) == "NIF SXI upper"
             # a later definition of an id shadows an earlier one, with a warning naming both

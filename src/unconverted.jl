@@ -11,8 +11,8 @@ a port-dependent direction; its focus lies `focal_shift` mm beyond the 3ω focus
 to the 3ω light (which the deposition takes as fully absorbed), and `conversion` the
 x-ray conversion efficiency of the absorbed light relative to a material's 3ω
 conversion. [`unconverted_deposition`](@ref) deposits `absorption` times the incident
-power; [`solve`](@ref) with `unconverted` multiplies a material's conversion, at this
-color's own absorbed flux, by `conversion`.
+power; [`solve`](@ref) with `unconverted` multiplies a material's conversion, at the
+absorbed flux of this color, by `conversion`.
 """
 struct UnconvertedColor
     name::Symbol
@@ -196,14 +196,14 @@ Laser power of the unconverted (1ω, 2ω) light absorbed by the target: one
 [`solve`](@ref) and [`flux_response`](@ref) take the result's x-ray conversions with
 its light.
 
-Each beamlet's light of one color is a uniform square beam converging to its own focus.
+Each beamlet's light of one color is a uniform square beam converging to its focus.
 At the 3ω best-focus plane it is a square of side `footprint` whose nearest edge lies
 `edge` mm from the 3ω axis ([`UnconvertedColor`](@ref); [`nif_unconverted`](@ref) gives
 the NIF User Guide's 22 mm and 4.8 mm for 1ω, 12 mm and 2.9 mm for 2ω, §4.5 and
 Fig. 4-12). It converges to a point `focal_shift` beyond the 3ω focus on the chief ray
 from the lens center, `lens_distance` upstream. This is the geometry of
 [`talis_check`](@ref)'s 1ω footprint, at the footprint's nominal size where TaLIS uses
-its 10 % contour. The square is displaced along φ̂ to the side of the quad axis that
+its 10% contour. The square is displaced along φ̂ to the side of the quad axis that
 the beamlet's port lies on (Fig. 4-12), a NIF quad-level beam is expanded into its four
 beamlets, and `offsets` sets the displacement direction of other beams, as in
 [`talis_check`](@ref). The light at a target is the image of the near-field aperture,
@@ -379,7 +379,7 @@ Incident laser irradiance on a target over time, per color: the result of
 
 - `target`, `time` (ns), `colors` (the color names, in order)
 - `element` — per color, a `nelements × length(time)` matrix: the irradiance incident on
-  each element (W/cm²; the power reaching it over its area, at its own incidence)
+  each element (W/cm²; the power reaching it over its area, at its incidence)
 - `backside` — per color, a `ncomponents × length(time)` matrix: the irradiance on each
   one-sided component's unmodeled back side, its power over the component's area (W/cm²;
   a mean over the component, below the back side's local peak where it is lit unevenly)
@@ -492,7 +492,7 @@ _fractions_of(ratio, names, key, beams) =
 _schedule_of(p, key, b) = p isa Union{AbstractDict,NamedTuple} ? _beam_pulse(p, key, b) : p
 
 # A color's power per beam (TW) at the times `ts`: `r` (a number or a function of time)
-# times the 3ω pulse, plus the color's own pulse `pre` (or nothing).
+# times the 3ω pulse, plus a separate pulse `pre` for the color (or nothing).
 function _color_power(r, pulse, pre, ts, name)
     s = [_fraction_at(r, τ) * pulse(τ) + (pre === nothing ? 0.0 : Float64(pre(τ))) for τ in ts]
     all(>=(0), s) || throw(ArgumentError("the $name power must not be negative (ratio and prepulse)"))
@@ -520,7 +520,7 @@ its name; or `by(beam)`). For each color `c` of `colors`, the light of one beam 
   shape are not public (NIF User Guide §4.5: most of the unconverted light is 1ω, and
   shaped pulses leave more of it). Every color needs an entry (0 for none), keyed by its
   name, a `Symbol`: any other key (a `String`, an unknown name) is an error. A color's
-  entry holds for every beam, or gives each beam its own fraction (a number or a
+  entry holds for every beam, or gives each beam a separate fraction (a number or a
   function of time): a vector with one entry per beam of `beams`, in order, or keyed as
   `pulses` (by `by`; a beam without an entry is a `KeyError`, as for `pulses`), e.g.
   `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05, :inner23 => 0.0, :inner30 => 0.0),
@@ -854,7 +854,7 @@ The default 10⁸ W/cm² is the NIF User Guide's general guideline for the onset
 ionized plasma on a metal surface (§4.4, citing Spaeth et al., Fusion Sci. Technol. 69,
 25 (2016)); the guide puts the 1ω prepulse above it 3–5 ns before the nominal start of
 the pulse. It is a guideline for metals, not a facility criterion for foils; a foil of
-another material needs its own value.
+another material needs a separate value.
 """
 preplasma_check(h::IrradianceHistory, arrival::IrradianceHistory; foil::Symbol = :backlighter,
                 threshold::Real = 1e8, colors = nothing) =

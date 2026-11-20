@@ -27,7 +27,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         # Wien tail: (15/π⁴) e⁻ˣ (x³ + 3x² + 6x + 6) for x ≫ 1
         x = 40.0
         @test _planck_tail(x) ≈ 15 / π^4 * exp(-x) * (x^3 + 3x^2 + 6x + 6) rtol = 1e-12
-        # 1.8 keV is ~14 % of a 300 eV Planckian
+        # 1.8 keV is ~14% of a 300 eV Planckian
         @test 0.13 < planck_fraction(300.0, 1800, Inf) < 0.15
     end
 
@@ -214,7 +214,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             h0 = drive_history(m, op, beams_at, times; lpi = cbet, mband = nothing)
             h = drive_history(m, op, beams_at, times; lpi = cbet)          # MBandSplit() by default
             @test h0.mband === nothing && h0.mband_moments === nothing
-            # the gray history is untouched, bit for bit
+            # the gray history is bitwise untouched
             @test all(getfield(h, k) == getfield(h0, k) for k in keys(h0) if !(k in (:mband, :mband_moments)))
             # the default split is the calibrated pairing, spelled out (α_M as a number and
             # as the group albedos it stands for)
@@ -381,7 +381,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         half = dante(DanteView(0, 0; through = nothing, field_of_view = 100.0, pixels = 1000), sol_of(shielded))
         @test unblocked.intensity ≈ full.intensity rtol = 2e-3
         @test half.intensity ≈ unblocked.intensity / 2 rtol = 1e-12
-        # Tr over the part's visible projected area: the emitter's own temperature, exactly
+        # Tr over the part's visible projected area: the emitter temperature, exactly
         Tb = (π * Bd / π / SIGMA_SB)^0.25
         for tt in (lone, shielded)
             r = dante(DanteView(0, 0; through = nothing, field_of_view = 100.0, pixels = 200, area = :emitter),

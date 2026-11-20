@@ -113,7 +113,7 @@ end
 
 The triangle (a, b, c) split by the planes of the cut `r` into convex cells, each wholly
 removed or kept: `polygon` (its vertices, in the triangle's winding), `edge` (per edge
-from vertex i to i + 1: whether it is part of the triangle's own edges) and `removed`.
+from vertex i to i + 1: whether it is part of the edges of the triangle) and `removed`.
 A triangle that no plane crosses is one cell. The cells' areas sum to the triangle's.
 """
 function cut_pieces(r::CutRegion, a, b, c)

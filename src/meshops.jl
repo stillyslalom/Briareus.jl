@@ -8,8 +8,8 @@ function _welded_ids(m::Mesh; tol = 1e-9)
     lo = reduce((a, b) -> min.(a, b), m.vertices)
     hi = reduce((a, b) -> max.(a, b), m.vertices)
     h = tol * max(norm(hi - lo), eps())
-    # cells of size h; a vertex joins a representative within h in its own or a
-    # neighboring cell, so points straddling a cell boundary still weld
+    # cells of size h; a vertex joins a representative within h in its cell or a
+    # neighboring one, so points straddling a cell boundary still weld
     cells = Dict{NTuple{3,Int},Vector{Int}}()
     rep = Vec3[]
     ids = Vector{Int}(undef, length(m.vertices))
@@ -151,7 +151,7 @@ Each connected surface then gets one orientation as a whole:
 Edges shared by more than two patches (non-manifold) do not constrain the orientation.
 Where they only join separate surfaces, each with two patches on the edge (closed
 solids touching along an edge, as in a CAD assembly), each surface still counts as
-closed and faces out of its own volume; other non-manifold edges (three patches of one
+closed and faces out of its volume; other non-manifold edges (three patches of one
 surface, a sheet meeting a solid) leave their surfaces open, and are reported in a
 warning. A surface that cannot be oriented consistently (a Möbius-like stitching) has
 no right winding: every orientation leaves some front side facing the wrong way, which
@@ -339,7 +339,7 @@ shorten: it only groups whole facets. Here:
 1. vertices are welded by position (to `tol` times the mesh's extent), and one-sided
    edges with other such edges' vertices on them (T-junctions between CAD faces) are
    split there, so faces that meet along an edge are connected;
-2. every facet is split, in its own plane, into triangles with edges of at most
+2. every facet is split, in its plane, into triangles with edges of at most
    `size / 3`; an edge gets the same points from both facets sharing it, so the refined
    triangulation is conforming. Parallel edges longer than that (the sides of a wall's
    strips: a cylinder's or an extrusion's generators, to 0.25°) and the diagonals of
@@ -1220,7 +1220,7 @@ _element_sums(ms, area, cen, nrm) =
 # sphere at 0.6 mm 237, while a finely faceted CAD capsule leaves small elements of up
 # to 4,600, whose dissolution costs ~n² element tests and mostly ends stuck. An engineering
 # default, not a quality criterion (research notes, "GUI on CAD", 2026-10-26: that
-# capsule's remesh at 0.28 mm 12.4 s → 2.0–3.3 s, its mesh changed on 0.17 % of its area).
+# capsule's remesh at 0.28 mm 12.4 s → 2.0–3.3 s, its mesh changed on 0.17% of its area).
 const _DISSOLVE_MAX = 256
 
 function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax, amin)

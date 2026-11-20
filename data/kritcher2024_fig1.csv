@@ -1,7 +1,7 @@
 # Simulated scaled capsule radius against time for N221204's 2.05 MJ drive, from A. L. Kritcher
 # et al., Phys. Plasmas 31, 070502 (2024), doi:10.1063/5.0210904 (CC BY 4.0), Fig. 1 bottom
 # right ("Scaled capsule Radius vs time", HYDRA): the thicker as-shot N221204 capsule (red)
-# and the thinner N210808 capsule on the same drive (black). The radius has no axis of its own:
+# and the thinner N210808 capsule on the same drive (black). The radius has no separate axis:
 # it is drawn on the panel's Tr axis with its initial value at the 300 eV line and zero at
 # 0 eV, read as R/R(0). Which radius is not stated; it stays at R(0) until ~3.6 ns (red) /
 # ~3.4 ns (black), close to the first shock's breakout from the ablator into the fuel
@@ -17,7 +17,7 @@
 # time from the bottom and top tick marks (45.4 px per ns, 8 ns at column 1539.5, residual
 # < 2 px, +/-0.04 ns), radius from the left-axis ticks (20 eV = 23.9 px; 300 eV at row 546.5,
 # 0 at 904.5). Each value is the stroke center (6 px wide, 0.017) tracked column by column
-# and normalized by the curve's own flat start (red 1.004, black 0.999); +/-0.01 where the
+# and normalized by the flat start of that curve (red 1.004, black 0.999); +/-0.01 where the
 # stroke is clear, 0.02 at 9.25 ns (red hidden under the black rebound, interpolated). The
 # black curve after its minimum (9.18 ns) is not read (NaN). Research notes, "The P2 swing:
 # capsule radius, backscatter and the collision (2026-10-25)".

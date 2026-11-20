@@ -699,7 +699,7 @@ Flat annulus (a disk when `r_inner == 0`) in the plane `z`, with `nr` radial by 
 azimuthal patches. Front faces point along `+ẑ` when `up`, `-ẑ` otherwise. Rings are
 equal-area so patch areas are uniform. `phibreaks` (radians) are azimuths the mesh must
 contain, as in `cylinder_mesh`; giving both the same `nphi` and `phibreaks` makes an
-end cap meet a wall vertex for vertex.
+end cap meet a wall at shared vertices.
 """
 function annulus_mesh(r_inner, r_outer, z; nr::Integer, nphi::Integer, up::Bool = true,
                       phi0 = 0.0, phibreaks = ())
@@ -820,7 +820,7 @@ function icosphere_mesh(radius; n::Integer, outward::Bool = true)
     faces = [(i, j, k) for i in 1:12 for j in i+1:12 for k in j+1:12
              if all(d -> isapprox(d, e; rtol = 1e-9), (norm(V[i] - V[j]), norm(V[j] - V[k]), norm(V[i] - V[k])))]
     # A point from integer barycentric weights, summed in vertex-index order so points on
-    # shared edges come out bit for bit the same from either face.
+    # shared edges come out bitwise identical from either face.
     pt(i, j, k, a, b, c) = radius * normalize(a * V[i] + b * V[j] + c * V[k])
     for (i, j, k) in faces
         P(a, b) = pt(i, j, k, n - a - b, a, b)

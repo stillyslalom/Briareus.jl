@@ -4,7 +4,7 @@ using Briareus, LinearAlgebra, Test
 
 @testset "sombrero" begin
     kw = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 0.6, capsule_h = 0.3)
-    # off by default: the same target, element for element
+    # off by default: the same target at every element
     t0 = hohlraum(; kw...)
     for s in (nothing, false)
         ts = hohlraum(; kw..., sombrero = s)

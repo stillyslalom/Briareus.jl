@@ -210,8 +210,8 @@ function _vrw_flip(m::Mesh)
     Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches)
 end
 
-# Primitive surfaces in the object's own frame (mm), as Briareus components.
-# Grid conventions inferred from VisRad's own element counts (power-source table of the
+# Primitive surfaces in the object frame (mm), as Briareus components.
+# Grid conventions inferred from the VisRad element counts (power-source table of the
 # primitive workspace): a rectangle with 10 × 10 mesh points has 81 elements, a
 # cylindrical hohlraum with mesh points (11, 12, 4) has 216 — 10 × 12 wall, 2 × 3 × 12
 # end-cap and 2 × 12 laser-entrance-hole elements. Periodic azimuths count elements,
@@ -244,7 +244,7 @@ function _vrw_primitive(kind, name, p, mat; h = nothing)
         # hohlraum normals point in by default. Each LEH is one ring of elements.
         R, H, r = L(1), L(2), L(3)
         # VisRad's grid: one ring of LEH elements; Briareus's: `hohlraum`'s (LEH rings of
-        # about h, the wall's azimuthal count: the caps' inner edges, vertex for vertex)
+        # about h, the wall's azimuthal count: matching the caps' inner edges at every vertex)
         nz, nphi, nr, nr_leh, nphi_leh = if h === nothing
             max(1, N(1) - 1), max(3, N(2)), max(1, N(3) - 1), 1, max(3, N(2))
         else
@@ -318,7 +318,7 @@ function _vrw_build_objects(blocks, folders)
         R, t = frame(blk.name)
         mesh = nothing
         if kind === :mesh
-            # nodes are in the object's own frame (cm), centered on its centroid; the
+            # nodes are in the object frame (cm), centered on its centroid; the
             # "Gen. mesh object origin" (= -Position) maps them back to the CAD file's
             # frame and is not needed here
             vs = [R * (10 * v) + t for v in blk.nodes]
@@ -365,7 +365,7 @@ end
 # ---------------------------------------------------------------------------------------
 
 # Columns of the per-beam row (laser-beam data formats 22 and 23), named from the
-# file's own header. "rot_id" is blank in both files, leaving 52 tokens of 53.
+# header of the file. "rot_id" is blank in both files, leaving 52 tokens of 53.
 const _VRW_BEAM_COLUMNS = (:port, :theta, :phi, :port_radius, :custom, :cone_min, :cone_max,
     :fnumber, :red, :green, :blue, :transparency, :method, :port_distance, :geometry,
     :p1, :p2, :p3, :focus, :rg_model, :on_blue, :on_green, :on_red, :vis_blue, :vis_green,
@@ -673,7 +673,7 @@ close every opening (see [`open_fraction`](@ref)).
 
 A comparison with VisRad and a radiation study usually take two targets from the same
 workspace. [`visrad_deposition`](@ref) maps VisRad's per-element deposition only onto
-components on VisRad's own elements, so it takes a target built without `remesh`,
+components on the VisRad elements, so it takes a target built without `remesh`,
 `coarsen`, `fit` and `inside` (e.g. `visrad_target(ws)`, with the same `select`), on
 which a `DepositionOperator` reproduces VisRad's calculation element by element; the
 view factors take the remeshed, cut target. The beams serve both, with one
@@ -725,7 +725,7 @@ end
 # solids facing out of their material) turns over; 0 for a consistent mesh. Read
 # one-sided as stored, such a mesh radiates and absorbs on the front of each triangle as
 # the file winds it, and CAD windings are often inconsistent: about half the area of the
-# hohlraum parts of a NIF CAD workspace, where VisRad's own laser deposition does not
+# hohlraum parts of a NIF CAD workspace, where the VisRad laser deposition does not
 # depend on the winding (research notes, "VisRad JSON workspaces") but Briareus then puts
 # nearly all the laser power on back sides.
 function _vrw_miswound(o::VisRadObject)
@@ -781,7 +781,7 @@ efficiency, laser reflectivity, pre-reflection laser power, numbers of red and b
 cones hitting the element, and minimum overlap angles at 1ω and 3ω.
 
 `tables` maps each object's name to a `NamedTuple` of column vectors, named from the
-section's own header (`:surface_index`, `:direct_laser_pwr_source`, `:uniform_source`,
+section header (`:surface_index`, `:direct_laser_pwr_source`, `:uniform_source`,
 `:albedo`, `:x_ray_conv_efficiency`, `:laser_reflectivity`, `:pre_reflect_laser_pwr`,
 `:n_red_cones_hitting_surf`, `:n_blue_cones_hitting_surf`, `:min_angle_overlap_1w`,
 `:min_angle_overlap_3w` in VisRad 20–21); integer columns are `Int`. `units` maps
@@ -879,15 +879,15 @@ VisRad's and Briareus's depositions on the same target compare element by elemen
 per component (`sum(P[elements(target, :wall)])`).
 
 `target` must hold the workspace's objects as `visrad_target(workspace)` or
-`visrad_component` build them, one component per object (named after it) on VisRad's
-own elements. Each component is checked against the object's elements; a component
+`visrad_component` build them, one component per object (named after it) on the
+VisRad elements. Each component is checked against the object's elements; a component
 remeshed, coarsened, fitted or cut to a cavity is refused, so the target compared with
 VisRad is not the one a radiation study remeshes (see [`visrad_target`](@ref)): build
 both from the workspace, and compare depositions on this one. Elements are matched by:
 
 - CAD meshes (generalized meshes): one Briareus patch per VisRad surface element, in
-  the file's connectivity order. The order is VisRad's own; it is confirmed by
-  Briareus's deposition matching VisRad's element by element (correlation 1.0000,
+  the file's connectivity order. The order is that of VisRad; it is confirmed by
+  Briareus's deposition matching VisRad's at every element (correlation 1.0000,
   0.9% rms with `VisRadProfile`) on 2388 wall elements of a NIF workspace.
 - Rectangles on VisRad's grid: VisRad's elements run the local x fastest (measured on a
   foil workspace).
@@ -934,7 +934,7 @@ end
 
 # The element of target `t` (its front side, or the back of a back-only patch; 0 for a
 # zero-area patch) for each of VisRad object `o`'s `n` surface elements, in VisRad's row
-# order, where component `ci` of `t` is the object on VisRad's own elements. Refuses an
+# order, where component `ci` of `t` is the object on the VisRad elements. Refuses an
 # object whose element order is not established and a component that is not on VisRad's
 # elements (remeshed, coarsened, fitted or cut).
 function _vrw_row_elements(o::VisRadObject, t::Target, ci::Integer, n::Integer)
@@ -963,12 +963,12 @@ visrad_deposition(path::AbstractString, args...; kw...) =
 A VisRad workspace with the pointing, focus, power and on/off of `beams` written into a
 copy of the workspace `template` (a `.vrw` file, e.g. the one a design was imported
 from with `read_visrad_workspace`). Each beam row of the template whose name matches a
-beam gets that beam's aim, as a Cartesian position in the row's own reference frame
+beam gets that beam's aim, as a Cartesian position in the reference frame of the row
 (cm), its focus offset `defocus` (cm), its power as the 3ω power column (divided by
 the row's power multipliers and, under the "Fraction of Total Beam Power" red/green
 model, by its blue fraction, so VisRad's blue cone carries the beam's power) and on (power > 0)
-or off. Everything else is copied byte for byte: the target components and their
-frames, the spots, pulse shapes and VisRad's settings stay VisRad's own. Numbers are
+or off. Everything else is copied verbatim: the target components and their
+frames, the spots, pulse shapes and VisRad's settings stay as the template has them. Numbers are
 written in place at the template's column widths and decimals (0.1 µm for positions).
 
 A computed template's results (power sources, radiosities, beam capture and clearance)
@@ -1063,7 +1063,7 @@ const _VRW_DECIMALS = Dict(:p1 => 6, :p2 => 6, :p3 => 6, :focus => 6, :power_blu
 
 # A beam row with the given columns rewritten in place: each value right-aligned where
 # the old token ended, with the old token's decimals (integers for integer tokens), at
-# least `_VRW_DECIMALS` of them (VisRad's own: 0.1 µm for positions in cm).
+# least `_VRW_DECIMALS` of them (the VisRad precision: 0.1 µm for positions in cm).
 function _vrw_patch_row(line::AbstractString, new::AbstractDict)
     cr = endswith(line, '\r')
     s = cr ? chop(line) : String(line)

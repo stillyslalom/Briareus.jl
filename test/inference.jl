@@ -28,7 +28,7 @@ function _inf_body_instances(f)
 end
 
 # Whether JET's analysis `report` (`JET.report_opt` or `JET.report_call`) of `f(args...)`
-# reports nothing in Briareus' own frames; prints the reports otherwise. Base, Optim and
+# reports nothing in Briareus frames; prints the reports otherwise. Base, Optim and
 # ForwardDiff internals are not ours to fix.
 function _inf_jet_clean(report, f, args...)
     r = report(f, Base.typesof(args...); target_modules = (Briareus,))
@@ -181,7 +181,7 @@ end
     clfa = clearance_floor(keepout[1])     # an aperture keep-out over the phases (one skipped)
     sw = Scenario(tw, p)
     pcross = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
-    # ceilings at the beams' own powers read from the evaluation's own deposition (the
+    # ceilings at the beam powers read from the deposition in the evaluation (the
     # optimizer's split scenario)
     pown = picket_ceiling(evaluate(s, xo), :wall)
     ssp = Briareus._with_split(s, Briareus._split_request((pavg, pown)))
@@ -549,7 +549,7 @@ end
                     @test all(m -> _inf_jet_clean(JET.report_opt, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
                               (bubble, linked))
                 end
-                # the bubble's own clipping: no dispatch on either version
+                # the clipping of the bubble: no dispatch on either version
                 @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), bubble, bs)
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
                 @test _inf_jet_clean(JET.report_call, pavg.f, ev) && _inf_jet_clean(JET.report_call, pcor.f, ev)

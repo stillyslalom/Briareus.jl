@@ -1,6 +1,6 @@
 # NIF Sentinel on shot N170924-003 (16 MiniXRD channels, no mirrors; filters chosen to
 # emulate that shot's Dante 2 without its mirror channels). Public values: Kemp et al.
-# (2020), OSTI 1736345, Table II, read from the page image; "35 % transmission sieve" as
+# (2020), OSTI 1736345, Table II, read from the page image; "35% transmission sieve" as
 # grid = 0.35. Not public, so absent: the equatorial DIM it was fielded on (90-78 or
 # 90-315: phi_deg), and the MiniXRDs' responsivity (the cross-calibration against Dante on
 # this shot needed the Al MiniXRDs 3–4 times as responsive as an XRD-31): supply cathode

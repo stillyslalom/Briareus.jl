@@ -43,12 +43,12 @@ without a footprint; see [`set_unconverted_ratio!`](@ref)) and `face` (a flat ob
 face's incident x-ray flux over the whole face, `(; mean, peak, low, rms)` in W/cm² and
 the RMS nonuniformity, or `nothing`) and `cavities` (per cavity of the design,
 [`cavity_walls`](@ref), whose walls the drive's target has: `(; name, flux, Tr)`, the
-area-weighted mean incident x-ray flux on that hohlraum part's own wall pieces in TW/mm²
+area-weighted mean incident x-ray flux on the wall pieces of that hohlraum part in TW/mm²
 and its radiation temperature in eV, core `wall_temperature`; empty without a radiation
 model or a hohlraum part). With unconverted light, `evaluation`'s deposition is
 the absorbed power of the 3ω light plus the 1ω and 2ω `unconverted_deposition`, and the
 x-ray source (`solution`, the capsule flux) counts each unconverted color's power at the
-material's conversion, at that color's own absorbed flux, times the color's `conversion`
+material's conversion, at the absorbed flux of that color, times the color's `conversion`
 (`UnconvertedColor`; `solve`'s `unconverted`), and `solution.laser` is the absorbed
 power of every color.
 """
@@ -260,7 +260,7 @@ open wherever its file is (entrance holes), so its view factors are left raw unl
 aperture parts close its openings: the drive then balances them (`closed = true`,
 `enforce_closure!`), when at most [`CAVITY_MAX_LEAK`](@ref) of the cavity's rays leak,
 and its status says which. A cavity holding hohlraum parts of the design that rays find
-closed balances each of them on its own instead (as the whole target's drive does), so
+closed balances each of them separately instead (as the whole target's drive does), so
 what it reaches through an entrance hole beyond them keeps its raw rows.
 """
 function set_cavity!(dr::DriveState, on::Bool; point = dr.cavity_point[], films = dr.films[])
@@ -277,7 +277,7 @@ function _cavity(t::Target, point, films)
     isempty(comps) && throw(ArgumentError("every component is a film left out of the cavity"))
     enc = enclosure(comps, point)
     src = enc.source
-    own(tg, c) = tg.comp_elems[component_index(tg, c.name)]     # a component's own elements
+    own(tg, c) = tg.comp_elems[component_index(tg, c.name)]     # the elements of a component
     pos = Dict{Symbol,Vector{Int}}(c.name => own(t, c) for c in comps)
     rank = zeros(Int, nelements(src))
     for c in comps
@@ -291,7 +291,7 @@ end
 
 """
 Whether the drive fits the curved faces of CAD parts (cylinders, cones, spheres:
-`curved_components` on each part's file facets) in its own target, so the x-ray view
+`curved_components` on each part's file facets) in a separate target, so the x-ray view
 factors integrate on the true surfaces. The window keeps showing and keying the parts;
 the drive's elements map back to theirs. Set it to `false` for flat CAD elements.
 """
@@ -452,7 +452,7 @@ _observed_part(s::Scenario) = (o = _observed_parts(s); isempty(o) ? nothing : fi
 # The foil a flux-map lookup was made for (`nothing`: none, or a capsule map).
 _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 
-# The cavities of the design whose view factors the drive balances each on its own (core
+# The cavities of the design whose view factors the drive balances separately (core
 # `RadiationModel(...; closed)` with one element set per cavity; reference/
 # assemblies-design.md, "Per-cavity balancing as built"): one per hohlraum part in the
 # calculations, its closed volume (its profile about its axis, ends included) placed by
@@ -473,7 +473,7 @@ end
 # evaluated at zero power, so on/off needs no rebuild). `observed` (a part or component
 # name, [`observed_name`](@ref)) is the surface the radiation model observes;
 # `cavities` (`_cavity_volumes`) are the design's cavities, whose view factors are
-# balanced each on its own when rays find it closed (`_closed_cavities`). Every target gets a radiation model for the B/H fields, unless it is too
+# balanced separately when rays find it closed (`_closed_cavities`). Every target gets a radiation model for the B/H fields, unless it is too
 # large for its view factors (`radiation_size`: laser only). With `cavity = (point,
 # films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
 # pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
@@ -524,7 +524,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; cavities = _Ca
     if enc === nothing
         closed = _closure_kw(t, cs)
     else
-        # the cavity's hohlraum parts closed by rays: each balanced on its own, as the whole
+        # the cavity's hohlraum parts closed by rays: each balanced separately, as the whole
         # design's are, rather than the enclosure (what it reaches through an entrance
         # hole, outside the hohlraum, keeps its raw rows); else the enclosure as one
         cs = filter(c -> !isempty(c.elements), cs)
@@ -551,7 +551,7 @@ const CAVITY_MAX_ESCAPE = 0.5
 The largest fraction of a cavity's diffuse rays that may leak (`Briareus.open_fraction`
 of the cavity selected, apertures stopping the rays) for the drive to balance the view
 factors of a cavity that has apertures (`closed = true`, `enforce_closure!`), and of
-each cavity of the design's hohlraum parts (balanced each on its own). Adding
+each cavity of the design's hohlraum parts (each balanced separately). Adding
 apertures is the user's declaration that they close the cavity's openings; this guard
 keeps a cavity with an opening left without one, or with an aperture facing out of the
 cavity (dropped by the selection), unbalanced. An engineering default, not a facility
@@ -575,12 +575,12 @@ end
 # The drive status's note on the cavity's closure: balanced, or how much leaks and why.
 function _closure_note(leak, closed::Bool)
     isnan(leak.fraction) && return ""
-    pct = @sprintf("%.2g %%", 100leak.fraction)
+    pct = @sprintf("%.2g%%", 100leak.fraction)
     closed && return " · closed by its apertures: view factors balanced ($pct of the rays leak)"
     leak.apertures ||
         return " · open: $pct of the cavity's rays leak: add apertures to its LEHs to balance its view factors"
     return " · open: $pct of the cavity's rays leak past its apertures (above " *
-           @sprintf("%.2g %%", 100CAVITY_MAX_LEAK) * "): an opening has no aperture, or one faces out of " *
+           @sprintf("%.2g%%", 100CAVITY_MAX_LEAK) * "): an opening has no aperture, or one faces out of " *
            "the cavity (Properties ▸ Inward); view factors not balanced"
 end
 
@@ -719,7 +719,7 @@ end
 # color (what the laser coloring, power accounting and back-side losses show:
 # `unconverted_deposition` has applied each color's `absorption`). The x-ray source is
 # kept per color: the 3ω power at the material's conversion, each unconverted color's at
-# the material's conversion (at the color's own absorbed flux) times the color's
+# the material's conversion (at the absorbed flux of that color) times the color's
 # `conversion`, as `solve`'s `unconverted` takes it. The capsule flux of the evaluation
 # goes through the scenario's linear response with the equivalent 3ω power P₃ + Σ c P_c,
 # which is exact there: that response holds only conversions independent of intensity.
@@ -821,7 +821,7 @@ function power_rows(ev::Evaluation; minor::Real = 1e-3)
     P = d.delivered
     frac(v) = P > 0 ? v / P : 0.0
     # by part (the drive's fitted pieces summed), but each piece of a part made in pieces
-    # (a hohlraum part's wall, caps, …) on its own row, as the model tree lists them
+    # (a hohlraum part's wall, caps, …) on a separate row, as the model tree lists them
     cp = merge(component_power(d, t), component_power(d, t; by = :component))
     ps, labels = Symbol[], String[]
     several = length(unique(c.part for c in t.components if _is_piece(c))) > 1
@@ -857,8 +857,8 @@ function power_rows(ev::Evaluation; minor::Real = 1e-3)
     return rows
 end
 
-# A fraction as a percentage without trailing zeros: 1e-3 → "0.1 %".
-_pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), " %"))
+# A fraction as a percentage without trailing zeros: 1e-3 → "0.1%".
+_pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), "%"))
 
 # Text with a no-break space before each unit and after each mode symbol (ε₂), so that a
 # wrapped line keeps a number with its unit and its symbol.
@@ -926,24 +926,24 @@ function drive_summary(res::DriveResult; short::Bool = false)
     if res.face !== nothing
         f = res.face
         Tr = radiation_temperature(res.mean_flux)
-        short && return _nobreak(@sprintf("Tr %.0f eV · rms %.1f %%", Tr, 100 * f.rms))
-        return _nobreak(@sprintf("observed face %s W/cm² (Tr %.0f eV) · rms %.1f %% · %s to %s W/cm²",
+        short && return _nobreak(@sprintf("Tr %.0f eV · rms %.1f%%", Tr, 100 * f.rms))
+        return _nobreak(@sprintf("observed face %s W/cm² (Tr %.0f eV) · rms %.1f%% · %s to %s W/cm²",
                                  _wcm2(res.mean_flux), Tr, 100 * f.rms, _wcm2(f.low / to_Wcm2(1.0)),
                                  _wcm2(f.peak / to_Wcm2(1.0))))
     end
     if short && (!isempty(res.modes) || res.spot !== nothing)
-        isempty(res.modes) && return _nobreak(@sprintf("spot rms %.1f %%", 100 * res.spot.rms))
+        isempty(res.modes) && return _nobreak(@sprintf("spot rms %.1f%%", 100 * res.spot.rms))
         e2 = only(r.epsilon for r in res.modes if r.l == 2)
-        return _nobreak(@sprintf("Tr %.0f eV · ε₂ %.2f %%", radiation_temperature(res.mean_flux), 100 * e2))
+        return _nobreak(@sprintf("Tr %.0f eV · ε₂ %.2f%%", radiation_temperature(res.mean_flux), 100 * e2))
     end
     if !isempty(res.modes)
         m = Dict(r.l => r.epsilon for r in res.modes)
-        return _nobreak(@sprintf("capsule %s W/cm² (Tr %.0f eV) · ε₂ %.2f %% · ε₄ %.2f %%",
+        return _nobreak(@sprintf("capsule %s W/cm² (Tr %.0f eV) · ε₂ %.2f%% · ε₄ %.2f%%",
                                  _wcm2(res.mean_flux), radiation_temperature(res.mean_flux),
                                  100 * get(m, 2, NaN), 100 * get(m, 4, NaN)))
     elseif res.spot !== nothing
         s = res.spot
-        return _nobreak(@sprintf("spot %.3g W/cm² · rms %.1f %% · %.0f %% of the power in r ≤ %.2g mm",
+        return _nobreak(@sprintf("spot %.3g W/cm² · rms %.1f%% · %.0f%% of the power in r ≤ %.2g mm",
                                  s.mean, 100 * s.rms, 100 * s.fraction, s.radius))
     end
     d = res.evaluation.deposition
@@ -1001,7 +1001,7 @@ values)` in kJ, cumulative), `fields` (per [`DRIVE_FIELDS`](@ref) an elements ×
 matrix in W/cm², on the drive's elements), `range` (each field's finite extremes over
 the history), `history` (the core `drive_history`), `key` (what it was computed for),
 `seconds` and `cavities` (per cavity of the design, [`cavity_walls`](@ref), `(; name,
-Tr)`: its own walls' radiation temperature per step in eV, the core history's
+Tr)`: the radiation temperature of its walls per step in eV, the core history's
 `cavity_Tr`).
 """
 struct DriveHistory
@@ -1037,7 +1037,7 @@ time shown in the 3D view, ns; `NaN`: the drive at the table's powers), `diagnos
 [`set_diagnostic!`](@ref)), `catalog` (the definitions on the search path and those
 saved with the session, see [`refresh_diagnostics!`](@ref)), `embedded` (the
 definitions read from a saved session, by id: the ones used for those ids),
-`view_parts` (the session's own values of the parts a definition's `[view]` names, by id:
+`view_parts` (the session values of the parts a definition's `[view]` names, by id:
 `center_part` or `area_part` => the part; set when such a part is renamed, see
 [`follow_renames!`](@ref), so that the definition, the user's file, stays as it is),
 `issues`

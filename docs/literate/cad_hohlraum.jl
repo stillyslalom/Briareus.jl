@@ -93,7 +93,7 @@ nothing #hide
 # random, are wound the other way, and the facets are shuffled. [`write_stl`](@ref)
 # with `binary = false` writes one `solid … endsolid` block per part, the way CAD
 # exporters write assemblies, and [`read_stl_solids`](@ref) reads them back as named
-# meshes. STL lists every facet with its own three vertices, so the file does not record
+# meshes. STL lists three separate vertices for every facet, so the file does not record
 # which facets are neighbors.
 
 rng = Xoshiro(2026)
@@ -151,7 +151,7 @@ end
 # the flux that an isotropic source at the point would put on it, directly and after
 # re-emission, and the elements that receive at least 5% of the cavity's typical flux
 # are kept. The point is the capsule center; lines of sight from it pass through
-# surfaces seen from behind, such as the capsule's own.
+# surfaces seen from behind, such as the capsule surface itself.
 
 part_target(ps) = Target([Component(Symbol(n), m, n == "capsule" ? ablator() : gold()) for (n, m) in ps])
 with_tent = enclosure(part_target(oriented))
@@ -247,12 +247,12 @@ end
 # On the walls and the capsule the remeshed elements are as compact as squares, about
 # one per size² (the 104.5 mm² of a half's cavity side in about 470 elements of
 # 0.5 mm). Faces narrower than the size, the 50 µm bores and gap faces, give elements
-# as narrow: that is the geometry's own scale. Coarsening leaves the strips whole, and
+# as narrow: the geometry sets that scale. Coarsening leaves the strips whole, and
 # five times as many elements on the capsule. The capsule is remeshed finer (0.15 mm)
 # than the walls (0.5 mm), as a primitive hohlraum's capsule is.
 #
 # The selection is then repeated on the elements, since an element straddling the edge
-# of the lit region averages its flux over its own area. Selecting on the facets first
+# of the lit region averages its flux over its whole area. Selecting on the facets first
 # and remeshing only the kept ones saves remeshing the mount and the outsides. The
 # remeshed surface has the area of the facets to round-off.
 
@@ -281,7 +281,7 @@ foreach(println, regions[:hohlraum_top])
 # the fitted `CylinderSurface` or `SphereSurface`, and the rest; planar faces stay flat
 # elements, which are exact. So do curved regions of under 10⁻³ of the part's area
 # (`minfraction`): in real CAD those are fillet pieces, small holes and edge faces, each
-# of which would otherwise become a component of its own (the bore here is about
+# of which would otherwise become a separate component (the bore here is about
 # 5×10⁻³ of its half's kept area).
 
 fitted = reduce(vcat, [curved_components(c; regions = regions[c.name]) for c in remeshed.target.components])
@@ -352,7 +352,7 @@ by_hand = Target(fitted)
 # The split is computational. Each piece records its part, and [`parts`](@ref),
 # `elements(target, :hohlraum_top)`, the keep-outs, the clearance checks and the reports
 # (`energy_balance`, `component_power`, `write_results`) take and show the parts as
-# read; a piece stays reachable by its own name. A part that is one surface, as the
+# read; each piece stays reachable by name. A part that is one surface, as the
 # capsule is, keeps its name:
 
 println(parts(one_call))

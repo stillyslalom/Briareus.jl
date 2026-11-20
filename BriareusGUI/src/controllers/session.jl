@@ -226,7 +226,7 @@ function _follow_view_parts!(sess::DesignSession, rn::AbstractDict)
     return sess
 end
 
-# The parts definition `def`'s view names, `key => name`, with the session's own `vp`
+# The parts definition `def`'s view names, `key => name`, with the session `vp`
 # (`time.view_parts[id]`, or `nothing`) in place of the file's.
 function _view_parts(def, vp)
     v = get(def.data, "view", nothing)
@@ -681,7 +681,7 @@ function build_scenario!(sess::DesignSession)
                       (enc === nothing ? "" : @sprintf(" (the cavity: %d of the target's %d elements)",
                                                        nelements(s.target), nelements(t))) *
                       (cavity !== nothing && enc === nothing ?
-                       @sprintf(" · on the whole target: the cavity point is in the open (%.0f %% of its rays escape)",
+                       @sprintf(" · on the whole target: the cavity point is in the open (%.0f%% of its rays escape)",
                                 100escape) : "") *
                       (film === nothing ? "" :
                        " · $film sealed the point in a pocket (a capsule tent or window modeled as a solid): " *
@@ -801,7 +801,7 @@ function _cavities_note(cs; enclosure::Bool = false)
         c.balanced && continue
         out *= " · $(c.name) not balanced: " *
                (c.holed ? "a piece of its boundary is left out of the calculations" :
-                @sprintf("%.2g %% of its rays leave it (an opening without an aperture, or an open end)", 100c.leak))
+                @sprintf("%.2g%% of its rays leave it (an opening without an aperture, or an open end)", 100c.leak))
     end
     return out
 end
@@ -903,7 +903,7 @@ The unconverted power of each beam of the table as a fraction of its 3ω power,
 `(; omega1, omega2)` (vectors in table order): the drive's ratio
 ([`set_unconverted_ratio!`](@ref)) for the beams whose 1ω or 2ω light takes part
 ([`participates`](@ref)), zero for the others; `nothing` when no unconverted light takes
-part (the drive is then the 3ω drive alone, bit for bit).
+part (the drive is then bitwise the 3ω drive alone).
 """
 function unconverted_ratios(sess)
     bt = sess.beams
@@ -1301,8 +1301,8 @@ it. `prepulse` adds light not proportional to the 3ω pulse, `(; omega1, omega2,
 window)`: per color a power per beam of `beams` (TW, a vector), flat over `window =
 (start, stop)` (ns); the histories and the retune take it as `drive_history`'s and
 `retune_drive`'s `prepulse`, keyed by `by` (the beams of one key must carry the same
-prepulse), and the retune does not retune it. Without either they are the 3ω ones, bit
-for bit.
+prepulse), and the retune does not retune it. Without either they are bitwise the 3ω
+ones.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
@@ -1353,7 +1353,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     refbeams(τ) = _table_beams(beams, pulses, τ; by = ref_by, shares = rsh)
     oldbeams(τ) = _table_beams(kept, pulses, τ; by = ref_by, shares = rsh[keep])
     # the unconverted light of every beam (the reference's) and of the kept beams, as
-    # `drive_history`'s keywords, and the latter as the retune's (its `by` is its own)
+    # `drive_history`'s keywords, and the latter as the retune's (with a separate `by`)
     uc = _light_kw(unconverted, prepulse, beams; by)
     uck = _light_kw(_kept_unconverted(unconverted, keep), _kept_unconverted(prepulse, keep), kept; by)
     ucr = Base.structdiff(uck, NamedTuple{(:by,)})
@@ -1764,7 +1764,7 @@ Start a new target from `starter` ([`new_target!`](@ref) on the session's target
 optimization of the previous target is cleared. The starters belong to a facility
 ([`STARTER_PRESETS`](@ref)): when the beams are another facility's preset, or a preset
 of the same facility that does not drive this kind of target (the OMEGA hohlraum beams
-on a foil), the starter's own preset replaces them, pointed for the new target; a
+on a foil), the preset of the starter replaces them, pointed for the new target; a
 hohlraum preset whose beams do not aim in the new target's entrance holes as
 [`preset_pointing`](@ref) aims them (a halfraum pair after a hohlraum) is loaded again
 for the new target. Imported beams are kept, as are the beams of an empty target

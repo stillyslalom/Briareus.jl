@@ -69,7 +69,7 @@ the scenario caches built from them) measures directions by default: the center 
 their `SphereSurface` when every element lies on sphere components with one center (a
 capsule, also when it is offset from chamber center), otherwise the origin. Analyzing
 an offset capsule about the origin mixes its P2 into a spurious mode 1 at first order
-in the offset (0.74 % of mode 1 per 100 µm on a 0.83 mm capsule with P2/P0 ≈ −0.1).
+in the offset (0.74% of mode 1 per 100 µm on a 0.83 mm capsule with P2/P0 ≈ −0.1).
 """
 function mode_center(t::Target, elems::AbstractVector{<:Integer})
     c = nothing
@@ -311,8 +311,8 @@ SphereSurface(R)))`, with `dep.element ./ t.elem_area` projected by
 `W = ylm_weights(t, 1:nelements(t); lmax = 30)`, built once (`DepositionOperator(t,
 beams; ncone = 1)` for collimated beams). The element values average the illumination
 over each facet, which lowers `σₗ` at second order in the element size: on OMEGA's 60
-beams with SG4 spots on R = 0.5 mm, `σ` (l ≤ 30) is 3.5 % low at `n = 20` (edges
-0.055 R) and 1.7 % low at `n = 30`; a Richardson extrapolation of the two is 0.3 % low
+beams with SG4 spots on R = 0.5 mm, `σ` (l ≤ 30) is 3.5% low at `n = 20` (edges
+0.055 R) and 1.7% low at `n = 30`; a Richardson extrapolation of the two is 0.3% low
 (`reference/research-notes.md`, "Hard-sphere direct-drive illumination").
 """
 function mode_rms(c::AbstractVector, lmax::Integer; m::Symbol = :all)

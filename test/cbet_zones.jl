@@ -83,7 +83,7 @@ end
     inner = (:inner23, :inner30)
     P(m) = sum(b.power for b in apply_lpi(m, q, 0.0) if b.group in inner)
     lin = P(CBET(leh_z = 5.05, clamp = nothing))
-    # hard minimum: no effect while δn stays below the clamp (bit for bit linear theory up
+    # hard minimum: no effect while δn stays below the clamp (linear theory, bitwise up
     # to summation order), and never less transfer than the smooth factor
     @test P(CBET(leh_z = 5.05, clamp = 1.0, saturation = :min)) ≈ lin rtol = 1e-12
     @test P(CBET(leh_z = 5.05, clamp = 1.0)) != lin

@@ -633,7 +633,7 @@ function _soft_weight(z)
     return 1 - t^2 * (3 - 2t)
 end
 
-# The keep-out's own dual numbers: the smooth minimum's sensitivities to the focus (three)
+# Dual numbers of the keep-out: the smooth minimum's sensitivities to the focus (three)
 # and the envelope's semi-axes (two), the only quantities of the beam it reads.
 struct _RimTag end
 const _RimDual = ForwardDiff.Dual{_RimTag,Float64,5}
@@ -641,7 +641,7 @@ const _RimDual = ForwardDiff.Dual{_RimTag,Float64,5}
 # The smooth minimum in the beam's number type. On Float64 the terms on the values; on a
 # dual beam its sensitivities to the frame's five dual quantities (`_RimDual`, Float64
 # partials), carried to the beam's partials by the chain rule, so the cost does not grow
-# with the beam's partials; on nested duals the terms in the beam's own type.
+# with the beam's partials; on nested duals the terms in the number type of the beam.
 _rim_result(k::ApertureKeepOut, terms, imin, fv, ::Beam{Float64}, ρ) = _rim_soft_min(k, terms, imin, fv)
 
 function _rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam{<:ForwardDiff.Dual{<:Any,Float64}}, ρ)
@@ -685,7 +685,7 @@ the f-cone tilt of the envelope surface (cos of the cone half-angle) is neglecte
 
 By default the spheres are the parts that are spheres: those whose largest spherical
 component carries at least 90% of the part's area (a primitive capsule, or a CAD capsule
-fitted with `curved_components`, its fill tube a piece of its own), not the small
+fitted with `curved_components`, its fill tube a separate piece), not the small
 spherical fillets fitted on hohlraum CAD. `spheres` names parts or components; a part
 stands for its largest sphere, and its other pieces are not landing surfaces.
 
@@ -805,7 +805,7 @@ keepout_clearance(k, ev::Evaluation) = keepout_clearance(k, ev.beams)
     keepout_penalty(keepout, ev::Evaluation) -> Real
 
 The penalty a keep-out adds to an objective: `weight × Σᵢ max(0, minimum − cᵢ)²` over
-the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the keep-out's own
+the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the keep-out
 `weight` and `minimum`; for a tuple or vector of keep-outs the sum of theirs, and 0 for
 `nothing`. It is what the `keepout` keyword of [`symmetry_objective`](@ref),
 [`asymmetry_objective`](@ref) and [`face_flux_objective`](@ref) adds, so a hand-written

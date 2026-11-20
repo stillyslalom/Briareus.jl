@@ -13,11 +13,11 @@ Figs. 1, 9 and 10 of K24E were rendered and read by eye.
 - **Capsule outer radius:** 1135 µm (K24E Fig. 1a label).
 - **W dopant:** 0.44 at.% (N210808) and 0.54–0.6 at.% (N221204, batch KC952).
 - **Hohlraum energy balance, N221204** (K24E App. 3, HYDRA calibrated to data).
-  - Fractions of incident laser energy: 54.1 % heats the wall (4.4 % Au lining, 49.7 % DU), 25.2 % leaves as radiation through the LEHs, 4.5 % heats the He, 16.2 % is absorbed by the capsule.
-  - The laser energy had to be degraded by 9–13 % to match data.
-  - Downstream: 246 kJ (~12 %) is coupled to the implosion, fuel kinetic energy 15.33 kJ, 20 kJ of work on the DT, 8.2 kJ to the hot spot.
+  - Fractions of incident laser energy: 54.1% heats the wall (4.4% Au lining, 49.7% DU), 25.2% leaves as radiation through the LEHs, 4.5% heats the He, 16.2% is absorbed by the capsule.
+  - The laser energy had to be degraded by 9–13% to match data.
+  - Downstream: 246 kJ (~12%) is coupled to the implosion, fuel kinetic energy 15.33 kJ, 20 kJ of work on the DT, 8.2 kJ to the hot spot.
 - **Capsule absorbed energy:** 258 kJ for N221204 (H24 Table I caption: Y/G_cap), and 19.4 kJ into the DT fuel.
-  - H24's generic low-fill accounting: ~50 % wall, 30–35 % out the LEHs, 10–15 % capsule, ~5 % gas plus LEH windows.
+  - H24's generic low-fill accounting: ~50% wall, 30–35% out the LEHs, 10–15% capsule, ~5% gas plus LEH windows.
   - H24: f₂ ≈ 0.07 asymmetry roll-up for N221204.
 - **Modeling settings:** CBET clamp δn/n = 0.0075 after the start of the rise (K24E). The PoP rounds it to 0.008.
 - **Outer-power alternative:** symmetry by power alone would need the outers cut to 150–200 TW.
@@ -68,7 +68,7 @@ diagnostic windows.
 | Au liner thickness, DU thickness | not given | not given | gap |
 | Corner radius / LEH lip | Schematics show rounded corners and an "LEH washer" (Au insert); no dimensions | same | AS22 Fig. 1a; SW25 Fig. 3, L |
 | LEH window | 500 nm polyimide + 25 nm Al flash ("standard on high-performance ID-ICF targets"); glued to an Al washer | same | SW25 §II.4, H |
-| Storm window | 100 nm polyimide + 32 nm C, ~700 µm outside the pressure membrane; its Al retainer blocks ~27 % of Dante-2's view | same | SW25, H |
+| Storm window | 100 nm polyimide + 32 nm C, ~700 µm outside the pressure membrane; its Al retainer blocks ~27% of Dante-2's view | same | SW25, H |
 | Diagnostic windows | "three equatorial hohlraum diagnostic windows were repositioned" (new design first on N210808); "low Z" windows, sizes and location changed | same design | AS24 App. A; AS22; Z22 §I C; K22 §II C, H (no sizes or azimuths published in what I read) |
 | Tent | two 45-nm Formvar membranes | same | AS24 p. 3; AS22, H |
 | Fill tube | 2 µm diameter (was 5 µm) | 2 µm | P24 Table I; AS22, H |
@@ -76,12 +76,12 @@ diagnostic windows.
 | Ablator layers (in→out), µm | 6 / 18.7 doped / 54.9 (= 79.6) | 7.7 / 15.1 doped / 62.6 (= 85.4) | P24 Table I, H |
 | Ablator radii | 1055, 1073.5, outer 1128.5 µm (OD 2.257 mm) | outer 1135 µm (K24E Fig. 1a, H); doped layer at 1057.7–1072.8 µm (L, from P24) | K22 Fig. 4; K24E Fig. 1a |
 | Thickness change | — | +5.75 µm (N221204), +6.9 µm (N230729), +~5 µm more (N231029/N240210) | K24 §II, III; R26 abstract, H |
-| W dopant | 0.42 % (K22) / 0.44 at.% (K24E), KC789, NCD; 7.9 %W·µm | 0.54–0.6 at.% (K24E), 0.6 at.% (AS24), 0.62 % (K24); NCD batch KC952; 9.2 %W·µm; ~1.19× optical depth | K22; K24E App. 2; P24 Table I & App.; AS24, H |
+| W dopant | 0.42% (K22) / 0.44 at.% (K24E), KC789, NCD; 7.9%W·µm | 0.54–0.6 at.% (K24E), 0.6 at.% (AS24), 0.62% (K24); NCD batch KC952; 9.2%W·µm; ~1.19× optical depth | K22; K24E App. 2; P24 Table I & App.; AS24, H |
 | Capsule mass | 3927 µg | 4253.1 µg ("4.25 mg") | P24 Table I; AS24, H |
 | DT ice | 65 µm; inner radius 983 µm | 64.5 µm, 220 µg | K22 Fig. 4; AS24, H |
 | DT gas / ice density | 0.45 mg/cc / 0.25 g/cc | same | AS24 Fig. 1, H |
 | Inclusions (>200 µm³) | 5 | 105; >4000 small W–C inclusions | P24 Table I, H |
-| Capsule mode 1 (wall) | 0.2 µm | 0.13 µm (<0.25 % of wall) | P24 Table I, H |
+| Capsule mode 1 (wall) | 0.2 µm | 0.13 µm (<0.25% of wall) | P24 Table I, H |
 
 ## 2. Laser
 
@@ -92,12 +92,12 @@ diagnostic windows.
 | N210307 | 1.91 MJ | 487 TW | 1.55 Å | AS24 T. I; K22 |
 | N210808 | 1.89 MJ (AS24, P24, corrected) / 1.917 (AS22) / 1.92 (K24) | 441 TW | 1.8 Å | AS24 T. I; AS22 T. I |
 | N220919 | 2.05 MJ | 440 TW | 2.5 Å | AS24; K24; P24 |
-| N221204 | 2.05 MJ ± 2 % | 440 TW | 2.75 Å | AS24; DN24 |
+| N221204 | 2.05 MJ ± 2% | 440 TW | 2.75 Å | AS24; DN24 |
 | N230729 | 2.05 MJ | ~440 TW | 2.9 Å | K24 |
 | N231029, N240210 | 2.2 MJ | 440 TW | 4.00 Å for the 2.2-MJ keyhole N231016 | K24 §II; R26 Table I |
 
 AS24 App. B: the reported energies were "corrected a few percent downward due to neutron background on the laser calorimeters".
-DN24: for N221204 the calorimeter read 3.7 % high before correction. N210808 is therefore 1.89 MJ in the 2024 papers and 1.917 MJ in 2022.
+DN24: for N221204 the calorimeter read 3.7% high before correction. N210808 is therefore 1.89 MJ in the 2024 papers and 1.917 MJ in 2022.
 
 **Pulse shape, total power** (P24 Fig. 1 top, delivered N210808/N220919/N221204, read by eye, **L**).
 - Picket: ≈55 TW at 0.7–1.3 ns, the same for all three shots.
@@ -121,12 +121,12 @@ against "Specified", right axis in TW, read by eye, **L**):
 - Cross-check: DN24 Fig. 1 left gives per-quad power of ≈9.3 TW for both cones at peak (32 outer and 16 inner quads), so 297 + 149 TW = 446 TW and CF = 1/3.
 - R26 (H): "the cone fraction during the peak power is limited to 0.33, where the peak laser power is distributed evenly to all the beams".
 - Requested vs delivered energy, N221204 (DN24 Fig. 1, H).
-  - Inner: +1.5 %, −2.6 %, −7.4 %, −4.8 % over the foot epochs; +0.6 % at peak.
-  - Outer: +1.1 %, +0.9 %, +0.6 %, +1.5 %; −0.5 % at peak.
+  - Inner: +1.5%, −2.6%, −7.4%, −4.8% over the foot epochs; +0.6% at peak.
+  - Outer: +1.1%, +0.9%, +0.6%, +1.5%; −0.5% at peak.
 - Quad-to-quad power balance rms, N221204 (DN24, H).
-  - Inner: 12.1 → 13.7 → 10.0 → 5.6 % in the foot, 2.2 % at peak.
-  - Outer: 6.4 → 6.8 → 3.7 → 3.4 %, 2.1 % at peak.
-  - Requirements: foot 22 % inner / 14 % outer, peak 2.5 % / 3.5 %. Pointing accuracy <50 µm.
+  - Inner: 12.1 → 13.7 → 10.0 → 5.6% in the foot, 2.2% at peak.
+  - Outer: 6.4 → 6.8 → 3.7 → 3.4%, 2.1% at peak.
+  - Requirements: foot 22% inner / 14% outer, peak 2.5% / 3.5%. Pointing accuracy <50 µm.
 
 **Cone fraction, other sources.**
 - R26 Fig. 5 (N210808 keyhole and 2DConA pulses, read by eye, L): CF ≈0.10 in the picket, ≈0.16 at ≈2.3 ns, ≈0.10 at 3 ns.
@@ -158,7 +158,7 @@ Times are in ns, powers in TW per whole cone.
 | 44° post-CBET | | | | | | | | | 80 (5.3 ns), dip 55 (6 ns) | 70 | 75 | | | |
 | 50° post-CBET | | | | | | | | | 95, dip 85 | 95 | 100 | | | |
 
-- Peak input per cone sums to ≈64 + 64 + 125 + 128 ≈ 380 TW (L), below the 440 TW delivered. HYDRA plots appear to carry the 9–13 % laser degradation that K24E App. 3 says is needed.
+- Peak input per cone sums to ≈64 + 64 + 125 + 128 ≈ 380 TW (L), below the 440 TW delivered. HYDRA plots appear to carry the 9–13% laser degradation that K24E App. 3 says is needed.
   - DN24's measured split at peak is 146 TW inner and 296 TW outer, i.e. 73 TW per inner cone and 148 TW per outer cone.
   - Use DN24 for absolute powers and K24E for the design CF shape.
 - K24E text (H): the cone fraction "in the peak (33%)". The outers "droop" late while the inners are held, so CF → 1 at ≈9.2 ns.
@@ -170,14 +170,14 @@ Times are in ns, powers in TW per whole cone.
 - 50° beams moved toward the midplane to clear the 3.1 mm LEH. K22 Fig. 1a labels the move "250 µm vs N210307" (H).
 - Outer-quad splitting (K21, H): the focal points of the four beams in each outer quad are separated in azimuth by 450 µm. The 44° and 50° focal points are separated by >430 µm along the axis.
 - Absolute aim points, defocus and CPP types per cone: **not published** in any source read (gap).
-- NIF tuning ranges (DN24, H): outer 1052.32–1052.95 nm, inner 1052.85–1053.7 nm (1ω). Since 2020 a 4th oscillator gives the 50° cone its own wavelength (the 44.5°/50° split, used against 50° SBS).
+- NIF tuning ranges (DN24, H): outer 1052.32–1052.95 nm, inner 1052.85–1053.7 nm (1ω). Since 2020 a 4th oscillator gives the 50° cone a separate wavelength (the 44.5°/50° split, used against 50° SBS).
 - Whether N221204 split 23.5°/30° or 44.5°/50°: **not stated** in any source read. K24, AS24 and P24 give a single Δλ (gap; likely in PRE 109 025204).
 - Beam smoothing: no per-shot data found.
 
 **Backscatter.**
 - N221204, SBS: 42 ± 11 kJ (1σ), "early in peak power and mostly on the inner cones" (AS24, H).
 - N221204, SRS: 6 ± 1 kJ, throughout peak (AS24, H).
-- N221204, coupled fraction: 98 % ± 0.6 % (AS24, H).
+- N221204, coupled fraction: 98% ± 0.6% (AS24, H).
 - N210808, inner-cone SBS: 2.8 kJ/quad (23°) and 0.9 kJ/quad (30°), i.e. ≈30 kJ total over 8 + 8 inner quads (KE26 §II, H; total L).
 
 ## 3. Measured observables
@@ -186,7 +186,7 @@ Times are in ns, powers in TW per whole cone.
   - N221204: ≈150 eV at 3 ns, ≈200 eV at 4.6 ns, ≈275 eV at 6 ns, peak ≈311 eV at ≈8.2 ns.
   - N210808-pulse repeats: peak ≈310 eV, ≈0.3 ns earlier.
   - "Dante 1 data are not available for N210808"; traces stop 100 ps before peak nuclear production.
-  - AS24: N221204 reached "a 2 % higher peak x-ray drive temperature" (H).
+  - AS24: N221204 reached "a 2% higher peak x-ray drive temperature" (H).
 - **"Drive Trad"** (AS24 Table I, H): 304 (N210207), 306 (N210307), 307 (N210808, average of similar shots), 313 (N220919), 313 eV (N221204).
   - AS22 gives the N210808 value as computed "from the measured laser pulse", not measured directly.
 - **Coast time** (AS24, H): 0.93 ns (N210808), 0.89 ns (N220919), 0.78 ns (N221204). Defined from mid-fall of the laser to peak compression (AS22).
@@ -200,10 +200,10 @@ Times are in ns, powers in TW per whole cone.
   - Back through 0 at ≈6.5 ns.
   - ≈+0.10 at 7.5 ns and ≈+0.12–0.15 at 8.0–8.3 ns (pole-hot).
   - K24E: P2 is held in spec in the foot and "allowed to swing" in the peak. The swing comes from wall motion, which a static Briareus geometry will not reproduce.
-- **Energy partition** (K24E App. 3, HYDRA calibrated, H): see the addendum (54.1 / 25.2 / 4.5 / 16.2 %).
+- **Energy partition** (K24E App. 3, HYDRA calibrated, H): see the addendum (54.1 / 25.2 / 4.5 / 16.2%).
   - R26 2DConA stagnation (H): 9.170 ± 0.061 ns for N220618 (N210808 surrogate) and 9.876 ± 0.090 ns for N240304 (N221204 surrogate, Δλ 2.9 Å).
 - **Hot-spot P2 (PNI)** (K24 Table II, H): N220919 ~−10.5 µm (oblate), N221204 ~0, N230618 ~0, N230729 ~+6, N230904 ~+6 µm.
-  - P24 (H): N210808 −2.3 ± 0.5 µm, N211024 +6.5 ± 1.1 µm, N220919 |P2| 10.8 ± 1.6 µm, N221204 0.3 ± 0.1 µm (17 % contour).
+  - P24 (H): N210808 −2.3 ± 0.5 µm, N211024 +6.5 ± 1.1 µm, N220919 |P2| 10.8 ± 1.6 µm, N221204 0.3 ± 0.1 µm (17% contour).
 - **Hot-spot velocity, magnitude and direction (θ, φ)** (P24 Fig. 2, H): N210808 68 km/s (166°, 167°); N220919 51 (74°, 71°); N221204 36 (151°, 54°); N211024 133 (154°, 313°).
   - K24 Table II: N221204 36 ± 6 km/s (~27 without α heating); N230729 104 ± 9 km/s.
   - The Fig. 2 skymaps also mark the "mode-1 drive" direction, which gives a mode-1 drive vector to compare with Briareus's flux P1 including windows.
@@ -217,15 +217,15 @@ Times are in ns, powers in TW per whole cone.
 | N240304 (N221204) | 2.90 | 0.17 | 355 ± 5 (344) | 9.876 ± 0.090 | 21.7 ± 1.31 (19.5) | 4.16 ± 1.04 | 71.0 / 7.39 ± 1.85 / 0.07 |
 
 - R26 Fig. 9 (N240304 P2 vs time, L): shell P2 ≈22–24 µm at 9.15 ns falling to ≈16 µm at 9.45 ns, at shell P0 270→160 µm.
-- R26: matching these data needs HYDRA peak-power multipliers of 0.825–0.86 and peak CBET clamps of 0.005–0.007, varying "5 % and 30 %" shot to shot.
+- R26: matching these data needs HYDRA peak-power multipliers of 0.825–0.86 and peak CBET clamps of 0.005–0.007, varying "5% and 30%" shot to shot.
 - **Shock timing, keyhole** (R26 Table II, H), N230110 = the N221204 design: 85.6 µm, Δλ 2.75 Å, rise CF 0.21.
   - Equator: shock-1 breakout 3.864 ± 0.012 ns, 1–2 merge 4.847 ± 0.003 ns, 1–2–3 merge 5.972 ± 0.008 ns; velocities 32.74 and 50.30 km/s.
   - Pole: 3.906 ± 0.018, 4.857 ± 0.01 and 6.050 ± 0.046 ns; velocities 34.00 and 49.90 km/s.
   - N221106 (N210808 design): equator 3.714 / 4.725 / 5.700 ns, pole 3.650 / 4.655 / 5.809 ns.
 - **Implosion velocity:** 380–400 km/s (K24, AS24, H). K24 Table III (simulated N230729): 386 km/s, 245 kJ absorbed by the capsule.
 - **Capsule absorbed energy** (H24, H): 258 kJ for N221204. For N210808, 1.37 MJ / G_cap 5.8 ≈ 236 kJ (L). G_cap is simulation-based.
-  - K24E App. 3: the capsule absorbs 16.2 % of incident laser energy, i.e. ≈330 kJ of 2.05 MJ before the 9–13 % degradation (L). 246 kJ of that is coupled to the implosion.
-  - K24E Table I simulated implosion velocity: 401 km/s (N210808) and 383 km/s (N221204). Remaining ablator mass: 3.8 % and 5.7 %.
+  - K24E App. 3: the capsule absorbs 16.2% of incident laser energy, i.e. ≈330 kJ of 2.05 MJ before the 9–13% degradation (L). 246 kJ of that is coupled to the implosion.
+  - K24E Table I simulated implosion velocity: 401 km/s (N210808) and 383 km/s (N221204). Remaining ablator mass: 3.8% and 5.7%.
 - **LEH closure:** no N221204 GLEH data found. SW25 (H, BAH targets): simulations overpredict LEH size early and match it at peak.
   - SW25: measured bang times are 400–700 ps later than simulated across ID-ICF.
 - **Sensitivities.**
@@ -244,7 +244,7 @@ Times are in ns, powers in TW per whole cone.
 | Pulse | ref. | +~300 ps peak, longer trough | same as N220919, re-tuned powers | early pulse +~30 ps | longer |
 | Δλ 1ω (Å) | 1.8 | 2.5 | 2.75 | 2.9 | (4.00 on keyhole N231016) |
 | Ablator (µm) | 79.6 | ~85.4 (+6) | 85.4 (+5.75) | +6.9 vs N210808 | +~5 vs N230729 |
-| W | 0.42 % | 0.62 % | 0.62 % | ~0.4 % | ? |
+| W | 0.42% | 0.62% | 0.62% | ~0.4% | ? |
 | LEH (mm) | 3.1 | 3.1 | 3.1 | 3.1 | 3.1 (L) |
 | Yield (MJ) | 1.37 (AS22) / 1.3 ± 0.07 | 1.2 ± 0.06 | 3.1 ± 0.16 (3.15) | 3.88 | 5.2 (record, N240210 per K24 abstract) |
 | HS P2 (µm) | −2.3 ± 0.5 | −10.5 / −10.8 | ~0 / 0.3 | ~+6 | ? |
@@ -283,7 +283,7 @@ dlambda_outer = 0.0          # GAP: any 44.5°/50° or 23.5°/30° split on N221
 # 44°/50° foci >0.43 mm apart in z (K21). Absolute aims, defocus and CPPs: GAP (use the repo's current HYBRID-E defaults).
 # Backscatter (subtract from incident): inner SBS 42 ± 11 kJ, early in peak; SRS 6 ± 1 kJ over peak.
 # CBET (HYDRA practice): δn/n = 0.002 until the rise, 0.0075 after (K24E App. 1, H); 2DConA fits need 0.005–0.007 (R26).
-# Energetics: HYDRA needed the laser degraded 9–13 % (K24E) or peak multipliers 0.825–0.86 (R26) to match data.
+# Energetics: HYDRA needed the laser degraded 9–13% (K24E) or peak multipliers 0.825–0.86 (R26) to match data.
 # Use the same knob, not the wall albedo, if Briareus's absolute drive comes out high.
 ```
 
@@ -291,21 +291,21 @@ dlambda_outer = 0.0          # GAP: any 44.5°/50° or 23.5°/30° split on N221
 
 | Observable | Value | Time | Source |
 |---|---|---|---|
-| Peak Trad (Dante-1, through LEH) | ≈311 eV (N221204); ≈2 % above N210808 | ≈8.2 ns | P24 Fig. 1 (L); AS24 (H) |
+| Peak Trad (Dante-1, through LEH) | ≈311 eV (N221204); ≈2% above N210808 | ≈8.2 ns | P24 Fig. 1 (L); AS24 (H) |
 | Drive Trad (inferred) | 313 eV (N221204), 307 eV (N210808) | peak | AS24 Table I, H |
 | Trad(t) foot/rise | ≈150 eV @ 3 ns, 200 @ 4.6, 275 @ 6 ns | — | P24 Fig. 1, L |
 | Capsule absorbed energy | 258 kJ (N221204); ≈236 kJ (N210808) | integrated | H24 (H); N210808 from G_cap (L) |
-| Laser energy fractions (N221204) | wall 54.1 % (Au 4.4, DU 49.7), LEH 25.2 %, He 4.5 %, capsule 16.2 % | integrated | K24E App. 3, H (HYDRA calibrated) |
+| Laser energy fractions (N221204) | wall 54.1% (Au 4.4, DU 49.7), LEH 25.2%, He 4.5%, capsule 16.2% | integrated | K24E App. 3, H (HYDRA calibrated) |
 | Flux P2/P0 (simulated) | ≈0 foot; ≈−0.17 at 5.5 ns; 0 at 6.5 ns; ≈+0.12–0.15 at 8 ns | 0.5–8.5 ns | K24E Fig. 10, L (model, not data) |
 | Bang time | 9.53 ± 0.07 ns (N221204); 9.28 ± 0.07 ns (N210808) | — | K24E Table I, H |
-| Laser coupled (1 − SBS) | 98 % ± 0.6 % | — | AS24, H |
+| Laser coupled (1 − SBS) | 98% ± 0.6% | — | AS24, H |
 | In-flight shell P2 (N221204 surrogate) | 21.7 ± 1.3 µm | 9.1–9.5 ns, R ≈ 270→160 µm | R26 T. IV, H |
 | In-flight shell P2 (N210808 surrogate) | 9.07 ± 0.30 µm; 27.5 ± 2.4 µm at rise CF 0.24 | ~8.6–9.1 ns | R26, H |
 | ΔP2 per 0.01 rise CF | ≈+6 µm (0.21→0.24); ~0 (0.21→0.16) | in flight | R26 Fig. 10, H |
 | Hot-spot P2 | N210808 −2.3 ± 0.5; N220919 −10.8 ± 1.6; N221204 0.3 ± 0.1; N230729 ≈+6 µm | stagnation | P24; K24, H |
 | ΔP2 / ΔΔλ | ≈40–50 µm/Å (hot spot) | stagnation | K21 (H); P24 pair (L) |
 | Mode-1 (hot-spot velocity) | 36 ± 6 km/s at (151°, 54°) (N221204); 68 km/s at (166°, 167°) (N210808) | stagnation | P24 Fig. 2; K24, H |
-| Mode-1 drive → velocity | 0.7 % applied mode 1 ↔ >100 km/s burn-on | — | K24 Fig. 5, H |
+| Mode-1 drive → velocity | 0.7% applied mode 1 ↔ >100 km/s burn-on | — | K24 Fig. 5, H |
 | Foot shock symmetry | pole − equator shock-1 breakout +42 ± 22 ps (N230110) | 3.9 ns | R26 Table II, H (difference L) |
 | Coast time / 2DConA stagnation | 0.78 ns; 9.876 ± 0.090 ns | — | AS24; R26, H |
 
@@ -335,4 +335,4 @@ through a transfer function, and the Trad and capsule-energy rows for absolute e
 7. **Energy bookkeeping.** N210808 at 1.89 (corrected) vs 1.92 MJ. Use the 2024 values for both shots.
 8. **2DConA surrogate.** N240304 used Δλ 2.9 Å (not 2.75) and rise CF 0.17, so it is a surrogate of the N221204 *design*, not of the shot.
 9. **Bang times:** resolved (K24E Table I).
-10. **Liner thickness:** still unpublished. K24E only splits the wall energy between the Au lining (4.4 % of laser energy) and the DU (49.7 %).
+10. **Liner thickness:** still unpublished. K24E only splits the wall energy between the Au lining (4.4% of laser energy) and the DU (49.7%).

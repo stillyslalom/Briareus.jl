@@ -2,8 +2,8 @@
 # reference: 1-D nonlinear radiation diffusion in a static gold wall with the power laws
 # of Hammer & Rosen, PoP 10, 1829 (2003) (e = 3.4 T^1.6 ρ^-0.14 MJ/g, κ_R = 7200 T^-1.5
 # ρ^0.2 cm²/g, T in heV) and a Marshak boundary driven by the incident flux σT_D(t)^4.
-# The closure is given the same T_D(t) and the medium's own constant-T scaling (a static
-# medium: E ∝ T^((4+α+β)/2) t^0.5, a = 3.55 and b = 0.5; coefficient from the
+# The closure is given the same T_D(t) and the constant-T scaling of the same medium (a
+# static medium: E ∝ T^((4+α+β)/2) t^0.5, a = 3.55 and b = 0.5; coefficient from the
 # reference's constant-T energy). Prints the release factor each drive needs (the
 # closure is linear in it for a prescribed T_D) and the check at `WallLossAlbedo`'s
 # default. A static wall needs 0.76–0.78 (the default until 2026-10-25); the default is

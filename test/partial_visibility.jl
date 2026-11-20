@@ -34,7 +34,7 @@ end
 @testset "partial visibility" begin
     @test_throws ArgumentError view_factors(hohlraum(h = 2.0, capsule_h = 0.8); visibility = :rays)
 
-    # nothing in the way: identical to the centroid rule, bit for bit
+    # nothing in the way: bitwise identical to the centroid rule
     s = Target(Component(:s, sphere_mesh(2.0; ntheta = 8, nphi = 12, outward = false), gold();
                          surface = SphereSurface(2.0)))
     @test view_factors(s; visibility = :sampled) == view_factors(s)
@@ -93,7 +93,7 @@ end
 # meshops.jl): elements folded across many facets (48 per capsule element here). Their
 # sample cells' mean points lay behind a convex part's facets, which blocked 91% of the
 # capsule's sample rays: capsule row sums 0.03 (0.0–0.999) and flux 40× too low (an open
-# question of 2026-10). Samples now lie on the facets, and an element's own facets do not
+# question of 2026-10). Samples now lie on the facets, and the facets of an element do not
 # occlude its samples.
 @testset "sampled visibility on remeshed CAD" begin
     R, Rout, Rleh, h, th, rc = 2.875, 2.975, 1.55, 4.7, 0.05, 0.9

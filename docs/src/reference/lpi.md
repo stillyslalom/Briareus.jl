@@ -9,9 +9,9 @@ multiplier, flow and clamp [`calibrate_cbet`](@ref) fits to transfer data;
 [`TwoZoneCBET`](@ref), which separates the flowing plasma outside the LEH from the
 stagnant one inside, with calibrations to published HYDRA transfer for HYBRID-E shots;
 and inner-beam absorption in the gold bubble ([`BubbleAbsorption`](@ref)), whose picket
-fluence ratio [`picket_ratio`](@ref) can take from a pointing's own outer picket fluence
-on the wall ([`picket_fluence`](@ref)). [`PicketLinkedBubble`](@ref) takes it from the
-beams inside every evaluation, so that a re-pointed design grows its own bubble, and
+fluence ratio [`picket_ratio`](@ref) can take from the outer picket fluence of a
+pointing on the wall ([`picket_fluence`](@ref)). [`PicketLinkedBubble`](@ref) takes it from
+the beams inside every evaluation, so that the bubble follows a re-pointed design, and
 [`bubble_prediction`](@ref) reports what a re-pointing does to the picket, the bubble
 and the P2 swing; [`picket_irradiance`](@ref) and [`picket_ceiling`](@ref) give the
 outer cones' irradiance in a phase (its peak, its energy-weighted mean, the spatially

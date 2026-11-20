@@ -1,13 +1,13 @@
 # Multigroup (spectral) radiosity: the gray solution split into photon-energy groups.
 #
 # View factors do not depend on photon energy, so each group g obeys the gray system
-# with its own source and albedo,
+# with a per-group source and albedo,
 #
 #     B_g = S_g + α_g H_g,      H_g = F B_g,
 #
 # where S_g splits the gray source ηP/A by a Planckian at each element's emission
 # temperature, less a laser-produced non-Planckian M-band part (`MBandEmission`) placed
-# in its own band. With `thermalize = true` an element instead re-emits everything it
+# in a separate band. With `thermalize = true` an element instead re-emits everything it
 # re-emits thermally: B_g = S_g + b_g(T) Σ_g′ α_g′ H_g′, with b_g(T) the Planck fraction
 # of group g. With equal group albedos either form sums to the gray system exactly
 # (Σ_g S_g = S, Σ_g b_g = 1), so the group sum of every flux is the gray one.
@@ -99,9 +99,9 @@ part of their absorbed laser power `P` as M-band x-rays, flat in photon energy o
 The M-band is part of the converted x-rays, not added to them: the element's Planckian
 source is `ηP/A` less the M-band (which is capped at `ηP/A`).
 
-Defaults (provenance in the research notes, "Spectral radiosity, M-band and a synthetic
-Dante"): laser → M-band (> 1.8 keV) conversion of gold at normal incidence ~1 % at 10¹⁴
-and ~20 % at 10¹⁵ W/cm² (Dewald et al., PoP 15, 072706, 2008, as quoted in Dewald et
+Defaults (sources in the research notes, "Spectral radiosity, M-band and a synthetic
+Dante"): laser → M-band (> 1.8 keV) conversion of gold at normal incidence ~1% at 10¹⁴
+and ~20% at 10¹⁵ W/cm² (Dewald et al., PoP 15, 072706, 2008, as quoted in Dewald et
 al., PoP 27, 2020, **M**); the band's upper edge 2.85 keV puts 1/3 of a flat band above
 2.5 keV, Dewald 2020's share of the hohlraum M-band above the Mo edge (**L**). The
 element-averaged intensity of the default form depends on the mesh across a spot (the
@@ -176,8 +176,8 @@ materials and apertures emit none. `spectral_solve` takes the result as `mband_p
 With a laser–plasma model `lpi`, `beams` are its effective beams (`apply_lpi(lpi, b,
 time)`: after CBET, backscatter, the bubble) and each group is deposited through
 [`lpi_deposit`](@ref) at `time`, so light that the model deposits off the operator (the
-bubble's ridge stop) converts at its own group's fraction. Every step of a
-[`drive_history`](@ref) does this by default with its own effective beams. The groups
+bubble's ridge stop) converts at the fraction of its group. Every step of a
+[`drive_history`](@ref) does this by default with the effective beams of that step. The groups
 are split in one deposition pass: each group's share of an element is exactly the
 deposition of that group's beams alone (the others at zero power).
 """
@@ -239,7 +239,7 @@ and a synthetic Dante" and "Laser-spot spectrum"): with `nif_mband()`, thermaliz
 the laser spots thermal at the local radiation temperature (`spot = :radiation`), it
 gives Dewald et al. 2020's recirculating-to-laser M-band ratio ``F_M`` ≈ 2 on their setup
 (`examples/mband_dewald2020.jl`; 0.5 under the `:brightness` rule). Fitted to ``F_M`` only;
-Dante's > 1.8 keV share (11.4–12.0 % against the measured 12 %) is the check.
+Dante's > 1.8 keV share (11.4–12.0% against the measured 12%) is the check.
 """
 function mband_albedo(t::Target, m::MBandEmission, edges; albedo::Real = _ALPHA_M)
     E = collect(Float64, edges)
@@ -365,7 +365,7 @@ e.g. `spectral_edges()`).
   - `:wall`: the converted x-rays also at the wall temperature;
   - `:brightness`: everything at the brightness temperature `(B/σ)^¼` of the total
     radiosity (the rule before 2026-10-24's spot spectrum; a laser spot then emits as a
-    Planckian well above the wall's temperature, with a hard tail of its own).
+    Planckian well above the wall's temperature, plus a hard tail).
   The temperatures follow the group totals when those differ from the gray ones
   (iterated to `tol`). A given `temperature` vector (eV) fixes the wall (with
   `:brightness` the only) temperature, `spot_temperature` the converted x-rays' one.

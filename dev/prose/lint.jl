@@ -1,13 +1,15 @@
-# Prose lint for Briareus: American spelling everywhere, and the docs register (no "we"/"you",
-# no software as the subject of verbs for minds or bodies) in README, docs pages, tutorial
-# comments and src docstrings (src comments get the spelling check only). Base Julia only, so
+# Prose lint for Briareus: American spelling and the banned phrases ("its own", "bit for bit",
+# a space before %) everywhere, and the docs register (no "we"/"you", no software as the
+# subject of verbs for minds or bodies, discouraged words and constructions as warnings) in
+# README, docs pages, tutorial comments and src docstrings (src comments get the first set only). Base Julia only, so
 # it runs in a hook without a project environment (`--compile=min`: under a second).
 # The mind-verb check is a lexicon of inflected forms, a heuristic: it reads no syntax.
 #
 #   julia dev/prose/lint.jl [--fix] [paths...]   report every hit (default: all tracked files);
-#                                                --fix applies the spelling corrections
+#                                                --fix corrects spelling and percent spacing
 #   julia dev/prose/lint.jl --staged             pre-commit: hits on lines added since HEAD;
-#                                                spelling and we/you fail, mind verbs warn
+#                                                mind verbs and discouraged hits warn, the
+#                                                rest fail
 #   julia dev/prose/lint.jl --hook               Claude Code PostToolUse: tool JSON on stdin;
 #                                                hits in the edited text go to stderr, exit 2
 #
@@ -181,9 +183,9 @@ end
 struct Hit
     line::Int
     col::Int          # Char index of the word
-    kind::Symbol      # :spelling, :person, :mind
+    kind::Symbol      # :spelling, :person, :mind, :banned, :percent, :discouraged
     word::String
-    fix::String       # American form (spelling only)
+    fix::String       # the replacement (spelling, percent) or the reason (banned, discouraged)
 end
 
 function american(w::AbstractString)
@@ -241,6 +243,7 @@ function lint(rel::String, text::String, only = nothing)
             a = american(w)
             a === nothing || push!(hits, Hit(i, j, :spelling, w, a))
         end
+        banned!(hits, i, cs)
         # comments in src/ are notes for developers; the register is for docs and docstrings
         (register && !(comment[i] && startswith(rel, "src/"))) || continue
         ws = words(unquote(cs))
@@ -270,15 +273,73 @@ function lint(rel::String, text::String, only = nothing)
         for m in eachmatch(r"\b(cannot|can't|can not) tell\b", s)
             push!(hits, Hit(i, length(s, 1, m.offset), :mind, m.match, ""))
         end
+        for (re, why) in DISCOURAGED
+            for m in eachmatch(re, s)
+                w = m.match
+                if why == "possessive on a thing"
+                    stem = lowercase(match(r"^[\p{L}-]+", w).match)
+                    (stem in HUMAN || stem in OWNERS || stem in ("it", "one", "let", "that", "there",
+                                                                 "here", "what", "who")) && continue
+                end
+                why == "\"<verb> no\"" && lowercase(split(w)[1]) in NO_OK && continue
+                push!(hits, Hit(i, length(s, 1, m.offset), :discouraged, w, why))
+            end
+        end
+    end
+    hits
+end
+
+# banned everywhere prose is linted (errors in --staged); the percent spacing is fixable
+const BANNED = [
+    (r"(?i)(\bits|['’]s|s') own\b", "\"its own\" / \"'s own\""),
+    # "bit for bit", "vertex for vertex"; not a comprehension ("x for x in xs"), a symbol
+    # ("thr/N for N components") or a compound ("time for time-integrated")
+    (r"(?i)\b(\p{L}{2,}) for \1\b(?! in\b| ∈| =|-)", "\"x for x\""),
+]
+# a space (plain, no-break, thin or narrow no-break) between a number and %; built with
+# `Regex` from literal characters: `r""` hands `\x{a0}` to PCRE as the letters x, {, a, 0, }
+const PERCENT = Regex("(?<=[0-9⁰¹²³⁴⁵⁶⁷⁸⁹)])[    ]%")
+
+# discouraged in the docs register (warnings): heuristics, so a literal use stays
+const DISCOURAGED = [
+    (r"\bprovenance\b", "\"provenance\" (say references or sources)"),
+    (r"\b(reads|prints|printed)\b", "\"reads\"/\"prints\" (literal file I/O is fine)"),
+    (r"\bto round-?off\b", "\"to round-off\""),
+    (r"\b\p{L}+s no\b(?! (longer|more|less|matter|doubt|one|other)\b)", "\"<verb> no\""),
+    (r", not (a|an|the)\b", "\"a, not b\" (state what it is)"),
+    (r"\(\d+(\.\d+)? ?(s|ms|min)\)", "timing claim (machine specific)"),
+    (r"\b[\p{Ll}][\p{L}-]*['’]s\b|\b[\p{Ll}][\p{L}-]*s['’](?=\s)", "possessive on a thing"),
+]
+# words before " no" that are not the dispreferred "<verb> no" ("has no", "is no")
+const NO_OK = Set(split("""
+    is was has does as its this thus plus yes less unless whereas always perhaps sometimes
+    ones others"""))
+# lowercase possessors that are people or groups of people
+const OWNERS = Set(split("""
+    person team teams group groups lab lab's experimenter designer designers operator
+    operators reviewer reviewers student students"""))
+
+"Banned phrases and percent spacing in one masked line."
+function banned!(hits, i, cs)
+    s = String(unquote(cs))
+    for (re, why) in BANNED, m in eachmatch(re, s)
+        push!(hits, Hit(i, length(s, 1, m.offset), :banned, m.match, why))
+    end
+    s = String(cs)
+    for m in eachmatch(PERCENT, s)
+        push!(hits, Hit(i, length(s, 1, m.offset), :percent, m.match, "%"))
     end
     hits
 end
 
 const LABEL = Dict(:spelling => "British spelling", :person => "we/you",
-                   :mind => "verb for a mind or body")
+                   :mind => "verb for a mind or body", :banned => "banned phrase",
+                   :percent => "space before %", :discouraged => "discouraged")
 
 function describe(rel, lines, h::Hit)
-    what = h.kind == :spelling ? "\"$(h.word)\" -> \"$(h.fix)\"" : "\"$(h.word)\""
+    what = h.kind == :spelling ? "\"$(h.word)\" -> \"$(h.fix)\"" :
+           h.kind in (:banned, :discouraged) ? h.fix * ": \"$(h.word)\"" :
+           h.kind == :percent ? "(write \"0.5%\")" : "\"$(h.word)\""
     "$rel:$(h.line): $(LABEL[h.kind]) $what: $(strip(lines[h.line]))"
 end
 
@@ -306,8 +367,18 @@ end
 # --- modes ---
 
 function report(root, paths, fix)
-    rels = isempty(paths) ? tracked(root) :
-           [relpath(abspath(p), root) |> x -> replace(x, '\\' => '/') for p in paths]
+    files = tracked(root)
+    rels = isempty(paths) ? files : String[]
+    for p in paths                                   # a directory stands for its tracked files
+        rel = replace(relpath(abspath(p), root), '\\' => '/')
+        if rel == "."
+            append!(rels, files)
+        elseif isdir(joinpath(root, rel))
+            append!(rels, filter(r -> startswith(r, rel * "/"), files))
+        else
+            push!(rels, rel)
+        end
+    end
     n = 0
     for rel in filter(lintable, rels)
         path = joinpath(root, rel)
@@ -317,7 +388,7 @@ function report(root, paths, fix)
         lines = split(text, '\n')
         foreach(h -> println(describe(rel, lines, h)), hits)
         n += length(hits)
-        sp = filter(h -> h.kind == :spelling, hits)
+        sp = filter(h -> h.kind in (:spelling, :percent), hits)
         if fix && !isempty(sp)
             ls = [collect(l) for l in lines]
             for h in sort(sp; by = h -> (h.line, -h.col))
@@ -327,7 +398,7 @@ function report(root, paths, fix)
             write(path, join(String.(ls), '\n'))
         end
     end
-    println(n, " hits", fix ? " (spelling fixed)" : "")
+    println(n, " hits", fix ? " (spelling and percent spacing fixed)" : "")
     n
 end
 
@@ -338,12 +409,13 @@ function staged(root)
         new = something(gitout(root, "show", ":$rel"), "")
         lines = split(new, '\n')
         for h in added_hits(rel, head_text(root, rel), new)
-            println(stderr, h.kind == :mind ? "warning: " : "error: ", describe(rel, lines, h))
-            fail |= h.kind != :mind
+            warn = h.kind in (:mind, :discouraged)
+            println(stderr, warn ? "warning: " : "error: ", describe(rel, lines, h))
+            fail |= !warn
         end
     end
     fail && println(stderr, "prose lint: fix the errors above (julia dev/prose/lint.jl --fix " *
-                            "<file> corrects spelling); quoted text is exempt")
+                            "<file> corrects spelling and percent spacing); quoted text is exempt")
     fail ? 1 : 0
 end
 
@@ -413,8 +485,10 @@ function hook()
            [describe(rel, lines, h) for h in hits];
            "Docs register: neutral academic prose; no we/you (use the passive or name the " *
            "thing); software takes literal verbs (computes, checks, selects), not verbs for " *
-           "minds or bodies (asks, says, decides, wants). Mind-verb hits are heuristic: leave " *
-           "literal uses. American spelling throughout."]
+           "minds or bodies (asks, says, decides, wants). American spelling throughout. Banned: " *
+           "\"its own\"/\"'s own\", doubled nouns (\"bit for bit\"), a space before %. " *
+           "Mind-verb and discouraged hits are heuristic: leave literal uses (a function that " *
+           "reads a file reads it)."]
     println(stderr, join(msg, '\n'))
     2
 end

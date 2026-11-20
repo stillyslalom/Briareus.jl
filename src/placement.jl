@@ -11,7 +11,7 @@ frame's offset and rotation in its parent. Relations fix degrees of freedom:
 [`Coincident`](@ref), [`OnAxis`](@ref), [`Concentric`](@ref), [`Distance`](@ref),
 [`Facing`](@ref), [`Parallel`](@ref) and [`Roll`](@ref) with a reference direction.
 Relative moves fix none: [`Offset`](@ref), [`Rotate`](@ref) and [`Roll`](@ref) without
-one. Each step has a closed form; a rotation turns the frame about its own origin.
+one. Each step has a closed form; a rotation turns the frame about its origin.
 Frames named by steps (`ref`) are resolved first, so a frame follows them as it follows
 its parent. [`placement_report`](@ref) gives what each step fixes.
 """
@@ -123,7 +123,7 @@ Parallel(ref::Symbol; axis = :z, flip::Bool = false) = Parallel(ref, _step_axis(
 """
     Roll(angle; from = nothing)
 
-Turn the frame about its own `z` axis. With `from` (a frame name, its `x` axis, or
+Turn the frame about its `z` axis. With `from` (a frame name, its `x` axis, or
 `(name, axis)`), set the frame's `x` axis to `angle` degrees from that direction's
 projection across `z`, turning toward `y`; this fixes the roll. A direction along `z`
 has no projection and is an `ArgumentError`. Without `from`, turn by `angle` from the
@@ -143,7 +143,7 @@ end
 """
     Offset(dx, dy, dz; frame = nothing)
 
-Move the frame by `(dx, dy, dz)` (mm) along its own axes, or along the axes of the frame
+Move the frame by `(dx, dy, dz)` (mm) along its axes, or along the axes of the frame
 named `frame`. A relative move: it fixes nothing.
 """
 struct Offset <: PlacementStep
@@ -156,7 +156,7 @@ Offset(dx::Real, dy::Real, dz::Real; frame::Union{Nothing,Symbol} = nothing) =
 """
     Rotate(axis, angle)
 
-Turn the frame by `angle` degrees (right-handed) about its own `axis` (`:x`, `:y`, `:z`
+Turn the frame by `angle` degrees (right-handed) about its `axis` (`:x`, `:y`, `:z`
 or a vector in its coordinates) through its origin. A relative move: it fixes nothing.
 """
 struct Rotate <: PlacementStep

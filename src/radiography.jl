@@ -28,7 +28,7 @@ The optic:
   imager's ([`XrayImager`](@ref)): the penumbra `d(1 + 1/M)` and a Gaussian of the
   diffraction at the line energy and the detector pixel, on the object plane.
 - **Point projection** (`pinhole = nothing`): each detector point receives every foil
-  element as a point source at its centroid, along its own path through the object, so
+  element as a point source at its centroid, along its path through the object, so
   the source's extent blurs the image (by the source width × `L/(s + L)` on the object
   plane, `s` the foil's distance behind the object and `L = distance`). The image point
   of a detector point is the object-plane crossing of its line to the foil's centroid,
@@ -42,7 +42,7 @@ detector area `dA_d` at the ray's end is `A cos α · dA_d cos α / D²`, with `
 p)/cos α` the pinhole–detector distance along the ray, so the fluence is
 `R A cos⁴α/(L − p)²`: the on-axis value times `cos⁴α` (the projected pinhole area,
 the inverse square of the longer distance, and the detector's incidence cosine). In
-point projection each foil element's fluence `E_e f(cos θ)/(4π r²)`, at its own
+point projection each foil element's fluence `E_e f(cos θ)/(4π r²)`, at its
 distance `r` from the detector point, is times the ray's incidence cosine on the
 detector, `r̂ · d̂`. On the axis the pinhole's factor is 1 exactly; in point projection
 the incidence cosines differ from 1 by the source's angular extent,

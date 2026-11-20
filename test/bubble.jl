@@ -26,7 +26,7 @@
     for i in findall(==("hydra"), ab.source)
         @test sum(bubble_fractions(mz, quads, ab.t[i]).absorbed[ii]) / length(ii) ≈ ab.absorbed[i] atol = 0.03
     end
-    @test 0.3 < bubble_transmission(m3, 5.5) < 0.4             # Izumi's own model: 0.29
+    @test 0.3 < bubble_transmission(m3, 5.5) < 0.4             # Izumi's model: 0.29
     @test 0.5 < bubble_transmission(m15, 5.5) < 0.62           # and 0.54
     @test bubble_depth(m3, 5.5) ≈ 0.36 * (5.5 - 0.55)
     @test bubble_speed(m15) / bubble_speed(m3) ≈ 2^0.2
@@ -35,7 +35,7 @@
     @test bubble_transmission(m3, 0.4) == 1 && bubble_depth(m3, 0.4) == 0
     @test bubble_transmission(BubbleAbsorption(radius = 2.88, stagnation = Inf), 20.0) == 0
 
-    # stagnation: ballistic (bit for bit) up to the knee, C¹ there, bounded by x_max
+    # stagnation: ballistic (bitwise) up to the knee, C¹ there, bounded by x_max
     mb = BubbleAbsorption(radius = 2.88, turn_on = 0.3, stagnation = Inf)
     @test bubble_depth(m3, 5.5) == bubble_depth(mb, 5.5)
     @test bubble_depth(m15, 5.5) == bubble_depth(BubbleAbsorption(radius = 2.88, turn_on = 0.3,
@@ -94,7 +94,7 @@
     m = BubbleAbsorption(radius = 2.875)
     # before the launch nothing moves
     @test [x.power for x in apply_lpi(m, quads, 0.1)] == [x.power for x in quads]
-    # an abstract vector of beams takes one number type first: the same powers, bit for bit
+    # an abstract vector of beams takes one number type first: bitwise the same powers
     @test [x.power for x in apply_lpi(m, Beam[quads...], 5.0)] == [x.power for x in apply_lpi(m, quads, 5.0)]
     # power is conserved, in each hemisphere, and moves from inner to 50° beams only
     for t in (3.0, 5.0, 7.0)

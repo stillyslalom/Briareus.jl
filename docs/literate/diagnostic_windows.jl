@@ -34,7 +34,7 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 # A [`WallWindow`](@ref) with a `diameter` is a disk drawn on the unrolled wall: arc
 # length ``s = R\phi`` along the wall by ``z`` along the axis. Unrolling a cylinder is
 # an isometry, so the window's area is ``\pi d^2/4``. A `gap` adds a ring of that
-# width around it, its own component (here the default, an open aperture).
+# width around it, a separate component (here the default, an open aperture).
 #
 # [`hohlraum`](@ref) cuts a square box around the window and its gap out of the
 # conforming wall grid, half a wall cell wider than the gap, and re-meshes it with
@@ -64,8 +64,8 @@ R, L = 2.875, 10.1
         area(:wall) + area(:window_1) + area(:window_1_gap) + area(:window_2) + area(:window_2_gap),
         2π * R * L)
 
-# The unrolled mesh around the first window. The box's outer vertices are the grid's
-# own, the gap is one band of triangles 50 µm wide, and the window's elements are about
+# The unrolled mesh around the first window. The outer vertices of the box lie on
+# the grid, the gap is one band of triangles 50 µm wide, and the window's elements are about
 # the size of the wall's:
 
 function unrolled(target, φc)
@@ -103,7 +103,7 @@ unrolled(target, 78)
 # ```
 #
 # (their eq. 112 for a constant drive), the default [`HeatFront`](@ref). A window
-# burns through when ``m_F`` reaches its own areal mass, ``19.3\ \mathrm{g/cm^3}``
+# burns through when ``m_F`` reaches the window areal mass, ``19.3\ \mathrm{g/cm^3}``
 # times its thickness, 3.86 mg/cm² for 2 µm. A hohlraum's temperature is far from
 # constant, so the front is integrated over the drive history:
 #
@@ -134,7 +134,7 @@ m = heat_front(front, ts, fill(300.0, length(ts)))
 #   ``8.32\times10^{-4}`` at constant absorbed flux, ``T \propto t^{0.123}``.
 #
 # The two solutions differ by 7% at constant temperature, so the test is the ratio of
-# each ramp to its own constant-temperature coefficient. Hammer and Rosen also plot
+# each ramp to the matching constant-temperature coefficient. Hammer and Rosen also plot
 # the ablated mass at 4 ns for ``T_s = (t/1\,\mathrm{ns})^{0.182}`` hectovolts: about
 # 2.2–2.4 mg/cm² from both HYDRA and the analytic curve (their Fig. 4b).
 
@@ -195,7 +195,7 @@ end
 # Before the front arrives, the foil absorbs exactly what a thick wall does: in the
 # diffusion picture the cold gold ahead of a nonlinear front does not change the flux
 # into it, and the measurements show no early transmission. So the thin-foil albedo
-# follows the wall's own Marshak scaling, [`WallLossAlbedo`](@ref), until burnthrough.
+# follows the same Marshak scaling as the wall, [`WallLossAlbedo`](@ref), until burnthrough.
 #
 # ### After burnthrough
 #
@@ -281,7 +281,7 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 @printf("laser energy %.2f MJ, peak power %.0f TW\n", 48 * pulse_energy(pulse) / 1e3, 48 * 9.5)
 
 # [`drive_history`](@ref) marches the radiosity through the pulse quasi-statically.
-# Each window element tracks its own heat front from its own incident flux, so the
+# Each window element tracks a separate heat front from its incident flux, so the
 # windows burn through at the times that flux implies. With `ylm = true` it
 # also records the real spherical harmonics of the capsule flux. The three thicknesses
 # share one geometry, so they share its view factors and its deposition operator.
@@ -296,8 +296,8 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 # The open-hole bound and the linearized scenarios below are standalone `solve`s, which
 # evaluate the wall's [`WallLossAlbedo`](@ref) at the time since the pulse start. The
 # histories do the same here (`wall_history = false`), so that every comparison is like
-# with like; by default a drive history follows each wall element's own temperature
-# history instead, which lowers the wall albedo early in the peak.
+# with like; by default a drive history follows the temperature history of each wall
+# element instead, which lowers the wall albedo early in the peak.
 
 times = 0.2:0.2:9.8
 beams_at(τ) = with_pulses(quads, pulse, τ)
@@ -378,7 +378,7 @@ fig
 # 5 ns on, as well as at the peak. It also gives the drive cost: the radiation
 # temperature at the peak, the capsule's absorbed energy over the pulse, and the
 # energy that leaves through the windows and gaps (`window_loss`). Each history is
-# summed over its own steps, each step weighted by half the time to its neighbors (the
+# summed over its time steps, each step weighted by half the time to its neighbors (the
 # first and last by a whole step), which on the uniform `times` is the plain sum times
 # the step.
 
@@ -467,7 +467,7 @@ odd = maximum(abs(h.ylm[mode_index(l, m), k]) / h.ylm[1, k]
 # outside, centered between the windows, which face the capsule's waist at φ = 78° and
 # 258° (circles). The maps are drawn from the spherical harmonics through ``l = 6``,
 # which carry the low modes a capsule responds to, rather than from the coarse capsule
-# mesh. The top row shows the flux relative to its own mean, without windows and with
+# mesh. The top row shows the flux relative to the mean flux, without windows and with
 # the 2.5 µm pair and its gaps. Without windows this untuned pointing already drives
 # the waist hot, so the bottom row subtracts that map and shows what the windows
 # change: on the left without gaps, on the right with them.
@@ -543,7 +543,7 @@ incident = sum(sol.H[e] * t.elem_area[e] for n in (:window_1, :window_2) for e i
 #
 # The same pairs of windows without gaps, with the transmission following the
 # temperature of the flux on each window element, against the constant transmission
-# above. Each history is compared with the hohlraum without windows solved at its own
+# above. Each history is compared with the hohlraum without windows solved at the same
 # times, with the measures of the table above:
 
 function costs(h, b)
@@ -663,8 +663,8 @@ factors = trim.x ./ x0
         trim.reason, trim.iterations, extrema(factors)..., count(f -> abs(abs(f - 1) - 0.2) < 1e-6, factors),
         sum(trim.x) / sum(x0))
 for (label, ev) in (("as designed", evaluate(S_win, x0)), ("quad powers", evaluate(S_win, trim.x)))
-    @printf("  %-12s  departure from the reference shape, l = 1–4: %s %%\n", label,
-            join((@sprintf("%.3f", d) for d in departure(ev)), ", "))
+    @printf("  %-12s  departure from the reference shape, l = 1–4: %s\n", label,
+            join((@sprintf("%.3f%%", d) for d in departure(ev)), ", "))
 end
 for g in (:inner23, :inner30, :outer44, :outer50)
     f = factors[[b.group === g for b in peak]]
@@ -694,8 +694,8 @@ moves = reshape(repoint.x .- xp, 2, :)
         size(moves, 2), 1e3 * sqrt(sum(abs2, moves[1, :]) / size(moves, 2)),
         1e3 * sqrt(sum(abs2, moves[2, :]) / size(moves, 2)), 1e3 .* maximum(abs, moves; dims = 2)...)
 ev = evaluate(S_pairs, repoint.x)
-@printf("  re-pointed    departure from the reference shape, l = 1–4: %s %%; mean flux %+.1f%%\n",
-        join((@sprintf("%.3f", d) for d in departure(ev)), ", "), 100 * (flux_ylm(ev)[1] / ref[1] - 1))
+@printf("  re-pointed    departure from the reference shape, l = 1–4: %s; mean flux %+.1f%%\n",
+        join((@sprintf("%.3f%%", d) for d in departure(ev)), ", "), 100 * (flux_ylm(ev)[1] / ref[1] - 1))
 
 # Moves of 0.09–0.14 mm rms (two to three times NIF's 50 µm rms pointing
 # specification, the largest 0.25–0.27 mm; the run ends elsewhere on a flat family of
@@ -807,11 +807,11 @@ end
 # The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds seven more checks.
 # The view-factor rows of a windowed hohlraum close as well as those without windows.
 # Reciprocity holds. Each window element's burnthrough time in the drive history
-# matches the standalone estimate from that element's own temperature history. Once a
+# matches the standalone estimate from the temperature history of that element. Once a
 # window has burned through, the drive history sends exactly the fraction
 # ``\mathcal{T}`` of the power on it to `transmitted`. A history refined through the
 # transitions follows a uniformly fine one five times more closely than the unrefined
 # steps do. The temperature-following transmission of each burned-through element is
-# the one for its own converged temperature. An open `GapClosure` gap matches the open
-# (aperture) gap, a closed one the wall, and halfway closed it transmits half the
-# power on it.
+# the one at the converged temperature of that element. An open `GapClosure` gap
+# matches the open (aperture) gap, a closed one the wall, and halfway closed it
+# transmits half the power on it.

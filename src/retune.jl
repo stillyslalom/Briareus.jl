@@ -298,7 +298,7 @@ limits. This is a box-bounded linear least-squares problem per time, the level h
 by a penalty row whose target is shifted until the solution's level is `L_t` (the
 secant method on that level, piecewise linear in the shift: one step while the active
 bounds hold). A penalty alone would pull the level down by about the square of the
-nonuniformity (`L/L_t ≈ 1/(1 + RMS²)`), a percent at an RMS of 10 %. Where the bounds
+nonuniformity (`L/L_t ≈ 1/(1 + RMS²)`), a percent at an RMS of 10%. Where the bounds
 cannot reach `L_t` the level is the nearest they allow, and `drive` reports it.
 
 **Unconverted light.** A reference run with unconverted (1ω, 2ω) light takes that
@@ -350,7 +350,7 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
             throw(ArgumentError("the reference history has unconverted light: pass its `unconverted` " *
                                 "(and `prepulse`, `colors`, `unconverted_kw`)"))
     end
-    # the reference's own drive: for its shape, or for its level when none is prescribed
+    # the drive of the reference: for its shape, or for its level when none is prescribed
     need_ref = target === :reference || level === nothing
     st = q isa FoilIrradiance ? _retune_setup(q, ref, need_ref, op.target) : _retune_setup(q, ref, need_ref)
     t = st.target

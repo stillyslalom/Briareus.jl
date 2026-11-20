@@ -1,6 +1,6 @@
 # One pointing over several phases of a pulse (`PhasedScenario`).
 #
-# References: the plain `Scenario` (one phase at the pointing's own powers, bit for bit);
+# References: the plain `Scenario` (one phase at the pointing powers, bitwise);
 # the duplicate-beam construction it replaces at the same parameters (a copy of every
 # beam per scaled phase under one quad name, so that a per-quad pointing gives the copies
 # one aim, a `PowerScales` keyed by (quad, phase) through a counting `by`, and each
@@ -67,7 +67,7 @@
     end
 
     @testset "one phase is the plain scenario" begin
-        # bit for bit: the evaluation and a constrained run of the same objective
+        # bitwise: the evaluation and a constrained run of the same objective
         sG = remake(sP; parameterization = gg)
         ps1 = PhasedScenario(gg, Phase(:a, sG; scaled = false))
         x = [0.25, -0.1, -0.2, 0.1, 0.15, 0.0, -0.1, 0.05]
@@ -218,7 +218,7 @@
         es = evaluate(sub, yk)
         @test all(k -> rel(es[k].deposition.element, evaluate(subset(ps[k], keep; parameterization = sub.param.pointing),
                                                               apply(pp, y)[k][keep]).deposition.element) < 1e-12, keys(ps))
-        # phases as remakes of one shared scenario, each with its own albedos and time
+        # phases as remakes of one shared scenario, each with separate albedos and time
         # (as `history_state` supplies them): the operator, view factors and target shared
         shared = [Phase(:picket, sP; power = picket_power),
                   Phase(:step, remake(sP; albedo = albedos(tS, 2.5), time = 2.5); pulses, time = 2.5),
@@ -230,7 +230,7 @@
     end
 
     @testset "phases on one mesh deposit in one pass" begin
-        # reference: each phase's own scenario evaluated alone (`deposit` per phase). The
+        # reference: the scenario of each phase evaluated alone (`deposit` per phase). The
         # three targets differ in albedo only: their operators have the same points.
         flat(v) = reduce(vcat, [[ForwardDiff.value(z); collect(ForwardDiff.partials(z))] for z in v])
         near(a, b) = rel(flat(a), flat(b)) < 1e-12
@@ -267,6 +267,6 @@
         alone = [evaluate(pm.scenarios[k], bm[k]) for k in 1:4]
         @test all(k -> near(em[k].deposition.element, alone[k].deposition.element), 1:2)
         @test all(k -> em[k].deposition.element == alone[k].deposition.element &&
-                       em[k].deposition.per_beam == alone[k].deposition.per_beam, 3:4)   # bit for bit
+                       em[k].deposition.per_beam == alone[k].deposition.per_beam, 3:4)   # bitwise
     end
 end

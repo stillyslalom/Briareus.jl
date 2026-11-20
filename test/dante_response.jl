@@ -54,7 +54,7 @@ using Briareus: _rubery_dante, _response, _DANTE_GRID, _planck_shape, _channel_m
         sel = 2000 .< Eg .< 4000
         r = [_response(ch[2], e) / 1e3 for e in Eg[sel]]
         @test sum(r) / sum(g[sel]) ≈ 1 atol = 0.08
-        # each band peaks within 25 % of its nominal energy (16 and 18, broad, excepted)
+        # each band peaks within 25% of its nominal energy (16 and 18, broad, excepted)
         for c in ch
             c.number in (11, 16, 18) && continue
             @test c.E[argmax(c.R)] / c.energy ≈ 1 atol = 0.25
@@ -113,7 +113,7 @@ using Briareus: _rubery_dante, _response, _DANTE_GRID, _planck_shape, _channel_m
         @test rs.Tr_unfold ≈ r.Tr * planck_fraction(T0, 50.0, 20_000.0)^0.25 rtol = 2e-3
         @test !haskey(dante(dante1(), s; unfold = nothing), :unfold)
         # Dante 2 from its definition reads what the bare view at its port with Dante 1's
-        # channels (no fields of their own) reads, bit for bit
+        # channels (no fields of their own) reads, bitwise
         bare = DanteView(64, 350; through = :leh_top, channels = Briareus._with_field.(dante1_channels(), nothing))
         r2, rb = dante(dante2(), s), dante(bare, s)
         @test all(k -> isequal(r2[k], rb[k]), (:intensity, :Tr, :channels, :Tr_unfold)) && all(>(0), r2.channels)

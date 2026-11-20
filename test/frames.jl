@@ -26,7 +26,7 @@ using Briareus: Vec3, SVector, SMatrix
         Ry(a) = [cos(a) 0 sin(a); 0 1 0; -sin(a) 0 cos(a)]
         part_rotation(θ, φ, ψ) = Rz(deg2rad(φ)) * Ry(deg2rad(θ)) * Rz(deg2rad(ψ))
         @test all(isapprox(euler_rotation(a...), part_rotation(a...); atol = 1e-15) for a in angles)
-        # the VisRad workspace rotation it replaced, bit for bit
+        # the VisRad workspace rotation it replaced, bitwise
         vRz(a) = SMatrix{3,3,Float64}(cosd(a), sind(a), 0, -sind(a), cosd(a), 0, 0, 0, 1)
         vRy(a) = SMatrix{3,3,Float64}(cosd(a), 0, -sind(a), 0, 1, 0, sind(a), 0, cosd(a))
         @test all(euler_rotation(θ, φ, ψ) == vRz(φ) * vRy(θ) * vRz(ψ) for (θ, φ, ψ) in angles)
@@ -223,7 +223,7 @@ using Briareus: Vec3, SVector, SMatrix
         Fk = place(Concentric(:snout))
         @test isapprox(Fk.R[:, 3], a; atol = 1e-14) && norm(cross(Fk.origin - snout.origin, a)) < 1e-13 &&
               isapprox(dot(Fk.origin - snout.origin, a), dot(F0.origin - snout.origin, a); atol = 1e-13)
-        # antiparallel: half a turn about the frame's own x
+        # antiparallel: half a turn about the frame x axis
         @test resolve_frames(Dict(:a => FrameDef(steps = [Parallel(:tcc; flip = true)])))[:a].R ≈
               Diagonal([1.0, -1.0, -1.0]) atol = 1e-15
         # a roll from chamber x about chamber z
@@ -232,7 +232,7 @@ using Briareus: Vec3, SVector, SMatrix
         Fz = place(Parallel(:snout), Roll(-25.0; from = (:snout, :y)))
         e = normalize(snout.R[:, 2] - dot(snout.R[:, 2], a) * a)
         @test Fz.R[:, 1] ≈ cosd(-25) * e + sind(-25) * cross(a, e) atol = 1e-14
-        # relative moves are compositions in the frame's own coordinates
+        # relative moves are compositions in the frame coordinates
         @test place(Offset(0.2, -0.4, 1.1)) ≈ compose(F0, Frame(I(3), (0.2, -0.4, 1.1)))
         @test place(Offset(0.2, -0.4, 1.1; frame = :snout)).origin ≈ F0.origin + snout.R * Vec3(0.2, -0.4, 1.1)
         @test place(Rotate(:z, 35.0)) ≈ compose(F0, euler_frame((0, 0, 0), 0, 0, 35))
@@ -384,7 +384,7 @@ using Briareus: Vec3, SVector, SMatrix
                   zip(apply(step.pointing, initial_parameters(p)), step.beams))
         @test initial_parameters(step.pointing) ≈ initial_parameters(p) atol = 1e-14
 
-        # a plate beside a beam, swept across it: the clearance changes one for one. Beam
+        # a plate beside a beam, swept across it: the clearance changes by the same amount. Beam
         # along -x onto a target foil at x = -3; the plate (normal y) beside the path at
         # y = 1, the sweep moving it away along +y.
         tgt = foil(:tgt, (-3.0, 0.0, 0.0), (1, 0, 0); width = 2.0, n = 2)
@@ -460,7 +460,7 @@ using Briareus: Vec3, SVector, SMatrix
         @test length(r1.x) == 4 && rows[1] === nothing && rows[3] === r2
         @test_throws ArgumentError placement_sweep(t, bs, :backlighter, [0.0];
                                                    optimize = (; objective = spread))
-        # a step's own `scenario_kw` follows the sweep's: here each step's time
+        # the `scenario_kw` of a step follows the sweep's: here each step's time
         times = Float64[]
         lk = ReentrantLock()                      # gradient chunks run concurrently
         stamp(ev) = (lock(() -> push!(times, ev.scenario.time), lk); spread(ev))

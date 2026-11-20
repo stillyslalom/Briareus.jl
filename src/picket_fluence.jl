@@ -61,7 +61,7 @@ the outer picket energy net of backscatter over the outer phase-plate spot area 
 ∝ I^0.36); Callahan et al., PoP 25, 056305 (2018), the outer picket energy over the
 one-side outer spot area, 53 mm² (size ∝ (E/A)^0.5); Izumi et al., PoP 28, 022706
 (2021), the spatially averaged outer picket fluence over the first ns (tip position
-∝ E^0.2), 27 % lower when the quads and cones are split at the same energy. Over a fixed
+∝ E^0.2), 27% lower when the quads and cones are split at the same energy. Over a fixed
 area that quantity is `energy` (its ratios between designs are the energy's;
 [`picket_irradiance`](@ref)'s `:average`). `mean` = ∫F² dA / ∫F dA, the energy over the
 effective area (∫F dA)²/∫F² dA, counts the overlap of the spots as well: one isolated
@@ -76,9 +76,9 @@ published picket fluence, the trough and the inner-beam corridor (2026-11-18)").
 
 **Mesh.** An element average lowers ∫F² dA by about h²/(6a²) for a Gaussian spot of 1/e
 radius a on elements of size h, so `mean` converges as O(h²) and is low on a coarse
-mesh: with the NIF outer spots (0.67 × 0.39 mm 1/e semi-axes) it is about 1 % low at
-h = 0.2 mm and 0.3 % at 0.1 mm on NIF hohlraums, and its ratio between two hohlraums
-0.35 % high at 0.2 mm (research notes). Compare a design with its reference on the same
+mesh: with the NIF outer spots (0.67 × 0.39 mm 1/e semi-axes) it is about 1% low at
+h = 0.2 mm and 0.3% at 0.1 mm on NIF hohlraums, and its ratio between two hohlraums
+0.35% high at 0.2 mm (research notes). Compare a design with its reference on the same
 mesh size, where most of the error cancels in the ratio; a
 radiation mesh of 0.8 mm is too coarse for the map, and a separate target for the
 deposition alone is cheap.
@@ -225,12 +225,12 @@ _pulse_key(by::Symbol, b::Beam) = by === :group ? b.group : by === :quad ? Symbo
                                   throw(ArgumentError("by is :group, :quad, :beam or a function, got $(repr(by))"))
 _pulse_key(by, b::Beam) = by(b)
 
-# A beam's own power as its picket power.
+# The power of each beam as its picket power.
 struct _OwnPower end
 (::_OwnPower)(b::Beam) = b.power
 
 # The picket power per beam from the keywords: `pulses` over `window`, or `power` (a
-# function of the beam), or (`own`) each beam's own power.
+# function of the beam), or (`own`) the power of each beam.
 function _picket_power(pulses, window, by, power, own::Bool)
     if pulses !== nothing
         power === nothing || throw(ArgumentError("give the picket by `pulses` and `window` or by `power`, not both"))
@@ -316,11 +316,11 @@ the picket, the trough or the foot.
 **The powers.** With `pulses` (keyed as for [`with_pulses`](@ref), with `by`) and
 `window = (t0, t1)` (ns), each beam's mean power over the window; with `power`, a
 function of the beam that returns its power (TW), e.g. by cone from a picket table; with
-neither, each beam's own power (an evaluation run at a phase's powers, or `power = b ->
+neither, the power of each beam (an evaluation run at a phase's powers, or `power = b ->
 r * b.power` to scale them). The other beams are deposited at zero power, by the
 scenario's deposition operator with the evaluation's setup beams (`ev.beams`: their
 pointing, spots and focus). With `lpi = true` the beams are instead the evaluation's
-effective beams (`ev.effective`, after the scenario's laser–plasma model at its own
+effective beams (`ev.effective`, after the scenario's laser–plasma model at its
 `time`, e.g. net of a [`Backscatter`](@ref) and after a transfer), at their own powers
 (`pulses` and `power` are then an error); otherwise the laser–plasma model does not
 enter, and backscatter or transfer is taken off the powers given. One deposition per
@@ -374,7 +374,7 @@ function picket_irradiance(ev::Evaluation, names::Symbol...; pulses = nothing, w
 end
 
 # The element powers (TW) of the evaluation's setup beams (or with `lpi` its effective
-# beams) at their picket powers: at their own powers, the evaluation's own deposition of
+# beams) at their picket powers: at their own powers, the deposition in the evaluation of
 # the groups where it kept them (`_split_map`), else a deposition of those beams.
 function _picket_map(ev::Evaluation, power, gs, lpi::Bool)
     P = _split_map(ev, power, gs, lpi)
@@ -384,12 +384,12 @@ function _picket_map(ev::Evaluation, power, gs, lpi::Bool)
 end
 _picket_map(op::DepositionOperator, power, gs, beams) = deposit(op, _picket_beams(power, gs, beams)).element
 
-# The element powers of the groups `gs` from the evaluation's own deposition, which kept
+# The element powers of the groups `gs` from the deposition in the evaluation, which kept
 # them (`Scenario`'s split, set by the optimizer for the constraints that read them), or
 # `nothing`. They serve the beams at their own powers when the evaluation deposited those
 # beams as `deposit` does: its effective beams (`lpi`), or its setup beams when the
 # laser–plasma model left them as they are. The same sums as the deposition in
-# `_picket_map`, bit for bit (`_GroupSplit`); to rounding when phases of a
+# `_picket_map`, bitwise (`_GroupSplit`); to rounding when phases of a
 # `PhasedScenario` deposited in one pass (`_deposit_sets`).
 function _split_map(ev::Evaluation, power, gs, lpi::Bool)
     sp = getfield(ev, :_split)
@@ -519,30 +519,30 @@ the beams and the measure, the same for the reference and the design), at or bel
 - `measure = :average`: the spatially averaged irradiance over a fixed area, the
   quantity of the published bubble scalings (against the reference: the absorbed power
   on the parts over the reference's); linear in the powers, held directly.
-- `measure = :corridor`: the mean irradiance near the inner beams' centerlines, the
-  design's own (they move with its aims): smooth, held directly.
+- `measure = :corridor`: the mean irradiance near the inner beams' centerlines, those
+  of the design (they move with its aims): smooth, held directly.
 
 **A reference on another target.** For `:peak` the reference evaluation must be on the
 same target as the optimized scenario (a [`subset`](@ref) of it shares the target), or
 evaluating the constraint throws an `ArgumentError`: the peak follows one element and
 the mesh, and the stand-in's scale is the reference mesh's ratio of peak to norm. The
 three integral measures hold across meshes and take a reference on another target (a
-hohlraum without the design's windows, a reference's own mesh): `:average` (absorbed
+hohlraum without the design's windows, a separate mesh for the reference): `:average` (absorbed
 power over a fixed area, a quantity of the field, not the mesh), `:weighted` (an
 integral that converges as O(h²) with the element size h: compare targets meshed at the
-same `h`, where the bias of about 1 % at 0.2 mm cancels in the ratio) and `:corridor`
+same `h`, where the bias of about 1% at 0.2 mm cancels in the ratio) and `:corridor`
 (an area mean). On an evaluation of another target the constraint measures the parts
 `names` of that target, and the limit is the reference's over `reference_names` (by
 default `names`), so that a design with windows in its mesh holds the light on its wall
 and windows at the reference's light on its wall, `picket_ceiling(reference, :wall,
 :window; reference_names = (:wall,), measure = :average)`. The
-laser–plasma model enters only with `lpi = true`; then the reference, on its own target
+laser–plasma model enters only with `lpi = true`; then the reference, on the same target
 or another, must share the scenario's model and time, as for [`irradiance_ceiling`](@ref)
 and [`mode_gate`](@ref): evaluating the constraint with another model, or at another time
 with a model, throws an `ArgumentError`. One deposition per evaluation, in the
 evaluation's number type; inside [`optimize_pointing`](@ref), with the beams at their own
-powers (no `pulses` or `power`), none: the evaluation's own deposition keeps the
-groups' element powers in the same pass, the same sums bit for bit (unless the
+powers (no `pulses` or `power`), none: the deposition in the evaluation keeps the
+groups' element powers in the same pass, the same sums bitwise (unless the
 scenario's laser–plasma model deposits light itself, or with `lpi = false` changes the
 beams). For a phase other than the
 optimized scenario's (a trough, a foot), give the phase's powers by `pulses` and
@@ -672,7 +672,7 @@ with F̄ the energy-weighted mean outer picket fluence on the `components` of `t
 (tip speed ∝ E^0.2, collision time − `turn_on` ∝ E^-0.16). `bubble.picket_ratio` is
 the E of the `reference` pointing (set by hand, or from [`picket_ratio`](@ref)
 against the calibration platform), so at the reference the model is `bubble` itself,
-bit for bit, and a re-pointed design gets the bubble its own picket grows, inside
+bitwise, and a re-pointed design gets the bubble its picket grows, inside
 `evaluate(scenario, beams)`, the constraints and objectives built on it
 ([`mode_gate`](@ref)) and [`drive_history`](@ref)`(...; lpi)`. Compose as `bubble` is
 composed, e.g. `lpi = (cbet, linked)`.
@@ -764,7 +764,7 @@ end
 _linked_fluence(op, rb, index, power, gs, es, beams::AbstractVector{<:Beam}) =
     _linked_fluence(op, rb, index, power, gs, es, _common_type(beams))
 
-# A vector of beams of mixed number types as one type (the promotion of the beams' own,
+# A vector of beams of mixed number types as one type (the promotion of their number types,
 # abstract if one of them is).
 _number_type(::Beam{T}) where {T} = T
 function _common_type(beams)
@@ -827,7 +827,7 @@ powers, target and bubble; usually `reference` is the pointing the model was bui
 `history(beams, bubble)` runs a drive history (the result of [`drive_history`](@ref),
 with `lmax ≥ 2`) of `beams` with the laser–plasma chain built on `bubble`, e.g.
 `(bs, bub) -> drive_history(model, τ -> with_pulses(bs, pulses, τ), times; lpi = (cbet, bub))`.
-It runs for the design with its own bubble and for the reference with its own
+It runs for the design with its bubble and for the reference with a separate bubble
 (`reference_history`, a result of the same call for the reference, skips that run),
 and with `fixed = true` also for the design with the reference's bubble, which splits
 the change into the pointing's effect through the deposition and through the bubble.
@@ -841,7 +841,7 @@ reference).
 *Derived* (confidence low): the bubble's response to the pointing rests on the
 published exponents (tip speed ∝ E^0.2, Izumi 2021; collision ∝ E^-0.16, Izumi 2018)
 applied to a fluence changed by re-pointing, which has no published test
-([`PicketLinkedBubble`](@ref)); ratios between pointings on one mesh converge to < 1 %
+([`PicketLinkedBubble`](@ref)); ratios between pointings on one mesh converge to < 1%
 (research notes, "The swing and the bubble without new data (2026-11-18)" §5).
 """
 Base.@nospecializeinfer function bubble_prediction(m::PicketLinkedBubble, design::AbstractVector{<:Beam},

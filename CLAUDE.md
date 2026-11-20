@@ -2,7 +2,7 @@
 
 Briareus.jl — view-factor radiation and laser-pointing design (a VisRad replacement/
 complement) for indirect-drive hohlraums and backlighter foils. [README.md](README.md):
-scope and facility-data provenance. [reference/ROADMAP.md](reference/ROADMAP.md): open work.
+scope and facility-data sources. [reference/ROADMAP.md](reference/ROADMAP.md): open work.
 `reference/research-notes.md`: every physics default and measured constant, with its source
 and confidence; `reference/litreview/`: literature reviews by topic. Read the relevant
 notes section before changing a default or a calibrated number.
@@ -16,7 +16,7 @@ julia --project=. test/docrefs.jl                        # docs guard, ~3 s
 julia --project=docs -t auto docs/make.jl                # docs; runs every tutorial
 julia --project=docs -t auto docs/literate/<name>.jl     # one tutorial as a script
 julia --project=BriareusGUI -t auto -e 'using Pkg; Pkg.test(; julia_args = ["--heap-size-hint=2G"])'  # GUI (~7 min)
-julia dev/prose/lint.jl [--fix] [files]                  # prose lint; --fix: spelling
+julia dev/prose/lint.jl [--fix] [files]                  # prose lint; --fix: spelling, %
 ```
 
 `BRIAREUS_NO_WORKLOAD=true` skips the precompile workload (end of `src/Briareus.jl`) for
@@ -34,9 +34,9 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
   quadrature, Monte Carlo, ray traces converged at nspot ≥ 121), never against the method
   under test. Published shot data used as a check (e.g. PRE 109 Fig. 10, Dante) is never
   also a fit target; say which data a calibration was fitted to.
-- New paths must leave existing ones bit for bit unless the change is the point: say so in
-  the commit and measure the difference. Screens that skip work (zero weights, culled
-  rays) must be exact on Float64. The package is 0.x: a better design is reason enough to
+- New paths must leave existing results bitwise identical unless the change is the point:
+  say so in the commit and measure the difference. Screens that skip work (zero weights,
+  culled rays) must be exact on Float64. The package is 0.x: a better design is reason enough to
   break an API or change results (no compatibility shims, no parallel old option); "existing
   results don't change" is never the argument for keeping a worse one.
 - Tests: tolerances no tighter than ~1e-12 relative on summed quantities (CI CPUs round
@@ -52,7 +52,17 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
   minds or bodies (asks, says, decides, wants). American spelling everywhere, comments and
   data headers included. `dev/prose/lint.jl` checks each edit (a hook in
   `.claude/settings.json`) and, with `git config core.hooksPath dev/githooks`, each commit.
-- Provenance: docstrings say when a value is derived or an engineering default rather than
+- Banned everywhere (the lint fails a commit): "its own" and "'s own"; doubled nouns
+  ("bit for bit", "vertex for vertex": write "bitwise identical", "at every vertex"); a
+  space before a percent sign ("0.5%", in output strings too).
+- Discouraged (the lint warns where it can): "provenance" (say references or sources);
+  "reads", "prints", "printed" and "to round-off" outside literal I/O; "<verb> no" ("solves
+  no hydrodynamics": say what it does); "a, not b" (state what the thing is);
+  possessives on things ("the beam's axis": "the beam axis", "the axis of the beam");
+  preambles before the content; pronouns and "the source" with more than one candidate
+  referent; sentences of stacked clauses (split them); timings that depend on the machine
+  ("loads in 1.6 s": say "the study takes about 15 seconds on a desktop", where it matters).
+- Sources: docstrings say when a value is derived or an engineering default rather than
   a facility criterion; numbers go in the research notes with source and confidence.
   Papers are cite-only (numbers with citations, never copied text or figures).
   Non-public data *never* enters the repository; public examples use mock-ups.
@@ -86,7 +96,7 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
   (Briareus,)`): add a case there for each such function and each new hot-path function. A
   Float64 constant (`Inf`, `init = 0.0`) returned beside duals is the usual culprit.
 - Mode analysis integrates Pₗ/Yₗₘ over each facet's exact solid angle; centroid × A cosθ/R²
-  leaks P0 into P2 at 0.5 %.
+  leaks P0 into P2 at 0.5%.
 - Deposition sums the best-focus profile over the f-cone directions; the moment-matched
   `intensity` is for envelopes only (wrong shape far from focus).
 - Large radiation models (> 10k elements: `Float32Matrix`; > 15k: `HMatrix`) are never

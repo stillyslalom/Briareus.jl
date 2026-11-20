@@ -1,8 +1,8 @@
 # Diagnostic definitions: design (2026-10-29)
 
 Aim (user, 2026-10-29): synthetic diagnostics as good as public information allows,
-and a framework that a user group extends with its own (non-public) details for its own
-configurations, without editing the package. First kind: the soft x-ray power
+and a framework that a user group extends with (non-public) details for the
+configurations of that group, without editing the package. First kind: the soft x-ray power
 diagnostics (NIF Dante 1 and 2, Sentinel, Omega Dante). Decisions 10 and 11 of
 `reference/assemblies-design.md` (whole-assembly view, collimator field of view,
 reference area, shields as parts) are this file's geometry. Remove each phase once it
@@ -13,11 +13,11 @@ lands; the docstrings and research notes then hold what was built.
 - Definitions (phase 1, 2026-10-29): `src/diagnostics.jl`, the docs page "Diagnostic
   definitions" (schema, search path, extends, CSV curves, kinds); the kind
   `xray_power`; built-ins `nif_dante1_2021` and `nif_dante1` in `data/diagnostics`,
-  from which `dante1()` and `dante1_responses()` build (bit for bit with the table they
+  from which `dante1()` and `dante1_responses()` build (bitwise identical to the table they
   replaced).
 - Field of view and reference area (phase 2, 2026-10-29): `DanteView(...;
   field_of_view, center, area)`, `[view]` keys `field_of_view_mm`, `center_part`,
-  `center_mm`, `area_part`; the view through a hole is unchanged (bit for bit).
+  `center_mm`, `area_part`; the view through a hole is unchanged (bitwise).
 - Public definitions and the time-dependent Tr area (phase 3, 2026-10-29): Dante 1 by
   date and shot, Dante 2, Sentinel N170924, Omega Dante in `data/diagnostics`; fresnel
   mirrors (`GrazingMirror`); `area = :open` and an area history (`area_open`,
@@ -62,7 +62,7 @@ lands; the docstrings and research notes then hold what was built.
 
 ## Model
 
-1. **One TOML file per diagnostic.** TOML: comments for provenance, already the session
+1. **One TOML file per diagnostic.** TOML: comments for sources, already the session
    format, a standard library. A file names its schema (`schema = 1`), an `id`
    (unique, `nif_dante1`), a display `name`, a `kind`, and per value optional `source`
    and `confidence` (shown in the GUI's tooltip). Unknown keys are errors (a typo fails
@@ -72,7 +72,7 @@ lands; the docstrings and research notes then hold what was built.
    and other kinds plug in later without a schema change.
 3. **Built-ins are files.** The public definitions live in `data/diagnostics/*.toml`
    and the code constructors (`dante1()`) read them; Dante 1 reproduces today's
-   channels bit for bit. Missing public values are absent, not guessed; a definition
+   channels exactly (bitwise). Missing public values are absent, not guessed; a definition
    that lacks a value a calculation needs fails with the key to supply.
 4. **Overrides by inheritance.** `extends = "nif_dante1"` takes a definition and
    replaces what the file gives: channels by `number` (a campaign's filter set), the
@@ -81,9 +81,9 @@ lands; the docstrings and research notes then hold what was built.
 5. **Measured curves by file.** Any modeled component (a cathode's sensitivity, a
    mirror's reflectivity, a filter's transmission, a whole channel's response) can be a
    two-column CSV (energy eV, value) given by a path relative to the TOML; a measured
-   response replaces the model, each one stated in the result's provenance.
-6. **Search path.** Built-ins, then each user directory in order, then the session's
-   own; a later definition of an `id` shadows an earlier one, with a warning naming
+   response replaces the model, each one stated in the sources of the result.
+6. **Search path.** Built-ins, then each user directory in order, then the session
+   directory; a later definition of an `id` shadows an earlier one, with a warning naming
    both files. Directories come from a user configuration file (platform config dir:
    `%APPDATA%\Briareus\config.toml`, `~/Library/Application Support/Briareus`,
    `$XDG_CONFIG_HOME/briareus`; key `diagnostics.paths`), from `BRIAREUS_DIAGNOSTICS`
@@ -119,7 +119,7 @@ lands; the docstrings and research notes then hold what was built.
 ## What the research sets (research notes, "Dante-family hardware and geometry: what is public (2026-10-29)")
 
 - **Configurations are dated.** Dante 1's channels changed in 2009, 2012–15, 2017–18 (shot
-  by shot) and October 2021; each published set becomes its own built-in file
+  by shot) and October 2021; each published set becomes a separate built-in file
   (`nif_dante1_2021`, `nif_dante1_N170924`, …) with `valid_from` / `shots`, and `nif_dante1`
   extends the latest. A session records which one it used.
 - **Field of view per channel.** The instrument's field of view (NIF: ±30 mm, the 2004
@@ -141,7 +141,7 @@ lands; the docstrings and research notes then hold what was built.
   Omega Dante's standoff and solid angles, the fielded NIF collimators. The definitions
   say so in their comments; `check_diagnostics` names the keys to supply.
 - **Checks of the field-of-view path** (never fit targets), still to run on modeled
-  targets: Chen 2024's LEH / open-end pair (≈ 15 / 35 TW/sr), the BAH paper's 27 %
+  targets: Chen 2024's LEH / open-end pair (≈ 15 / 35 TW/sr), the BAH paper's 27%
   occlusion of Dante 2 by a ring, May 2015's cos 37° / cos 64° ratio.
 
 ## Phases
@@ -161,7 +161,7 @@ lands; the docstrings and research notes then hold what was built.
    are shared tables in the schema: `optic` (pinholes with positions, sizes and filters;
    a multilayer mirror; a slit and relay), `filters`, `detector` (CCD, image plate with
    Rosenberg's response model, MCP strips, hCMOS, streak tube), `recording`. A gated
-   pinhole array is several cameras (each pinhole its own position and time, t₀ varying
-   across the sensor, Chen 2018). Open for imagers: whether the 3–5 keV SXI and G-LEH
-   images need a non-thermal spot-emission model; to be measured against published
+   pinhole array is several cameras (each pinhole with a separate position and time, t₀
+   varying across the sensor, Chen 2018). Open for imagers: whether the 3–5 keV SXI and
+   G-LEH images need a non-thermal spot-emission model; to be measured against published
    images, not assumed.

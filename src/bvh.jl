@@ -186,10 +186,10 @@ index) that blocked direction `j` before, or 0; it is tested first and updated.
 
 The packet is traversed once. Interior nodes are culled by a slab test conservative
 over the origins' bounding box and the directions' inverse components, leaves by one
-per direction; then each ray takes its own slab test and triangle tests. fp subtraction
+per direction; then each ray takes a separate slab test and triangle tests. fp subtraction
 and products are monotone, so the conservative tests never cull a node a ray passes,
 and the slab test is monotone in box containment, so a ray passes a leaf's test only if
-it passes every ancestor's: each ray tests only the triangles its own `any_hit`
+it passes every ancestor's: each ray tests only the triangles its `any_hit`
 traversal reaches, and each of them until one blocks it.
 """
 function _unblocked!(open::AbstractVector{UInt16}, b::BVH, os::AbstractVector{Vec3},

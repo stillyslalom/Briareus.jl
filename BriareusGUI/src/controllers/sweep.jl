@@ -213,7 +213,7 @@ end
     sweep_frame(sess) -> Symbol
 
 The frame whose axis the sweep moves along: the chosen one when the design still has it,
-otherwise (`:none`, the default) the subject's own frame (a part's, the foil's), or
+otherwise (`:none`, the default) the frame of the subject (a part's, the foil's), or
 `:tcc`.
 """
 function sweep_frame(sess)
@@ -261,7 +261,7 @@ function sweep_los_object(sess)
     return :none
 end
 
-# The frames that move with the subject: its own (and its pieces', `piece_frame_defs`) and
+# The frames that move with the subject: its frame (and its pieces', `piece_frame_defs`) and
 # every part's placed in one of them.
 function _moved_frames(parts, subject::Symbol)
     moved = Set{Symbol}()
@@ -331,8 +331,8 @@ end
 _moved_volume(v::_CavityVolume, F::Frame) =
     _CavityVolume(v.name, F, v.length, v.radius, v.profile, v.pieces, v.holed)
 
-# The scenario keywords of a re-optimized sweep step: its cavities balanced each on its
-# own on the step's target, as the drive balances the design's (`_closed_cavities`; the
+# The scenario keywords of a re-optimized sweep step: its cavities balanced each
+# separately on the step's target, as the drive balances the design's (`_closed_cavities`; the
 # rays check each cavity where the step put it), or none.
 function _step_scenario_kw(target::Target, vols::Vector{_CavityVolume})
     isempty(vols) && return (;)
@@ -370,7 +370,7 @@ end
 
 # The design of a sweep step that edits the parts (`edit(parts, value)`: a part's center,
 # a placement step's number) and re-resolves their frames: each part whose frame changes
-# moves rigidly by its own map from the sweep's start (`frames`), and so do the beams
+# moves rigidly by its map from the sweep's start (`frames`), and so do the beams
 # aimed in it, exactly as a rebuilt design would place them (to round-off).
 struct _FrameSweepDesign
     target::Target

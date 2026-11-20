@@ -112,7 +112,7 @@ end
 # curvature: two closest points, the other its mirror image across the major axis).
 # Eberly's robust point–ellipse method, the Lagrange multiplier found by Newton's method;
 # the center for a degenerate ellipse. Only a point on the major axis takes the on-axis
-# branch: a point next to it keeps its own closest point, which moves fast along the
+# branch: a point next to it keeps its closest point, which moves fast along the
 # ellipse next to a center of curvature (`HardwareKeepOut` marks the minima next to the
 # medial axis by their mirror point, `_medial_tie`).
 function _ellipse_closest(u::Float64, v::Float64, a::Float64, b::Float64)
@@ -392,7 +392,7 @@ Only hardware upstream of each beam's landing is checked: where the beam axis fi
 meets one of the `targets` components (the surfaces the beam should hit), or the aim
 plane if it misses them. Hardware is split into `4^level` sub-triangles per triangle,
 and a point counts only if beam light can reach it past the target's opaque surfaces
-(apertures are transparent; the component's own triangles never block it): the
+(apertures are transparent; triangles of that component never block it): the
 straight segment to it from the beam axis at the same axial position is unobstructed;
 or, outside the envelope, the segment from the nearest envelope point along the same
 transverse ray, provided that point is lit (some f-cone direction reaches it from
@@ -592,7 +592,7 @@ function _variant_intensity(frames, αmax, βmax, cone, wings::Tuple, rhs, P, x)
 end
 
 # Whether beam light can reach hardware sample `x` (of components `ci`) at axial position `s`
-# and signed envelope distance `d`, ignoring the component's own triangles (apertures
+# and signed envelope distance `d`, ignoring the triangles of that component (apertures
 # are not in the BVH). Reachable if the segment to `x` from the beam axis at the same
 # `s` is unobstructed, or
 # - outside the envelope (d > 0): the envelope point `p` nearest `x` along the

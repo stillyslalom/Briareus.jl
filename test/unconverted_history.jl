@@ -104,7 +104,7 @@
                              prepulse = (omega1 = pre,))
     onset = -5 + 5 * 4.84e-4 / 1e-3
     @test isapprox(threshold_crossing(hp, 1e8).time, onset; rtol = 1e-12)
-    # the beam's own 3ω reaches 1e8 W/cm² on the plate within the first foot sample: on a
+    # the 3ω light of the beam reaches 1e8 W/cm² on the plate within the first foot sample: on a
     # 0.25 ns grid, at the ramp's first sampled point past zero (τ = 0.25 ns, the peak
     # element's 3ω irradiance at 0.1 TW ≫ 1e8), linearly from τ = 0
     op = DepositionOperator(t, [bl])

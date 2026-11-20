@@ -104,7 +104,7 @@ run, on a uniform grid of spacing `≤ dt` (ns; 50 ps by default, `hydro_couplin
 §(c)) spanning the history's solved times, or on the given `times` (within them). The
 Legendre moments `aₗ` are interpolated linearly between the history's steps and
 divided by the interpolated `a₀`; `flux` is `a₀` and `Tr` its radiation temperature,
-exactly the history's `flux` and `Tr` at its own times. Run `drive_history(...; lmax = 8)`
+exactly the history's `flux` and `Tr` at the history times. Run `drive_history(...; lmax = 8)`
 for the moments through `l = 8` the hand-over calls for; `lmax` here may only truncate.
 
 With `ylm` (the default when the history recorded them,
@@ -117,10 +117,10 @@ of `a₀` on the coarse test hohlraum.)
 
 `target` (a `Target` or `RadiationModel`; the keyframes' reference target for a moving
 hohlraum) supplies the radius of the observed sphere (its `SphereSurface`; pass
-`radius` for any other surface), the observed area, and the provenance of the capsule
-material and mesh. `observe` must name the components the history observed.
+`radius` for any other surface), the observed area, and the capsule material and mesh
+recorded in `provenance`. `observe` must name the components the history observed.
 `provenance` (NamedTuple or Dict: hohlraum, pulse, albedo model, …) is merged into the
-recorded provenance.
+recorded `provenance`.
 """
 function capsule_drive(h::NamedTuple, target; observe = :capsule, dt::Real = 0.05,
                        times = nothing, lmax::Integer = size(h.moments, 1) - 1,

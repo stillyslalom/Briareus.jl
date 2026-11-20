@@ -16,14 +16,14 @@ of the flat shape):
   the disk's area, so the window's area is exact while its edge stays within
   `π² d/6 segments²` of the circle (3 µm for a 2 mm window with 32 sides).
 
-- A closed window (`open = false`) is an opaque patch of wall that re-emits with its
-  own `material` (albedo and laser conversion, e.g. a thin gold foil whose albedo
+- A closed window (`open = false`) is an opaque patch of wall that re-emits with a
+  separate `material` (albedo and laser conversion, e.g. a thin gold foil whose albedo
   follows `BurnthroughAlbedo`); `material = nothing` keeps the wall's.
 - An open window (`open = true`) is a hole: an aperture that laser light passes
   through and whose incident x-ray flux escapes.
 
 `gap > 0` (mm) surrounds the window with an assembly gap of that width (a ring around
-a disk, a frame around a rectangle), its own component `Symbol(name, :_gap)`: open by
+a disk, a frame around a rectangle), a separate component `Symbol(name, :_gap)`: open by
 default, or a closed patch of `gap_material`. `name` defaults to `:window_<k>` for the
 `k`-th window.
 """
@@ -157,14 +157,14 @@ unrolled coordinates (u, v) = (R(φ - φc), z - zc), with every vertex on the cy
   the count inward while the arcs stay below 1.25 `hcell`, and a fan at the center;
 - gap: two triangles per side between the window's and the gap's polygons;
 - wall: triangles joining the outer polygon to the box boundary, whose vertices are
-  exactly those of the box's own grid (no T-junctions with the wall around it), by the
+  exactly those of the box grid (no T-junctions with the wall around it), by the
   shorter-diagonal rule.
 
 The window and gap polygons are `equal_area_radius` polygons, so with the exact curved
 areas of triangles on the cylinder (R times their (φ, z) area) the components have the
 areas π rw² and π(rg² - rw²) to round-off. Every patch is a triangle: a polygon with
 more than three vertices on the cylinder is not planar, and the centroid of a folded
-patch can sit behind its own facets, which hides the element from the visibility rays.
+patch can sit behind its facets, which hides the element from the visibility rays.
 """
 function _circular_window(box::Mesh, R, φc, zc, rw, rg, n::Integer, hcell)
     uv(p) = (R * (mod(atan(p[2], p[1]) - φc + π, 2π) - π), p[3] - zc)
@@ -400,7 +400,7 @@ profile), centered on TCC (dimensions in mm), with components
   its hole)
 - `:capsule` — spherical capsule (omit with `capsule_radius = 0`)
 - `:window_1`, … — diagnostic windows in the wall, one component per `WallWindow` in
-  `windows` (or the window's own name): closed windows are opaque wall patches with
+  `windows` (or the window name): closed windows are opaque wall patches with
   their own material, open ones apertures. A window with a gap is followed by its gap
   component `:window_1_gap`, ….
 - `:sombrero_top`, `:sombrero_bottom` — with `sombrero`, the entrance-hole shields
@@ -414,7 +414,7 @@ model uses the true geometry.
 The target is declared `closed`, so `RadiationModel` balances its view factors
 (`enforce_closure!`) unless given `closed = false`: windows, their gaps and closing lips
 are apertures, the sombreros see nothing of the cavity, and with open windows and gaps
-the balanced loss and capsule drive agree with a continuum Monte Carlo within 0.1 %
+the balanced loss and capsule drive agree with a continuum Monte Carlo within 0.1%
 (research notes, "Closure on bored, windowed and CAD cavities").
 
 Each end (`top_end` at `+length/2`, `bottom_end` at `−length/2`) is, by default, an
@@ -431,10 +431,10 @@ sombrero. The defaults leave the hohlraum exactly as without these keywords.
 With windows, the wall and end-cap meshes contain the windows' edges as grid lines
 (`conforming_grid`; the wall's axial grid gets their `z` edges, wall and caps share
 the azimuthal grid with their `φ` edges), so each rectangular window (and gap frame) is
-tiled exactly by whole patches, and the caps still meet the wall vertex for vertex. A
+tiled exactly by whole patches, and the caps still meet the wall at shared vertices. A
 circular window is cut the same way as a square box around it and its gap, half a wall
 cell wider, which is re-meshed to conform to the circles (`_circular_window`) and
-stitched to the surrounding grid at the box's own vertices. Without windows the mesh
+stitched to the surrounding grid at the box vertices. Without windows the mesh
 is the uniform `nz × nphi` grid.
 
 Mesh size: give `h` (mm) to set the wall, cap and LEH counts from an element size
@@ -448,7 +448,7 @@ of each end and the caps `corner_radius` short of the wall radius. Each fillet i
 `:corner_top_1`, … (from the wall to the cap) and `:corner_bottom_1`, …, of the wall
 material. Each band is the exact frustum through its two rim circles (`ConeSurface`),
 so the fillet is the chord polygon of the arc (sagitta `corner_radius (1 − cos(π/4k))`,
-20 µm for 1 mm in 4 bands) and the bands, wall and caps meet vertex for vertex.
+20 µm for 1 mm in 4 bands) and the bands, wall and caps meet at shared vertices.
 
 `leh_closure`, a `GapClosure`, closes each entrance hole to x-rays from `leh_radius` down
 to `leh_open_radius` during the pulse: the annulus between them is a closing lip
@@ -458,14 +458,14 @@ its incident flux escape until `closure.closure` (ns) and across the next
 (the wall's, e.g. `WallLossAlbedo()`). Engineering default for low-fill NIF hohlraums:
 open through the foot, closing over ~0.5 ns at the rise to peak, to
 `leh_open_radius = 0.84 leh_radius` (Schneider et al. 2015: ~0.84 r₀ through the peak;
-Young et al. 2020 use 85 % static radii; research notes, "Closing entrance holes"). Beams
-pass the lip unclipped: the laser keeps its own path open (Chen et al. 2020).
+Young et al. 2020 use 85% static radii; research notes, "Closing entrance holes"). Beams
+pass the lip unclipped: the laser keeps its path open (Chen et al. 2020).
 
 `leh_closure = :computed` (or a `LipClosure`) computes the closure instead: each lip's
 plasma edge moves in from `leh_radius` at the sound speed of the gold blown off the lip
 and stands a fixed depth inside the rim while the beams pass at high power
 (`LipClosure`, calibrated on measured LEH radii; `drive_history` integrates it per hole
-from the lip's own temperature and the beams entering that hole). The lip then reaches
+from the lip temperature and the beams entering that hole). The lip then reaches
 down to `leh_open_radius` (default 0.6 `leh_radius`, the floor of the closure) in
 `nr_lip` rings (default 6; 1 for a `GapClosure`).
 
@@ -479,12 +479,12 @@ does not change. Off by default.
 
 `profile`, a [`HohlraumProfile`](@ref), gives the wall a radius per break instead of
 `length` and `radius` (give neither): a frustraum ([`frustraum_profile`](@ref)) or a
-multi-section hohlraum. Each section between two breaks is its own wall component,
+multi-section hohlraum. Each section between two breaks is a separate wall component,
 `:wall_1`, `:wall_2`, … from the bottom, each with `part = :wall` (so `:wall` names the
 whole wall in `elements`, `drive_history(; wall)` and every name-taking analysis) and its
 exact surface: a `CylinderSurface`, a `ConeSurface` (a frustum, meshed as planar
 trapezoids between parallel chords) or a `DiskSurface` (a flat ring where the radius
-steps). All sections share the azimuthal grid, so they meet vertex for vertex, and each
+steps). All sections share the azimuthal grid, so they meet at shared vertices, and each
 end's cap runs from its hole to that end's radius. With `h` the azimuthal count comes
 from the widest radius and each section's axial count from its meridian length;
 otherwise `nz` is shared out among the sections by length. Windows are cut into
@@ -638,8 +638,8 @@ function _end_components!(comps, ends, h, rcaps, nphi, phibreaks, wall; leh_clos
         e.kind === :open && continue
         disk = DiskSurface(center = (0, 0, sgn * h))
         rl = e.radius
-        # the hole takes the cap's azimuths, so its rim meets the cap's inner edge vertex
-        # for vertex (half the count left a crack at the rim that rays leak through)
+        # the hole takes the cap's azimuths, so its rim meets the cap's inner edge at
+        # shared vertices (half the count left a crack at the rim that rays leak through)
         if leh_closure === nothing
             push!(comps, aperture(name, annulus_mesh(0.0, rl, sgn * h; nr = e.nr_leh, nphi,
                                                      up = sgn < 0, phibreaks); surface = disk))
@@ -800,8 +800,8 @@ end
 # A section of revolution from radius r0 at z0 to r1 at z1 (a frustum, a cylinder or a
 # flat ring) in `n` bands on the azimuthal grid `φs`, facing the axis side of the profile
 # (the cavity). Each patch is the trapezoid between two parallel chords at the same
-# azimuths, so it is planar; the last ring is (r1, z1) exactly, so sections meet vertex
-# for vertex.
+# azimuths, so it is planar; the last ring is (r1, z1) exactly, so sections meet at
+# shared vertices.
 function _section_mesh(r0, z0, r1, z1, n, φs)
     m = Mesh()
     ring(i) = i == n ? (Float64(r1), Float64(z1)) : (r0 + (r1 - r0) * i / n, z0 + (z1 - z0) * i / n)

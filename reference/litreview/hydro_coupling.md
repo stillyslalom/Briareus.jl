@@ -89,10 +89,10 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
 - T_i(no-α) ≈ 4.0 keV (ρR_tot/1.4)^0.182 (V/370)^1.063 and ρR_hs ≈ 0.31 (…)^0.97 (V/370)^1.24
   g/cm² (**M**).
 - **Energy accounting for HyE (**H**).** Energy in the imploding mass grew from 19 to 33 kJ.
-  Coupling efficiency (laser → imploding KE) rose from 1.1 % to 1.6 %. "Hydrodynamic
-  efficiency of about 14 % so the capsule absorbed energy varies from ~210–235 kJ",
-  i.e. ~11 % of laser energy. HyE capsules absorbed ~210 kJ against ~140 kJ for the
-  HDC (910 µm) capsules. Error bars are 3 % on V and 5 % on remaining mass. The inferences
+  Coupling efficiency (laser → imploding KE) rose from 1.1% to 1.6%. "Hydrodynamic
+  efficiency of about 14% so the capsule absorbed energy varies from ~210–235 kJ",
+  i.e. ~11% of laser energy. HyE capsules absorbed ~210 kJ against ~140 kJ for the
+  HDC (910 µm) capsules. Error bars are 3% on V and 5% on remaining mass. The inferences
   use a "power law approximation of the Rocket model".
 - Hurricane, "How ignition and target gain > 1 were achieved", High Energy Density Phys.
   53, 101157 (2024), doi:10.1016/j.hedp.2024.101157, OSTI 2472991 (**H**):
@@ -109,18 +109,18 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
 ### 1.4 Spectral issue: M-band
 - Dewald et al., Phys. Plasmas 27, no. 12 (2020; page not verified), doi:10.1063/5.0027467, OSTI 1764324, accepted
   ms (**H**):
-  - "15 % of the Au hohlraum spectrum represents M-band radiation > 1.8 keV" at peak.
+  - "15% of the Au hohlraum spectrum represents M-band radiation > 1.8 keV" at peak.
   - M-band is pole-hot (P2 > 0) because the outer beams' wall irradiance is 5× the inner
     beams'.
   - At the Mo sphere, P2/P0 swings by d(P2/P0)/dt ~ 0.2/ns and reaches +0.15 at end of drive.
   - The inferred wall M-band P2/P0 is ≈ +0.53 (smoothing factor 0.28 at τ = 2).
   - "until recently high-resolution capsule only hydrodynamic simulations assume for
     simplicity that the M-band has similar drive symmetry to the softer x-ray drive that is
-    typically only 1 % asymmetric".
-- HDC capsules carry a ~15–20 µm buried layer of 0.3–0.5 % W "for shielding the inner undoped
+    typically only 1% asymmetric".
+- HDC capsules carry a ~15–20 µm buried layer of 0.3–0.5% W "for shielding the inner undoped
   C from multi-keV X-rays" (Lindl 2026, **H**).
 - Lindl 2004, Nova HEP4 (**H**): the 2–4 keV Au M-line fraction is the source of capsule
-  preheat. A 3× underestimate of the hard fraction cut yield by only 30 % for 1.3 % Ge-doped
+  preheat. A 3× underestimate of the hard fraction cut yield by only 30% for 1.3% Ge-doped
   CH.
 - When it matters (**L**):
   - Stage 0: not at all, since a pressure BC carries no spectrum.
@@ -157,7 +157,7 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
   public, fully specified problem with an imposed drive. It is the only one I found.
 - **Angle-resolved BC (**L**).** Set E_s(θ,t) = 4F_inc(θ,t)/c from Briareus's
   F_inc = Σ a_l(t)P_l. For multigroup, split by a Planckian at T_r(t) plus an M-band
-  component carrying its own a_l^M(t).
+  component carrying a separate a_l^M(t).
   - Pitfall 1: applied at a fixed outer radius through optically thin blowoff, diffusion
     smears the angular structure, and geometry smooths it by the case-to-capsule ratio
     (Dewald Fig. 6).
@@ -173,7 +173,7 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
     "a solver does not evaluate these tables" (CompactLES docs, Physics models, **H**).
 - **EOS** (**M** unless noted):
   - Gaffney et al., "A review of equation-of-state models for ICF materials", HEDP 28, 7–24
-    (2018), doi:10.1016/j.hedp.2018.08.001. Models differ by 5–10 %, more where ionization
+    (2018), doi:10.1016/j.hedp.2018.08.001. Models differ by 5–10%, more where ionization
     and dissociation occur; D is especially uncertain.
   - Clark 2019 (**H**): DT EOS choice shows "remarkably little sensitivity", but HDC EOS
     models "do show some sensitivity".
@@ -194,13 +194,13 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
 
 | Quantity | Value | Source |
 |---|---|---|
-| v_imp, ablator mass remaining, capsule absorbed energy (sim, N230729 base 2.05 MJ, +0/+4/+10 µm HDC) | 386/383/374 km/s; 5/5.9/6.6 %; 245/257/274 kJ | Kritcher PoP 31 Table III (**H**) |
-| HYBRID-E Table I (480 TW) | v 360–>400 km/s, mass remaining <5–6.5 %; first shock ~50 TW ≈ 150 eV ≈ >12 Mbar; adiabat ≈ 2.5 at peak velocity, ~5 at bang | Kritcher PoP 28 (2021) (**H**) |
-| HyE energetics | KE_imp 19–33 kJ; η_hydro ≈ 14 %; E_abs 210–235 kJ ≈ 11 % of laser | Lindl PoP 33 050503 (**H**) |
-| 2DConA surrogates, data (sim) | N220618: v 392±24 (401) km/s, t_stag 9.170±0.061 (9.214) ns. N221010: 381±15 (408), 9.230 (9.260), mass rem. 7.2±1.0 (7.52) %. N240304: 355±5 (344), 9.876±0.090 (9.876), 8.8±1.0 (10.20) %. Shell P2 9–27 µm, HS P2 5.7–25.4 µm (see table) | Ruof et al., PoP 33, 052706 (2026), OSTI 3367476, Table IV (**H**; row labels offset by one in extraction, re-aligned) |
-| Capsule-only (drive-tuned) vs N170601 | bang 8.19 vs 8.16±0.03 ns; T_ion 4.97 vs 4.93±0.2 keV; DSR 3.11 vs 3.10±0.2 %; P0 30.9 vs 30±1 µm; Y 1.31 vs 1.46e16 (3-D) | Clark PoP 26 Table I (**H**) |
-| Mass remaining N210808 → N221204/N230729 | 3.8 % → 5.7 % (capsule-only, surrogate-tuned) | Ruof 2026 (**H**) |
-| Coast time (pre-N210808 HyE) | ~1.4 ns from 90 % peak T_r to peak compression, ~1.6 ns from laser-off | Zylstra et al., PRE 106, 025202 (2022), OSTI 1959535 (**H**) |
+| v_imp, ablator mass remaining, capsule absorbed energy (sim, N230729 base 2.05 MJ, +0/+4/+10 µm HDC) | 386/383/374 km/s; 5/5.9/6.6%; 245/257/274 kJ | Kritcher PoP 31 Table III (**H**) |
+| HYBRID-E Table I (480 TW) | v 360–>400 km/s, mass remaining <5–6.5%; first shock ~50 TW ≈ 150 eV ≈ >12 Mbar; adiabat ≈ 2.5 at peak velocity, ~5 at bang | Kritcher PoP 28 (2021) (**H**) |
+| HyE energetics | KE_imp 19–33 kJ; η_hydro ≈ 14%; E_abs 210–235 kJ ≈ 11% of laser | Lindl PoP 33 050503 (**H**) |
+| 2DConA surrogates, data (sim) | N220618: v 392±24 (401) km/s, t_stag 9.170±0.061 (9.214) ns. N221010: 381±15 (408), 9.230 (9.260), mass rem. 7.2±1.0 (7.52)%. N240304: 355±5 (344), 9.876±0.090 (9.876), 8.8±1.0 (10.20)%. Shell P2 9–27 µm, HS P2 5.7–25.4 µm (see table) | Ruof et al., PoP 33, 052706 (2026), OSTI 3367476, Table IV (**H**; row labels offset by one in extraction, re-aligned) |
+| Capsule-only (drive-tuned) vs N170601 | bang 8.19 vs 8.16±0.03 ns; T_ion 4.97 vs 4.93±0.2 keV; DSR 3.11 vs 3.10±0.2%; P0 30.9 vs 30±1 µm; Y 1.31 vs 1.46e16 (3-D) | Clark PoP 26 Table I (**H**) |
+| Mass remaining N210808 → N221204/N230729 | 3.8% → 5.7% (capsule-only, surrogate-tuned) | Ruof 2026 (**H**) |
+| Coast time (pre-N210808 HyE) | ~1.4 ns from 90% peak T_r to peak compression, ~1.6 ns from laser-off | Zylstra et al., PRE 106, 025202 (2022), OSTI 1959535 (**H**) |
 | Yield scaling | Y ∝ η^3.83 p_abl^0.64 v_imp^4.47 α_if^−1.44 S^4.67 (exponent pairing reconstructed) | Ruof 2026 Eq. 1 (**M**) |
 | Kritcher PRE 106, 025201 and PRE 109, 025204 tables | not read (paywalled; OSTI 1880163 / 2474067 no full text) | — |
 
@@ -237,7 +237,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
   for the Briareus capsule and check the linear prediction.
 - **Pitfalls of capsule-only with an imposed P2(t)** (from the above, **H**/**L**):
   - The drive is calibrated, not predicted; LLNL tunes multipliers per design (Ruof 2026).
-  - The M-band has its own, larger P2 (Dewald).
+  - The M-band has a distinct, larger P2 (Dewald).
   - The asymmetry must be applied near the ablation front, not at a distant wall.
   - The capsule–wall stagnation plasma at the equator (Dewald) and bubble or LEH geometry
     are absent.
@@ -253,7 +253,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
   "rocket" shell.
 - Calibrate P₀ to HYBRID-E: first shock >12 Mbar at ~150 eV, P_abl ~140–150 Mbar at peak.
 - Validate on:
-  - v_imp 380–400 km/s with 5–6.6 % mass remaining;
+  - v_imp 380–400 km/s with 5–6.6% mass remaining;
   - coupled KE 19–33 kJ;
   - Hurricane's free-fall condition p_hs ≈ p_abl(t_coast − R_pv/v);
   - Masse-type G(t,τ) sign inversion near 4.5 ns.
@@ -265,7 +265,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
 
 **Stage 1: gray flux-limited diffusion + table EOS (1-D, then 2-D).**
 - Implicit gray radiation energy equation coupled to T_e (one-T to start), with κ_R and κ_P
-  from TOPS for C (+0.4 % W) and DT.
+  from TOPS for C (+0.4% W) and DT.
 - Marshak BC E − (2/c)F·n̂ = 4F_inc(θ,t)/c.
 - Spitzer–Härm conduction flux-limited at f = 0.15.
 - QEOS/FEOS tables for C, DT and He.
@@ -275,7 +275,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
 
 **Stage 2: multigroup + M-band.**
 - Briareus spectral radiosity (ROADMAP "Spectral radiosity") supplies a Planck component plus an Au M-band
-  component (~15 % > 1.8 keV, pole-hot, its own a_l).
+  component (~15% > 1.8 keV, pole-hot, separate a_l).
 - Multigroup diffusion; the group count is not public, so pick it by convergence (**L**).
 - Two-temperature model with electron–ion coupling.
 - Validate: W-layer preheat, Dewald's capsule-inner-surface P2 history, ablation-front growth
@@ -293,7 +293,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
 - The radius R_cap at which the flux was evaluated. Optionally a table over R ∈ [R_abl,min,
   R₀] so CompactLES can apply the flux at the moving front.
 - Later: spectral split into groups ν_g, F_g(t), and a_l,g(t), at minimum Planck + M-band.
-- Provenance: hohlraum, pulse, albedo model, mesh, and git hash.
+- Run metadata: hohlraum, pulse, albedo model, mesh, and git hash.
 
 **CompactLES must add:**
 1. `AblationPressureSource` / `AbsorbedFluxSource <: Source`, via `add_source!(src, solver,

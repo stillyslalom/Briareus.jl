@@ -3,7 +3,7 @@
 # spectrum, a flux and a radiation temperature. Research notes, "Dante channel responses
 # and the unfold (2026-10-24)".
 
-# Energy grid of the responses and of the unfold (eV): 50 eV – 30 keV, 0.21 % steps.
+# Energy grid of the responses and of the unfold (eV): 50 eV – 30 keV, 0.21% steps.
 const _DANTE_GRID = exp.(range(log(50.0), log(29_990.0), 3001))
 
 # Digitized curves of Rubery et al., RSI 2023 (OSTI 1975922), Figs. 3 and 8
@@ -32,11 +32,11 @@ end
 # surface layer of mass fractions w_C carbon and w_O oxygen over the bulk metal (μ_s the
 # mixture's μ/ρ, ρ the metal's density) and a power-law correction E^γ. Fitted in log
 # (`examples/dante_channels.jl`) to the measured curves digitized from Rubery 2023: L,
-# w_C, w_O, γ and K for Cr to Fig. 3b (0.075–1 keV, rms 12 % against the median-read
+# w_C, w_O, γ and K for Cr to Fig. 3b (0.075–1 keV, rms 12% against the median-read
 # curve; it does not reproduce the edge spikes); K and γ for Al to Fig. 8b (1–4.5 keV,
-# Al K edge, rms 7 %) with Cr's surface layer. Ni (no published curve) takes Cr's
+# Al K edge, rms 7%) with Cr's surface layer. Ni (no published curve) takes Cr's
 # parameters on the Ni bulk (*assumed*), and above 1 keV for Cr and below 1 keV for Al
-# the model is an extrapolation, as Rubery's own "representative sensitivity shapes"
+# the model is an extrapolation, as Rubery's "representative sensitivity shapes"
 # are above 2.2 keV.
 const _XRD_SURFACE = (L = 33.64, wC = 0.2742, wO = 0.2504)     # nm, mass fractions
 const _XRD_FIT = Dict(:Cr => (K = 15.84e6, γ = -0.2442), :Al => (K = 35.12e6, γ = 0.1018),
@@ -140,7 +140,7 @@ nominal band energy and `solid_angle` (sr) the channel's. Fields `E` (eV) and `R
 tabulate the response on 50 eV – 30 keV; a spectrum `dI/dE` (GW/sr/eV) gives the voltage
 `V = Ω ∫ (dI/dE) R dE` (Harris et al., RSI 92, 033505, 2021, eq. 1).
 
-`field_of_view` (mm) is the channel's own collimated field, the diameter of the disk it
+`field_of_view` (mm) is the collimated field of the channel, the diameter of the disk it
 sees at the view's center, in place of the view's ([`DanteView`](@ref)); `nothing`
 (default) takes the view's.
 """
@@ -212,7 +212,7 @@ function Base.show(io::IO, c::DanteResponse)
     fov = c.field_of_view === nothing ? "" : ", field of view $(c.field_of_view) mm"
     c.response === nothing || return print(io, "measured response ", _show_part(c.response), fov, ")")
     parts = [[_show_filter(k, v) for (k, v) in c.filters]; ["filter " * _show_part(t) for t in c.tables]]
-    print(io, join(parts, " + "), c.grid < 1 ? " + $(round(100c.grid; digits = 1)) % grid" : "",
+    print(io, join(parts, " + "), c.grid < 1 ? " + $(round(100c.grid; digits = 1))% grid" : "",
           c.mirror === nothing ? "" : c.mirror isa TabulatedCurve ? ", mirror " * _show_part(c.mirror) :
           c.mirror isa GrazingMirror ? ", " * sprint(show, c.mirror) :
           ", $(c.mirror[1]) $(c.mirror[2])°",
@@ -230,7 +230,7 @@ end
     dante1_responses() -> Vector{DanteResponse}
 
 The 18 NIF Dante 1 channels as configured for ICF experiments from October 2021 (Rubery
-et al., RSI 2023, Fig. 4: filters, 8.8 % grids, two SiO₂ mirrors and the 2–4 keV
+et al., RSI 2023, Fig. 4: filters, 8.8% grids, two SiO₂ mirrors and the 2–4 keV
 multilayer, Al/Cr/Ni XRDs, solid angles), each built as a [`DanteResponse`](@ref) from
 the built-in definition `nif_dante1_2021` ([`diagnostic`](@ref); the file
 `data/diagnostics/nif_dante1_2021.toml` records the transcription and its assumptions).

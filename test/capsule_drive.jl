@@ -22,7 +22,7 @@
     @test d.radius == 0.9 && d.area ≈ sum(t.elem_area[elements(t, :capsule)])
     @test d.provenance[:pulse] == "test ramp" && d.provenance[:code] == "Briareus"
     @test d.provenance[:observe] == [:capsule] && haskey(d.provenance, :git)
-    # round trip: on the history's own times the drive is the history
+    # round trip: on the history times the drive is the history
     dh = capsule_drive(h, m; times = h.time)
     @test dh.flux == h.flux && dh.Tr ≈ h.Tr
     @test dh.modes ≈ h.moments ./ h.moments[1:1, :]
@@ -124,7 +124,7 @@ end
     @test d1.flux ≈ d0.flux rtol = 1e-8
     @test d1.modes ≈ d0.modes rtol = 1e-6 atol = 1e-9
     b0, b1 = d0.ylm[:, end], d1.ylm[:, end]
-    @test abs(b0[mode_index(2, 2)]) + abs(b0[mode_index(2, -2)]) > 2e-3      # a real m = 2 drive (0.5 %)
+    @test abs(b0[mode_index(2, 2)]) + abs(b0[mode_index(2, -2)]) > 2e-3      # a real m = 2 drive (0.5%)
     for l in 1:4, mm in 1:l
         cp, sp = b0[mode_index(l, mm)], b0[mode_index(l, -mm)]
         @test b1[mode_index(l, mm)] ≈ cp * cos(mm * α) - sp * sin(mm * α) atol = 1e-7

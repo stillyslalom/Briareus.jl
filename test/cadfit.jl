@@ -2,7 +2,7 @@
 # `facet_soup` from meshops.jl.
 
 # CAD-like facets: curved faces as full-length strips, flat annuli as radial slivers,
-# every facet its own vertices (as STL has them), wound to face `facing`.
+# every facet separate vertices (as STL has them), wound to face `facing`.
 function cad_quad!(F, a, b, c, d, facing)
     dot(cross(b - a, c - a), facing) < 0 && ((a, b, c, d) = (d, c, b, a))
     push!(F, (a, b, c), (a, c, d))

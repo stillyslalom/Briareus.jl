@@ -1,12 +1,12 @@
 # NIF beams on VisRad's phase plates, their spots in the quad frame: the major axis along
 # the quad port's horizontal (φ̂) projected across the beam, by vector geometry; the turn
-# against the range VisRad's own deposition gave (research notes, "VisRad beam-profile
+# against the range the VisRad deposition gave (research notes, "VisRad beam-profile
 # probe"); and the default beams unchanged.
 
 using Briareus, LinearAlgebra, Test
 
 @testset "NIF beams on VisRad's phase plates" begin
-    # the default is the beam frame, bit for bit
+    # the default is bitwise the beam frame
     @test nif_beams() == nif_beams(spot_frame = :beam)
     @test_throws ArgumentError nif_beams(spot_frame = :cone)
     # the plates by cone, and their spots

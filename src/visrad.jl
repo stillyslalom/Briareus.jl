@@ -4,7 +4,7 @@
 #
 # Every format detail cites a page of the online manual, https://prism-cs.com/Manuals/VisRad/
 # (abbreviated `VR/` below); details the manual does not fix are labeled *assumption*.
-# The provenance and confidence of each detail are collected in
+# The sources and confidence of each detail are collected in
 # `reference/research-notes.md`, section "VisRad interchange formats".
 #
 # Conventions shared with VisRad (VR/power_sources/set_laser_beam_pointing.html):
@@ -193,7 +193,7 @@ const VISRAD_PHASE_PLATES = Dict{String,NamedTuple{(:facility, :major, :minor, :
     "No CPP" => (facility = :NIF, major = 75.0, minor = 75.0, order = 2.0, level = 0.5),
     "400 um CPP" => (facility = :NIF, major = 189.0, minor = 189.0, order = 7.145, level = 0.5),
     "3 mm 2W CPP" => (facility = :NIF, major = 1575.0, minor = 1190.0, order = 13.1, level = 0.5),
-    # LMJ (radii at 3 % of peak)
+    # LMJ (radii at 3% of peak)
     "Type A" => (facility = :LMJ, major = 757.0, minor = 328.0, order = 2.87, level = 0.03),
     "Type B" => (facility = :LMJ, major = 904.0, minor = 584.0, order = 3.83, level = 0.03),
     "Type D" => (facility = :LMJ, major = 440.0, minor = 419.0, order = 3.01, level = 0.03),
@@ -242,7 +242,7 @@ function _vr_sense(sense::Symbol)
     throw(ArgumentError("rotation_sense must be :beam or :target"))
 end
 
-# VisRad measures a NIF beam's rotation from its quad's horizontal, not the beam's own:
+# VisRad measures a NIF beam's rotation from the horizontal of its quad (rather than of the beam):
 # at rotation 0 the major axis lies along φ̂ of the quad's port, turned about the beam
 # axis by 1.6–5.3° from the beam's φ̂ (measured: VisRad 21 deposition on plates normal to
 # 48 beams, the fitted spot rotation equals this angle to 0.02° on all of them;
@@ -268,7 +268,7 @@ function _nif_beam_quad(name::AbstractString)
 end
 
 # A beam built from a file without a template: its NIF quad from its name, and its spot
-# (read relative to the beam's own φ̂) turned to the quad's horizontal
+# (read relative to the beam φ̂) turned to the quad's horizontal
 function _vr_quad_framed(b::Beam)
     q = _nif_beam_quad(b.name)
     isempty(q) && return b
@@ -638,7 +638,7 @@ Columns are recognized by header, so older layouts and extra columns are accepte
 Conversions:
 - **Pointing.** "TC Pt Pos-x/y/z" (cm) is the beam's *focus* in the target-chamber frame:
   the Reference Point plus the focus offset along the beam. This follows from the
-  manual's own example table (`VR/power_sources/images/laser_summary.jpg`): beams pointed
+  example table in the manual (`VR/power_sources/images/laser_summary.jpg`): beams pointed
   at the same foil-frame Reference Point with focus offset -0.215 cm have TC positions
   that differ by exactly 0.215 cm × the difference of their port vectors. So
   `aim = 10·TC + defocus·port` (mm) with `defocus = 10·focus offset` (cm → mm). When the
@@ -665,10 +665,9 @@ Conversions:
   looking along the beam) and `90° + ρ` for `:target` (seen from TCC). The manual does
   not say which. VisRad 21's deposition settles it as `:beam`: at ρ = ±30°, 60° and 90°
   on ten NIF beams its spot axes match `:beam` within 0.04° and differ from `:target` by
-  60°. Horizontal is φ̂ of the beam's
-  NIF quad port (`quad` of the template beam), which is turned 1.6–5.3° from the beam's
-  own φ̂: measured in VisRad 21 to 0.02° on 48 beams. Beams of no NIF quad use their
-  own φ̂.
+  60°. Horizontal is φ̂ of the beam's NIF quad port (`quad` of the template beam),
+  which is turned 1.6–5.3° from the φ̂ of the beam: measured in VisRad 21 to 0.02° on
+  48 beams. Beams of no NIF quad use their φ̂.
 - DPR, halo, f-number and wavelength are not in the file: DPR "On" is warned about and
   ignored (VisRad splits such OMEGA beams into two cones 85 µm apart); the rest come from
   the template.
@@ -1137,7 +1136,7 @@ end
 const _VR_POWER_COLUMNS = ("Surface Area", "Incident Rad Pwr", "Emitted Rad Pwr", "Pwr Src Term",
                            "Laser Pwr Dep")
 
-# A component's conversion as one number: its own, or for a `Conversion` model the
+# A component's conversion as one number: the value itself, or for a `Conversion` model the
 # laser-weighted mean of the solved source (the model at the solution's time without laser).
 _mean_conversion(η::Real, sol, t, es) = η
 function _mean_conversion(m::Conversion, sol, t, es)
@@ -1414,7 +1413,7 @@ Compare a kit written by `write_visrad_kit` with VisRad's results for the same c
 
 - `elements`: VisRad's Surface Element Properties export for the observed component
   (`read_visrad_table`). The polar and azimuthal columns (headers containing
-  "polar"/"theta" and "azim"/"phi", degrees, in the component's own frame — for an
+  "polar"/"theta" and "azim"/"phi", degrees, in the component frame — for an
   unrotated sphere the chamber frame) and "Flux In" (TW/cm²; a TW/mm² header is
   converted) are fitted exactly as Briareus's elements were (`visrad_legendre_fit` over
   `terms`, `visrad_ylm_fit` to `lmax`).

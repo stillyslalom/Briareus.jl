@@ -1,7 +1,7 @@
 # The model tree of assemblies (phase B2): membership separate from placement, nested
 # assemblies, subtree show/hide and include/exclude with the mixed state, the tree's
 # commands (new, move into, ungroup, rename, remove), the analyses seeing the flattened
-# components (the drive unchanged, bit for bit), sessions (round trip, version 9).
+# components (the drive bitwise unchanged), sessions (round trip, version 9).
 
 const A3 = Briareus.Vec3
 
@@ -27,7 +27,7 @@ _drive_bits(sess) = (r = (build_scenario!(sess); sess.drive.result[]);
     # nothing moved: the same frames, the same components, so the same target
     @test all(n -> part_frames(ts)[n] == fr0[n], keys(fr0))
     @test ts.target[] === t0 && target_summary(ts) == target_summary(TargetSetup(resolution = :coarse))
-    # the analyses see the flattened components: the drive is the same, bit for bit
+    # the analyses see the flattened components: the drive is bitwise the same
     @test _drive_bits(s) == before
 
     # nested, and both at the top: a disk beside them
@@ -107,7 +107,7 @@ end
     # a part put back alone: the assembly is partly in the calculations
     include_components!(s, [:capsule], true)
     @test observed_name(ts) === :capsule && occursin("partly in calculations", row("assembly:cavity").detail)
-    # a piece left out on its own comes back with its assembly
+    # a piece left out alone comes back with its assembly
     include_components!(s, [:hohlraum], true)
     @test set_excluded!(ts, :hohlraum_wall, true)
     @test occursin("partly", row("part:hohlraum").detail)

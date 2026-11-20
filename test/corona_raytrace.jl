@@ -2,7 +2,7 @@
 # tracing through a corona n_e(x) by RK4, the prototype's model (c) (research notes,
 # "Corona model prototype"). It shares only the beam model with Briareus (f-cone
 # directions and the best-focus profile); paths, absorption, angular binning and the
-# harmonic projection are its own. With the ray parameter τ (ds = n dτ):
+# harmonic projection are separate code. With the ray parameter τ (ds = n dτ):
 #     dx/dτ = v,   dv/dτ = -∇(n_e/n_c)/2,   d(optical depth)/dτ = (ν_ei/c)(n_e/n_c),
 # so for an isothermal profile the rate is (ν_c/c)(n_e/n_c)² (Kruer, ch. 5). Rays start
 # on a square lattice (spacing `hlat`) in the plane normal to the beam through the center,

@@ -35,7 +35,7 @@
 # multiplies it (the window's incident temperature is a few percent below Dante's). Columns:
 # `HeatFront`'s arrival; two calibrations of it to the 7.5 ns leading edge Lester et al.
 # measured through 2.5 µm of gold and 35 µm of epoxy (a heat-front coefficient and a
-# constant offset, each fitted on this drive); the 1-D gold's transmission onset (1 %);
+# constant offset, each fitted on this drive); the 1-D gold's transmission onset (1%);
 # the emergence with `HeatFront`'s arrival, `BurnthroughAlbedo`'s transition and
 # transmission (`RosselandTransmission`) driving the backing; and the 1-D emergence.
 
@@ -195,7 +195,7 @@ if mode == "nova"
     TD(t) = 2.6 * max(t, 1e-3)^0.15
     tn = range(0, 2.5; length = 2501)
     println("Nova, 260 eV (t/1 ns)^0.15: measured half signal, HeatFront arrival, 1-D transmission")
-    println("onset (1 %), bare and backed by 35 µm of epoxy, and the rear gold's density then (g/cm³)")
+    println("onset (1%), bare and backed by 35 µm of epoxy, and the rear gold's density then (g/cm³)")
     println("| Au (µm) | measured | HeatFront | 1-D bare | ρ | 1-D backed | ρ |")
     for (x, measured) in nova
         hr = burnthrough_time(BurnthroughAlbedo(thickness = x), tn, 260 .* tn .^ 0.15)

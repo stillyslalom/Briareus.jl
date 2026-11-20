@@ -12,7 +12,7 @@ automatic-differentiation gradients pass through it. Give exactly one of `upper`
 `lower`.
 
 `f` may return a number or a vector; a vector constraint has one component per entry,
-each with its own multiplier and row in the report, against a `limit` that is a number
+each with a separate multiplier and row in the report, against a `limit` that is a number
 (shared) or a vector of the same length. `labels` name the components in reports
 (default `"1"`, `"2"`, …): a collection of names, or a function of the evaluation that
 returns them, for a constraint whose components follow the evaluation (one per beam,
@@ -22,7 +22,7 @@ different numbers of beams (a stage on quads, then one on their beams).
 
 `scale` (a number or one per component, positive) sets the units of the violation: the
 optimizer works on `±(f(ev) - limit)/scale` and its `feasibility` tolerance is in those
-units. By default `scale = |limit|`, so a violation is relative (1e-3: 0.1 % of the
+units. By default `scale = |limit|`, so a violation is relative (1e-3: 0.1% of the
 limit); a zero limit needs a `scale`.
 
 Ready-made constraints: [`irradiance_ceiling`](@ref), [`mode_gate`](@ref),
@@ -93,7 +93,7 @@ function _constraint_rows(ev, cs::Tuple, multipliers, feasibility::Float64)
     k = 0
     for c in cs
         # the reported value: the exact quantity where the constraint's function is a
-        # smooth stand-in for one (`_exact_value`), else the function's own
+        # smooth stand-in for one (`_exact_value`), else the function value
         v = something(_exact_value(c.f, ev), c.f(ev))
         vals = v isa Number ? [Float64(ForwardDiff.value(v))] : Float64.(ForwardDiff.value.(v))
         sg = c.upper ? 1 : -1
@@ -186,7 +186,7 @@ Base.@nospecializeinfer function _constrained_pointing(
     inner_reltol >= 0 || throw(ArgumentError("inner_reltol must be nonnegative"))
     inner_evaluations >= 1 || throw(ArgumentError("inner_evaluations must be at least 1"))
     phase1 |= relaxation
-    # the constraints' picket maps read from the evaluations' own deposition
+    # the constraints' picket maps read from the deposition of the evaluations
     s = _with_split(s, _split_request(cs))
     ev = evaluate(s, xs)
     f0 = Float64(ForwardDiff.value(objective(ev)))
@@ -349,7 +349,7 @@ Base.@nospecializeinfer function _constrained_pointing(
         evx = evaluate(s, x)
     end
     # the reported multipliers: those that best satisfy stationarity at the design (the
-    # iteration's own, in `state`, are what a restart continues from)
+    # iteration estimates, in `state`, are what a restart continues from)
     kkt = _active_set_multipliers(s, objective, work, x, lower, upper,
                                   _all_violations(work, evx), feasibility)
     rows = _constraint_rows(evx, cs, kkt.λ, feasibility)
@@ -517,7 +517,7 @@ Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs:
         n > W && best[n] > (1 - _PHASE1_STALL) * best[n-W] && (stalled[] = true; return true)
         return callback === nothing ? false : callback(merge(st, (; outer = 0))) === true
     end
-    # phase 1's own budget: no cap on its iterations (the inner runs' `iterations` caps the
+    # a separate budget for phase 1: no cap on its iterations (the inner runs' `iterations` caps the
     # augmented Lagrangian's subproblems, which phase 1 is not), so that it ends on
     # convergence, its stall rule, the run's evaluation budget, the time limit or the
     # callback
@@ -567,7 +567,7 @@ function _positive_norm(g::AbstractVector{T}, p::Float64) where {T}
 end
 
 # The p of a relaxation's smooth largest violation (engineering default: as the gate
-# multiples of a study, 4 components equal at most 2.2 % above their largest)
+# multiples of a study, 4 components equal at most 2.2% above their largest)
 const _RELAX_P = 64.0
 
 # The relaxation of each constraint violated or active at the infeasible design `x1`
@@ -671,7 +671,7 @@ the named parts or components: element power over element area, as in
 to another element: the reported quantity of [`irradiance_ceiling`](@ref), whose
 optimizer works on the smooth [`irradiance_norm`](@ref). The element average resolves
 a peak only as finely as the mesh: a coarser mesh averages the hottest spot over more
-area and reports a lower peak (on the dropped-bundle hohlraum, 8 % lower at 0.45 mm
+area and reports a lower peak (on the dropped-bundle hohlraum, 8% lower at 0.45 mm
 than at 0.2 mm).
 
 `weight`, a function of a beam, counts each beam's deposition times `weight(beam)`
@@ -779,14 +779,14 @@ limit (research notes, "Constrained re-pointing").
 `exact = false` bounds the norm alone, and the norm is the reported value: at the limit
 the field's hot spots are as hot, in the `p`-norm mean, as the reference's, while the
 peak over the elements may exceed the limit, by a margin that depends on where the run
-ends: on the tutorial's mesh 0.1 % at `p = 64` and 3 % at `p = 16`, and on the
-dropped-bundle test case (0.45 mm wall elements) 3 % at `p = 64` for one of two designs
+ends: on the tutorial's mesh 0.1% at `p = 64` and 3% at `p = 16`, and on the
+dropped-bundle test case (0.45 mm wall elements) 3% at `p = 64` for one of two designs
 that meet the same gates, under another floating-point rounding of the same run
 (research notes, "Constrained re-pointing").
 
 Across meshes the ceiling is a ratio to the reference on the same
 mesh, which changes less with the element size than the peak's ratio does (rms
-difference 1.0 % against 1.3 % between 0.2 and 0.45 mm elements near the limit), while
+difference 1.0% against 1.3% between 0.2 and 0.45 mm elements near the limit), while
 the peak itself falls on a coarser mesh.
 """
 function irradiance_ceiling(reference::Evaluation, names::Symbol...;
@@ -914,14 +914,14 @@ the keep-out to the objective's `keepout` keyword or as a constraint, not both.
 
 `scale` (mm) is the unit of the violation: with the default 1 mm and `feasibility =
 1e-3`, a clearance within 1 µm of `minimum` is `:active` (an engineering default, finer
-than the keep-out's own accuracy against [`clearance`](@ref), a few micrometers). Give
-each of several keep-outs its own `name`.
+than the keep-out accuracy against [`clearance`](@ref), a few micrometers). Give
+each of several keep-outs a distinct `name`.
 
 Where the limits conflict, `scale` is also the keep-out's weight against the other
 constraints: phase 1, the augmented Lagrangian and the least-violation design of
 [`PointingResult`](@ref) trade normalized violations, so at 1 mm a beam 0.1 mm inside
-the keep-out weighs as a mode gate exceeded by 10 % of itself or a ceiling 10 % over its
-limit (each beam its own component). A smaller scale, e.g. a pointing tolerance of
+the keep-out weighs as a mode gate exceeded by 10% of itself or a ceiling 10% over its
+limit (one component per beam). A smaller scale, e.g. a pointing tolerance of
 0.05 mm, makes the same shortfall weigh twenty times more: on a re-pointing study whose
 gates conflicted with the keep-out and a ceiling, it moved the violation from the
 keep-out onto the gates and the ceiling, each then several times further over (research
@@ -929,7 +929,7 @@ notes, "Least violation, capped inner runs and phase 1's budget", § 6). Choose 
 the trade the design accepts.
 
 The floor is per beam, not on the smallest clearance over the beams: in the augmented
-Lagrangian each beam's component has its own multiplier, which stays zero for a beam
+Lagrangian each beam component has a separate multiplier, which stays zero for a beam
 clear of its minimum (its term then vanishes from the inner problem), and each term is
 as smooth as that beam's clearance, while the smallest clearance over the beams has a
 kink wherever the closest beam changes (research notes, "Constrained re-pointing").
@@ -940,8 +940,8 @@ On a [`PhasedScenario`](@ref) the constraint takes the [`PerPhase`](@ref) evalua
 directly, without [`in_phase`](@ref): each beam's component is its least clearance over
 the phases, and its rows carry no phase in their names (`leh[B211]`). The phases share
 the aims, so a keep-out that does not read the beams' power (an `ApertureKeepOut` at a
-`peak_fraction`) gives every phase the same clearance, and the value is any one phase's
-bit for bit; a keep-out at an absolute `intensity` widens with the power, and the
+`peak_fraction`) gives every phase the same clearance, bitwise identical to that of any one
+phase; a keep-out at an absolute `intensity` widens with the power, and the
 brightest phase sets the clearance.
 """
 function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale::Real = 1.0,
@@ -1052,7 +1052,7 @@ end
 The departure of a drive shape from a reference shape per degree `l = 1:lmax`:
 `δₗ = √((2l+1) Σₘ (c_lm/c_00 - r_lm/r_00)²)`, the [`mode_amplitude`](@ref) of the
 difference of the two normalized shapes (`c` and `reference` are coefficient vectors
-from [`flux_ylm`](@ref); with an evaluation, its own). For an axisymmetric difference
+from [`flux_ylm`](@ref); with an evaluation, those of the evaluation). For an axisymmetric difference
 this is `|aₗ/a₀ - aₗ'/a₀'|`. Generic in the number type: the value of
 [`mode_gate`](@ref).
 
@@ -1097,11 +1097,11 @@ end
 A gate per degree on the departure of the capsule's drive shape from a `reference`
 shape: the [`Constraint`](@ref) `mode_departure(ev, reference; lmax) ≤ gates`, named
 `:mode_gate`, one component per degree `l = 1:lmax` (labeled `l = 1`, …), each in units
-of its own gate.
+of its gate.
 
 `gates` is a vector of departures (`gates[l]` for degree `l`, in the units of
 [`mode_departure`](@ref): for an axisymmetric difference `|Δaₗ/a₀|`, so `0.005` at
-`l = 2` is 0.5 % in P2/P0), or the result of [`mode_uncertainty`](@ref), whose
+`l = 2` is 0.5% in P2/P0), or the result of [`mode_uncertainty`](@ref), whose
 `floor` is the gate, `√(2l+1) × rms_mode[l]`: the departure that random errors of
 that size (e.g. NIF's 50 µm rms pointing) give each degree. That gate is a lower bound,
 what pointing error alone produces: laser delivery and the hohlraum plasma move the
@@ -1110,9 +1110,9 @@ tolerance per degree in physical units, a choice of the design, is the usual gat
 the pointing floor the gates can cost re-pointing and drive that a tolerance within
 that shot-to-shot spread does not (research notes, "Mode gates in physical units").
 Laser delivery's share can enter the floor through `mode_uncertainty`'s `power` (an
-rms fraction per pointing unit): on the dropped-bundle tutorial's case 3 % per quad
-raises the floor by 40 % at `l = 1` and 21 % at `l = 2`, 5 % by 92 % and 51 % (NIF's
-published beam-to-beam balance is better than 5 %; research notes, "Inner-run options,
+rms fraction per pointing unit): on the dropped-bundle tutorial's case 3% per quad
+raises the floor by 40% at `l = 1` and 21% at `l = 2`, 5% by 92% and 51% (NIF's
+published beam-to-beam balance is better than 5%; research notes, "Inner-run options,
 a wall-loss scenario warning and laser delivery figures", § 7).
 With [`drive_objective`](@ref), the largest drive within the gates; with
 [`shift_objective`](@ref), the least re-pointing that meets them.
@@ -1287,7 +1287,7 @@ The constraint for a design whose power can fall: with power scales
 ([`PowerScales`](@ref)) or powers among the parameters, a ceiling on an absolute
 quantity (an [`irradiance_ceiling`](@ref), a [`light_ceiling`](@ref)) is met by cutting
 power, and the drive falls with it. The default `scale` is the limit, so the default
-`feasibility = 1e-3` meets the floor to 0.1 % of the limit. As for
+`feasibility = 1e-3` meets the floor to 0.1% of the limit. As for
 [`mode_gate`](@ref), the floor records the reference scenario's laser–plasma model and
 time, and evaluating it with another throws an `ArgumentError`; the reference may be on
 another target. [`drive_ceiling`](@ref) is the upper side, for a band.
@@ -1307,7 +1307,7 @@ mean_flux(reference)`, the upper side of [`drive_floor`](@ref), with the same re
 `scale` and check of the reference's laser–plasma model and time (an `ArgumentError` on
 an evaluation with another; the reference may be on another target). With a floor it
 holds the drive in a band about the reference's: `drive_floor(reference; fraction =
-1.0)` and `drive_ceiling(reference; fraction = 1.02)` keep it within 0–2 % above, so
+1.0)` and `drive_ceiling(reference; fraction = 1.02)` keep it within 0–2% above, so
 that power scales among the parameters cannot buy shape with drive beyond the band.
 `fraction` (positive, no default) is a choice of the study, not a facility limit.
 """

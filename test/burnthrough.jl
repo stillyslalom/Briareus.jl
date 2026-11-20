@@ -126,7 +126,7 @@ end
     T = 2 / 7                                       # the default for 2 µm (τ = 4)
     # early: intact; mid: halfway through the transition (s = 1/2); late: burned through
     early, mid, late = (solve(m, laser; time) for time in (0.9, 1.2, 2.0))
-    # intact: the wall's Marshak albedo at the window's own temperature (to the iteration's
+    # intact: the wall's Marshak albedo at the window temperature (to the iteration's
     # tolerance), and nothing transmitted
     wl(s) = albedo.(Ref(WallLossAlbedo()), s.time, radiation_temperature.(s.H[ew]))
     @test early.albedo[ew] == early.intact[ew] && all(==(0.0), early.transmission[ew])
@@ -191,7 +191,7 @@ end
     @test bh.absorbed[:window_1] == 0
     @test bh.transmitted[:window_1] ≈ bo.transmitted[:window_1] + bo.absorbed[:window_1] rtol = 1e-13
 
-    # --- drive_history tracks each element's front from its own flux history
+    # --- drive_history tracks each element's front from its flux history
     q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
     pulse = PulseShape([0.0, 0.5, 2.0, 3.0, 5.0], [0.0, 1.0, 1.0, 8.0, 8.0])
     tw = hohlraum(; kw..., wall, windows = [WallWindow(phi = 0, diameter = 2.0, gap = 0.05, material = foil()),
@@ -208,7 +208,7 @@ end
     @test all(isfinite, tb) && all(t -> 2.0 < t < 5.0, tb)
     @test h.burnthrough[:window_2] == fill(3.5, length(elements(tw, :window_2)))
     # re-solving each time with the final burnthrough times reproduces the march (times
-    # past τ do not touch its albedos), and the element's own temperature history gives
+    # past τ do not touch its albedos), and the temperature history of the element gives
     # back its burnthrough time through the standalone estimate
     e1 = elements(tw, :window_1)
     tbv = fill(NaN, nelements(tw))
@@ -251,7 +251,7 @@ end
     inserted = setdiff(hr.time, coarse)
     @test issorted(hr.time) && issubset(coarse, hr.time) && !isempty(inserted)
     # refined only while a transition is under way, and no step advances one by more
-    # than the tolerance (1.5 times it after a step's own correction); without
+    # than the tolerance (1.5 times it after the correction within a step); without
     # refinement a single step takes most of a transition
     tb1 = hr.burnthrough[:window_1]
     @test all(τ -> minimum(tb1) < τ < maximum(tb1) + 0.4 || 3.5 < τ < 3.9, inserted)
@@ -329,7 +329,7 @@ end
     @test !Briareus._temperature_dependent(BurnthroughAlbedo(thickness = 2.5, before = 0.8))
 
     # in a hohlraum: solve iterates the transmission with the albedos, and each
-    # burned-through element transmits the fraction for its own converged temperature
+    # burned-through element transmits the fraction for its converged temperature
     kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
     wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
     windowed(transmission) =
@@ -478,7 +478,7 @@ end
 @testset "burnthrough steps leave no sliver" begin
     # A thin gold window burns through while the drive falls, so the wall cools and
     # re-emits (`wall_release`) during the transition. A planned step that ended a few
-    # 1e-6 ns short of one of `times` left that sliver as a step of its own; the release
+    # 1e-6 ns short of one of `times` left that sliver as a separate step; the release
     # kernel's Δ^(b-1) made the cooling wall's albedo about -30 there, and the
     # unpreconditioned GMRES of a large (iterative) model did not converge (a
     # multi-phase re-pointing study, 2026-11-18). The remainder now joins the step.
@@ -510,7 +510,7 @@ end
 
 @testset "intact foil follows the wall's history" begin
     # With `wall_history` on, a thin foil whose `before` is a `WallLossAlbedo` loses energy
-    # as a wall element with its own temperature history does. Intact it is the wall: a
+    # as a wall element with its temperature history does. Intact it is the wall: a
     # hohlraum with the window is the same hohlraum with wall in its place (one mesh, one
     # set of view factors) at every step before any of its elements burns through.
     kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
@@ -542,7 +542,7 @@ end
     # Through the transition and after it, `BurnthroughAlbedo`'s formulas with the history's
     # `before`: albedo (1 - s f) α_before, transmitted s f, the re-emitted stored energy
     # scaled by 1 - s f (here f the constant gray fraction, s the smooth step from each
-    # element's burnthrough time). Reference: the wall's albedo on its own history, rebuilt
+    # element's burnthrough time). Reference: the wall albedo on the element history, rebuilt
     # from the recorded temperatures with `drive_history`'s documented effective time
     # (no release: `wall_release = false`, so the albedo is Lindl's at t_eff).
     hn = drive_history(mw, op, f, times; record = rec, wall_release = false, tol = 1e-10)

@@ -131,7 +131,7 @@ ColumnLayout {
             visible: app.bnSplit > 0
             text: app.bnSplit === 1 ? "Split into beams" : "Split " + app.bnSplit + " quads into beams"
             onClicked: Julia.br_split_quads("")
-            tip: "Four beams per quad, each from its own port"
+            tip: "Four beams per quad, each from a separate port"
         }
         Button {
             visible: app.bnMerge > 0

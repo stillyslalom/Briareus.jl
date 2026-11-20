@@ -9,7 +9,7 @@ using Printf
 # `src/tutorials/` (generated, gitignored) and executed by Documenter through their
 # `@example` blocks, so the documentation build runs every tutorial end to end. They
 # are registered here rather than discovered, so that adding a script never adds an
-# expensive page to every build. Each page reports its own execution time: the
+# expensive page to every build. Each page reports its execution time: the
 # conversion wraps it in a pair of hidden `@setup` blocks that run in the page's module
 # and record the elapsed time in `Main.PAGE_TIMES`.
 const LITERATE_DIR = joinpath(@__DIR__, "literate")
@@ -40,7 +40,7 @@ macro phase(name, ex)
     end
 end
 
-"Wrap a Literate-generated page so it reports its own execution time."
+"Wrap a Literate-generated page so it reports its execution time."
 function time_tutorial(name)
     start = "\n```@setup $name\nMain.PAGE_TIMES[\"$name\"] = -time()\n```\n"
     stop = "\n```@setup $name\nMain.PAGE_TIMES[\"$name\"] += time()\n```\n"

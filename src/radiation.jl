@@ -48,7 +48,7 @@ deposition. `kwargs` pass through to `view_factors`. `closed = true`, for elemen
 error with `enforce_closure!`: view-factor rows sum to one only to ~1e-3, and multiple
 bounces at high albedo amplify that leak or excess (at α = 0.925, a 5e-4 shift in the
 wall's mean row sum moves the capsule drive by 0.3% and its P2 by ~0.05%). It defaults
-to the target's own declaration (`hohlraum` makes it) when the view factors are
+to the declaration of the target (`hohlraum` makes it) when the view factors are
 computed here, and to `false` for a given `F`, which is used as is; pass
 `closed = false` for the raw view factors of a closed target.
 
@@ -56,7 +56,7 @@ A target of several cavities (two halfraums across a package, two hohlraums side
 side) passes `closed` a collection of cavities, each the elements of one closed
 enclosure: a vector of element indices, or of component or part names (a part name
 takes every piece of the part, entrance holes included, which is what a hohlraum's
-cavity holds). Each cavity's rows are balanced to sum to one over its own elements
+cavity holds). Each cavity's rows are balanced to sum to one over its elements
 (`enforce_closure!(F, A; cavities)`), and elements in no cavity (a package's outer
 face, free parts in the open) keep their raw rows apart from the reciprocal scaling of
 their entries with cavity elements. One cavity holding every element is `closed =
@@ -175,8 +175,8 @@ Rescale view factors so every row sums to one while keeping reciprocity
 from symmetric (Sinkhorn) balancing. Only valid for closed enclosures. Rows that see
 nothing are left untouched.
 
-`cavities` (disjoint vectors of element indices) balances each cavity on its own: the
-rows of its elements sum to one over its own elements, from the Sinkhorn balancing of
+`cavities` (disjoint vectors of element indices) balances each cavity separately: the
+rows of its elements sum to one over its elements, from the Sinkhorn balancing of
 its block of `G`, and elements in no cavity keep `sᵢ = 1`. The one scaling `s` applies to
 the whole matrix, so reciprocity holds everywhere, and an entry between a cavity and
 another element (of another cavity, or outside every cavity, seen through an aperture
@@ -244,7 +244,7 @@ would. A target is closed, and `closed = true` balancing (`enforce_closure!`) ap
 when every opening carries an aperture: the fraction is then zero up to cracks where
 meshes meet without sharing vertices (a disk aperture of 24 sides in a bore of 20 or
 360): 2–7 × 10⁻⁴ on the cavities of the research notes' "Closure on bored, windowed and
-CAD cavities"; `hohlraum`'s holes meet its caps vertex for vertex, and it leaks nothing
+CAD cavities"; the holes of `hohlraum` meet its caps at shared vertices, and it leaks nothing
 (2.7 × 10⁻³ at h = 1 when the holes took half the caps' count). An opening left
 without an aperture shows
 as the share of the view it takes, which may be no larger: a 40 µm waist gap 4 × 10⁻³,
@@ -261,7 +261,7 @@ element side outside the cavity (or a one-sided surface from behind), so an elem
 that the cavity's declaration misses, or one that belongs to another cavity, shows as a
 leak where it is seen; `element` is zero outside the cavity.
 
-Each element draws from its own stream (from `seed` and the element), so the result
+Each element draws from a separate stream (from `seed` and the element), so the result
 does not depend on the thread count.
 """
 function open_fraction(t::Target; cavity = nothing, rays::Integer = 64, seed::Integer = 1)
@@ -498,7 +498,7 @@ _real_columns(S::AbstractVector) = (nothing, nothing)
 # max α about 1 (F is similar to a symmetric matrix of spectral radius ≤ 1), and those of
 # F cluster at 0, so restarted GMRES converges in a few tens of iterations. The columns
 # of a block (several right-hand sides, or a dual's value and partials) are iterated in
-# lockstep, each with its own Krylov basis, sharing one product with F per iteration.
+# lockstep, each with a separate Krylov basis, sharing one product with F per iteration.
 
 const _BLOCK_RESTART = 40
 const _BLOCK_MAXITER = 400
@@ -827,7 +827,7 @@ temperature at `time`, as if the wall had been at that temperature since `t = 0`
 with no re-emission of stored energy. Partway through a shaped pulse that is not the
 wall a [`drive_history`](@ref) of the pulse finds (on a NIF-like mock-up, wall albedo
 0.74 against 0.67 at the picket, 0.81 against 0.86 in the trough, 0.94 against 0.87 at
-the peak, and capsule drive 15–44 % off). A fixed-time scenario of such a phase takes
+the peak, and capsule drive 15–44% off). A fixed-time scenario of such a phase takes
 its albedos from the history ([`history_state`](@ref); research notes, "Drive
 histories: sliver steps and the albedo of a phase (2026-11-18)").
 
@@ -843,7 +843,7 @@ and the source made from it share one set of colors. Element i's source flux is 
 
 with ηᵢ its material's [`conversion_efficiency`](@ref), `P` the 3ω power, `P_c` the
 color's absorbed power and `r_c` the color's `conversion` relative to 3ω. Each color's
-conversion is evaluated at that color's own absorbed flux, an *engineering default*:
+conversion is evaluated at the absorbed flux of that color, an *engineering default*:
 the relative conversions come from gold disks irradiated at one wavelength at a time,
 and no measurement of the conversion of overlapping colors was found (research notes,
 "Unconverted light: absorption and conversion vs. wavelength"). A conversion
@@ -906,7 +906,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     δ, δprev, ω, its, Δprev = 0.0, Inf, 1.0, 0, α
     if warm && nelements(guess.model.target) == nelements(t)
         # a nearby system's factorization (another model's: the previous time of a
-        # moving target) preconditions this one's iterates until it factors its own
+        # moving target) preconditions this one's iterates until this system is factored
         c = m.cache
         lock(c.lock) do
             c.precond[] === nothing && (c.precond[] = guess.model.cache.precond[])
@@ -965,7 +965,7 @@ _relax(::Nothing, xn::AbstractVector, ω) = ω .* xn
 const _UNDAMPED = 10
 
 # The unconverted colors' x-ray source flux Σ_c r_c η(t, P_c/A) P_c/A and absorbed power
-# Σ_c P_c per element, each color's conversion at its own absorbed flux.
+# Σ_c P_c per element, each color converting at its absorbed flux.
 _color_power(d::Deposition) = d.element
 _color_power(p::AbstractVector{<:Number}) = p
 _color_power(x) =      # (an entry of a NamedTuple read by a runtime name may be `colors`)
@@ -1032,8 +1032,8 @@ or a per-element absorbed power), returns a `Dict` of responses keyed by color: 
 the 3ω response above, and one per unconverted color `c`, the response to that color's
 absorbed power: the 3ω response with each element's conversion `η(t, P/A)` replaced by
 `r_c η(t, P_c/A)`, `r_c` the color's `conversion`, so that
-`H[observed] ≈ R[:omega3] * P + Σ_c R[c] * P_c`. Each color's conversion is fixed at its value for the color's own
-power in `unconverted` (a secant per color): the sum is `solve`'s per-color result to
+`H[observed] ≈ R[:omega3] * P + Σ_c R[c] * P_c`. Each color's conversion is fixed at its value for the power
+of that color in `unconverted` (a secant per color): the sum is `solve`'s per-color result to
 rounding at those powers, and at any powers for conversions independent of intensity.
 With an intensity-dependent conversion, other powers `P_c′` leave the error of the
 source change `r_c [η(P_c/A) − η(P_c′/A)] P_c′/A` carried through the radiosity solve;
@@ -1137,7 +1137,7 @@ end
 The radiation temperature (eV) of the area-weighted mean incident flux `ΣHᵢAᵢ / ΣAᵢ` on
 the elements of the components or parts `names`: a cavity's wall temperature when
 `names` are its wall and caps. With several cavities in one target (two halfraums
-across a package), each cavity's own wall pieces give its own temperature; a part name
+across a package), the wall pieces of each cavity give a separate temperature; a part name
 takes every component of the part, entrance holes included, so a hohlraum's wall is
 named piece by piece. `drive_history`'s `cavity_Tr` records it per step.
 """

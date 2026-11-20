@@ -40,7 +40,7 @@ from the reference's by [`shift_modes`](@ref) are keywords of `mode_gate`);
 its minimum; [`light_ceiling`](@ref) and [`light_floor`](@ref), the laser light on
 named parts ([`light_fraction`](@ref)) at most or at least a limit. The outer cones'
 irradiance in a phase (the picket, the trough, the foot), the quantity of the gold
-bubble's published scalings, has its own ceiling, [`picket_ceiling`](@ref) (Laser–plasma
+bubble's published scalings, has a dedicated ceiling, [`picket_ceiling`](@ref) (Laser–plasma
 models).
 
 [`mode_sensitivity`](@ref) gives the exact sensitivity of the drive shape to each beam's
@@ -75,7 +75,7 @@ Private = false
 
 A [`PhasedScenario`](@ref) holds one pointing over several phases of a pulse (a
 picket, a foot, the peak before and after windows burn through): each [`Phase`](@ref)
-has its own target, radiation model and options and its own beam powers, given per
+has a separate target, radiation model and options and separate beam powers, given per
 beam or from pulses at a time, and the parameter vector ([`PhasedPointing`](@ref)) is
 the shared pointing's, which sets the aims of every phase, followed by a power scale per
 (group, phase) for the phases not fixed. [`evaluate`](@ref) gives one evaluation per

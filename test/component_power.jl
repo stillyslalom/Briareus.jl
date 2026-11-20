@@ -28,7 +28,7 @@ using SpecialFunctions: erfc
     M = beam_component_power(op, beam.(x0))
     @test sum(M; dims = 2) ≈ fill(2.0, 3, 1) rtol = 2e-3
     @test M[:, 2] ./ 2 ≈ right.(x0) rtol = 5e-3
-    # the rows are the beams' own: linear in power, and the per-beam totals of `deposit`
+    # the rows are per beam: linear in power, and the per-beam totals of `deposit`
     @test beam_component_power(op, [beam(0.2; P = 6.0)]) ≈ 3 .* M[2:2, :] rtol = 1e-12
     d = deposit(op, [beam(0.2)])
     @test sum(M[2, :]) ≈ sum(d.element) + sum(d.backside) rtol = 1e-12

@@ -7,7 +7,7 @@
 # in-lens power multiplied by the lens factor 3.4, i.e. all backscattered SBS light per
 # quad (TW). The paper's energies: 2.8 kJ/quad (23 deg) and 0.9 kJ/quad (30 deg); this
 # table integrates to 2.87 and 0.92. Single-shot error up to
-# 100 % (lens fraction, calibration); 30-50 % between N210808 repeats. The paper notes the
+# 100% (lens fraction, calibration); 30-50% between N210808 repeats. The paper notes the
 # 23 deg curve's sharp rise (4.6 ns) may be a processing artifact, and a ~0.3 ns offset
 # between measured and modeled 23 deg onset (DrD timing uncertainty up to 0.2 ns). On the
 # same axis the pre-CBET inner-cone laser power per quad reaches half its 9 TW peak at

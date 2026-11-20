@@ -18,8 +18,8 @@ reproduced.
 |---|---|---|---|
 | Ba24 | D. E. M. Barlow, A. Colaïtis, D. Viala, M. J. Rosenberg, I. Igumenshchev, V. Goncharov, L. Ceurvorst, P. B. Radha, W. Theobald, R. S. Craxton, M. J. V. Streeter, R. H. H. Scott, K. Glize, T. Chapman, J. Mathiaud, "Optimization methodology of polar direct-drive illumination for the National Ignition Facility", PRL 133, 175101 (2024), doi:10.1103/PhysRevLett.133.175101 | full text: accepted manuscript OSTI 2475934; preprint arXiv:2311.18342 (v2) | the only published GA PDD optimizer; Table I (optimized pointing), Table II (σ₁, σ₂, P̄abl, f), appendices (defocus model, pressure proxy) |
 | Pol | D. Barlow, "Polaris" (github.com/DuncanBarlow/Polaris, MIT license; successor of the "PDDOptimisation" repository cited in Ba24) | code read (README, beam tables, deck generator, Ifriit base input) | how Ba24's σ₁ is evaluated; NIF/LMJ/OMEGA beam tables; a 1-D-averaged Ifriit plasma profile (`plasma_profiles/ifriit_1davg_input.nc`) |
-| Ye21 | C. B. Yeamans, G. E. Kemp, Z. B. Walters, H. D. Whitley, P. W. McKenty, E. M. Garcia, Y. Yang, R. S. Craxton, B. E. Blue, "High yield polar direct drive fusion neutron sources at the National Ignition Facility", Nucl. Fusion 61, 046031 (2021) | full text: LLNL-JRNL-814327, OSTI 1772693 | complete 24-parameter pointing tables (Table 1); SAGE optimization; Eq. 3 azimuthal model; V_rms 2.22 % |
-| Co08 | A. M. Cok, R. S. Craxton, P. W. McKenty, "Polar-drive designs for optimizing neutron yields on the National Ignition Facility", PoP 15, 082705 (2008), doi:10.1063/1.2975213 | full text (author copy, pas.rochester.edu) | Table I pointing/defocus/split quads; CPP 50 % ellipses; geometric-optics defocus model; Table III energy fits |
+| Ye21 | C. B. Yeamans, G. E. Kemp, Z. B. Walters, H. D. Whitley, P. W. McKenty, E. M. Garcia, Y. Yang, R. S. Craxton, B. E. Blue, "High yield polar direct drive fusion neutron sources at the National Ignition Facility", Nucl. Fusion 61, 046031 (2021) | full text: LLNL-JRNL-814327, OSTI 1772693 | complete 24-parameter pointing tables (Table 1); SAGE optimization; Eq. 3 azimuthal model; V_rms 2.22% |
+| Co08 | A. M. Cok, R. S. Craxton, P. W. McKenty, "Polar-drive designs for optimizing neutron yields on the National Ignition Facility", PoP 15, 082705 (2008), doi:10.1063/1.2975213 | full text (author copy, pas.rochester.edu) | Table I pointing/defocus/split quads; CPP 50% ellipses; geometric-optics defocus model; Table III energy fits |
 | Ho15 | M. Hohenberger et al., "Polar-direct-drive experiments on the National Ignition Facility", PoP 22, 056308 (2015) | full text: OSTI 1182632 | the standard NIF PDD pointing (Table I); absorption with/without CBET; measured P₂–P₆ |
 | CM18 | T. J. B. Collins, J. A. Marozas, "Mitigation of cross-beam energy transfer in ignition-scale polar-direct-drive target designs for the National Ignition Facility", PoP 25 (2018), doi:10.1063/1.5039513 | full text: OSTI 1467080 | ignition-scale pointing (Table II), parametric spots with spot-masking apodization, detuning (Table I) |
 | MN17 | M. Murakami, D. Nishi, "Optimization of laser illumination configuration for directly driven inertial confinement fusion", Matter Radiat. Extremes 2, 55 (2017), doi:10.1016/j.mre.2016.12.002 (open access; arXiv:2512.04722) | full text | analytic PDD model (Eqs. 28–31, 37) and a fully specified 2-cone-per-hemisphere solution |
@@ -88,13 +88,13 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    each sample's direction and normal, so a per-sample weight η_a(ψ) is cheap and
    differentiable (**L**). Done 2026-10-27: `deposit(op, beams; absorption = η⊥)`
    (research notes, "Hard-sphere direct-drive illumination"); its docstring states the
-   thin-corona limit measured by the corona prototype (decision 3: σ 5.7 % against
-   10.4 % on the OMEGA case), 2026-10-26.
+   thin-corona limit measured by the corona prototype (decision 3: σ 5.7% against
+   10.4% on the OMEGA case), 2026-10-26.
 4. **Refraction and inverse-bremsstrahlung absorption in the corona.** All the
    hydro-based designs (Co08, Ye21, Ho15, CM18, Ba24's σ₂) deposit along refracted rays:
    oblique equatorial rays turn at lower density (n_e = n_c cos²ψ for a planar
    gradient), deposit less and spread their energy over a wider angle (Co08 §III
-   explains SiO₂ vs CH this way; Ye21 reports 94.5 % absorption, all inverse
+   explains SiO₂ vs CH this way; Ye21 reports 94.5% absorption, all inverse
    bremsstrahlung). Briareus has no corona. In a spherically symmetric profile each ray
    stays in the plane through the center, so its deposition depends only on its impact
    parameter b and rotates with its plane: a 1-D family of kernels K(b; r, Δα) can be
@@ -117,8 +117,8 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    Briareus has the LMF-measured NIF CPP fits, `nif_spot`); the planned PDD plates with a
    "secondary ellipse" (Ho15 §IV) and skewed ellipses for the equatorial beams (Ho15 §I);
    circular super-Gaussians enveloped by a higher-order masking super-Gaussian
-   (spot-masking apodization: CM18 uses orders 3 polar / 2.2 others, 5 % contour at the
-   initial radius R₀, mask order 10 with 5 % contour at 1.15 R₀) (**H**).
+   (spot-masking apodization: CM18 uses orders 3 polar / 2.2 others, 5% contour at the
+   initial radius R₀, mask order 10 with 5% contour at 1.15 R₀) (**H**).
    `SuperGaussianSpot` has an elliptical core plus an additive halo; a multiplicative mask
    and a two-ellipse sum are new (**L**).
 8. **Defocus model.** Co08 computes out-of-focus spots by geometric optics from the
@@ -130,8 +130,8 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    1/e radii linearly, w(d) = w₀(1 + κd), κ = {0.30, 0.40, 0.80, 0.95}/50 mm⁻¹ for the
    23.5°/30°/44.5°/50° cones, fitted to pF3D, with Ifriit treating each beam as a plane
    wave (**H**).
-9. **Direct-drive CBET.** The dominant loss and symmetry driver in NIF PDD (Ho15: 89 %
-   absorption without CBET vs 67 % with it in a DRACO example, Fig. 5; CM18: losses
+9. **Direct-drive CBET.** The dominant loss and symmetry driver in NIF PDD (Ho15: 89%
+   absorption without CBET vs 67% with it in a DRACO example, Fig. 5; CM18: losses
    concentrate over the equator where repointed beams from both hemispheres overlap,
    mitigated by hemispheric or banded detuning, Table I) (**H**). `cbet.jl` is a
    two-zone LEH model calibrated to N221204 and does not transfer (**L**). No published
@@ -168,9 +168,9 @@ ring (N → many), f-number → ∞, defocus 0, η_a weight. *Gap*: none beyond 
 
 **2. Te14 single-ring σ_2D (nearly complete; H).** Ring at 49°/131°, R₀ = 0.5 mm, SG
 I₀·exp{−[(x/a)² + (y/b)²]^{m/2}} (same form as `SuperGaussianSpot`), m = 4, y in the
-meridional plane. Centered beams: circular a = b = R₀ → σ_2D = 11.9 %; elliptical
-a = 2b, b = R₀ → 5.2 %. Optimum shift: Δ/R₀ = 13.7 % → 1.1 % (circular), 7.4 % → 1.3 %
-(elliptical). Hydro absorption 85 % vs 61 % (circular vs elliptical, 2-D) is model
+meridional plane. Centered beams: circular a = b = R₀ → σ_2D = 11.9%; elliptical
+a = 2b, b = R₀ → 5.2%. Optimum shift: Δ/R₀ = 13.7% → 1.1% (circular), 7.4% → 1.3%
+(elliptical). Hydro absorption 85% vs 61% (circular vs elliptical, 2-D) is model
 output, not a benchmark. *Ambiguities*: whether the illumination is I·cos ψ with full
 absorption (likely, **L**), whether Δ is perpendicular to the beam axis, and the ring is
 continuous (Eq. 1 is axisymmetric). Four numbers, two conventions to try; a mismatch
@@ -178,38 +178,38 @@ under both would be informative.
 
 **3. Ba24 σ₁, NIF 192 beams, vacuum (most relevant; partial; H).** OC parameters
 (Table I, per cone 1–4: polar angle 6.36/14.95/52.48/85.62°, azimuthal offset
-52.02/160.75/−12.14/6.90°, defocus 8.22/9.07/4.67/6.83 mm, power 66.26/66.26/95.05/82.88 %
+52.02/160.75/−12.14/6.90°, defocus 8.22/9.07/4.67/6.83 mm, power 66.26/66.26/95.05/82.88%
 of 4 TW/quad), all four beams of a quad overlapping at the aim on R = 1.1 mm; defocus
-spot growth κ as in §2.8; l ≤ 30. Published: σ₁ = 6.03 % (OC), 8.56 % (N190204-003);
-σ₂ = 12.56 % / 14.83 %; P̄abl = 56.0 / 63.5 Mbar; f = 0.35 / 0.18; absorption
-77 % / 82 % and other 3-D ASTER results in Table II. *Missing or ambiguous*: the
+spot growth κ as in §2.8; l ≤ 30. Published: σ₁ = 6.03% (OC), 8.56% (N190204-003);
+σ₂ = 12.56% / 14.83%; P̄abl = 56.0 / 63.5 Mbar; f = 0.35 / 0.18; absorption
+77% / 82% and other 3-D ASTER results in Table II. *Missing or ambiguous*: the
 best-focus CPP shapes are Ifriit internal models ("NIF-inner-23" … "NIF-outer-50" in
 Pol's deck generator), not tabulated (Briareus's LMF-measured fits are the public
 substitute); whether "polar angle" in Table I is measured from the pole or about the
 port (the caption and the method text differ); whether σ₁ is cos-projected incident
 intensity (Pol's `DIAGNOSE_INPUT_BEAMS` at 1100 µm suggests incident intensity, **L**);
-the power rescaling after optimization. N190204-003's own pointing is only drawn
+the power rescaling after optimization. The N190204-003 pointing is only drawn
 (Fig. 1a; quad splitting, stalk and backlighter adjustments), so its σ₁ is not
 reproducible. σ₂ needs the plasma and CBET (Pol ships a 1-D-averaged profile under MIT;
 which shot and time it is was not verified). Expected use: a documented consistency
-check (σ₁ within ~1 % absolute, **L**), and an apples-to-apples optimizer comparison:
+check (σ₁ within ~1% absolute, **L**), and an apples-to-apples optimizer comparison:
 Ba24's f with σ₂ dropped (or replaced at Stage 1) evaluated by Briareus at OC and at
-Briareus's own optimum, with evaluation counts.
+the Briareus optimum, with evaluation counts.
 *Done 2026-10-26* (tutorial "Polar direct drive: a published NIF pointing", example
 `examples/ba24_pdd_optimization.jl`; research notes, "Ba24 σ₁ comparison and
-optimization"): σ₁ = 6.57 % with Briareus's beams, 7.87 % with Ba24's linear spot growth
-emulated, against 6.03 %, within the spread of the unpublished spots (±10 % in size adds
-~1 point; order-3 spots give 6.0 %). The caption's reading settles both ambiguities: the
-about-the-port reading of the method text (Polaris's search parameters) gives 30–150 %,
-and σ₁ is the projected intensity I cos ψ (incident I gives 14.2 %; the `DIAGNOSE_INPUT_BEAMS`
+optimization"): σ₁ = 6.57% with Briareus's beams, 7.87% with Ba24's linear spot growth
+emulated, against 6.03%, within the spread of the unpublished spots (±10% in size adds
+~1 point; order-3 spots give 6.0%). The caption's reading settles both ambiguities: the
+about-the-port reading of the method text (Polaris's search parameters) gives 30–150%,
+and σ₁ is the projected intensity I cos ψ (incident I gives 14.2%; the `DIAGNOSE_INPUT_BEAMS`
 guess above was wrong).
 
 **4. Ye21, NIF 3-mm and 4-mm designs (inputs complete, metric not; H).** Table 1 gives
 all 24 parameters for both targets (e.g. 4 mm "Orange": ring-1 A/B θ = 13°/24°,
 ring-2 38°/46°, ring-3 53°/71°, ring-4 79°/88°; Δφ 22.5°/11.25°/15°; defocus 2.5, 2.0,
 2.0, 2.0 cm), the 750 kJ pulse (linear rise to 357 TW at 0.7 ns, fall 2.3–2.6 ns), 25.4 µm
-CH. Published: V = 2.22 % (V_{m=0} = 1.23 % from SAGE, V_{m≠0} = 1.85 % from the 3-D
-deposition map via Eq. 3), R_CM rms 11.4 µm after 923 µm travel at 3.1 ns, 94.5 %
+CH. Published: V = 2.22% (V_{m=0} = 1.23% from SAGE, V_{m≠0} = 1.85% from the 3-D
+deposition map via Eq. 3), R_CM rms 11.4 µm after 923 µm travel at 3.1 ns, 94.5%
 absorption. Best-focus spots are Munro's model (private communication), defocused by
 Co08's method. Only the m ≠ 0 part is in Briareus's reach, and only once deposition
 includes refraction (time-integrated to 3.1 ns). Good as a realistic pointing fixture.
@@ -217,8 +217,8 @@ includes refraction (time-integrated to 3.1 ns). Good as a realistic pointing fi
 **5. Co08 350 kJ design (inputs nearly complete, metric hydro-only; H).** Table I:
 rings 1–4 shifts 50/200/250/594 µm (SiO₂; CH: 100/300/350/694), defocus 2.6/2.6/2.6/1.3 cm,
 inner/inner/outer/outer CPPs, split quads ring 3 (200, 400) µm and ring 4 (75, 300) µm;
-CPP 50 % contours 739 × 636 µm (inner) and 593 × 343 µm (outer) with an unspecified
-radial fall-off; R = 1.1 mm. Published: R_CM rms 6.5 µm and V_rms 1.7 % at 2.8 ns
+CPP 50% contours 739 × 636 µm (inner) and 593 × 343 µm (outer) with an unspecified
+radial fall-off; R = 1.1 mm. Published: R_CM rms 6.5 µm and V_rms 1.7% at 2.8 ns
 (SAGE), ±50 µm ring-4 pointing tolerance (Fig. 8). No static illumination number.
 
 **6. Ho15 standard NIF PDD pointing (incomplete; H).** Table I: cone 23.5° unrepointed;
@@ -230,7 +230,7 @@ comparisons are hydro-level. Use: a named fixture and qualitative mode signs.
 **7. CM18 ignition-scale designs (spots fully parametric, metric hydro-only; H).**
 R₀ = 1482 µm, 1.8 MJ; repointed to rings at 23°, 49° and 84.4° (northern hemisphere;
 far-field translations −12.9, 482.5, 950.6/837.3 µm; the table extraction is partly
-garbled, **M** on the cone-to-ring assignment), spots as in §2.7, equatorial pulses 50 %
+garbled, **M** on the cone-to-ring assignment), spots as in §2.7, equatorial pulses 50%
 higher. Published metrics are DRACO absorption and implosion speed with and without
 detuning. Use: a PDD-plate fixture.
 
@@ -261,9 +261,9 @@ super-Gaussian), ellipticity 1.0/1.0/1.2, Δr = 16/21/68 µm, energy multipliers
 1.00/1.00/1.25; 11.54 kJ (Fig. 130.8). Output: normalized overlapped on-target intensity
 per ring versus polar angle, normalized to ring 1 at the pole (p. 63), panels (a)/(b)
 SG 3.7/2.2 centered, (c)/(d) the same repointed, circular (solid) and with η₃ = 1.2
-(dashed). Text (p. 63–64): repointed SG 3.7 under-drives the equator by nearly 20 %
+(dashed). Text (p. 63–64): repointed SG 3.7 under-drives the equator by nearly 20%
 relative to the pole; SG 2.2 gives nearly equal pole and equator; SG 2.2 with the
-elliptical ring 3 drives the equator about 20 % above the pole. *Ambiguities*: the
+elliptical ring 3 drives the equator about 20% above the pole. *Ambiguities*: the
 caption gives (16, 21, 28) µm while the text and table give (16, 21, 68) µm; the text's
 angles (3°, 4°, 13°) are sin⁻¹(Δr/300 µm) of 16, 21 and 68 µm, so 68 is the consistent
 reading (**L**); the SG 3.7 radius is unclear (Fig. 130.5 says "383 µm", likely 183);
@@ -273,8 +273,8 @@ blur are not stated. Use: a digitized-shape comparison (decision 14), not a test
 **9. Cr05 (inputs complete, outputs hydro and absorption; H).** Δr = 91/188/196 µm
 (Fig. 102.7a); SG r₀ = 380 µm, n = 3.7, with 1-THz 2-D SSD and polarization smoothing
 (p. 68, Fig. 102.7b); 865-µm-diameter, 20-µm CH shell, 15 atm D₂; 1-ns pulse at about
-16 kJ (p. 70). SAGE: absorption 66 % (PDD) against 75 % center-pointed (Fig. 102.9);
-center-of-mass velocity rms 3.8 % (3.6 % for even l ≤ 8) at 1.1 ns (Fig. 102.15);
+16 kJ (p. 70). SAGE: absorption 66% (PDD) against 75% center-pointed (Fig. 102.9);
+center-of-mass velocity rms 3.8% (3.6% for even l ≤ 8) at 1.1 ns (Fig. 102.15);
 R_abs rms 7 and 9 µm at 1.25 and 1.5 ns, matching shot 34669 (Fig. 102.13). Fig. 102.10
 (absorption measured against symmetric repointing by 335 and 514 µm on 1600-µm CH
 spheres, with SAGE) bears on Stage 1 obliquity absorption, not Stage 0.
@@ -285,14 +285,14 @@ n = 3.66 (p. 7, citing Forties & Marshall, RSI 76, 073505, 2005); Δr = (0, 120,
 (90, 120, 120), (90, 133, 133), (30, 150, 150); pointing accuracy ~8 µm rms; shell inner
 radius 412 µm, R ≈ 430–439 µm. The shots used E_ave = 13.8 kJ (13.0–15.0) in a
 ~3-ns triple-picket pulse; the 27 kJ, 1-ns case is the nominal LILAC design calculation
-(p. 4), not the shot conditions. Measured: spherical shells a₂ ≈ −20 %, a₄ ≈ +15 % late
-in time, contoured ≲ 5 % (Fig. 12).
+(p. 4), not the shot conditions. Measured: spherical shells a₂ ≈ −20%, a₄ ≈ +15% late
+in time, contoured ≲ 5% (Fig. 12).
 
 **11. Jo22 (inputs complete except the spot profile; H).** Δr = 123/157/219 µm;
-SG5-650 plates (80 % of the SG5-850 diameter; profile in Theobald et al., PoP 29, 012705,
+SG5-650 plates (80% of the SG5-850 diameter; profile in Theobald et al., PoP 29, 012705,
 2022, not read); cryogenic DT, outer diameter 767 µm; 12.7 ± 0.2 kJ; ring energies for
-three shots (Table I), ΔD = (ΔE₃ − ΔE₁)/E = −4.6 %, 1.0 %, 10.6 %. Measured self-emission
-P₂ linear in ΔD, vanishing near ΔD ≈ 5 % (Fig. 6), which the authors read as models
+three shots (Table I), ΔD = (ΔE₃ − ΔE₁)/E = −4.6%, 1.0%, 10.6%. Measured self-emission
+P₂ linear in ΔD, vanishing near ΔD ≈ 5% (Fig. 6), which the authors read as models
 over-predicting oblique equatorial coupling. A measured sensitivity dP₂/d(ring balance),
 hydro-level.
 
@@ -311,20 +311,20 @@ and "PD-R1" spot models, no standard 40-beam PDD case and no σ (**H**, code rea
 10 per ring, the hemispheres rotated 18° (§2); elliptical super-Gaussian quads,
 Δa = 2Δb, Δb = 320 µm, m = 4, minor axis meridional; static sphere of radius r₀ in the
 authors' illumination model (that of Te14, whose conventions are pinned in the research
-notes). Intrinsic σ₀ = 4.6 % at r₀ = 320 µm without beam errors or PDD shift (text and
+notes). Intrinsic σ₀ = 4.6% at r₀ = 320 µm without beam errors or PDD shift (text and
 Fig. 5); a circular spot of the same 1/e area (450 µm) gives almost double (Fig. 5).
-*Correction (2026-10-26, paper re-read)*: 4.6 % is the minimum over r₀ of the intrinsic
-curve, near r₀ = 350 µm in Fig. 5; 320 µm is the optimum of the error-averaged σ̄ = 6.2 %.
-Reproduced under the Te14 convention (σ₀ min 4.589 % at 350.4 µm; 5.23 % at 320 µm) and
+*Correction (2026-10-26, paper re-read)*: 4.6% is the minimum over r₀ of the intrinsic
+curve, near r₀ = 350 µm in Fig. 5; 320 µm is the optimum of the error-averaged σ̄ = 6.2%.
+Reproduced under the Te14 convention (σ₀ min 4.589% at 350.4 µm; 5.23% at 320 µm) and
 now a test (research notes, "LMJ, Temporal et al. 2014"). The
-PDD minimum σ̄ = 3.6 % at r₀ = 270 µm and δ/r₀ = 15 % (Fig. 7) averages Monte Carlo
+PDD minimum σ̄ = 3.6% at r₀ = 270 µm and δ/r₀ = 15% (Fig. 7) averages Monte Carlo
 draws of beam errors, so it is not deterministic. Missing: the exact quad azimuths
 (uniform 36° spacing is the natural reading, **L**). The best new numerical case.
 
 **14. Mu15, NIF (pointing complete, output a VisRad map; H).** Table II: quad cone →
 surface aim α and defocus: 23.5° → 31.3°, 18 mm; 30° → 37.8°, 19 mm; 44.5° A&B → 42.2°,
 24 mm; 44.5° C&D → 79.9°, 16 mm; 50° → 83.0°, 12 mm; IR wavelengths in Table II; polar
-beams at nominally 80 % of the equatorial power; 2.15-ns square pulses of 319, 462 and
+beams at nominally 80% of the equatorial power; 2.15-ns square pulses of 319, 462 and
 607 kJ; R = 1100 µm, 42-µm CH. Fig. 3 is the VisRad irradiance on the capsule (color
 scale 1250–1600 TW/cm²), no σ; the spots are the indirect-drive CPPs. Directly relevant
 to Briareus as a VisRad replacement, at figure level.
@@ -348,9 +348,9 @@ calibrations are multipliers inside particular codes (**H** for the papers read)
   f_CBET = 2.8 ± 0.5, 3.1 ± 0.5, 3.9 ± 1.0 (OMEGA PDD at 14, 10, 7 × 10¹⁴) and 2 (NIF PDD,
   symmetric OMEGA) are code-specific. The best *validation* target once a drive proxy
   exists: the pole-to-equator ratio cancels common coupling physics.
-- Mu15: matching NIF PDD self-emission at 1.4 × 10¹⁵ W/cm² needed a 33 ± 5 % cut of the
+- Mu15: matching NIF PDD self-emission at 1.4 × 10¹⁵ W/cm² needed a 33 ± 5% cut of the
   equatorial (44.5° C&D and 50°) power in HYDRA; none at 1.0 × 10¹⁵. Model-inferred.
-- Jo22: P₂ = 0 at ΔD ≈ 5 % rather than 0 (OMEGA cryogenic, low intensity; may not be
+- Jo22: P₂ = 0 at ΔD ≈ 5% rather than 0 (OMEGA cryogenic, low intensity; may not be
   CBET).
 - Ma18: detuning raised the measured equatorial shell speed from 133 to 154 µm/ns; one
   detuning value, pointing not tabulated.
@@ -358,7 +358,7 @@ calibrations are multipliers inside particular codes (**H** for the papers read)
   target radius 0.5–1.09, but symmetric 60-beam drive. Cr05 Fig. 102.10: absorption
   against symmetric repointing (collisional-absorption era).
 - El18: 1-D laser-energy multipliers ≈ 0.6–0.65 lump CBET with every other shortfall.
-- Ho15's 89 % → 67 % is DRACO; Ra12's 140 ± 50 ps later bang time implies ~10 % velocity
+- Ho15's 89% → 67% is DRACO; Ra12's 140 ± 50 ps later bang time implies ~10% velocity
   deficit, attributed to CBET by inference.
 
 A Briareus PDD CBET model "fitted to data" would be fitted to another code's inference.
@@ -401,7 +401,7 @@ the Ye21 m ≠ 0 benchmark, which needs a comparable profile; the corona is not 
 
 **Stage 2 — time dependence.** A sequence of corona snapshots (from the user's 1-D runs,
 e.g. CompactLES, or tabulated), per-cone pulse shapes and time-varying power balance,
-snapshot-weighted objectives (Ba24 suggests σ < 2 % at all times needs power balance
+snapshot-weighted objectives (Ba24 suggests σ < 2% at all times needs power balance
 varied between snapshots), and an optional in-memory 1-D coupling.
 
 **Stage 3 — direct-drive LPI and hardware.** Ray-based CBET with outgoing rays and
@@ -424,8 +424,8 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      differences measured, never as a fit target.
    - **Decided**: the recommendation. **Implemented** 2026-10-26: (a) in
      `test/direct_drive.jl` (with Te14b's LMJ σ₀); (b) as the tutorial "Polar direct
-     drive: a published NIF pointing" (σ₁ 6.57 % own beams, 7.87 % Ba24's defocus
-     emulated, against 6.03 %; Table I read as its caption states; §4 item 3).
+     drive: a published NIF pointing" (σ₁ 6.57% own beams, 7.87% Ba24's defocus
+     emulated, against 6.03%; Table I read as its caption states; §4 item 3).
 2. **Defocus model.**
    - (a) Keep Briareus's f-cone geometric optics (Co08's model in substance). + Physical,
      already validated, smooth in defocus. − Disagrees with Ba24's empirical scaling;
@@ -437,8 +437,8 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      comparisons show it matters.
    - **Decided**: the recommendation; extend the defocus model (square near field,
      PDD-plate defocus) if PDD becomes a mainline use. The emulation is in the Ba24
-     tutorial: with the same best-focus spots, the f-cone gives σ₁ 6.57 % and the linear
-     growth 7.87 %.
+     tutorial: with the same best-focus spots, the f-cone gives σ₁ 6.57% and the linear
+     growth 7.87%.
 3. **Corona model for Stage 1.**
    - (a) Analytic profiles only. + Closed forms, trivial to test. − Not a real implosion.
    - (b) Tabulated 1-D spherical profiles with tabulated ray kernels. + Covers real
@@ -451,8 +451,8 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      Prototype done 2026-10-27 (`dev/corona/`; research notes, "Corona model prototype:
      impact-parameter kernels vs 3-D ray tracing"): on a spherical corona the two agree
      to 1e-5 of the mean in every σ_l (l ≤ 30), (b) is 60–110× faster per pointing
-     change; (c) measures what spherical symmetry drops (a 4 % P2 of the critical
-     radius moves σ₂ by 3 %). Verdict there: (b) as the operator, (c) as its check.
+     change; (c) measures what spherical symmetry drops (a 4% P2 of the critical
+     radius moves σ₂ by 3%). Verdict there: (b) as the operator, (c) as its check.
      Implemented 2026-10-27 (research notes, "Corona absorption operator"):
      `CoronaProfile` (tabulated r, n_e/n_c, T_e, Z, lnΛ, or the analytic exponential),
      `CoronaOperator` (rays from a transverse lattice per sub-beam; bare spheres only)
@@ -464,7 +464,7 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
    - (b) Add the P_abl (Ba24, n^{2/3}-weighted, 2/3 power) and Ye21 (0.72 power) proxies.
      + Published, cheap. − Empirical exponents fitted to other codes' runs.
    - *Recommendation*: absorbed power per steradian as the primary output; (b) as
-     optional objective transforms with the exponent a parameter and the provenance in
+     optional objective transforms with the exponent a parameter and the sources in
      the docstring.
    - **Decided**: the recommendation.
 5. **Parameterization.**
@@ -487,8 +487,8 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
    - *Recommendation*: (a) + (c); state that Ba24 is the only published GA PDD optimizer
      and that its full objective needs Stage 3 (CBET).
    - **Decided**: the recommendation. Done 2026-10-26 for σ₁ alone
-     (`examples/ba24_pdd_optimization.jl`): from the OC, L-BFGS-B reaches 2.6 % in 50
-     evaluations and 2.11 % in 229, Nelder–Mead 2.1 % after ~700, a particle swarm 2.5 %
+     (`examples/ba24_pdd_optimization.jl`): from the OC, L-BFGS-B reaches 2.6% in 50
+     evaluations and 2.11% in 229, Nelder–Mead 2.1% after ~700, a particle swarm 2.5%
      in 1 200; Ba24 report > 10 000 evaluations for σ₁ alone.
 7. **First facility.**
    - (a) NIF 192 beams. + Every quantitative benchmark (Ba24, Ye21, Co08, Ho15, CM18) is
@@ -506,7 +506,7 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      decision 12.
 8. **Direct-drive CBET.**
    - (a) Defer to Stage 3. + Keeps Stages 0–2 clean and validated. − PDD designs without
-     CBET are optimistic (Ho15: 89 % → 67 % absorption).
+     CBET are optimistic (Ho15: 89% → 67% absorption).
    - (b) A crude equatorial loss factor sooner. − An uncalibrated number with no data
      to fit it to.
    - *Recommendation*: (a); flag CBET-free results as such in docs and reports.
@@ -521,20 +521,20 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
    - (b) Assert the printed root at a loose tolerance. − Would hide a real discrepancy.
    - *Recommendation*: (a). **Decided**: (a).
 10. **Facet bias of the element metrics** (from Stage 0). Facet averaging makes σ (l ≤ 30)
-    1.7 % low at n = 30 (O(h²); research notes "Accuracy of element metrics").
+    1.7% low at n = 30 (O(h²); research notes "Accuracy of element metrics").
     - (a) Keep it; use n ≥ 30 or Richardson-extrapolate n = 20/30. + No new code. − A
-      known bias at the 2 % level.
+      known bias at the 2% level.
     - (b) Evaluate the metrics at the operator's sample points (projection). + Removes
       the facet averaging. − New code path and weights.
-    - *Recommendation*: (a), and (b) only if the Ba24 comparison needs better than 1 %.
+    - *Recommendation*: (a), and (b) only if the Ba24 comparison needs better than 1%.
       **Decided**: (a), flagged for another look later.
 11. **Absorption weight η_a(ψ)** (from Stage 0; MN17 Eq. 29).
-    - (a) Add it now as an optional per-sample weight, with its own bit-for-bit check.
+    - (a) Add it now as an optional per-sample weight, with a dedicated bitwise check.
       + Cheap; completes Stage 0's analytic cases. − A model that Stage 1's corona
       supersedes.
     - (b) Wait for Stage 1. − MN17's weighted design stays unchecked until then.
     - *Recommendation*: (a). **Decided**: (a). Done: the `absorption` keyword of
-     `deposit`, off by default and bit for bit when off; MN17's re-solved weighted
+     `deposit`, off by default and bitwise identical when off; MN17's re-solved weighted
      design is reproduced (research notes).
 
 ### Open (for the user)
@@ -543,7 +543,7 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
     small cases join it.
     - (a) NIF only. + One geometry to maintain. − No fast facility-scale test; no static
       σ number outside Ba24 (whose spots are not public).
-    - (b) Add LMJ (Te14b σ₀ = 4.6 %, §4.2 item 13) and OMEGA (Cr05; Ra12 design C,
+    - (b) Add LMJ (Te14b σ₀ = 4.6%, §4.2 item 13) and OMEGA (Cr05; Ra12 design C,
       §4.1). + Te14b is a published static σ with nearly complete inputs, by the authors
       whose Te14 conventions Stage 0 already pinned; OMEGA has 40 beams, `omega_ports`
       and SG spots that `SuperGaussianSpot` represents directly. − Two more geometries;
@@ -555,11 +555,11 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
       convention (a documented check otherwise), OMEGA Cr05 and Ra12 design C as
       example fixtures; NIF stays the headline.
     - *LMJ part decided* (user, 2026-10-26): reproduce Te14b σ₀ and add it as a test if it
-      matches. Done: it reproduces (4.589 % against 4.6 %, research notes "LMJ, Temporal
+      matches. Done: it reproduces (4.589% against 4.6%, research notes "LMJ, Temporal
       et al. 2014") and is in `test/direct_drive.jl`, with the 20 quads built in the test
       (LMJ azimuths are not published in text, so no LMJ facility function). The OMEGA
       fixtures remain open.
-13. **A user-set absorption (loss) knob for PDD CBET.** Mu15's 33 ± 5 % equatorial cut and
+13. **A user-set absorption (loss) knob for PDD CBET.** Mu15's 33 ± 5% equatorial cut and
     Da16's equatorial deficit are model-inferred (§4.3).
     - (a) No new option; document that deposition is linear in beam power, so a
       latitude-dependent loss is a power multiplier on the affected beams (`remake(b;
@@ -578,7 +578,7 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
     - (a) Digitize panels (c) and (d), store the values in the research notes marked as
       digitized with the citation, and compare in a tutorial under both offset readings
       (Δr₃ = 68 and 28 µm) and both intensity conventions. + The only illumination-level
-      OMEGA output; the text's "nearly 20 %" pole–equator differences are quantitative
+      OMEGA output; the text's "nearly 20%" pole–equator differences are quantitative
       anchors. − Digitization error of a few percent; the SG 3.7 spot radius and the
       convention are unstated, so agreement is a shape check only.
     - (b) Compare qualitatively (who drives the equator more) without digitizing.

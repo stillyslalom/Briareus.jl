@@ -234,7 +234,7 @@ and 0.05 (0.45 mg/cc, 280 TW).
 2. **A hard-min saturation option** (`saturation = :min | :smooth`) matching S17's
    min(δn_sat, linear). Then HYDRA clamp values transfer one to one.
 3. **Two crossing zones per LEH**: an outside slab (supersonic outflow, Mach > 1, where
-   inner → outer occurs at small Δλ) and an inside slab (Mach ≲ 1), each with its own
+   inner → outer occurs at small Δλ) and an inside slab (Mach ≲ 1), each with a separate
    length and state. Regression test: Δλ = 0 gives net inner → outer, and an I-Raum-like
    case needs Δλ ≈ 0.5 Å to null it (NC24). Magnitude L.
 4. **Plasma state tables as calibration inputs, not defaults**: ne/nc(t), Te(t), Ti(t),

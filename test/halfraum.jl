@@ -1,4 +1,4 @@
-# Hohlraum ends (`hohlraum(; top_end, bottom_end)`): the defaults unchanged bit for bit,
+# Hohlraum ends (`hohlraum(; top_end, bottom_end)`): the defaults bitwise unchanged,
 # per-end entrance-hole radii, closed ends, and open ends (a halfraum) against the
 # coaxial-disk view factor and an energy balance through an aperture closing the end;
 # the face flux objective of a flat observed face.
@@ -54,7 +54,7 @@ using Briareus, LinearAlgebra, ForwardDiff, Test
     @test sum(A[wall] .* escape[wall]) / (Ad * (1 - Fdd)) ≈ 1 rtol = 2.5e-3   # 1.3e-3
 
     # Energy balance: the wall driven, the power lost through the open end equals the
-    # power escaping through an aperture disk that closes the end (computed from its own
+    # power escaping through an aperture disk that closes the end (computed from its
     # view factors), and each balance closes.
     au = Material(:Au; albedo = 0.8, conversion = 0.8)
     t = hohlraum(; length = L, radius = R, leh_radius = 0.75, capsule_radius = 0.0, h = 0.2,
@@ -112,7 +112,7 @@ end
     δ = 1e-5
     fd = [(f(x1 .+ δ .* (eachindex(x1) .== i)) - f(x1 .- δ .* (eachindex(x1) .== i))) / 2δ for i in eachindex(x1)]
     @test maximum(abs.(g .- fd)) < 1e-7 * maximum(abs.(g))   # measured 2.4e-10
-    # optimizing the shape at a held level lowers the face's RMS (measured 0.61 % → 0.046 %)
+    # optimizing the shape at a held level lowers the face's RMS (measured 0.61% → 0.046%)
     lo, hi = bounds(p, x0; z = 1.0, r = 1.0)
     obj = face_flux_objective(; clip = 0.0, missed = 0.0, direct = 0.0, flux = H̄)
     res = optimize_pointing(s, obj; x0, lower = lo, upper = hi, iterations = 30)

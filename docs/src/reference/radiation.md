@@ -13,7 +13,7 @@ elements the view factors are a [`Float32Matrix`](@ref) with iterative solves, a
 a gray solution, with the laser-produced gold M-band.
 
 [`drive_history`](@ref) follows the drive in time from a [`PulseShape`](@ref) per cone,
-quad or beam. Each wall element loses energy by its own temperature history and
+quad or beam. Each wall element loses energy by its temperature history and
 re-emits stored energy when the drive falls; the wall moves ([`WallMotion`](@ref)), the
 entrance holes close as prescribed ([`GapClosure`](@ref)) or computed
 ([`LipClosure`](@ref)), and the capsule absorbs on a shrinking radius
@@ -23,7 +23,7 @@ a drive quantity through time under per-key power limits: a capsule's modes
 ([`CapsuleModes`](@ref)), a flat face's x-ray flux ([`FaceFlux`](@ref)) or a
 backlighter foil's laser irradiance ([`FoilIrradiance`](@ref)), each to a reference
 shot's or uniform at a prescribed level. With NIF bundle 31 down, retuning the other
-46 quads takes the mode-1 drive asymmetry from 2 % to 0.02 % at the peak.
+46 quads takes the mode-1 drive asymmetry from 2% to 0.02% at the peak.
 
 ```@autodocs
 Modules = [Briareus]

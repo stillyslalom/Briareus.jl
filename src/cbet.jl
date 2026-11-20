@@ -30,7 +30,7 @@ plasma_dispersion(ξ::Real) = complex(-2 * dawson(ξ), sqrt(π) * exp(-ξ^2))
 Ion-acoustic response `Γ = χe(1+χi)/(1+χe+χi)` for beat frequency `Ω` (rad/s), beat
 wavenumber `k` (1/m), Doppler shift `k·u` (rad/s), electron density `ne` (m⁻³),
 temperatures `Te`, `Ti` (eV), and ion species `ions` — `(fraction, Z, A)` tuples with
-number fractions summing to one; `χi` sums over species (each with its own Landau
+number fractions summing to one; `χi` sums over species (each with its Landau
 damping, which matters for CH: the protons dominate).
 """
 function cbet_coupling(Ω, k, kdotu; ne, Te, Ti, ions)
@@ -92,7 +92,7 @@ as a laser–plasma model (`apply_lpi`, `Scenario(...; lpi)`).
 Any plasma parameter and `multiplier` may be a number, a function of time (ns), or a
 `(times, values)` table. Each pair's exchange uses the geometric-mean beam area at the
 LEH, so total power is conserved. The coupled exchange is integrated with `nsteps` RK4
-steps. Beam detuning comes from `Beam.dlambda` (Å at the beam's own wavelength — NIF
+steps. Beam detuning comes from `Beam.dlambda` (Å at the beam wavelength — NIF
 quotes Δλ at 1ω, so divide those values by 3 for 3ω beams).
 
 The pair coefficients, and the two LEHs' exchanges, run on threads; results are
@@ -182,7 +182,7 @@ apply_lpi(m::CBET, beams::AbstractVector{<:Beam}, time = 0.0) =
     _apply_cbet(m, beams, time, Threads.nthreads() > 1)
 
 # `threaded = false` is the serial reference. Both paths give bitwise identical results
-# for any thread count: every pair writes its own slots of K and D, the two LEHs never
+# for any thread count: every pair writes separate slots of K and D, the two LEHs never
 # share data, and no sum runs in a thread-dependent order.
 function _apply_cbet(m::CBET, beams::AbstractVector{<:Beam}, time, threaded::Bool)
     T = promote_type(mapreduce(b -> typeof(b.power), promote_type, beams),
@@ -334,7 +334,7 @@ beams meet them: `outside` the LEH (supersonic outflow; the flow's Doppler shift
 power from
 the inner cones to the outer ones even without detuning) and `inside` it (slow flow;
 the transfer is set by the wavelength detuning, outer → inner for red-detuned inner
-cones). Each zone is a full [`CBET`](@ref) with its own crossing plane, flow (signed
+cones). Each zone is a full [`CBET`](@ref) with a separate crossing plane, flow (signed
 `mach` or `flow`), plasma state (`ne_nc`, `Te`, `Ti`, `ions`, as numbers, functions
 of time or `(times, values)` tables), `clamp`, `multiplier` and `length`, and stays
 generic in the number type.
@@ -506,7 +506,7 @@ end
 Joint multi-shot calibration: one `model` (shared plasma physics) fitted to the
 post-transfer power fractions of several shots at once. Each entry of `shots` is a
 NamedTuple `(; beams_at, data, delay = 0.0)`: `beams_at(t)` gives that shot's setup
-beams (its own powers and detuning) and `data` its `(t, fraction[, weight])` rows, as
+beams (the powers and detuning of that shot) and `data` its `(t, fraction[, weight])` rows, as
 in the multi-epoch method. `delay` (ns) shifts the shot against the model's time
 tables: the model is evaluated at `t - delay`, so a shot whose rise to peak comes
 0.2 ns earlier than the reference pulse's has `delay = -0.2` and sees the reference's
@@ -620,7 +620,7 @@ end
     n221204_fig9() -> NamedTuple
 
 PRE 109, 025204 (2024) Fig. 9 for N221204 (HYDRA), digitized
-(`data/pre109_fig9_n221204.csv`, provenance in its header): columns `t` (ns, 0.7–9.0 in
+(`data/pre109_fig9_n221204.csv`, sources in its header): columns `t` (ns, 0.7–9.0 in
 0.1 ns steps), inner cone fraction `cf_in`/`cf_post` before and after CBET (Fig. 9b),
 and per-cone powers `p23_in`, `p23_post`, …, `p50_post` (TW, Fig. 9a). Reading error
 about ±0.01 in cone fraction and ±2 TW per cone; the foot inner-cone powers (< 8 TW) are
@@ -646,7 +646,7 @@ end
     n220919_fig9() -> NamedTuple
 
 PRE 109, 025204 (2024) Fig. 9 for N220919 (HYDRA; the black curves, Δλ 2.5 Å), digitized
-(`data/pre109_fig9_n220919.csv`, provenance in its header). Same columns as
+(`data/pre109_fig9_n220919.csv`, sources in its header). Same columns as
 [`n221204_fig9`](@ref) (`t`, `cf_in`, `cf_post`, `p23_in`, …, `p50_post`; 0.7–7.4 ns,
 where the black curves end), each with a 1σ reading error `u_*` and a reading flag
 `f_*` (`"v"` seen, `"p"` partly covered, `"h"` hidden under N221204's red curve, value
@@ -659,7 +659,7 @@ n220919_fig9() = _nan_table("pre109_fig9_n220919.csv")
 
 Kritcher et al., PRE 106, 025201 (2022) Fig. 1(d, e) for N210808 (HYDRA, Δλ 1.8 Å):
 incident and post-CBET power per cone and inner cone fraction, digitized
-(`data/pre106_fig1_n210808.csv`, provenance in its header). Same columns as
+(`data/pre106_fig1_n210808.csv`, sources in its header). Same columns as
 [`n221204_fig9`](@ref). The incident powers carry HYDRA's multipliers (Fig. 1 caption),
 as Fig. 9's do.
 """
@@ -669,7 +669,7 @@ n210808_fig1() = _nan_table("pre106_fig1_n210808.csv")
     pre109_fig1() -> NamedTuple
 
 PRE 109, 025204 (2024) Fig. 1(d, e), digitized (`data/pre109_fig1_n210808.csv`,
-provenance in its header): inner cone fraction before and after CBET (`cf_in_n210808`,
+sources in its header): inner cone fraction before and after CBET (`cf_in_n210808`,
 `cf_post_n210808`, `cf_in_n221204`, `cf_post_n221204`) and the 23° cone's power
 (`p23_in_*`, `p23_post_*`, TW) against `t` (ns), each with reading errors `u_*` and flags
 `f_*`. N210808's post-CBET curve here is the 2024 HYDRA model's (the one of Fig. 9 and
@@ -700,7 +700,7 @@ end
 
 PRE 109, 025204 (2024) Fig. 10: capsule radiation-flux P2/P0 against time from HYDRA
 (post-CBET) for N210808, N220919 and N221204, digitized (`data/pre109_fig10.csv`,
-provenance in its header). Columns `t` (ns, 0.8–8.9 in 0.1 ns steps plus each curve's
+sources in its header). Columns `t` (ns, 0.8–8.9 in 0.1 ns steps plus each curve's
 extrema), `n210808`, `n220919`, `n221204` (P2/P0; negative is waist-hot) and their
 reading errors `u210808`, `u220919`, `u221204`. The error is ±0.002 where a curve is
 visible and 0.004–0.010 where another curve covers it. N221204 lies under the other two
@@ -719,7 +719,7 @@ end
 
 N221204's delivered laser power and measured Dante 1 radiation temperature, Pak et al.,
 PRE 109, 025203 (2024) Fig. 1, read from the figure's vector paths
-(`data/pak2024_fig1_n221204.csv`, provenance in its header): `t` (ns, 0–9.6 in 0.05 ns
+(`data/pak2024_fig1_n221204.csv`, sources in its header): `t` (ns, 0–9.6 in 0.05 ns
 steps), `power` (TW, total of the 192 beams; 2.051 MJ) and `dante1` (eV; `NaN` outside
 3.3–9.4 ns, the plotted range). Dante 1 peaks at 311.9 eV at 8.30 ns. Only the total
 power is published there; the inner/outer split is not.
@@ -735,7 +735,7 @@ end
     zylstra2022_fig2() -> NamedTuple
 
 The HYBRID-E LEH-size pair of Zylstra et al., PRE 106, 025202 (2022) Fig. 2, read from
-the figure's vector paths (`data/zylstra2022_fig2.csv`, provenance in its header): the
+the figure's vector paths (`data/zylstra2022_fig2.csv`, sources in its header): the
 symcaps N191118 (3.64 mm LEH) and N210601 (3.1 mm LEH). Fields `t` (ns, 0–10.85 in
 0.05 ns steps), `power_n191118`, `power_n210601` (TW, total delivered; 1.623 and
 1.663 MJ, peaks 470.6 and 398.9 TW), `dante_n191118`, `dante_n210601` (eV, measured
@@ -772,7 +772,7 @@ end
 
 # The calibrated two-zone models below share one form: both zones on one Te(t) table and
 # one clamp schedule (shot times, ns, shifted by `delay`), the outside zone with the fitted
-# outflow Mach number and multiplier, the inside zone at Mach 0 with its own multiplier.
+# outflow Mach number and multiplier, the inside zone at Mach 0 with a separate multiplier.
 # Their LEH planes default to ±5.62 mm, half the 11.24 mm length of the HYBRID-E
 # hohlraum of the shots they were fitted to (`hybride_mock_pointing`'s target); a call
 # site with a target passes its half-length.
@@ -836,9 +836,9 @@ Michel 2009 and Barrios 2016) and the Δλ null inside NC24's 1–1.55 Å for HY
 (that band is the Δλ of round hot spots in the 2020–21 shots, not the transfer null:
 [`hybride_cbet_iraum`](@ref) holds the null at I-Raum's ≤ 0.5 Å instead). HYDRA's hard-minimum saturation (`saturation = :min`) with the clamp schedule switched
 at the rise ([`cbet_clamp_schedule`](@ref)) and both clamp values fitted: 1.4×10⁻³ in
-the foot (not binding, unconstrained), 4.8×10⁻⁴ at peak (binding; ±27 %). Outside:
-Mach 1.54, multiplier 0.14 (×/÷ 2); inside: Mach 0, multiplier 0.73 (±18 %); Te(t)
-2.1 keV at 1 ns, 2.8 at 4, 3.4–3.9 in the peak, 5.5 (the bound) at 8 ns (±6–14 %).
+the foot (not binding, unconstrained), 4.8×10⁻⁴ at peak (binding; ±27%). Outside:
+Mach 1.54, multiplier 0.14 (×/÷ 2); inside: Mach 0, multiplier 0.73 (±18%); Te(t)
+2.1 keV at 1 ns, 2.8 at 4, 3.4–3.9 in the peak, 5.5 (the bound) at 8 ns (±6–14%).
 
 Fit (107 rows, 0.8–8.4 ns): cone-fraction rms 0.027 (N221204), 0.016 (N220919), 0.047
 (N210808), against 0.016 / 0.030 / 0.068 for [`n221204_cbet`](@ref); null 0.97 ± 0.10 Å
@@ -872,10 +872,10 @@ to negate the flow-induced CBET", NC24). Here the null at N221204's peak (5.6 an
 Δλ = 0, is a Briareus choice).
 
 Outside: Mach 1.49 (± 0.8), multiplier 0.072 (×/÷ 5); inside: Mach 0, multiplier 1.60
-(± 31 %); clamps 9.1×10⁻⁴ (foot, not binding, unconstrained) and 1.4×10⁻⁴ (peak,
-binding, ± 29 %; below the 5×10⁻⁴–7.5×10⁻³ of HYDRA decks, with which it trades
+(± 31%); clamps 9.1×10⁻⁴ (foot, not binding, unconstrained) and 1.4×10⁻⁴ (peak,
+binding, ± 29%; below the 5×10⁻⁴–7.5×10⁻³ of HYDRA decks, with which it trades
 against the inside multiplier and Te, correlations −0.92 to −0.97); Te(t) 3.2 keV at
-1 ns, 4.5 at 4, 2.5–3.8 in the peak, 5.5 (the bound) at 8 ns (± 7–15 %).
+1 ns, 4.5 at 4, 2.5–3.8 in the peak, 5.5 (the bound) at 8 ns (± 7–15%).
 
 Fit (107 rows, 0.8–8.4 ns): cone-fraction rms 0.024 (N221204), 0.016 (N220919), 0.028
 (N210808), all 0.024 (`hybride_cbet`: 0.027 / 0.016 / 0.047, all 0.033); loss 0.059

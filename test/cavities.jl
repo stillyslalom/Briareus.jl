@@ -1,7 +1,7 @@
 # Targets with several cavities (assemblies phase C2): each cavity's wall temperature
 # (`wall_temperature`, `drive_history(; cavities)`) against the area-weighted incident
 # flux of its wall elements reduced here directly from the solution, the history without
-# `cavities` unchanged bit for bit, and a Dante field of view that leaves one cavity out
+# `cavities` bitwise unchanged, and a Dante field of view that leaves one cavity out
 # receiving nothing from it.
 
 using Briareus, LinearAlgebra, Test
@@ -39,7 +39,7 @@ using Briareus: RadiationSolution
     # two cavities, two temperatures; together they are the history's wall temperature
     @test all(abs.(h.cavity_Tr[:a] .- h.cavity_Tr[:b]) .> 1.0)
     @test h.cavity_Tr[:all] == h.wall_Tr
-    # without `cavities` the history is the same, bit for bit
+    # without `cavities` the history is bitwise the same
     @test isempty(h0.cavity_Tr) && all(k -> k === :cavity_Tr || isequal(h0[k], h[k]), keys(h))
     # `wall_temperature` on one solution
     sol = solve(m, deposit(op, q))
@@ -83,7 +83,7 @@ using Briareus: RadiationSolution
     r = dante(fv, bb(lit(:a) .+ lit(:b)))
     @test isnan(r.Tr) && isapprox(r.intensity, hole(:a) + hole(:b); rtol = 5e-3)   # 1.8e-3 (400 pixels)
 
-    # a field of view per channel: channel 1 with its own field, the others the view's.
+    # a field of view per channel: channel 1 with a separate field, the others the view field.
     # The blackbodies as spectra (every element's groups its Planck fractions).
     E = spectral_edges()
     spec(B) = (G = length(E) - 1; Z = zeros(n, G);
@@ -91,12 +91,12 @@ using Briareus: RadiationSolution
     sa, sb, sab = spec(lit(:a)), spec(lit(:b)), spec(lit(:a) .+ lit(:b))
     chans(f) = [c.number == 1 ? Briareus._with_field(c, f) : Briareus._with_field(c, nothing) for c in dante1_channels()]
     chview(f; kw...) = DanteView(d1...; through = :a_leh_bottom, channels = chans(f), kw...)
-    # a channel given the view's own field reads bit for bit what it reads without one
+    # a channel given the view field records bitwise what it records without one
     same = dante(chview(60.0; field_of_view = 60.0), sab)
     @test all(k -> isequal(same[k], dante(chview(nothing; field_of_view = 60.0), sab)[k]),
               (:intensity, :Tr, :spectrum, :channels, :color_temperature, :Tr_unfold))
-    # 8 mm about a in the 60 mm field: channel 1 sees nothing of b and reads, from a, the
-    # 8 mm view's own channel 1 (the same rays; the in-group spectral shape is each view's
+    # 8 mm about a in the 60 mm field: channel 1 sees nothing of b and reads, from a, channel 1
+    # of the 8 mm view (the same rays; the in-group spectral shape is each view's
     # Tr_open, 1.5e-6 apart here); the other channels see both cavities
     eight(s) = dante(chview(8.0; field_of_view = 60.0, center = :a), s).channels
     @test eight(sb)[1] == 0 && all(>(0), eight(sb)[2:end])
@@ -146,7 +146,7 @@ end
     @test all(c -> maximum(abs.(rows(F0, c) .- 1)) > 1e-3, (a, b))            # 1.6e-2 on the polar band
     @test open_fraction(t; cavity = :a).fraction == 0 && open_fraction(t; cavity = b).fraction == 0
     @test open_fraction(t; cavity = :a_wall).fraction > 0.05                   # without its hole
-    # each cavity balanced on its own: its rows sum to one over its own elements
+    # each cavity balanced separately: its rows sum to one over its elements
     model(closed) = RadiationModel(t; F = copy(F0), closed)
     m = model([:a, :b])
     @test all(c -> maximum(abs.(rows(m.F, c) .- 1)) < 1e-10, (a, b))
@@ -156,7 +156,7 @@ end
     @test_throws ArgumentError model(:a)
     # the wall's mean incident flux against the closed form: per-cavity balancing moves it
     # toward it (3.3e-3 → 3.7e-4); balancing the whole target, the free disk's rows and
-    # the wall's view of it with it, is wrong by 36 %
+    # the wall's view of it with it, is wrong by 36%
     wa, wb = elements(t, :a_wall), elements(t, :b_wall)
     P = zeros(nelements(t))
     P[wa] .= t.elem_area[wa]
@@ -191,7 +191,7 @@ end
     t = Target([[translate(named(x, :top), (0, 0, 2.25)) for x in hohlraum(; kw..., bottom_end = :open).components];
                 [translate(named(x, :bot), (0, 0, -2.25)) for x in hohlraum(; kw..., top_end = :open).components]; pkg])
     cavs = [[elements(t, :top); elements(t, :package_top)], [elements(t, :bot); elements(t, :package_bottom)]]
-    @test all(c -> open_fraction(t; cavity = c).fraction < 1e-5, cavs)          # 0: the holes meet the caps vertex for vertex
+    @test all(c -> open_fraction(t; cavity = c).fraction < 1e-5, cavs)          # 0: the holes meet the caps at shared vertices
     @test open_fraction(hohlraum(h = 1.0)).fraction < 1e-5                       # 2.7e-3 when the holes took half the count
     @test open_fraction(t; cavity = elements(t, :top)).fraction > 0.1             # without the face
     coax(r1, r2, L) = (R1 = r1 / L; R2 = r2 / L; X = 1 + (1 + R2^2) / R1^2; (X - sqrt(X^2 - 4 * (R2 / R1)^2)) / 2)

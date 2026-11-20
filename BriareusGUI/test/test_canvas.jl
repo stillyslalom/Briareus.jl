@@ -61,7 +61,7 @@ const B = BriareusGUI
     @test all(c -> c.alpha < 0.5, sc.aims.color[][mem])
     set_enabled!(sess.beams, 3, true)
 
-    # beams take their group's color; a new group gets its own
+    # beams take their group's color; a new group gets a separate color
     pal = cluster_colors(sess.beams)
     @test sc.aims.color[][1] == B._hexcolor(pal[sess.beams.cluster[][1]])
     set_cluster!(sess.beams, [1, 2], "backlighter")

@@ -1,8 +1,8 @@
 # The core testsets: meshes and ray casting through radiation, analysis and optimization.
-# runtests.jl includes it (shard 1) rather than holding these testsets in its own body:
+# runtests.jl includes it (shard 1) rather than holding these testsets in its body:
 # inside the outer `@testset` the whole body is one top-level expression, which keeps
 # every testset's locals alive until the suite ends (about 600 MB); an included file
-# runs each testset as its own expression, and its locals are freed when it ends.
+# runs each testset as a separate expression, and its locals are freed when it ends.
 
 @testset "meshes" begin
     s = sphere_mesh(R_SPHERE; ntheta = 16, nphi = 24)
@@ -287,8 +287,8 @@ end
     @test maximum(abs.(deposit(DepositionOperator(tc, qc; maxlevel = 1), qc).per_beam ./
                        [b.power for b in qc] .- 1)) > 1e-2   # unrefined, it is not
     # `deposit` splits the work into units that own their outputs and sums each output in
-    # a fixed order, so it matches a serial beam-by-beam sum bit for bit whatever the
-    # thread count, also when cut into many small units; a beam subset gets its own plan
+    # a fixed order, so it matches a serial per-beam sum bitwise whatever the
+    # thread count, also when cut into many small units; a beam subset gets a separate plan
     opc = DepositionOperator(tc, qc)
     small = Briareus._deposit_plan(nelements(tc), opc.dest, opc.pts; unit = 64)
     @test size(small.boff, 1) > 10 && length(small.back) > length(qc)
@@ -432,7 +432,7 @@ end
     @test op[[1]].profile === prof && op[[1]].envelope == [ρd]
     @test Scenario(tf, [b]; deposition_kw = (; profile = prof)).deposition.profile === prof
     # the deposition's bound without logarithms or exponentials (`_vr_far`) passes only
-    # points where the law is cut off, and over 80 % of those on a grid out to 3 mm across
+    # points where the law is cut off, and over 80% of those on a grid out to 3 mm across
     # and 10 mm along the beam (0.97 on the order 4.5 spot, 0.85 on order 1.5): beams of
     # order 4.5, 2 and 1.5 (its Gaussian term's bound q ≥ (ln 1000)^(2/n) above 1), one
     # with a halo, one with its b axis the major one, the hard cut and a taper
@@ -449,7 +449,7 @@ end
     # over a ball (`_vr_far_ball`, which skips a run of the operator's points): only where
     # its center and 26 points on its surface (along the axes, their diagonals and the
     # corners' directions) are cut off, balls of radius 0.05 and 0.3 mm on every third
-    # point of the grid (of which it passes 29–81 %); the operator's balls hold their
+    # point of the grid (of which it passes 29–81%); the operator's balls hold their
     # points
     dirs26 = [normalize(Vec3(i, j, l)) for i in -1:1, j in -1:1, l in -1:1 if (i, j, l) != (0, 0, 0)]
     function ball_sound(bx, pr, R)
@@ -464,8 +464,8 @@ end
     opb = DepositionOperator(tf, [b]; profile = prof)
     @test all(t -> all(q -> norm(opb.pts[1][q] - Vec3(opb.plan.tiles[1][t][1:3]...)) <= opb.plan.tiles[1][t][4],
                        Briareus._TILE*(t-1)+1:min(Briareus._TILE * t, length(opb.pts[1]))), eachindex(opb.plan.tiles[1]))
-    # a dual beam's coordinates from its values' (the partials every point shares) are its
-    # frame's own, values and partials (bit for bit on this machine; to 1e-14 of the
+    # a dual beam's coordinates from its values' (the partials every point shares) are those
+    # of its frame, values and partials (bitwise on this machine; to 1e-14 of the
     # coordinates' scale here)
     bd = remake(b; aim = Tuple(ForwardDiff.Dual{:c}(b.aim[i], ntuple(j -> Float64(i == j), 3)) for i in 1:3),
                 defocus = ForwardDiff.Dual{:c}(0.3, (0.1, 0.2, 0.3)))
@@ -1011,7 +1011,7 @@ end
     h = 1e-5
     @test ForwardDiff.derivative(f, 1.0) ≈ (f(1.0 + h) - f(1.0 - h)) / 2h rtol = 1e-5
     @test ion_wave_amplitude(mf, eff[1], eff[end]) ≥ 0
-    # threaded pair coefficients and LEH exchanges reproduce the serial path bit for bit,
+    # threaded pair coefficients and LEH exchanges reproduce the serial path bitwise,
     # for values and for duals through power, aim and model parameters
     for mm in (mf, CBET(leh_z = 5.05, clamp = nothing))
         @test [b.power for b in Briareus._apply_cbet(mm, shifted, 0.0, true)] ==

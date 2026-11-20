@@ -281,7 +281,7 @@ A minimal parametric model with four pieces, all driven by `drive_history` time.
   E_ref = baseline HDC outer picket fluence, ρ_ref = 0.3 mg/cc.
 - Placement: the bubble sits at the axial position of each outer (50°) footprint.
 - Per inner beam:
-  - compute the clipped fraction f(x_bub) geometrically from Briareus's own inner-beam
+  - compute the clipped fraction f(x_bub) geometrically from the Briareus inner-beam
     envelope at z_bub, which is better than the annulus approximation;
   - absorbed = f·(1 − T_b(t)), with T_b a single calibration curve:
     exp(−τ_b (x_bub/x_ref)^p (R_hohl/(R_hohl − x_bub))^2), p ≈ 0.5, τ_b fitted;

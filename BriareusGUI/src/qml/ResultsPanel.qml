@@ -40,7 +40,7 @@ Pane {
             readonly property real pad: {
                 const shown = app.facility === "nif" ? names : names.slice(0, -1)   // (TaLIS: NIF beams)
                 const w = shown.reduce((s, t) => s + tabFont.advanceWidth(t), 0)
-                // less the spacing between tabs and a margin for the bar's own padding
+                // less the spacing between tabs and a margin for the bar padding
                 const room = results.width - w - spacing * (shown.length - 1) - leftPadding - rightPadding - 24
                 return Math.max(4, Math.min(18, Math.floor(room / (2 * shown.length))))
             }

@@ -76,7 +76,7 @@
     @test all(i -> abs(dB.element[i] - E[i]) < 5σ[i], lit)
     @test all(i -> dB.element[i] > 1e-6 || E[i] == 0, eachindex(E))
 
-    # A NIF quad is its four beamlets, each footprint on its own side of the quad axis
+    # A NIF quad is its four beamlets, each footprint on its side of the quad axis
     q = only(b for b in nif_quads() if b.quad == bl.quad)
     wide = Component(:wide, transform(rectangle_mesh(120.0, 120.0; nu = 60, nv = 60), hcat(ŵ, ô, -k),
                                       Vec3(0, 0, 0)), gold())

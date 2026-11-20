@@ -1,6 +1,6 @@
 # The hohlraum part and its pieces: the starter "Hohlraum with capsule" against core
 # `hohlraum` (the former template's geometry, names mapped), sessions with a template
-# converted to parts against the template-era GUI's own drives, pieces and ends, the
+# converted to parts against the drives of the template-era GUI, pieces and ends, the
 # entrance-hole and window frames, beams aimed in piece frames, roles, unique names on
 # insert.
 
@@ -79,7 +79,7 @@ end
                                       profile = Controllers._deposition_profile(s.drive))
     r = Controllers._evaluate_drive(out.s, display_beams(bt), out.lookup, s.drive.spot_radius[];
                                     ratio = unconverted_ratios(s), foil = active_foil(ts))
-    # (the drive balances the hohlraum's cavity, the shield in none: +0.33 % mean flux)
+    # (the drive balances the hohlraum's cavity, the shield in none: +0.33% mean flux)
     c = only(Controllers._closed_cavities(ts))
     @test c.balanced && isempty(intersect(c.elements, elements(t, :shield)))
     @test isapprox(rb.mean_flux, e["mean_flux"]; rtol = 5e-3) && !isapprox(rb.mean_flux, e["mean_flux"]; rtol = 1e-3)

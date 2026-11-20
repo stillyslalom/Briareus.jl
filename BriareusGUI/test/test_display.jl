@@ -203,7 +203,7 @@ end
     shield(res) = (cp = component_power(res.evaluation.deposition, t); get(cp, :shield, 0.0) + get(cp, :shield_outside, 0.0))
     @test res0.unconverted === nothing && shield(res0) < 1e-9
 
-    # a hidden beam still deposits, bit for bit as when drawn
+    # a hidden beam still deposits bitwise as when drawn
     set_beams_drawn!(v, [b.name], 3, false)
     @test sess.drive.result[] === res0 && res0.evaluation.deposition.per_beam[1] > 0
     set_beams_drawn!(v, [b.name], 3, true)
@@ -238,7 +238,7 @@ end
     set_beams_drawn!(v, [b.name], 1, true)
     set_beams_drawn!(v, [b.name], 1, false)
     @test sess.drive.result[] === res1
-    # out of the calculations again: the 3ω drive alone, bit for bit
+    # out of the calculations again: bitwise the 3ω drive alone
     set_participation!(bt, [1], 1, false)
     @test sess.drive.result[].evaluation.deposition.element == res0.evaluation.deposition.element
 

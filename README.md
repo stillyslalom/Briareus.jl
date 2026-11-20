@@ -52,25 +52,25 @@ pointing = GroupPointing(quads; by = ring, fields = (:z, :power), relative = tru
 scenario = Scenario(target, pointing; observe = :capsule)
 
 x0 = initial_parameters(pointing)    # no aim shift, 8 TW per quad
-report(evaluate(scenario, x0))       # 384 TW, Tr = 262.7 eV, P2/P0 = -15.737 %
+report(evaluate(scenario, x0))       # 384 TW, Tr = 262.7 eV, P2/P0 = -15.737%
 
 drive = mean_flux(evaluate(scenario, x0))    # mean capsule flux, held fixed
 keepout = (ApertureKeepOut(target), SphereKeepOut(target))
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive, keepout)
-lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60 % of power
+lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60% of power
 result = optimize_pointing(scenario, objective; x0, lower, upper)  # 20 iterations
-report(evaluate(scenario, result.x)) # 422.1 TW, P2/P0 = -0.000 %, P4/P0 = +0.000 %
+report(evaluate(scenario, result.x)) # 422.1 TW, P2/P0 = -0.000%, P4/P0 = +0.000%
 parameter_names(pointing) .=> result.x  # inner.z -0.135 mm, inner.power 3.97 TW,
                                         # outer.z +0.298 mm, outer.power 11.21 TW
 ```
 
-The starting P2/P0 of −15.7 % is expected: equal power per quad puts 1/3 of it on the
+The starting P2/P0 of −15.7% is expected: equal power per quad puts 1/3 of it on the
 inner cones, near HYBRID-E's peak cone fraction, and a static solve without cross-beam
 energy transfer or the hohlraum's dynamics is not balanced there (the repository's
-N221204 benchmark has a static P2/P0 of −26 % at 5.5 ns; the shot's balance comes from
+N221204 benchmark has a static P2/P0 of −26% at 5.5 ns; the shot's balance comes from
 wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes,
 which `drive_history` models). The optimum lowers the inner-cone fraction to 0.15 and
-stops where the 30° beams reach the entrance-hole keep-out; P6/P0 is left at +0.08 %.
+stops where the 30° beams reach the entrance-hole keep-out; P6/P0 is left at +0.08%.
 After the package loads (1.6 s), building the scenario (deposition operator and view
 factors) takes 2.5 s on 16 threads and the optimization 5 s on its first call (mostly
 compilation) and 1 s after. `examples/nif_hohlraum.jl` runs the same case with a
@@ -119,10 +119,10 @@ its port, pointing moves its axis, and positive defocus moves the focus along th
 ## Verification and validation
 
 - **Exact references**: the integrating-sphere flux to round-off, the defocused spot
-  against the exact f-cone convolution (about 1 % of the beam power), the harmonics the
+  against the exact f-cone convolution (about 1% of the beam power), the harmonics the
   NIF port symmetry forbids to round-off, gradients against finite differences.
-- **VisRad**: with VisRad's own beam profile law, wall deposition 0.45–0.7 % rms per element
-  from VisRad 21's on three NIF hohlraum workspaces and 0.1–0.3 % on plates up to 15 mm
+- **VisRad**: with the VisRad beam profile law, wall deposition 0.45–0.7% rms per element
+  from VisRad 21's on three NIF hohlraum workspaces and 0.1–0.3% on plates up to 15 mm
   from focus; capsule P2 and P4 within 0.014 and 0.004 points (earlier profile).
 - **Monte Carlo**: LEH escape and capsule fractions agree with a photon walk in the
   exact N210808 geometry within its sampling error (10⁻⁴ of the source).
@@ -147,7 +147,7 @@ overlap; its unsaturated coupling overpredicts transfer, so calibrate it
 is used, which works about a gray solution. The `clearance` thresholds and wing models
 are engineering defaults, not facility criteria.
 
-## Facility data and provenance
+## Facility data and sources
 
 | Data | Source | Notes |
 |---|---|---|
@@ -156,7 +156,7 @@ are engineering defaults, not facility criteria.
 | NIF target-configuration rules | LMF "TCC Configuration Requirements" (2018) | [PDF](https://lmf.llnl.gov/sites/lmf/files/2023-05/TCC-configuration-requirements.pdf). The 0.5° tolerance (a component rotated off nominal) applies to the clearances, not to the 70° incidence limit; see `talis_check`. |
 | OMEGA beams and phase plates | Truncated icosahedron reproducing the 21.4/42.0/58.9/81.2° cones; OMEGA Users' Guide (2014) | Azimuthal origin not tied to the chamber; real ports via `beams_from_table`. |
 | VisRad formats and beam profile | VisRad manual (v21.1.1); VisRad 21 runs on NIF hohlraums and a beam-profile probe | |
-| Published shot and simulation data | The cited papers, digitized or tabulated in `data/*.csv` with provenance headers | The research notes record which data each calibration was fitted to and which are checks only. |
+| Published shot and simulation data | The cited papers, digitized or tabulated in `data/*.csv` with source headers | The research notes record which data each calibration was fitted to and which are checks only. |
 
 `reference/research-notes.md` records the source and confidence of every default and
 calibrated constant. The HYBRID-E pointing in the examples is an illustrative mock-up

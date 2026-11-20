@@ -20,7 +20,7 @@ _aims_held(bt; atol = 1e-12) =
         eachindex(bt.beams[]))
 
 @testset "part frames and the foil frame (no GL)" begin
-    # the foil starter built from its frame, bit for bit with the core's `foil`
+    # the foil starter built from its frame, bitwise identical to the core's `foil`
     s = DesignSession(starter = :foil, resolution = :coarse)
     ts = s.target
     w = ts.parts[][part_index(ts, :foil)].values[:r1]
@@ -90,7 +90,7 @@ end
     @test all(i -> isapprox(aim(i), V3(3.1, 0, -0.2); atol = 1e-12), idx)
     bead = part_centroid(ts.target[], :bead)
     @test isapprox(bead, V3(4.0, 0, 0); atol = 1e-12)             # the child turned with it
-    # moved along its own axis (now chamber +x), then along the chamber's y: one edit each
+    # moved along its axis (now chamber +x), then along the chamber's y: one edit each
     record!(s)
     others = [aim(i) for i in eachindex(bt.beams[]) if !(i in idx)]
     @test nudge_part!(ts, part_index(ts, :shield), 0.5; frame = :shield, axis = :z)
@@ -129,7 +129,7 @@ end
     @test all(==(:screen), bt.aim_frame[][a]) && bt.beams[] == aims && bt.aim_local[] == loc
     # the observed role takes a sphere or a flat face (a disk, here, which then gives it up;
     # a cone is refused); roles keep the parts' names: each set of beams stays with its
-    # own part
+    # part
     @test set_part_role!(ts, part_index(ts, :screen), :observed) && observed_flat(ts)
     @test set_part_role!(ts, part_index(ts, :screen), :none) && all(==(:screen), bt.aim_frame[][a])
     @test add_part!(ts, :cone; name = :funnel, z = -4.0)
@@ -579,7 +579,7 @@ end
           Controllers._observed_parts(s.drive.scenario[]) == (:ball,)
 
     # the same design saved by version 6, the sphere named capsule (the name was the role):
-    # it loads with the role, and its drive is the ball's, bit for bit
+    # it loads with the role, and its drive is bitwise the ball's
     old = session_state(s)
     old["version"] = 6
     for p in old["target"]["parts"]
@@ -615,7 +615,7 @@ end
     @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
     # (a part wholly inside the hohlraum lies in its cavity; of one reaching out through
     # the wall the cavity holds the elements facing into it, and the wall buried in it sees
-    # the part from behind: 1.2 % of the cavity's rays leave it, and it is not balanced)
+    # the part from behind: 1.2% of the cavity's rays leave it, and it is not balanced)
     @test closed_design(ts)
     inside() = (b = elements(ts.target[], :ball); count(in(only(Controllers._closed_cavities(ts)).elements), b) / length(b))
     @test inside() == 1

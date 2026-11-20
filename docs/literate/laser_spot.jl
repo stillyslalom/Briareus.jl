@@ -295,7 +295,7 @@ I0 = focal_profile(spot, P, 0.0)
 # Here the camera looks down onto the central 2.5 mm of a foil, and the field is the
 # absorbed laser flux from [`laser_flux`](@ref), converted to W/cm² by
 # [`to_Wcm2`](@ref). For the images the foil is that central 2.5 mm alone, divided into
-# 20 µm patches rather than 50 µm. Each patch shows its own absorbed flux. The three
+# 20 µm patches rather than 50 µm. Each patch shows the flux it absorbs. The three
 # images share one color scale, from zero to the peak at best focus. The beam at best
 # focus is aimed at ``(0.3, -0.2)`` mm, the other two at the origin.
 

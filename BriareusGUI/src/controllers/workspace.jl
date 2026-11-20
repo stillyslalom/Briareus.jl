@@ -165,7 +165,7 @@ Older sessions convert as they load, through this one path:
   no window from version 13 on (an undo step) leaves the window as it is.
 - Before version 12 a session saved no pulses: it loads with none (Pulse table… or the
   pulse shape fires the beams again).
-- Before version 11 no piece holds a role of its own: a hohlraum part's pieces load with
+- Before version 11 no piece holds a separate role: a hohlraum part's pieces load with
   their default roles ([`piece_role`](@ref): the wall and caps the wall role).
 - Before version 10 a design has no assemblies: every part loads at the top level of the
   model tree ([`TOP_LEVEL`](@ref)), placed as saved.
@@ -475,11 +475,11 @@ const _TEMPLATE_DEFAULTS = Dict(:length => 10.1, :radius => 2.875, :leh_radius =
                                 :leh_closure_time => 5.0, :leh_closure_width => 0.5, :leh_open_fraction => 0.84)
 
 # The placement of a foil template's foil (the template's `:backlighter` frame, `z` toward
-# TCC, `x` along chamber `z`): the converted foil part's own frame.
+# TCC, `x` along chamber `z`): the frame of the converted foil part.
 _template_foil_frame(p) = euler_frame(Vec3(p[:distance], 0, 0), 90.0, 180.0, 180.0)
 
 # The parts a session's template (`kind`, dimensions `p`, the hohlraum's `windows`)
-# becomes, ahead of the session's own `parts` (so the elements keep their order), with
+# becomes, ahead of the session `parts` (so the elements keep their order), with
 # the names its components take (old => new) and its frames (old => new); the session's
 # parts placed in a template frame (or with steps referring to one) refer to the new one.
 function _template_parts(kind::Symbol, p::AbstractDict, windows, parts, capsule_h::Real)

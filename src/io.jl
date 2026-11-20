@@ -495,7 +495,7 @@ solids so a CAD user sees them; pass `apertures = false` to leave them out, e.g.
 code that would take every facet for a wall. A closing lip (`aperture(...; closure)`,
 `hohlraum(; leh_closure)`) is a plasma model, not a part: a lip named `<hole>_lip` is
 written in the solid of its aperture `<hole>`, so the entrance hole comes out whole, at
-its full radius (a lip without its hole keeps its own solid). A component's exact `CurvedSurface` is
+its full radius (a lip without its hole is written as a separate solid). A component's exact `CurvedSurface` is
 not written, only its facets, and the patch structure is lost (`read_stl` returns one
 patch per triangle).
 """

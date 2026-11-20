@@ -13,7 +13,7 @@ _vr_is_flux(h) = occursin(r"w\s*/\s*(cm|mm)"i, h)
     visrad_element_values(workspace, target, tables, column; index_base = nothing) -> Vector{Float64}
 
 One column of VisRad's per-element results mapped onto the elements of `target`, a
-target on VisRad's own elements (`visrad_target(workspace)` or a selection of its
+target on the VisRad elements (`visrad_target(workspace)` or a selection of its
 objects, without `remesh`, `coarsen`, `fit` or `inside`; see [`visrad_deposition`](@ref)
 for the element orders established). `tables` maps object names to VisRad's Surface
 Element Properties export of that object (File | Save Data for Object, or a run's
@@ -104,9 +104,9 @@ const _VR_ELEMENT_QUANTITIES = (
         -> (; rows, elements)
 
 Compare a Briareus radiation solution `sol` with VisRad's results for the same workspace,
-element by element. `sol` is solved on a target with VisRad's own elements
+per element. `sol` is solved on a target with the VisRad elements
 (`visrad_target(workspace)`, or a selection of its objects; see
-[`visrad_deposition`](@ref)), for instance from VisRad's own deposition
+[`visrad_deposition`](@ref)), for instance from the VisRad deposition
 (`solve(RadiationModel(t), visrad_deposition(workspace, t))`) to isolate the radiation
 solve, or from Briareus's.
 
@@ -125,7 +125,7 @@ solve, or from Briareus's.
 - `observe`: the component (a VisRad object, e.g. the capsule) whose incident flux is
   analyzed in spherical harmonics on both sides with the same exact solid-angle weights
   ([`ylm_weights`](@ref) to `lmax`, about `center`, by default the object's position:
-  the origin of VisRad's own angles for it, the bounding-box center of a CAD mesh):
+  the origin of the VisRad angles for it, the bounding-box center of a CAD mesh):
   rows "P2/P0" and so on (the m = 0 coefficient as a Legendre ratio `aₗ/a₀`) and "mode
   amplitude l=2" and so on (`√((2l+1) Σₘ cₗₘ²) / c₀₀` for the orthonormal coefficients
   `cₗₘ`, which is `|aₗ/a₀|` for an axisymmetric field) for l = 1, …, `lmax`, all in

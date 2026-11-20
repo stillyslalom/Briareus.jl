@@ -415,7 +415,7 @@ ApplicationWindow {
         orientation: Qt.Horizontal
         // Esc clears the selection. The key reaches here from whatever had the keyboard
         // (a field, the tree) unless that used it; a popup closes on Esc before this, and
-        // the 3D view, which takes its own keys, clears the selection itself.
+        // the 3D view, which takes its keys, clears the selection itself.
         focus: true
         Keys.onEscapePressed: (event) => { Julia.br_select(""); event.accepted = true }
 

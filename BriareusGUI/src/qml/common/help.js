@@ -5,7 +5,7 @@
 // Writing an entry: `tip` is one short line for the hover. `text` is Markdown, written for
 // someone who is stuck: short sentences, one idea each, lists for steps and choices, the
 // control's name in bold where it helps to find it. Say what a control does and when to
-// use it; leave derivations and provenance to the documentation.
+// use it; leave derivations and sources to the documentation.
 .pragma library
 
 // A text block written with the code's indentation: each line trimmed, so that Markdown
@@ -123,17 +123,17 @@ var pages = [
           text: md(`
             The mesh preset sets the element sizes of the whole target.
 
-            - **Coarse**: about 0.5 % error in the capsule P2 and P4, under a second.
-            - **Standard**: about 0.1 %, a few seconds.
+            - **Coarse**: about 0.5% error in the capsule P2 and P4, under a second.
+            - **Standard**: about 0.1%, a few seconds.
             - **Fine**: converged, tens of seconds.
 
-            The capsule element size sets the accuracy of P4. A part can set its own element size in its properties.`) }
+            The capsule element size sets the accuracy of P4. A part can set a different element size in its properties.`) }
     ] },
     { key: "assembly", title: "Assemblies", items: [
         { key: "assembly.intro", title: "Assemblies",
           tip: "A group of parts that moves together",
           text: md(`
-            An assembly groups parts and other assemblies. It has its own frame, and its members are placed in that frame, so moving the assembly moves them and the beams aimed at them.
+            An assembly groups parts and other assemblies. It has a frame, and its members are placed in that frame, so moving the assembly moves them and the beams aimed at them.
 
             - The assembly's box shows or hides everything in it. A dash means partly shown.
             - **Include in calculations** puts all of it in or leaves all of it out.
@@ -159,13 +159,13 @@ var pages = [
           text: md(`
             A hohlraum part is drawn as pieces: wall sections, caps, entrance holes and windows. Their sizes come from the part, so select the part to change them.
 
-            A piece can be shown, hidden or drawn semi-transparent on its own. However it is drawn, it stays in the calculations.`) },
+            A piece can be shown, hidden or drawn semi-transparent separately from its part. However it is drawn, it stays in the calculations.`) },
         { key: "component.role", title: "A piece's role",
           tip: "Wall, observed face, or none",
           text: md(`
             By default the wall and the caps are **Wall**: they count toward the hohlraum's wall temperature. The other pieces have no role.
 
-            - **Observed** on a cap makes it the observed surface: a flat face with its own flux map. Only one surface is observed at a time.
+            - **Observed** on a cap makes it the observed surface: a flat face with a dedicated flux map. Only one surface is observed at a time.
             - **None** on a wall section or cap takes it out of the wall temperature.
             - **Wall** on a closed window adds it to the walls.
 
@@ -179,7 +179,7 @@ var pages = [
 
             - **Insert ▸ Frame** adds one in the selected frame, or at TCC.
             - Place it like a part: position, tilt of its z axis (θ, φ), rotation about z, then placement steps.
-            - Every part also has a frame of its own, with z along the part's axis.
+            - Every part also has a frame named after it, with z along its axis.
 
             Removing a frame leaves what was placed in it where it is.`) },
         { key: "frames.port", title: "Port frames",
@@ -210,7 +210,7 @@ var pages = [
             A part is placed in a frame (**Placed in**): TCC, a user frame, or another part's frame.
 
             - **x, y, z**: its center in that frame. **Position in** switches to cylindrical or spherical coordinates.
-            - **θ, φ**: the direction its axis (its own z) is tilted to.
+            - **θ, φ**: the direction its axis (its local z) is tilted to.
             - **Rotation**: its turn about that axis.
 
             A disk, washer or rectangle faces along its axis. Choosing another frame keeps the part where it is.
@@ -258,7 +258,7 @@ var pages = [
         { key: "part.hohlraum", title: "Hohlraum parts",
           tip: "A hohlraum along its z axis, in pieces",
           text: md(`
-            A hohlraum part lies along its own z axis. Each end is one of:
+            A hohlraum part lies along its local z axis. Each end is one of:
 
             - **Entrance hole**: a cap with a hole of the LEH radius.
             - **Closed**: a full cap.
@@ -279,7 +279,7 @@ var pages = [
             A diagnostic window sits in the hohlraum wall at azimuth φ and height z.
 
             - **Round** or rectangular.
-            - **Closed**: a wall patch with its own albedo and conversion.
+            - **Closed**: a wall patch with a separate albedo and conversion.
             - **Open**: a hole that light and x-rays leave through.
 
             **Insert ▸ Diagnostic window** adds a closed 1 mm window at the midplane, at the first free azimuth.`) },
@@ -385,7 +385,7 @@ var pages = [
           text: md(`
             A NIF quad can be held as one beam or as its four beams.
 
-            - **Split into beams** gives each beam its own port, so the laser deposition is computed per beam.
+            - **Split into beams** gives each beam a separate port, so the laser deposition is computed per beam.
             - **Merge into quads** goes back to one beam per quad.
 
             Both work on a quad, a group, or all beams (right-click the row).
@@ -462,7 +462,7 @@ var pages = [
             **Pulses ▾** sets the pulses the beams fire:
 
             - **Pulse table…** reads a CSV file: power in TW against time_ns, one column per cone, quad or beam.
-            - **Published shapes** scales a published NIF pulse to the beams, each reaching its own power at the peak.
+            - **Published shapes** scales a published NIF pulse to the beams, each reaching its power at the peak.
 
             A cone's or a quad's column gives the power **per quad**, shared by the quad's beams, so the pulses fire the same whether quads are split or not. Switch the box beside Pulses ▾ to **TW per beam** if the table gives each beam's power.
 

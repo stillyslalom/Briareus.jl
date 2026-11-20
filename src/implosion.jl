@@ -9,11 +9,11 @@
 Hot-spot velocity (km/s, burn-off) per percent of capsule flux mode 1 (`a₁/a₀`, the
 norm of the `l = 1` vector, `mode_amplitude(c, 1)`), applied over the rise and peak.
 An engineering default, not a facility criterion: Young et al., Phys. Plasmas 27,
-082702 (2020) (N170601: 0.44 % → 37.6 km/s in 3D HYDRA, 44.7 km/s from view factors
+082702 (2020) (N170601: 0.44% → 37.6 km/s in 3D HYDRA, 44.7 km/s from view factors
 and their Green's function), MacGowan et al., HEDP 40, 100944 (2021) (~100 km/s per
-%), and Kritcher et al. 2024 (N230729: ~0.7 % → 70–75 km/s burn-off). It is platform
-specific and linear only below about 0.75 % (Young; Spears et al. 2014 find 120 km/s at
-2 %, saturated).
+%), and Kritcher et al. 2024 (N230729: ~0.7% → 70–75 km/s burn-off). It is platform
+specific and linear only below about 0.75% (Young; Spears et al. 2014 find 120 km/s at
+2%, saturated).
 """
 const HOTSPOT_VELOCITY_PER_PERCENT = 100.0
 
@@ -47,7 +47,7 @@ from the Legendre moments), the velocity is the convolution of Young et al. (Phy
 Plasmas 27, 082702, 2020, Eq. 9), `v = −∫ G₁(t) · 100 p₁(t) dt`, with `G₁` in km/s per
 % per ns: `kernel` (a `ResponseKernel` or any function of time). The default is
 `flat_kernel(window...; total = per_percent)`, a flat weight over `window` (default:
-the whole history) that gives `per_percent` for a constant 1 %; Young's published
+the whole history) that gives `per_percent` for a constant 1%; Young's published
 kernels are negative in the foot and dominated by the rise and peak, so pass `window`
 as the rise and peak, or a custom kernel. The mode 1 is taken as linear between
 the history's steps and integrated exactly against a tabulated kernel (two-point Gauss
@@ -107,7 +107,7 @@ end
 """
     flat_kernel(t0, t1; total = HOTSPOT_VELOCITY_PER_PERCENT) -> ResponseKernel
 
-A constant kernel on `[t0, t1]` whose integral is `total`: a constant 1 % mode over the
+A constant kernel on `[t0, t1]` whose integral is `total`: a constant 1% mode over the
 window gives `total`. The placeholder for Young's mode-1 Green's function (*derived*:
 it keeps the published static sensitivity and puts all weight on the window, which
 should be the rise and peak).
@@ -187,7 +187,7 @@ over burn-off yield), from Nora et al., Phys. Plasmas 30, 092705 (2023), Eq. 4, 
 to 2D HYDRA simulations perturbed about N210808:
 - `0.324 ln(Y_amp + 2.239) + 0.653` for `1 ≤ Y_amp ≤ 40`;
 - `13.105 ln(Y_amp + 1585.225) − 95.539` for `80 ≤ Y_amp ≤ 500`, where a significant
-  part of the burn is in the expanding dense fuel (burn fraction above ~6 %). These are
+  part of the burn is in the expanding dense fuel (burn fraction above ~6%). These are
   the coefficients of the fit drawn in the paper's Fig. 6; Eq. 4 prints them rounded
   to 13, 1585 and −95, which moves the result by −0.24 (the logarithm is ~7.4), e.g. 1.43
   instead of 1.67 at `Y_amp = 80`.
@@ -211,9 +211,9 @@ end
 Factor by which the stagnated hot-spot shape changes the burn-off hot-spot speed driven
 by a mode-1 flux asymmetry, `Vhs_amp^shape` (speed over the speed without a flux P2),
 as a function of the equatorial neutron-image shape `P2` (`P2/P0` of the hot spot, a
-fraction: −0.2 is 20 % oblate), from Nora et al., Phys. Plasmas 30, 092705 (2023):
+fraction: −0.2 is 20% oblate), from Nora et al., Phys. Plasmas 30, 092705 (2023):
 - `shape_amplification(P2)`: Eq. 2, a fit to their 2D database (mode 1 along the
-  pole, ~1 % flux mode 1, time-dependent flux P2): `1.31 P2 + 0.71` below 0.35,
+  pole, ~1% flux mode 1, time-dependent flux P2): `1.31 P2 + 0.71` below 0.35,
   `−0.65 P2 + 1.4` above. It is 0.71 for a round hot spot: the 2D points sit shifted
   from the 3D ones (the paper's Fig. 5), and a time-integrated P2 swing does not order
   them well. Use it for trends.
@@ -325,7 +325,7 @@ picket_max, picket_ok, response)`:
   `swing = max − min`, and `deviation`, the time average of `|aₗ/a₀ − mean|`;
 - over `picket` (default: the first 2 ns of the history), the time average and the
   largest `|aₗ/a₀|`; `picket_ok` compares the average with `limit`, Milovich et al.'s
-  (Phys. Plasmas 23, 032701, 2016) 7.5 % early-time P2/P0 for under 10 % margin loss
+  (Phys. Plasmas 23, 032701, 2016) 7.5% early-time P2/P0 for under 10% margin loss
   (whether their limit is on the average or the peak is not stated: *derived*);
 - `response`: for each `name => kernel` in `kernels` (`ResponseKernel`s or functions,
   per % per ns), `∫ K(t) · 100 aₗ/a₀ dt` in the kernel's units, e.g. a hot-spot or ρR
@@ -383,7 +383,7 @@ expected_yield, total, expected_total)`:
   add in quadrature) and `speed_rms = √E|v|²`;
 - `yield_factor`, the no-α factor at the nominal velocity, and `expected_yield`, its
   expectation over the errors, from the Gaussian closed form of `E[exp(−a f²)]`
-  (`(1 − f²)ᵃ ≈ exp(−a f²)`, within 1 % at f = 0.25); `total` and `expected_total`
+  (`(1 − f²)ᵃ ≈ exp(−a f²)`, within 1% at f = 0.25); `total` and `expected_total`
   include the α factor (`chi` given) the same way, `exp(−(a + q χ^1.2) f²)`.
 Linear in the errors, like `mode_uncertainty`.
 """
@@ -461,7 +461,7 @@ A capsule-thickness mode 1 competes with the drive (Casey et al., PRL 126, 02500
 2021): the hot spot moves toward the thicker side, at `thickness_per_percent` km/s per %
 of the shell thickness (110 simulated, 140 ± 30 measured), so the opposite sign of a
 flux mode 1 on that side. It enters as a nuisance error, a vector `t` (fractions of the
-thickness, toward the thicker side) with rms `thickness` per axis (default 0.2 %, about
+thickness, toward the thicker side) with rms `thickness` per axis (default 0.2%, about
 0.15 µm metrology on a 78 µm shell: *derived*; 0 leaves it out), and is inferred with
 the beam errors.
 
@@ -552,7 +552,7 @@ end
 The mode-1 Green's function of NIF shot N170827 (km/s of final hot-spot velocity per %
 of flux mode 1 per ns) from 59 2D capsule-only HYDRA impulse runs: Young et al., Phys.
 Plasmas 27, 082702 (2020), Fig. 5, digitized twice (`data/young2020_fig5.csv`,
-provenance and reading errors in its header). `young2020_green()` has columns `t` (ns,
+sources and reading errors in its header). `young2020_green()` has columns `t` (ns,
 0.25–7.875 every 0.125), `panel_b` and `panel_d` (`NaN` where another stroke hides the
 curve); `young2020_kernel()` is their mean (either where one is missing) as a
 `ResponseKernel` for `hotspot_velocity(history; kernel)`. Negative in the foot,
@@ -590,8 +590,8 @@ end
 
 Flux mode 1 (%, the norm of the l = 1 vector) on the capsule of N170827 with one quad
 dropped from each cone, requested pulses, in the LLNL static view-factor model (radii
-at 85 %, albedos 0.8/0.3): Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 10a,
-digitized (`data/young2020_fig10a.csv`, provenance in its header). Columns `t` (ns,
+at 85%, albedos 0.8/0.3): Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 10a,
+digitized (`data/young2020_fig10a.csv`, sources in its header). Columns `t` (ns,
 0.25–7.75 every 0.125), `inner23`, `inner30`, `outer44`, `outer50` (`NaN` where hidden).
 Fig. 10c's hot-spot velocities (km/s, read off the markers ±2) are in `velocity`
 (requested pulses) and `velocity_delivered`, in the same cone order.

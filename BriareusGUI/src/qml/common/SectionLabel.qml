@@ -1,5 +1,5 @@
 // A section heading inside a panel, with an ⓘ for its Help entry when `info` names one
-// (`infoTip`: a one-line hint with current values, in place of the entry's own).
+// (`infoTip`: a one-line hint with current values, in place of the entry tip).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

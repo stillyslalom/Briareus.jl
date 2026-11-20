@@ -79,7 +79,7 @@ quads = aimed.(nif_quads(power = 8.0))
 # powers adjusted: the target, the deposition operator for these ports, the view
 # factors, the linear response of the capsule's incident flux to the power each element
 # absorbs, and the mode weights of the capsule. Its parameterization here gives each
-# quad its own power.
+# quad a separate power.
 #
 # The deposition operator is sampled more coarsely than its defaults, to keep the
 # optimizations below quick: points no farther apart than 0.6 of the spot's smaller
@@ -199,8 +199,8 @@ function min_standoff(φ_los, k; lo = 8.0, hi = 30.0, tol = 0.05)
 end
 
 # A closed form bounds the bisection from below. A quad's axis runs from the foil
-# center ``-d\,\hat n`` back toward its port ``\hat p``, crossing the plane of its own
-# hemisphere's shield, ``|z| = z_s`` (4.427 mm), a distance ``s = z_s/|p_z|`` along
+# center ``-d\,\hat n`` back toward its port ``\hat p``, crossing the shield plane of
+# the same hemisphere, ``|z| = z_s`` (4.427 mm), a distance ``s = z_s/|p_z|`` along
 # ``\hat p``. It passes outside the rim, ``\rho = 9.2`` mm, once
 # ``|-d\,\hat n + s\,\hat p_\perp| > \rho``, that is beyond the larger root
 #
@@ -431,8 +431,8 @@ end
 # capsule. Polar angle θ is marked at the left edge and azimuth φ along the equator,
 # which runs across the middle. The flux is computed per element, on the 1,620
 # triangles of the capsule's geodesic mesh; the maps interpolate it linearly from the
-# element values averaged onto their corners. The left map shows the flux relative to its own mean,
-# ``H/\langle H\rangle - 1``, where ``\langle H\rangle = c_{00}/\sqrt{4\pi}``.
+# element values averaged onto their corners. The left map shows the flux relative to the
+# mean flux, ``H/\langle H\rangle - 1``, where ``\langle H\rangle = c_{00}/\sqrt{4\pi}``.
 # The right map subtracts the same quantity for all 48 quads, which isolates what
 # freeing the bundle changed. The figure helpers `sphere_axis`, `sphere_map` and
 # `mark_directions!` come from `docs/literate/_plotting.jl`.
@@ -726,7 +726,7 @@ limited = optimize_pointing(repoint, most_drive; x0, lower, upper, constraints =
 # table lists each limit's value, its normalized excess and its multiplier; the outcome
 # records that the run converged with every constraint met inside the box. The
 # multipliers are those that best satisfy stationarity at the design, and the
-# stationarity line gives what they leave: here not small against the drive's own
+# stationarity line gives what they leave: here not small against the drive
 # gradient, since the drive is flat along the limits and the run ends on its value
 # tolerance, so the multipliers rank the limits' cost only roughly.
 #
@@ -762,17 +762,17 @@ end
 # this one end with other gates active, after 840 to 1,500 evaluations, at 0.9616 to
 # 0.9625 of the 48-quad drive (research notes, "The dropped-bundle tutorial's long runs
 # under rounding (2026-11-20)"). The printed departures of this run are one member of
-# the family; its drive is determined to about 0.1 %. The penalty design is determined:
+# the family; its drive is determined to about 0.1%. The penalty design is determined:
 # the same perturbed starts reproduce its drive and departures to the printed digits and
-# its peak to 0.1 %, and only its evaluation count varies. Staging the penalties by hand
+# its peak to 0.1%, and only its evaluation count varies. Staging the penalties by hand
 # (gates loosened four-, two- and 1.4-fold, then the final ones) reaches the penalty
 # design again, in more evaluations (research notes, "Constrained re-pointing").
 #
 # The constrained run ends with the peak over the elements at the ceiling or under it
-# (from 0.8 % under to 0.06 % over, within the run's tolerance of 0.1 %); the penalty
+# (from 0.8% under to 0.06% over, within the run's tolerance of 0.1%); the penalty
 # form, which bounds the 64-norm, the hot spots' mean, leaves the hottest element a
 # percent over it. Without the ceiling the same gates are met with the wall's peak
-# 27–38 % above the 48-quad pointing's (research notes), the re-aimed quads stacking
+# 27–38% above the 48-quad pointing's (research notes), the re-aimed quads stacking
 # their spots.
 
 # ## A re-pointing study, end to end
@@ -831,9 +831,9 @@ stage1 = optimize_pointing(study, most_drive; lower = lower_s, upper = upper_s, 
                            iterations = 1000, evaluations = 3000)
 
 # The run ends with every limit met and the box active: the 44.5° cone at full power,
-# the 30° cone 1.5–3.3 % below it and the other two within 1 %, and one to three of
+# the 30° cone 1.5–3.3% below it and the other two within 1%, and one to three of
 # the four gates active. The keep-out holds every quad above its 10 µm minimum (the
-# display shows the worst of the 46 rows, one per quad, each with its own multiplier,
+# display shows the worst of the 46 rows, one per quad, each with a separate multiplier,
 # and counts the active ones), and the light ceiling is met with room to spare: the
 # gates and the box bind here, not the caps. This run too ends in a flat family: from
 # the perturbed starts above it ends at 0.950 to 0.957 of the 48-quad drive, the
@@ -852,10 +852,10 @@ review_line("stage 1 (quads)", cap_review(stage1.beams))
 #
 # So far each quad has been one beam: one aim, one power and the deposition of its four
 # beams as a single f/7.9 cone. [`nif_beams`](@ref) gives the four beams of each quad,
-# each through its own port at f/20.7, at the quad's aim and with a quarter of its power.
+# each through its port at f/20.7, at the quad's aim and with a quarter of its power.
 # A scenario on them needs a deposition operator for their ports: `remake` builds one,
-# given the options of the first. The polish lets each outer beam move by up to 0.1 mm
-# on its own, along the hohlraum axis and along its quad's tangent (a quad is the unit of
+# given the options of the first. The polish lets each outer beam move independently by up
+# to 0.1 mm, along the hohlraum axis and along its quad's tangent (a quad is the unit of
 # [`GroupPointing`](@ref)'s frame by default), the inner quads' beams held as before.
 
 beams = nif_beams(stage1.beams)
@@ -868,7 +868,7 @@ gate_line("stage 1 on beams", polish_start)
 check_constraints(polish_start, limits)
 
 # The same aims, deposited beam by beam, give a slightly different drive: the four
-# beams of a quad enter at angles up to a few degrees apart, each with its own narrower
+# beams of a quad enter at angles up to a few degrees apart, each with a separate, narrower
 # f-cone, and a departure that was at its gate can now exceed it by up to a couple of
 # percent (l = 1 or l = 3, depending on where the first stage ended). The limits are the same
 # objects as in the first stage. The keep-out's components follow the evaluation's
@@ -908,7 +908,7 @@ held = filter(r -> r.name != "irradiance", stage2.constraints)   # gates, keep-o
 # least violation, here its best design within every limit (`least_violation` in the
 # result). Over six starts (the tutorial's and five moved by 10⁻¹² or 10⁻⁹ mm, which
 # stand for another CPU's rounding), two runs end within the limits and keep the drive
-# they gained, 0.17 and 0.32 % over the first stage's aims on beams; on the other four
+# they gained, 0.17 and 0.32% over the first stage's aims on beams; on the other four
 # the last design exceeds a gate by more than the tolerance, and the run returns an
 # earlier one within the limits, at the drive it started from. Every limit then holds:
 # the gates, the keep-out, and the wall's peak at 0.93 to 0.995 of the ceiling: the
@@ -930,10 +930,10 @@ held = filter(r -> r.name != "irradiance", stage2.constraints)   # gates, keep-o
 # ## A tolerance in physical units
 #
 # The gates above sit at the pointing-noise floor, the strictest case. A study states a
-# tolerance per degree instead, and the choice is the design's: 0.5 % in ``P_2/P_0`` is
+# tolerance per degree instead, and the choice is the design's: 0.5% in ``P_2/P_0`` is
 # the modelers' repeat uncertainty for one ignition design (research notes, "Drive
 # asymmetry inferred from post-shot capsule simulations"), and degrees 1, 3 and 4 have no
-# published number. Here, as an example, every degree is held within 0.5 % of the
+# published number. Here, as an example, every degree is held within 0.5% of the
 # 48-quad shape. [`shift_objective`](@ref), the mean squared aim shift from the start,
 # with the ceiling and the keep-out from the end caps as further constraints, gives the
 # least re-pointing that meets the tolerance, in one call:
@@ -950,12 +950,12 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 @assert sqrt(smallest.value) ≈ smallest_summary.shift_rms
 
 # Degrees 1–3 end at the tolerance and l = 4 well inside it; the quads move by 63 µm rms
-# and 0.105 mm at most, and the drive ends 0.3 % below the start's (the objective does
+# and 0.105 mm at most, and the drive ends 0.3% below the start's (the objective does
 # not seek drive). The same call with the gates at the noise floor moves the quads
-# by 93 µm rms and up to 0.18 mm; with 1 % per degree, which the start's departures in
+# by 93 µm rms and up to 0.18 mm; with 1% per degree, which the start's departures in
 # l = 1 and 2 barely exceed, by 6 µm. The largest drive within each tolerance, from
 # [`drive_objective`](@ref) under the same constraints, rises from 0.962 of the 48-quad
-# drive at the floor to 0.967 at 0.5 % and 0.971 at 1 % (research notes, "Mode gates in
+# drive at the floor to 0.967 at 0.5% and 0.971 at 1% (research notes, "Mode gates in
 # physical units", measured before phase 1 was the default).
 
 # ## What this checks
@@ -998,12 +998,12 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 #   reproduces the optimizer's modes.
 # - Re-pointing within limits meets every gate and the ceiling in one call (asserted:
 #   no constraint violated, the run converged, the peak over the wall's elements within
-#   0.1 % of the ceiling or below it). Its closed-form test
+#   0.1% of the ceiling or below it). Its closed-form test
 #   (`test/constraints.jl`): with the drive's coefficients linear in the quad powers,
 #   a fit under a ceiling on the total power matches the solution of the
 #   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; on a drive-like
 #   objective linear in the powers under two active ceilings, the reported multipliers
-#   match the closed form's to 1e-3, also where the iteration's own estimate has zeroed
+#   match the closed form's to 1e-3, also where the estimate of the iteration has zeroed
 #   one, and a bound sensitivity matches the closed form and restarts with the bound
 #   moved; the irradiance
 #   norm's power-mean ordering, its area-mean limit at p = 1 and the constraint values'
@@ -1012,8 +1012,8 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 #   on the 48-quad pointing to within a micrometer, and the polished beams pass that
 #   check with no beam failing (asserted). The budget-stopped polish holds the limits it
 #   works on: every gate's, the keep-out's and the light ceiling's normalized violation
-#   at most 0.01 (1 % of a gate, 10 µm of the keep-out), and the ceiling's smooth
-#   stand-in at most 1 % over its limit (asserted; over 13 starts, perturbed by 10⁻¹² to
+#   at most 0.01 (1% of a gate, 10 µm of the keep-out), and the ceiling's smooth
+#   stand-in at most 1% over its limit (asserted; over 13 starts, perturbed by 10⁻¹² to
 #   10⁻⁹ mm or by rounding, the largest of those violations was 0.002 and the stand-in
 #   at most 0.994 of its limit); the wall's peak
 #   itself is held only by a converged run, and is not asserted here. The closed-form tests of
@@ -1023,7 +1023,7 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 #   bisection, to 1e-5 mm; the constraints' values against the quantities that define
 #   them (the light on the caps against `component_power` to 1e-12) and their
 #   gradients against central differences to 1e-6.
-# - The least re-pointing within a tolerance of 0.5 % per degree meets the tolerance,
+# - The least re-pointing within a tolerance of 0.5% per degree meets the tolerance,
 #   the ceiling and the keep-out, and converges (asserted: no constraint violated), and
 #   the square root of its objective equals the summary's rms aim shift, computed from
 #   the aims directly (asserted). The objective's closed-form test

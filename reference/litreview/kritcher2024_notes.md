@@ -21,7 +21,7 @@ Source: full text read (H). doi:10.1063/5.0210904. Review of the HYBRID-E N22120
 | Hot-spot velocity (km/s) | N220919 51±9 (~40 no-α); N221204 36±6 (~27); N230618 107±7 (~84); N230729 104±9 (~75); N230904 82±17 (~63) | Table II |
 | Hot-spot P2 (PNI, µm) | −10.5, ~0, ~0, +6, +6 (same order) | Table II |
 | Mode-1 drive → velocity | applied mode one of ~0.7% reproduces burn-on >100 km/s | Fig. 5 caption |
-| Mode-2 sensitivity | reducing mode two by 5 µm → ~90 % more yield (N230729 sim) | Fig. 6 |
+| Mode-2 sensitivity | reducing mode two by 5 µm → ~90% more yield (N230729 sim) | Fig. 6 |
 | CBET clamp (HYDRA) | δn/n = 0.002 until start of rise, 0.008 thereafter | Appendix |
 | Flux limiter | 0.15 | Appendix |
 | Backscatter | energetically low on N210808/N221204; mostly inner-beam SBS early in peak | Appendix |
@@ -30,7 +30,7 @@ Source: full text read (H). doi:10.1063/5.0210904. Review of the HYBRID-E N22120
 
 ## Statements about the modeling chain (H)
 
-- Symmetry must be controlled to ~1 % time-varying flux asymmetry.
+- Symmetry must be controlled to ~1% time-varying flux asymmetry.
 - The wall ingresses into the beam paths; this is "a main challenge" for symmetry.
 - Late-time symmetry comes from a semi-empirical model (Callahan 2018, PoP 25) calibrated
   on years of data, not from first-principles LPI.
@@ -50,13 +50,13 @@ Source: full text read (H). doi:10.1063/5.0210904. Review of the HYBRID-E N22120
 
 1. Static geometry: no wall motion, LEH closure or spot motion → no P2 swing. (see
    `hohlraum_dynamics.md`)
-2. CBET: constant plasma state, clamp and multiplier are free knobs; the paper's own
-   designers could not extrapolate 2.75 → 2.9 Å. Need measured P2-vs-Δλ data to
+2. CBET: constant plasma state, clamp and multiplier are free knobs; the designers
+   behind the paper could not extrapolate 2.75 → 2.9 Å. Need measured P2-vs-Δλ data to
    calibrate against. (see `cbet_calibration.md`)
 3. Absolute energetics: gold Marshak albedo on a U-Au wall, fixed η = 0.75, capsule
    albedo 0.3, open LEH; 245 kJ capsule absorbed energy is a checkable number. (see
    `energetics.md`)
 4. Outputs stop at flux moments; experiments report hot-spot velocity, P2 in µm, RKE,
-   yield. Need transfer functions (0.7 % → 100 km/s; 2.7 µm per 1 % cone fraction).
+   yield. Need transfer functions (0.7% → 100 km/s; 2.7 µm per 1% cone fraction).
    (see `asymmetry_transfer.md`)
 5. No benchmark case against a documented shot. (see `n221204_benchmark.md`)

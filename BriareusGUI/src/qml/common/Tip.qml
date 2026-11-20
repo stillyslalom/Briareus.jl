@@ -1,5 +1,5 @@
 // A tooltip for a quick hint: a line or two, wrapped at `maxWidth` and centered over the
-// item it is declared in. The style's own ToolTip centers itself from its unwrapped
+// item it is declared in. The ToolTip of the style centers itself from its unwrapped
 // width, which puts a long text far from its control; this one centers from the width
 // it is drawn at. Details belong in Help (an ⓘ opens it), not here.
 import QtQuick

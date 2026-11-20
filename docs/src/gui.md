@@ -114,7 +114,7 @@ names the menu entries, and the panels are described in [The window](@ref).
 3. **The beams.** Selecting a cone (a group) in the tree shows its aim, defocus and
    power, which apply to all its quads; a quad or a beam is edited the same way, and the
    *Beam table* tab lists every one of them. View ▸ Beams ▸ Volumes draws each beam's
-   5 % contour along its f-cone, cut where it meets the target, so a beam clipping an
+   5% contour along its f-cone, cut where it meets the target, so a beam clipping an
    entrance-hole lip or the capsule shows at a glance.
 4. **Compute the drive.** Compute ▸ Drive (Ctrl + R), or coloring the target by a drive
    field (View ▸ Color target by ▸ Incident x-ray flux), computes the view factors on a
@@ -123,13 +123,13 @@ names the menu entries, and the panels are described in [The window](@ref).
 5. **Read P2/P0.** The *Drive* tab lists the capsule's mode amplitudes ε₁…ε₄ and the
    Legendre ratios ``P_l/P_0``, and the laser power accounting as [`report`](@ref)
    prints it (absorbed in the wall, on the caps' outer faces and on the capsule, the
-   parts below 0.1 % of the delivered power on one line, and the light that misses the
+   parts below 0.1% of the delivered power on one line, and the light that misses the
    target); for a foil it lists the spot statistics instead. *Capsule θ–φ map* in the
    drive's properties (or View ▸ Capsule θ–φ map) puts the capsule's flux map in the 3D
    view's place. On the starter at equal power per quad (an inner-cone fraction of
-   1/3), P2/P0 starts near −15 %: a static solve without cross-beam energy transfer or
+   1/3), P2/P0 starts near −15%: a static solve without cross-beam energy transfer or
    the hohlraum's dynamics is not balanced at a fielded cone fraction (the N221204
-   benchmark's static P2/P0 at 5.5 ns is −26 %; the shot's balance comes from
+   benchmark's static P2/P0 at 5.5 ns is −26%; the shot's balance comes from
    wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes).
 6. **Optimize.** Compute ▸ Optimization selects the optimization task: the free
    parameters (aim, defocus and power per cone, quad or beam, within ± bounds), the
@@ -229,11 +229,11 @@ on. A beam can be hidden to see the surface it lights, or its unconverted light 
 while it stays out of the way, without changing any result. The unconverted 1ω and 2ω
 light is drawn for NIF quads and beams as `unconverted_deposition` deposits it: per
 beamlet, the `nif_unconverted` footprint square at the 3ω best-focus plane, displaced to
-the beamlet's side of its quad, and the square beam converging to its own focus
+the beamlet's side of its quad, and the square beam converging to its focus
 (outlines and center lines as rays, the converging beam as a volume). Its participation
 dots switch once the drive has a power ratio for that color (below).
 
-![The beam matrix: each beam row of the model tree carries 2 × 3 dots (1ω, 2ω, 3ω; the top row in the calculations, the bottom row drawn), and the properties of the inner quad Q15T hold the same matrix as check boxes. With illustrative 1ω and 2ω power ratios of 5 % each, Q15T's unconverted light is drawn (each color's outlines and center lines as rays) while its 3ω light alone takes part in the calculations; the rows of its group and of all the beams show the 1ω and 2ω drawing dots pale, on for one of their beams.](assets/gui/beam_matrix.png)
+![The beam matrix: each beam row of the model tree carries 2 × 3 dots (1ω, 2ω, 3ω; the top row in the calculations, the bottom row drawn), and the properties of the inner quad Q15T hold the same matrix as check boxes. With illustrative 1ω and 2ω power ratios of 5% each, Q15T's unconverted light is drawn (each color's outlines and center lines as rays) while its 3ω light alone takes part in the calculations; the rows of its group and of all the beams show the 1ω and 2ω drawing dots pale, on for one of their beams.](assets/gui/beam_matrix.png)
 
 A component's box, in its color, shows or hides it; the box's fill is its display mode
 (solid opaque, pale semi-transparent, an outline as wireframe, empty when hidden), which
@@ -249,7 +249,7 @@ The right panel edits the selection. A value the geometry or a check rejects is
 refused with the reason in the status line. The pages hold controls and short status
 lines; tooltips are one-line hints. An ⓘ beside a page title, a section heading or a
 control shows such a hint on hover and, when clicked, opens its explanation in the Help
-window (Help ▸ Help, F1): a window of its own, which resizes and stays open beside the
+window (Help ▸ Help, F1): a separate window, which resizes and stays open beside the
 design, with the explanations by page, a search field, and the mouse and key bindings.
 Help ▸ Documentation opens this page.
 
@@ -276,7 +276,7 @@ Help ▸ Documentation opens this page.
   halfraum, closed or not by whatever is placed there), the closing entrance holes, and
   its windows. Each hohlraum part's cavity (its pieces, and the elements of other parts
   inside it that face into it: a capsule, a package face closing an open end) has its
-  view factors balanced on its own when under 1 % of its rays leave it; elements in no
+  view factors balanced separately when under 1% of its rays leave it; elements in no
   cavity keep their raw view factors. Its wall and
   caps hold the *Wall* role (the drive history's wall temperature); the clearance and
   TaLIS checks keep the caps as hardware, the entrance holes' edges. A piece's row in the
@@ -298,16 +298,16 @@ Help ▸ Documentation opens this page.
 - **Parts:** spheres, disks, washers, rectangles, cylinders and cones placed anywhere,
   with their own albedo, conversion, sidedness, aperture flag and element size: a
   shield, a stalk, a detector aperture, a second foil. A part is placed in a named
-  frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)): the chamber's, another
-  part's own frame (origin at its center, z its axis: a foil's z is its front normal),
+  frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)): the chamber's, the frame
+  of another part (origin at its center, z its axis: a foil's z is its front normal),
   or a hohlraum part's end or window frame; it moves and turns with that frame when that
   part changes. Its position
   is given in Cartesian, cylindrical or spherical coordinates of that frame
   ([`coords_of`](@ref)), and its orientation by the axis polar and azimuth angles and a
   rotation, in VisRad's order ([`euler_rotation`](@ref)). Changing the frame keeps the
   part where it is. The *Move along* row steps the part by ± a distance along the x, y
-  or z axis of any frame (its own z: along its axis), one edit per click; parts placed
-  in its frame and beams aimed in it move along. *Sweep along this axis…* sets up a
+  or z axis of any frame (z of the part frame: along its axis), one edit per click; parts
+  placed in its frame and beams aimed in it move along. *Sweep along this axis…* sets up a
   placement sweep of the part along that axis (below). *Placement steps* then place
   the part relative to other frames, in order ([`PlacementStep`](@ref)): coincident
   with a point, on or concentric with an axis, at a distance from a point, facing a
@@ -321,8 +321,8 @@ Help ▸ Documentation opens this page.
   mm, with its windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into
   elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
   solids gives one part per solid. A *VisRad object* part is a component of an imported
-  VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps VisRad's
-  own element grid unless the part is given an element size. A part's *Role* marks it
+  VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps the VisRad
+  element grid unless the part is given an element size. A part's *Role* marks it
   for the analyses, and the part keeps its name: *Observed* (the surface whose x-ray drive
   is analyzed, one at a time: a sphere, whose capsule modes, θ–φ map and keep-out the
   drive and optimization take, or a flat face, a rectangle or disk such as a package's
@@ -371,7 +371,7 @@ Help ▸ Documentation opens this page.
   quad's port azimuth ([`GroupPointing`](@ref)'s `unit = :quad`), so a quad's beams with
   the same values share one aim point: the point the quad held as one beam aims at, to
   under a micron (the mean of a quad's four ports is the quad's port to 0.004°).
-  Measured in each beam's own azimuth, the aims of a 23.5° quad would land 0.2 mm apart
+  Measured in the azimuth of each beam, the aims of a 23.5° quad would land 0.2 mm apart
   per mm of aim r. A cone's or a quad's row, the 192-beam preset and the optimizer per
   cone or per quad keep one aim point per quad; a quad's beams are pointed apart from
   their own rows. A click on one of a quad's beams in the 3D view selects the quad while
@@ -437,7 +437,7 @@ splitting the triangles also keeps picking and the outline exact.)
 
 ![Display modes and a bounded sector cut on the starter hohlraum, colored by the incident x-ray flux: the top cap drawn as a wireframe (its Display setting in Properties), the bottom cap semi-transparent, and a 120° slice of the wall toward the view removed between z = −3 mm and z = 3 mm, clipped at the cut rather than by whole elements.](assets/gui/display_cut.png)
 
-![A round diagnostic window 2 mm across in the wall at φ = 90°, z = 0, cut by the plane that contains its line of sight (from the window's centroid along θ = 90°, φ = 90°, at a rotation of 0°: the vertical plane with normal −x), so that the cut halves the window along the line. The drive, computed again with the window, puts 4.47 TW (1.17 %) of the 384 TW delivered on it.](assets/gui/cut_plane.png)
+![A round diagnostic window 2 mm across in the wall at φ = 90°, z = 0, cut by the plane that contains its line of sight (from the window's centroid along θ = 90°, φ = 90°, at a rotation of 0°: the vertical plane with normal −x), so that the cut halves the window along the line. The drive, computed again with the window, puts 4.47 TW (1.17%) of the 384 TW delivered on it.](assets/gui/cut_plane.png)
 
 ![The Cut settings popup for that plane: the normal θ = 90°, φ = 180° (the vector −1, 0, 0) through the window's centroid at (0, 2.83, 0) mm, the offset slider, and the direction θ = 90°, φ = 90° whose line from the selected component the plane contains.](assets/gui/cut_settings.png)
 
@@ -482,7 +482,7 @@ The bottom panel's tabs:
   pulse table ([`read_pulse_table`](@ref): power against time, per cone group,
   quad or beam; disabled beams stay off), or a published shape (`Controllers.PULSE_SHAPES`:
   the delivered total power of N221204, [`n221204_pulse`](@ref), or of N191118 or
-  N210601, [`zylstra2022_fig2`](@ref)), each beam reaching its own power at the peak. A
+  N210601, [`zylstra2022_fig2`](@ref)), each beam reaching its set power at the peak. A
   cone's or a quad's column of a table is the power per quad, shared by the beams the
   table holds of that quad, so the pulses fire the same total whether quads are split or
   not; the box beside *Pulses ▾* switches the columns to the power per beam
@@ -577,7 +577,7 @@ The bottom panel's tabs:
   re-optimized pointing when the sweep re-optimized. A sweep is marked out of date when
   the design or a setting it used changes.
 
-  ![A placement sweep of the backlighter foil along its front normal, from 2 mm farther from the target chamber center to 2 mm nearer it in 1 mm steps (the foil 8 mm to 4 mm from it), with the clearance check, the line of sight from the foil through the main target, and the power the foil captures. The least clearance falls from −1.130 mm to −1.901 mm (beams B35 and B36 on the main target), the line of sight stays clear, and the least fraction of a beam's power on the foil drops from 95.62 % at no shift to 63.50 % at +2 mm; the step at +1 mm is selected.](assets/gui/sweep.png)
+  ![A placement sweep of the backlighter foil along its front normal, from 2 mm farther from the target chamber center to 2 mm nearer it in 1 mm steps (the foil 8 mm to 4 mm from it), with the clearance check, the line of sight from the foil through the main target, and the power the foil captures. The least clearance falls from −1.130 mm to −1.901 mm (beams B35 and B36 on the main target), the line of sight stays clear, and the least fraction of a beam's power on the foil drops from 95.62% at no shift to 63.50% at +2 mm; the step at +1 mm is selected.](assets/gui/sweep.png)
 - **TaLIS:** the NIF target-configuration checks ([`talis_check`](@ref)): 3ω capture,
   incidence and clearance, 1ω clearance and unconverted-light management, and the TAS
   stay-in zone, on the chosen capture components, checked components and diagnostics
@@ -641,7 +641,7 @@ space around the point, without the assembly's outer faces. A thin film modeled 
 solid that seals the point into a pocket (a capsule tent) is found and left out, and the
 drive's properties list what the cavity kept of each part. The cavity's view factors are
 balanced once aperture parts facing into the cavity close its entrance holes, with
-under 1 % of its rays leaking (`CAVITY_MAX_LEAK`). A target whose x-ray view
+under 1% of its rays leaking (`CAVITY_MAX_LEAK`). A target whose x-ray view
 factors would not fit in half the memory (`radiation_size`: about 160,000
 elements on 32 GB) gets the laser deposition alone, with the reason in the status line.
 

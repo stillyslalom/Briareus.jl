@@ -29,7 +29,7 @@ end
         @test all(g -> Controllers._diagnostic_group(g.row.kind) == g.group, gs)
         @test [g.row.id for g in gs if g.row.kind === :xray_power] == [r.id for r in rows if r.kind === :xray_power]
         @test Controllers._diagnostic_group(:neutron_yield) == "Neutron yield"
-        # the image view's first limits: the pixels above 1e-3 of the peak plus 15 % (at
+        # the image view's first limits: the pixels above 1e-3 of the peak plus 15% (at
         # least 4 pixels) each side, none for an image filling the field or an empty one
         xs = range(-10.0, 10.0; length = 201)
         img = zeros(201, 201)

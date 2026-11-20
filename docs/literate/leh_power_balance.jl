@@ -170,7 +170,7 @@ nothing #hide
 # solved by a different method, so it is exact up to its sampling error, which is
 # reported with each result.
 
-const V3 = Briareus.Vec3     # Makie exports a `Vec3` of its own
+const V3 = Briareus.Vec3     # Makie also exports a `Vec3`
 
 "Cosine-distributed unit vector about the unit normal `n`."
 function lambertian(rng, n)
@@ -278,8 +278,8 @@ pb_nominal = power_balance(N210808.leh_diameter)
 # The view-factor loss is a discretization error. Refining the wall mesh brings
 # Briareus to within a few 10⁻⁴ of the photon walk; rescaling the view factors so
 # every row sums to one (`closed = true`, valid here because the holes close the
-# enclosure) brings it within the sampling error. Each mesh has its own
-# piecewise-constant source, so each gets its own Monte Carlo run:
+# enclosure) brings it within the sampling error. Each mesh has a separate
+# piecewise-constant source, so each gets a separate Monte Carlo run:
 
 convergence = map([(0.6, false), (0.4, false), (0.25, false), (0.4, true)]) do (h, closed)
     b = briareus_fractions(N210808.leh_diameter; h, closed)

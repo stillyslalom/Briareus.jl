@@ -258,7 +258,7 @@ end
 # Visibility between two clusters. The shaft (the convex hull of their boxes) holds every
 # segment between their elements; if no facet that could occlude one of those segments
 # meets it, the pair is wholly visible wherever it faces (exact, conservative: Haines &
-# Wallace's shaft culling). Facets of the two clusters' own elements are not occluders
+# Wallace's shaft culling). Facets of the elements of the two clusters are not occluders
 # (a ray leaves its element's facet, and the receiving facet is its end), nor are those
 # of a curved surface both clusters lie inside (`_vf_visible`'s rule).
 
@@ -700,7 +700,7 @@ end
 # segments between two elements' ray samples). Such a segment's point at parameter s lies
 # within ρ = max(ri, rj) of the point of oi → oj at s (a tube about it), and its ends'
 # heights over a plane within ri, rj of those of oi, oj. Zero radii give the segment's
-# verdict, bit for bit as without them.
+# verdict, bitwise identical to that without them.
 function _ball_verdict(oi, oj, ctr, rin, rout, ri = 0.0, rj = 0.0)
     ro = rout * (1 + 1e-9)
     (dot(oi - ctr, oi - ctr) > (ro + ri)^2 && dot(oj - ctr, oj - ctr) > (ro + rj)^2) || return Int8(-1)
@@ -796,7 +796,7 @@ end
 # (`onconvex`: its facets in that plane): the part lies behind it (within the convexity
 # tolerance), so a segment with both ends in front misses it. With radii ri, rj: the
 # verdict of the bundle of segments between points within ri of oi and rj of oj, the
-# ray samples of elements i and j (`_hvis_bundle`); an end element's own samples lie in
+# ray samples of elements i and j (`_hvis_bundle`); the samples of an end element lie in
 # its plane within `opts.hdev`.
 function _hcert_verdict(ctx, opts, c, i, j, oi, oj, ri = 0.0, rj = 0.0)
     k = opts.ball[c]
@@ -1020,7 +1020,7 @@ end
 # `occ.c[1:occ.n]` only (`_shaft_occluder`), as `_vf_visible`'s ray finds it: hidden if
 # one certificate finds the segment through its facets, visible if every one finds it
 # clear (`_hcert_verdict`: a convex part's balls, a planar part's facets, a part's
-# axisymmetric bounds). A pair the facing slack admits is judged on its own ray ends
+# axisymmetric bounds). A pair the facing slack admits is judged on its ray ends
 # (`_hslack_ends`). Only pairs left undecided take the ray. Centroid visibility only.
 function _hvis_cert(ctx, opts, i, j, occ::_HOcc)
     (; C, Nrm, slack, ε) = ctx
@@ -1152,7 +1152,7 @@ _hcertified(ctx, opts, perm, rows, cols, occ) =
 
 # `_vf_pair` of a pair i < j whose shaft `occ` holds no occluder: a pair facing beyond the
 # slack of the facing test leaves its elements' facets, and its ray would be
-# unobstructed; one admitted by the slack is visible if its own ray ends keep the
+# unobstructed; one admitted by the slack is visible if its ray ends keep the
 # shaft's exclusions (`_hslack_ends`; centroid visibility), else it takes the ray.
 function _vf_pair_free(ctx, i, j, occ::_HOcc)
     (; C, Nrm, slack) = ctx
@@ -1890,7 +1890,7 @@ function _hgroup_mul!(Y, H::HMatrix, Z, group, tmp)
     return Y
 end
 
-# W = G Z in tree order (n × k), threaded over the groups, each into its own buffer,
+# W = G Z in tree order (n × k), threaded over the groups, each into a separate buffer,
 # summed in group order (deterministic for a given thread count).
 function _hmul_tree(H::HMatrix, Z::Matrix{Float64})
     n, k = size(Z)

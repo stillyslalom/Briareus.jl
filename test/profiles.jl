@@ -1,6 +1,6 @@
 # Hohlraum profiles (`hohlraum(; profile)`): a profile of one cylindrical section is the
-# cylindrical hohlraum bit for bit; frustraums and multi-section walls mesh as planar
-# sections that meet vertex for vertex; a closed frustraum's exchanges against the
+# cylindrical hohlraum bitwise; frustraums and multi-section walls mesh as planar
+# sections that meet at shared vertices; a closed frustraum's exchanges against the
 # coaxial-disk closed form, and its drive and LEH loss against Monte Carlo transport.
 
 using Briareus, LinearAlgebra, Test
@@ -38,7 +38,7 @@ using Briareus, LinearAlgebra, Test
     @test_throws ArgumentError hohlraum(; profile = fr, leh_radius = 1.0, capsule_radius = 2.4)
     @test_throws ArgumentError hohlraum(; profile = fr, leh_radius = 1.0, windows = [WallWindow(; phi = 0, diameter = 0.5)])
 
-    # a frustraum: two cones, each with its exact area, meeting vertex for vertex at the waist
+    # a frustraum: two cones, each with its exact area, meeting at shared vertices at the waist
     t = hohlraum(; profile = fr, leh_radius = 1.0, capsule_radius = 0.8, h = 0.4, capsule_h = 0.3)
     @test names_of(t) == [:wall_1, :wall_2, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :capsule] && t.closed
     @test all(c -> c.part === :wall, t.components[1:2]) && t.components[1].surface isa ConeSurface
@@ -92,7 +92,7 @@ using Briareus, LinearAlgebra, Test
     @test sum(A[c1]) ≈ Ac rtol = 1e-12
     @test maximum(abs, A .* F .- (A .* F)') < 1e-14 * maximum(A .* F)
     @test flux(top, bot) ≈ exact.ee rtol = 5e-4                   # measured 7.3e-5
-    @test flux(top, c2) ≈ exact.near rtol = 2e-3                  # 9.1e-4 (the top's own cone)
+    @test flux(top, c2) ≈ exact.near rtol = 2e-3                  # 9.1e-4 (the top cone)
     @test flux(top, c1) ≈ exact.far rtol = 2e-4                   # 1.3e-5
     @test flux(c1, c2) ≈ exact.c1c2 rtol = 3e-3                   # 1.5e-3
     @test flux(c1, c1) ≈ exact.c1c1 rtol = 1.5e-3                 # 5.4e-4

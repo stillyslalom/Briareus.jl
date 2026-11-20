@@ -1,5 +1,5 @@
 # Per-color x-ray sources in `solve`: a two-plate enclosure solved by hand, the 3ω path
-# bit for bit, and the equivalent-3ω weighting for conversions independent of intensity.
+# bitwise, and the equivalent-3ω weighting for conversions independent of intensity.
 
 @testset "per-color x-ray sources" begin
     uc = nif_unconverted()
@@ -36,7 +36,7 @@
     @test isapprox(sol.source, [S1, S2]; rtol = 1e-12)
     @test isapprox(sol.B, [B1, B2]; rtol = 1e-12) && isapprox(sol.H, [fx * B2, fx * B1]; rtol = 1e-12)
     @test sol.laser == P .+ (u.omega1 .+ u.omega2)
-    # the equivalent 3ω power, at its own intensity, is another source on plate 1
+    # the equivalent 3ω power, at its intensity, is another source on plate 1
     Seq = solve(m, P .+ r1 .* u.omega1 .+ r2 .* u.omega2; time = τ).source
     @test abs(Seq[1] - S1) > 1e-3 * S1 && isapprox(Seq[2], S2; rtol = 1e-12)
     # a `Deposition` per color and a `Dict` give the same solution
@@ -60,7 +60,7 @@
     S1h = η(3e14) * 3.0 + 0.5 * 0.95 * 0.5 + 0.5 * η(2e14) * 2.0
     @test isapprox(sh.source, [S1h, 0.5 * τ^0.2 * (0.4 + 0.5 * 0.1)]; rtol = 1e-12)
 
-    # A hohlraum: the 3ω path bit for bit, and the equivalent 3ω power for conversions
+    # A hohlraum: the 3ω path bitwise, and the equivalent 3ω power for conversions
     # independent of intensity (constant gold; nif_gold's time-dependent conversion with a
     # temperature-dependent albedo, iterated)
     th = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
@@ -274,7 +274,7 @@ end
     @test u05.colors == m05 && sum(u05.omega1.element) > 1e-3 * sum(P05)
     @test isapprox(s05.source, S05; rtol = 1e-12)
     # the M-band is the 3ω light's on both paths: a direct `spectral_solve` of a step's
-    # solution (with unconverted light) and the history's own, per component; the
+    # solution (with unconverted light) and that of the history, per component; the
     # M-band of all the absorbed light differs
     em = MBandEmission()
     hm = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times[2:3]; record = sol -> sol,
@@ -359,12 +359,12 @@ end
         abs(hh.unconverted.delivered[:omega1][j] - u1.delivered) / u1.delivered
     end
     @test maximum(devh) < 1e-12 && 0 < hh.unconverted.delivered[:omega1][end] < hd.unconverted.delivered[:omega1][end]
-    # the same fractions as a vector per beam: the keyed history, bit for bit
+    # the same fractions as a vector per beam: bitwise the keyed history
     hv = drive_history(mh, oph, batd, times; record = sol -> sol, unconverted = (omega1 = [f1q[Symbol(b.quad)] for b in quads],
                        omega2 = 0.01), colors = mock)
     @test all(isequal(hh[f], hv[f]) for f in keys(hh) if f !== :record) &&
           isequal([s.B for s in hh.record], [s.B for s in hv.record])
-    # keyed fractions all equal: the scalar form, bit for bit
+    # keyed fractions all equal: bitwise the scalar form
     he = drive_history(mh, oph, batd, times; record = sol -> sol, colors = mock, by = :quad,
                        unconverted = (omega1 = Dict(Symbol(b.quad) => fω1 for b in quads),
                                       omega2 = Dict(Symbol(b.quad) => 0.01 for b in quads)))
@@ -375,7 +375,7 @@ end
                                         by = :quad, colors = mock)
     @test_throws DimensionMismatch drive_history(mh, oph, batd, times; unconverted = (omega1 = [0.05], omega2 = 0.0),
                                                  colors = mock)
-    # a zero prepulse: the history without one, bit for bit
+    # a zero prepulse: bitwise the history without one
     hz0 = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
                         colors = mock)
     hzp = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
@@ -389,7 +389,7 @@ end
                                              prepulse = Dict("omega1" => pre2))
     @test_throws ArgumentError drive_history(mh, oph, bat, times; unconverted = Dict("omega1" => 0.0, "omega2" => 0.0))
 
-    # zero fractions: the 3ω history, bit for bit
+    # zero fractions: bitwise the 3ω history
     h0 = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B)
     hz = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B,
                        unconverted = (omega1 = 0.0, omega2 = 0.0))
@@ -446,7 +446,7 @@ end
     # (b) the Lindl wall with its memory: a 1ω prepulse from -3 to 0 ns, then the main
     # pulse alone. Its early Tr is above the history without the prepulse, by less and
     # less; (c) without a prepulse, the main pulse's history is the history of the same
-    # steps with a zero prepulse, bit for bit
+    # steps with a zero prepulse, bitwise
     tw = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8,
                   wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw)
@@ -461,7 +461,7 @@ end
     @test all(>(0), ΔT) && issorted(ΔT; rev = true) && ΔT[end] < ΔT[1] / 2
     @test all(>(0), hp.Tr[1:length(tpre)])
     # a prepulse that stops at -1 ns, with zero-power steps at -0.5 and 0 ns: the wall
-    # cools through them and re-emits what it stored (its flux there is its own
+    # cools through them and re-emits what it stored (its flux there is its
     # emission); heated again by the main pulse, no element's radiosity is negative
     preg = PulseShape([-3.0, -1.0], [0.1, 0.1])
     hg = drive_history(mw, opw, bat, [collect(-3.0:0.5:0.0); tmain]; zero_light..., prepulse = (omega1 = preg,),

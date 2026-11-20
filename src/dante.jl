@@ -64,11 +64,11 @@ its open fraction (`sol.transmission`). What the rays cover:
   every surface of a target that faces it: the wall seen through windows, packages,
   shields.
 
-A channel with its own `field_of_view` ([`DanteResponse`](@ref)) records what that field
+A channel with a separate `field_of_view` ([`DanteResponse`](@ref)) records what that field
 sees in place of the view's: a disk of its diameter about `center` (in a view through a
-hole, the hole's square cut to that disk). Its signal comes from its own footprint, cast
+hole, the hole's square cut to that disk). Its signal comes from the footprint of that field, cast
 once per distinct field and target, so channels that share the view's field cost
-nothing more and read bit for bit what they read without a field of their own. The
+nothing more and record exactly (bitwise) what they record without a separate field. The
 intensity, `Tr` and the visible areas are the view's.
 
 The brightness temperature is
@@ -157,7 +157,7 @@ DIM-mounted broadband spectrometer that can be fielded on the polar DIM (`:polar
 000-000: θ 0°, straight down the hohlraum axis through the upper entrance hole) or on
 either equatorial DIM (`:equatorial_78`, P90-78 at φ 78.75°; `:equatorial_315`, P90-315;
 NIF User Guide 2024-09, Table 5-1), where a
-hohlraum is seen only through a diagnostic window, so `through` must name it. Its own
+hohlraum is seen only through a diagnostic window, so `through` must name it. Its
 filter set (16 Al, Ni and Cr MiniXRDs behind Dante filters) is not tabulated here: the
 channels default to Dante 1's (`dante1_channels()`, *assumed*), without Dante 1's
 per-channel fields of view (Sentinel's are not public), to be replaced by the shot's
@@ -199,8 +199,8 @@ end
 
 # Visible projected area (mm², normal to the line of sight) per (element, lip element
 # the ray crossed or 0), the reference hole's area and the cosine of the viewing angle,
-# over the field `fov` (mm; the view's, or a channel's own): a disk about the view's
-# center, or with no field of view of the view's own the hole's square, cut to `fov`'s
+# over the field `fov` (mm; the view field or a channel field): a disk about the view's
+# center, or, when the view has no field of view, the hole's square, cut to `fov`'s
 # disk when a channel gives one.
 function _dante_footprint(t::Target, v::DanteView, fov = v.field_of_view)
     h = _dante_hole(t, v)
@@ -286,7 +286,7 @@ _footprint(v::DanteView, t::Target, fov = v.field_of_view) =
         get!(() -> _dante_footprint(t, v, fov), byfield, fov)
     end
 
-# the field a channel records: its own, else the view's
+# the field a channel records: the channel field, else the view field
 _channel_field(v::DanteView, c) =
     c isa DanteResponse && c.field_of_view !== nothing ? c.field_of_view : v.field_of_view
 
@@ -325,7 +325,7 @@ the hole that the view samples (equal to `Tr` without lips; `NaN` without `throu
 Without a reference area `Tr` is `NaN`, and the in-group spectrum and the unfold take
 the visible projected area instead (a brightness temperature over what is seen). For a
 `SpectralSolution` also `spectrum` (TW/sr per group), `edges`, `channels` (each
-channel's signal, over its own field of view where it has one; the open-ended top group
+channel's signal, over its field of view where it has one; the open-ended top group
 contributes nothing), `color_temperature`
 (eV, the Planckian whose channel signals best match, in log, those of the channels
 below 1.5 keV, as Dante's unfold starts) and `mband_fraction` (of the intensity above

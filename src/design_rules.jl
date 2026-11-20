@@ -73,7 +73,7 @@ meets one of `targets` (by default every opaque surface not among `parts`), as i
 `clearance`; a beam whose axis meets none of them is judged up to its aim plane, or
 along its whole length with `miss = :all`, and a beam that lands on one of `parts`
 itself (when `targets` names it) gets `Inf`. The defaults are those of
-[`ApertureKeepOut`](@ref): engineering defaults (the 1 % contour is the level of the
+[`ApertureKeepOut`](@ref): engineering defaults (the 1% contour is the level of the
 TaLIS 3ω clearance rule), not facility criteria.
 
 `tolerance` (degrees) is the rule tolerance of [`talis_check`](@ref): the parts may sit
@@ -87,9 +87,9 @@ equal) the keep-out is the TaLIS 3ω clearance rule of `talis_check` for each be
     HardwareKeepOut(t, hardware; targets = capture, tolerance = 0.5, miss = :all,
                     minimum = 0.5)
 
-a surrogate checked against the package's own `talis_check` (its `:clearance_3w` worst
+a surrogate checked against `talis_check` in this package (its `:clearance_3w` worst
 values; see the research notes), not against the facility's tool. `talis_check` reports
-each hardware part on its own row, where the keep-out takes the minimum over its parts
+each hardware part on a separate row, where the keep-out takes the minimum over its parts
 (one keep-out per part gives the rows), and it passes a clearance strictly above
 0.5 mm; on an `leh` component its failure is a review, which a keep-out does not
 distinguish.
@@ -543,7 +543,7 @@ end
 # The signed distance (negative inside) from (u, v) to the ellipse with semi-axes
 # (A, B), in their number type: the projection on the unit normal (n1, n2) at the
 # closest point (X0, X1), found on the values (semi-axes `A0`, `B0`) and held by its
-# parameter. The value is the distance, and the first derivatives are its own (the
+# parameter. The value is the distance, and the first derivatives are those of the distance (the
 # closest point is stationary: Danskin's theorem).
 _ellipse_signed(u, v, A, B, A0::Float64, B0::Float64, X0, X1, n1, n2) =
     n1 * (u - A * (A0 > 0 ? X0 / A0 : 0.0)) + n2 * (v - B * (B0 > 0 ? X1 / B0 : 0.0))
@@ -583,9 +583,9 @@ outline `d` vanishes, so the margin is continuous there (on a straight edge it c
 linearly), and it falls at least as fast as the axis moves away. `-Inf` when no part has
 a free edge. The margin jumps where the landing moves from one part to another.
 
-The defaults are the TaLIS values (the 10 % contour at least 0.5 mm inside the edge
+The defaults are the TaLIS values (the 10% contour at least 0.5 mm inside the edge
 with a 0.5° tolerance about TCC; `talis_check` passes a margin at or above 0.5 mm). The
-quantity is a surrogate checked against the package's own `talis_check` (see the
+quantity is a surrogate checked against `talis_check` in this package (see the
 research notes), not against the facility's tool. Pass it as `keepout` to the objectives,
 which add `weight × Σᵢ max(0, minimum − mᵢ)²` ([`keepout_penalty`](@ref)).
 """
@@ -691,7 +691,7 @@ engineering default, not a facility criterion; the other defaults are those of
 
 As a keep-out ([`keepout_clearance`](@ref), [`keepout_penalty`](@ref)) the rule's quantity
 is the margin `max_incidence − incidence` in degrees, held at or above `minimum`.
-The quantity is a surrogate checked against the package's own `talis_check` (see the
+The quantity is a surrogate checked against `talis_check` in this package (see the
 research notes), not against the facility's tool.
 """
 struct IncidenceRule
@@ -804,7 +804,7 @@ end
 
 Keep-out of named parts from the beams' 1ω footprints: [`omega1_clearance`](@ref)`(keepout,
 beams)` gives each beam's worst-case clearance (mm) of `parts` (a name or a collection
-of part or component names) from the 10 % contour of its unconverted 1ω light, the TaLIS
+of part or component names) from the 10% contour of its unconverted 1ω light, the TaLIS
 1ω clearance rule of [`talis_check`](@ref) (`:clearance_1w`, more than 0.2 mm) as a
 quantity. The footprint and its keywords are `talis_check`'s (see its "1ω footprint":
 per beamlet of a NIF quad a square whose near edge lies `omega1_edge` from the 3ω axis,
@@ -822,7 +822,7 @@ footprint distance's at that point (Danskin's theorem; one-sided at the footprin
 corners and where two beamlets' footprints are equally near). Not clearing calls for
 unconverted-light management (`:management_1w`), a review this quantity does not
 decide. The defaults are `talis_check`'s; the quantity is a surrogate checked against
-the package's own `talis_check` (see the research notes), not against the facility's
+`talis_check` in this package (see the research notes), not against the facility's
 tool.
 """
 struct Omega1KeepOut{O,B}

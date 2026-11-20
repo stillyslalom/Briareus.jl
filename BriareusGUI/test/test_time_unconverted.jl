@@ -1,6 +1,6 @@
 # The time panel with unconverted (1ω, 2ω) light: the drive history and the retune take
 # the drive's ratios on the beams whose light takes part, as the core's `drive_history`
-# and `retune_drive` take `unconverted`; without it they are the 3ω ones, bit for bit.
+# and `retune_drive` take `unconverted`; without it they are bitwise the 3ω ones.
 # The unconverted light lands ≥ 4.8 mm off the 3ω axis (`nif_unconverted`), outside a
 # 2.9 mm hohlraum: a mock hohlraum 6 mm in radius with 5.5 mm entrance holes takes some in.
 
@@ -47,7 +47,7 @@ _history_fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, 
     core(; kw...) = drive_history(s.model, s.deposition, at, h0.time; observe, wall, lmax = 4, kw...)
     fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, h.laser, h.source, h.absorbed)
 
-    # without unconverted light, the 3ω history bit for bit (the core's without the keyword)
+    # without unconverted light, bitwise the 3ω history (the core's without the keyword)
     ref = core()
     @test isequal(fields(h0.history), fields(ref))
     # a ratio with no beam's 1ω or 2ω light taking part: still the 3ω history

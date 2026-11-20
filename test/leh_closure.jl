@@ -121,7 +121,7 @@ end
     @test all(sol.transmission[elements(t, :leh_top_lip)] .≈ 0.75)
 
     # drive_history integrates it per hole: open at the first time, the closure the
-    # standalone integration gives on the history's own lip temperatures and intensities
+    # standalone integration gives on the history lip temperatures and intensities
     quads = nif_quads()
     op = DepositionOperator(t, quads)
     P = PulseShape([0.0, 0.5, 2.0, 3.0, 6.0, 6.5, 9.0], [1.0, 1.0, 1.0, 9.0, 9.0, 1.0, 1.0])  # TW per quad

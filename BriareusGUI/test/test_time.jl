@@ -59,7 +59,7 @@ end
     load_pulses!(sess, csv)
     loaded = tm.pulses[]
     # the table's data is saved, not its path: the session opens with the CSV file gone,
-    # its pulses bit for bit
+    # its pulses bitwise
     for f in (joinpath(dir, "p.briar.toml"), joinpath(dir, "p.briar"))
         save_session(f, sess)
     end

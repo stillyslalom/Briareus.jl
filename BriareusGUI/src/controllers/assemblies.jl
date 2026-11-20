@@ -41,7 +41,7 @@ function check_tree(parts)
 end
 
 # Each part's place among its siblings in the tree: its index in the parts, an assembly's
-# the least of its own and its members' (at any depth), so an assembly is listed where
+# the least of its index and those of its members (at any depth), so an assembly is listed where
 # its first member was.
 function _tree_ranks(parts)
     rank = Dict{Symbol,Int}(p.name => i for (i, p) in enumerate(parts))
@@ -96,7 +96,7 @@ assembly_parts(parts, name::Symbol) =
 """
     assembly_frame(assembly::Symbol) -> Symbol
 
-The frame a member of `assembly` is placed in by default: the assembly's own, or `:tcc`
+The frame a member of `assembly` is placed in by default: the frame of the assembly, or `:tcc`
 at the top level ([`TOP_LEVEL`](@ref)).
 """
 assembly_frame(a::Symbol) = a === TOP_LEVEL ? :tcc : a

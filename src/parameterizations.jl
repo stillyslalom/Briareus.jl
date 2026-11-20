@@ -126,7 +126,7 @@ _nparams_shown(h::HeldParameters) = nparams(h)
 """
     PowerScales(p; by = :group)
 
-The parameterization `p` with a power scale per group of beams after its own
+The parameterization `p` with a power scale per group of beams after its
 parameters: the parameter vector is `[x; s]`, and `apply(ps, [x; s])` is `apply(p, x)`
 with each beam's power multiplied by the scale `s` of its group. Groups are keyed by
 `by` on the beams of `p` at its initial parameters: `:group` (e.g. the cone), `:quad`,

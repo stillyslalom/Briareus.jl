@@ -58,7 +58,7 @@ their string) for a deterministic order. Every multiplier must be positive.
 
 `class` (a function of the key, a dictionary or a vector aligned with the keys; `nothing`:
 one class) separates keys that never share a shape, such as the inner and the outer cones'
-quads, which follow different base pulses. Each class is grouped on its own, with at least
+quads, which follow different base pulses. Each class is grouped separately, with at least
 one shape and at most one per key, and the `shapes` are split between the classes by the
 smallest total squared error over every admissible split (ties to the first in order).
 
@@ -93,7 +93,7 @@ power scales of a re-optimization per shape ([`PowerScales`](@ref) with
 inner = Set(b.quad for b in beams if b.group in (:inner23, :inner30))
 g = pulse_shape_groups(m, quad_names; shapes = 6, class = q -> q in inner ? :inner : :outer)
 g.split, g.rms, g.assignment["Q15T"]
-# the fewest shapes, up to 8, that fit within 3 % rms
+# the fewest shapes, up to 8, that fit within 3% rms
 g3 = pulse_shape_groups(m, quad_names; shapes = 8, tolerance = 0.03,
                         class = q -> q in inner ? :inner : :outer)
 length(g3.names), g3.counts
@@ -364,7 +364,7 @@ function _kmeans_restarts(X::Matrix{Float64}, k::Int, seed::UInt64, restarts::In
         end
         a = [argmin([dist2(i, X[s, :]) for s in seeds]) for i in 1:n]
         for (g, s) in enumerate(seeds)
-            a[s] = g                 # each seed in its own group: none empty
+            a[s] = g                 # each seed in a separate group: none empty
         end
         _hartigan!(a, X, k)
         sse = _grouping_sse(X, a, k)
@@ -460,7 +460,7 @@ function _check_power_max(q::PulseShape, L::Float64)
     i = argmax(q.p)
     q.p[i] <= L * (1 + 1e-12) && return nothing
     throw(ArgumentError("the scaled pulse reaches $(round(q.p[i]; sigdigits = 6)) TW at $(q.t[i]) ns, " *
-                        "$(round(100 * (q.p[i] / L - 1); sigdigits = 3)) % above power_max = $L TW " *
+                        "$(round(100 * (q.p[i] / L - 1); sigdigits = 3))% above power_max = $L TW " *
                         "(cap the design's scales between the phases: bounds(...; power_max, pulses, times, peak))"))
 end
 

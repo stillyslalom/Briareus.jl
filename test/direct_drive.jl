@@ -8,12 +8,12 @@
 #   at the center, σₗ = |aₗ/a₀| Gₗ / √(2l+1) with aₗ the single beam's Legendre
 #   coefficients (a 1-D quadrature here) and Gₗ² = Σᵢⱼ Pₗ(Uᵢ·Uⱼ)/N² from the ports alone.
 # - Temporal et al., arXiv:1406.7762 (2014): one ring at 49°/131° on R₀ = 0.5 mm, m = 4
-#   super-Gaussians; σ = 11.9 % (circular, a = b = R₀) and 5.2 % (elliptical, a = 2b,
-#   b = R₀ meridional) centered, minima 1.1 % at Δ/R₀ = 13.7 % and 1.3 % at 7.4 % for a
+#   super-Gaussians; σ = 11.9% (circular, a = b = R₀) and 5.2% (elliptical, a = 2b,
+#   b = R₀ meridional) centered, minima 1.1% at Δ/R₀ = 13.7% and 1.3% at 7.4% for a
 #   shift Δ perpendicular to the beam toward the equator.
 # - Temporal et al., HPLSE 2, e8 (2014), §4: LMJ option A (20 quads at 49°/131°, the
 #   hemispheres rotated 18°), elliptical m = 4 quads Δa = 2Δb = 640 µm; minimum over r0
-#   of the intrinsic σ0 = 4.6 % (a 2-D quadrature of all 20 beams here).
+#   of the intrinsic σ0 = 4.6% (a 2-D quadrature of all 20 beams here).
 # - Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eqs. 28–37: ring-averaged
 #   absorbed intensity of parallel-ray super-Gaussian beams whose axes cross the polar
 #   axis at z R₀, re-solved here by direct quadrature.
@@ -230,7 +230,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         @test all(abs.(mode_power(C; m = :zero) .- zl) .< 2e-5)
 
         @testset "absorption weight η_a (MN17 Eq. 29)" begin
-            # off is the default, bit for bit (and unchanged from before the option: see the
+            # off is bitwise the default (and unchanged from before the option: see the
             # research notes); η⊥ = 1 (η_a ≡ 1) is the same model, to rounding
             op = runs[2].op
             dn = deposit(op, beams; absorption = nothing)
@@ -347,7 +347,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
     @testset "Temporal 2014 LMJ intrinsic σ0" begin
         # HPLSE 2, e8 (2014), §4 and Fig. 5: LMJ option A (the 20 quads at 49°/131°),
         # elliptical quads Δb = 320 µm meridional, Δa = 2Δb, m = 4, no beam errors and no
-        # PDD shift; the minimum over the capsule radius r0 of the intrinsic σ0 is 4.6 %
+        # PDD shift; the minimum over the capsule radius r0 of the intrinsic σ0 is 4.6%
         # (its curve's minimum lies near r0 = 350 µm in Fig. 5; the r0 = 320 µm of the
         # text is the optimum of the error-averaged σ̄). Same convention as Te14.
         σref(ρ) = _dd_lmj_sigma(ρ, 2.0, 1.0, 4.0)          # ρ = r0/Δb

@@ -52,17 +52,17 @@ pulse-shape files; Briareus is in mm, TW/mm², ns and TW. The readers and writer
 VisRad 21 computed the laser deposition on two NIF hohlraum workspaces built from
 Briareus geometry, and Briareus read each one, built the same target and beams, and
 compared its deposition element by element with VisRad's. With
-[`VisRadProfile`](@ref), wall deposition differs from VisRad's by 0.45–0.7 % rms per
-element and peaks agree within 0.1 %. With the earlier, tabulated profile, the
+[`VisRadProfile`](@ref), wall deposition differs from VisRad's by 0.45–0.7% rms per
+element and peaks agree within 0.1%. With the earlier, tabulated profile, the
 capsule's P2 and P4, computed from the two depositions through the same Briareus
 radiosity, agreed to 0.014 and 0.004 percentage points. [Verification and
 validation](@ref) gives the setup and all the numbers. On a
 foil workspace with four beams, the totals agree to the table's precision (3.6000 TW),
-elements above 20 TW/cm² within 1.4 %, and the faint wings near focus (2–30 TW/cm²)
-differ by 8–15 % (research notes, "VisRad workspace files (2026-10-17)").
+elements above 20 TW/cm² within 1.4%, and the faint wings near focus (2–30 TW/cm²)
+differ by 8–15% (research notes, "VisRad workspace files (2026-10-17)").
 
 [`write_visrad_kit`](@ref) and [`compare_visrad`](@ref) set up the same comparison for
-any case. The comparison covers deposition only: VisRad's own
+any case. The comparison covers deposition only: the VisRad
 radiosity, absolute drive levels and mode amplitudes have not yet been compared with
 Briareus's (ROADMAP, "Benchmark against VisRad").
 
@@ -71,7 +71,7 @@ spherical harmonics by least squares to the element values; the weighting is not
 documented. Briareus integrates the harmonics over each element's exact solid angle.
 The Legendre coefficients mean the same in both (``A_l`` and ``a_l``, with
 ``A_2/A_0 = a_2/a_0`` = P2/P0), but the two estimates differ on a coarse mesh; apply
-[`visrad_legendre_fit`](@ref) to both codes' element values for a like-for-like
+[`visrad_legendre_fit`](@ref) to both codes' element values for a matched
 comparison. VisRad's spherical harmonics are normalized so that ``Y_{00} = 1``: they
 are Briareus's orthonormal [`ylm_moments`](@ref) times ``\sqrt{4\pi}``. Whether VisRad
 includes the Condon–Shortley phase is not stated, so the signs of odd-``M``
@@ -92,8 +92,8 @@ is cut off at 10⁻³ of its local peak and renormalized in each transverse plan
 shapes differ in kind: away from focus VisRad's spot turns square-shouldered, while the
 f-cone sum softens the focal profile, to about half its focal order at 15 mm.
 
-On a hohlraum wall, 3–8 mm past focus, the f-cone sum gave 10 % rms per element against
-VisRad's deposition, with peaks 10 % higher. [`VisRadProfile`](@ref) is VisRad's law.
+On a hohlraum wall, 3–8 mm past focus, the f-cone sum gave 10% rms per element against
+VisRad's deposition, with peaks 10% higher. [`VisRadProfile`](@ref) is VisRad's law.
 The semi-axes, order, square weight and square width follow the parameters VisRad
 itself exports, and two constants were fitted to its deposition; the docstring gives the
 forms. [`visrad_profile`](@ref) reads the envelope ratios from a workspace. Neither model
@@ -106,7 +106,7 @@ and the default.
 Smaller differences of the beam model:
 
 - **Spot rotation.** VisRad's rotation 0 is the quad's horizontal, which is turned from
-  the beam's own port frame by 1.6–5.3° depending on the cone; the readers and writers
+  the port frame of the beam by 1.6–5.3° depending on the cone; the readers and writers
   convert. A positive rotation turns the spot clockwise as seen looking along the beam
   (`rotation_sense = :beam`, the default): VisRad's deposition at ±30°, 60° and 90° on
   ten beams matches it within 0.04°, and the other sense is off by 60°.
@@ -118,15 +118,15 @@ Smaller differences of the beam model:
   magnified: a point's shadow ray leans away from the axis in proportion to its
   position in the spot, as if from a source 12–19 mm upstream of focus, and each beam is
   then rescaled to its full power. Behind a washer or a sphere 5 mm upstream of a foil,
-  the axis test leaves 30 % rms per element against VisRad. VisRad also puts up to
+  the axis test leaves 30% rms per element against VisRad. VisRad also puts up to
   7 × 10⁻⁴ TW/cm² on LEH washers that Briareus leaves dark.
 - **Beam totals.** VisRad rescales each beam's deposited total: to its full power on
-  surfaces that catch the whole beam, at any incidence, and to a share within ±2.5 % of
+  surfaces that catch the whole beam, at any incidence, and to a share within ±2.5% of
   the geometric one when part of the beam hits nothing. [`VisRadProfile`](@ref)
-  normalizes each transverse plane instead, which puts 0.2 % too much power on a foil
-  at 40° incidence and 2.2 % at 78°.
+  normalizes each transverse plane instead, which puts 0.2% too much power on a foil
+  at 40° incidence and 2.2% at 78°.
 - **Capture/clearance report.** VisRad's report applies the TaLIS margins as fixed
-  widths around its 1 % and 10 % cones (0.5 mm), with no angular allowance. Its cones
+  widths around its 1% and 10% cones (0.5 mm), with no angular allowance. Its cones
   match Briareus's envelope (best-focus contour grown by the f-cone) to within 0.05 mm,
   up to 10 mm from focus. Its incident angle is that of the steepest ray of the f-cone
   (tilt + 1.38°), as in [`talis_check`](@ref). [`talis_check`](@ref) adds the 0.5°
@@ -170,7 +170,7 @@ washers and rims partly shadow elements.
 ### Element values
 
 VisRad's direct laser power source is an element average: centroid values differ from
-it by up to 13 % next to a spot's peak. Briareus deposits the integral over each
+it by up to 13% next to a spot's peak. Briareus deposits the integral over each
 element. [`visrad_deposition`](@ref) multiplies VisRad's values by the element areas, so
 the two codes compare in TW per element.
 
@@ -183,12 +183,12 @@ requests"):
   CMT XML.
 - Most of VisRad's primitives: cylinders, cones, disks, boxes, polygons, halfraums,
   rugby and slotted hohlraums, surfaces of revolution, multi-element objects, wall
-  thickness and partial spheres. Briareus has its own mesh builders for most of these
+  thickness and partial spheres. Briareus provides mesh builders for most of these
   shapes, but [`read_visrad_workspace`](@ref) skips them with a warning.
 - From workspaces: unconverted 2ω and 1ω beams, time-dependent beam powers and
   energy-normalized beams, DPR (split OMEGA beams), pointing toward a diagnostic port or
   in target-mount frames, and the time-dependent tables of albedo, conversion, lengths
-  and power sources. Briareus has its own time-dependent models (above), but does not
+  and power sources. Briareus provides separate time-dependent models (above), but does not
   import VisRad's.
 - Laser reflection, and power self-emission.
 - The blend toward a square beam far from focus (zero for NIF's beams).
@@ -214,8 +214,8 @@ beams = ws.beams            # 3ω power, aim, defocus and spot per beam
 profile = visrad_profile(ws)   # VisRad's beam model, with this workspace's envelopes
 ```
 
-**2. Check the deposition against VisRad's own.** On a workspace that VisRad has
-computed, a target on VisRad's own elements (no remeshing) takes VisRad's per-element
+**2. Check the deposition against VisRad.** On a workspace that VisRad has
+computed, a target on the VisRad elements (no remeshing) takes VisRad's per-element
 deposition. [`visrad_deposition`](@ref) maps only onto components on those elements, so
 this target serves the comparison only; step 3 builds the radiation target. VisRad saves
 a computed workspace as JSON, which [`read_visrad_workspace`](@ref) reads as it reads the

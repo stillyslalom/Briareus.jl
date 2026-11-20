@@ -86,8 +86,8 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   of the `wall` components
 - `cavity_Tr` — per cavity of `cavities` (pairs `name => wall names`, e.g.
   `[:upper => (:upper_wall, :upper_cap_top), :lower => (:lower_wall, :lower_cap_bottom)]`
-  for two halfraums), the temperature of the area-weighted mean incident flux on that
-  cavity's own wall components ([`wall_temperature`](@ref) of each step's solution),
+  for two halfraums), the temperature of the area-weighted mean incident flux on the
+  wall components of that cavity ([`wall_temperature`](@ref) of each step's solution),
   keyed by cavity name; empty without `cavities` (the default). A cavity's walls are
   named one by one: grouping by part would take a hohlraum's entrance holes too.
 - `escaped` — power (TW) through each aperture, and `transmitted` through each
@@ -98,7 +98,7 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   through every aperture except the entrance `holes` (default: the apertures not on a
   `CylinderSurface`, i.e. a hohlraum's LEHs)
 - `front` — per thin-foil component, its area-mean heat-front areal mass as a fraction
-  of the foil's (`≥ 1` once burned through), from its own flux history even when the
+  of the foil's (`≥ 1` once burned through), from its flux history even when the
   model has an explicit `burnthrough`
 - `burnthrough` — per thin-foil component, each element's burnthrough time (ns; `Inf`
   if it has not burned through)
@@ -141,7 +141,7 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 fraction of each beam's 3ω power: a number or a function of time (ns), keyed by color
 name, e.g. `(omega1 = 0.05, omega2 = 0.01)` or `(omega1 = PulseShape(ts, fs), omega2 =
 0.0)`, as [`unconverted_history`](@ref)'s `ratio` (no default: the fraction is an
-input). A color's fraction holds for every beam, or each beam has its own: a vector with
+input). A color's fraction holds for every beam, or each beam has a separate one: a vector with
 one entry per beam of `beams_at(τ)` (in its order, which the pointing fixes), or keyed by
 `by` as `prepulse` is (a beam without an entry is a `KeyError`, as in `with_pulses`),
 e.g. `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05, :inner23 => 0.0, :inner30 =>
@@ -149,7 +149,7 @@ e.g. `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05, :inner23 => 0.0, :inner
 [`unconverted_deposition`](@ref) for the beams of `beams_at(τ)` (their powers before
 `lpi`: unconverted light does not take part in the 3ω laser–plasma model) at that
 step's fractions of each beam, and the step is solved with them as `solve`'s `unconverted`, each
-color's conversion at its own absorbed flux. `prepulse` adds light not proportional to
+color converting at its absorbed flux. `prepulse` adds light not proportional to
 the 3ω pulse, as `unconverted_history`'s `prepulse`: per color (optional), a power per
 beam (TW) as a function of time, one function for all beams or keyed by `by` (`:group`,
 `:quad`, `:beam` or a function, as in [`with_pulses`](@ref)); a beam's power in color
@@ -170,21 +170,21 @@ fraction, prepulse) schedule, as `unconverted_history` does), never for a set wh
 light is zero, and scales those patterns by the powers in time; the pointing must not
 change in time. `laser` then includes each color's absorbed power,
 and `setup` and `delivered` its delivered power, so `energy_budget` balances; the
-M-band stays the 3ω light's. Without `unconverted` the history is the 3ω one, bit for
-bit.
+M-band stays the 3ω light's. Without `unconverted` the history is bitwise the 3ω
+one.
 
 **M-band.** `mband` is an [`MBandSplit`](@ref): the M-band emission model and the
 spectral split it is solved with. By default (`MBandSplit()`: `nif_mband()`, Dewald
 2020's per-cone conversions on gold and Au-lined uranium, in the calibrated two-group
-split) each step's laser-produced M-band comes from that step's own effective beams, as
+split) each step's laser-produced M-band comes from the effective beams of that step, as
 `mband_power(mband.emission, op, beams; lpi, time)` gives it with the beams after `lpi`
 (CBET, backscatter, the bubble): each beam group's (cone's) share of every element,
-split off in the step's own deposition pass, so the M-band follows the cone balance in
+split off in the deposition pass of that step, so the M-band follows the cone balance in
 time (an intensity-form `MBandSplit(MBandEmission())` converts the step's deposition
 itself). The step's gray solution is then split by `spectral_solve` with the split's
 `edges`, `thermalize` and group albedos; `spectral` holds `spectral_solve`'s other
 keywords (`spot`, `tol`, ...). A diagnostic: the gray history (every other record) is
-the same bit for bit with or without it. It costs ~6 % of a small history (600
+bitwise identical with or without it. It costs ~6% of a small history (600
 elements) and less than the run-to-run spread on N221204 (research notes, "Per-cone
 M-band in the drive history (2026-10-27)"); `mband = nothing` turns it off.
 
@@ -192,7 +192,7 @@ Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), s
 from the previous step's temperatures.
 
 **Wall-loss history.** With `wall_history = true` (the default) each element whose
-albedo is a [`WallLossAlbedo`](@ref) loses energy as its own temperature history
+albedo is a [`WallLossAlbedo`](@ref) loses energy as its temperature history
 requires, not as if it had been at today's temperature since `t = 0`. Lindl's
 constant-T wall energy `E_w ∝ T^a t^b` (a = 4 + p = 3.3, b = 1 + q = 0.62 for the
 defaults) is carried to a varying `T(t)` as `E_w ∝ [∫ (T/100 eV)^(a/b) dt]^b`, the form
@@ -226,15 +226,15 @@ potential `φ = (T/100 eV)^a`, is answered by the same self-similar kernel, supe
 
     F = L(T_h, t_eff) − f_r b C ∫ (t − t′)^(b−1) dD(t′),    C = L t_eff^(1−b) / (b φ(T_h)),
 
-the net flux into the wall (`C`, the loss's own coefficient, is constant for gold's
+the net flux into the wall (`C`, the coefficient of the loss, is constant for gold's
 Lindl loss; `f_r` is `WallLossAlbedo`'s `release`, 1.0, calibrated against 1-D
 radiation hydrodynamics of an ablating gold wall, `examples/late_time_wall.jl`). A constant-T wall loses `C b φ t^(b−1)`; a drop `D` at `t_d` gives back
 `f_r C D (t − t_d)^b` by `t`, quickly at first (the hot surface layer) and then as the
-heat wave's own `t^b`. The effective albedo `1 − F/H` exceeds 1 where the wall gives
+`t^b` of the heat wave. The effective albedo `1 − F/H` exceeds 1 where the wall gives
 back more than it takes; `solve` carries the release as an emission added to the
 element's source. While no element's temperature falls below its running maximum the
-history is the heating loss's bit for bit. At a step where nothing fires, a heated
-wall's flux is its own re-emission: `solve`'s albedo iteration starts it at half its
+history is bitwise that of the heating loss. At a step where nothing fires, a heated
+wall's flux is its re-emission: `solve`'s albedo iteration starts it at half its
 running maximum (an element without flux would otherwise take `reference_temperature`).
 A wall heated again after cooling takes back its surface layer's energy, but never more
 than the flux on it: its radiosity is kept ≥ 0 (albedo 0, no emission, *engineering*). `released` records the re-emitted power
@@ -251,12 +251,12 @@ over the hole's initial area), exactly for the hold's relaxation. The step is so
 with each lip ring closed outside the edge `r₀ − d`, and again until the corrected depth
 moves by less than 1e-5 mm.
 
-Each thin-foil element without an explicit `burnthrough` time tracks its own heat
+Each thin-foil element without an explicit `burnthrough` time tracks a separate heat
 front: the drive integral of `heat_front` over that element's incident-flux temperature
 history (trapezoidal between the steps, from `times[1]`), so its burnthrough is
 consistent with the flux the windowed hohlraum puts on it. A step is solved with the
 front extended from the previous step at constant temperature, and solved again
-until the step's own temperatures no longer move a burnthrough that affects its
+until the temperatures of that step no longer move a burnthrough that affects its
 albedo.
 
 A burnthrough transition takes the foil's `width` (0.4 ns by default), and a step
@@ -267,7 +267,7 @@ much longer than that jumps across it. Two optional criteria insert steps betwee
   `BurnthroughAlbedo`, 0 intact to 1 burned through), and no closing gap's (`GapClosure`,
   0 open to 1 closed), advances by more than this in one step.
   Steps are planned from each element's known or predicted burnthrough time, and
-  halved if the step's own temperatures move a burnthrough so that the advance
+  halved if the temperatures of that step move a burnthrough so that the advance
   exceeds 1.5 `transition`.
 - `flux_change` — the observed flux relative to its mean, `H/⟨H⟩` on each element of
   `observe`, changes by no more than this in one step; a step that exceeds it is
@@ -338,7 +338,7 @@ Base.@nospecializeinfer function _drive_history(
     issorted(times) || throw(ArgumentError("times must be sorted"))
     obs = elements(t, (observe isa Symbol ? (observe,) : observe)...)
     we = elements(t, wall...)
-    # each cavity's own wall elements (`cavities`: name => wall names)
+    # the wall elements of each cavity (`cavities`: name => wall names)
     cavity_elems = _cavity_elements(t, cavities)
     weights = _TargetCache(tg -> ylm_weights(tg, obs; lmax))
     N = nelements(t)
@@ -453,7 +453,7 @@ Base.@nospecializeinfer function _drive_history(
             return s
         end
         sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = ucs)
-        # corrector: the lips' depths with this step's own lip temperatures
+        # corrector: the lips' depths with the lip temperatures of this step
         for _ in 1:5
             (isempty(lips) || τ0 === nothing) && break
             dn = depths(_lip_temperatures(lips, sol))
@@ -462,12 +462,12 @@ Base.@nospecializeinfer function _drive_history(
             sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol, unconverted = ucs)
         end
         # corrector: the trapezoidal integral with this step's temperatures (from the
-        # state at τ0, `I0, tb0, rate0`: the march's own `I, tb, rate` are reassigned
+        # state at τ0, `I0, tb0, rate0`: the `I, tb, rate` of the march are reassigned
         # after each step, so captured here they would be boxed, possibly undefined to
         # JET's report_call)
         I0, tb0, rate0 = I, tb, rate
         function advance(sol)
-            # `local`: the step's own `Ik, tk, rk` below would otherwise be captured
+            # `local`: the per-step `Ik, tk, rk` below would otherwise be captured
             # (boxed, and possibly undefined here; JET's report_call)
             local Ik, tk, rk = copy(I0), copy(tb0), copy(rate0)
             for e in foil_elems
@@ -482,7 +482,7 @@ Base.@nospecializeinfer function _drive_history(
             return Ik, tk, rk
         end
         Ik, tk, rk = advance(sol)
-        # re-solve while the step's own temperatures move a burnthrough that its albedo
+        # re-solve while the temperatures of this step move a burnthrough that its albedo
         # sees (a fixed point; the transition is smooth, so it converges in a few passes)
         used = pred
         for _ in 1:20
@@ -622,7 +622,7 @@ Base.@nospecializeinfer function _drive_history(
             keep_albedo && push!(transmission_steps, copy(sol.transmission))
             record === nothing || push!(recorded, record(sol))
             if emission !== nothing
-                # the step's own effective beams, each cone's share of the deposition
+                # the effective beams of this step, each cone's share of the deposition
                 # (its beams alone, = `mband_power(emission, op, bl; lpi, time)`); the
                 # intensity form converts the step's deposition itself
                 tm = sol.model.target
@@ -701,8 +701,8 @@ shaped pulse) needs in place of the materials' albedos.
 
 - `time` — the time;
 - `albedo` — each element's albedo, the history's converged one (`history.albedo`),
-  interpolated linearly in time between the two steps around `time` (a step's own at its
-  time). It follows each wall element's own temperature history, carries a re-emitting
+  interpolated linearly in time between the two steps around `time` (the value of a step at its
+  time). It follows the temperature history of each wall element, carries a re-emitting
   wall's emission (the effective albedo `B = ηP/A + αH`) and a thin foil's state (`(1 −
   s𝒯) α_before` while it burns through);
 - `transmission` — each element's fraction of the incident flux transmitted out of the
@@ -722,11 +722,11 @@ history's `wall_albedo` on the wall).
 with `st = history_state(target, h, τ)`, `Scenario(target, beams; observe = :capsule,
 st.time, st.albedo)` or `remake(scenario; st.time, st.albedo)` is the flux response about
 the history's state at `τ`, linear in the laser source as the optimizer requires. At a
-step's time and the history's own beams it gives the history's observed flux. A standalone
+step's time and with the history beams it gives the history's observed flux. A standalone
 `solve` at a time partway through a pulse, or a scenario's default albedos, evaluate a
 [`WallLossAlbedo`](@ref) as if the wall had been at its present (or reference)
 temperature since `t = 0`, without the history or the re-emission: on a NIF-like
-mock-up the capsule drive then differs from the history's by −15 to +64 % and P2/P0 by
+mock-up the capsule drive then differs from the history's by −15 to +64% and P2/P0 by
 up to 3.6 percentage points (research notes, "Drive histories: sliver steps and the
 albedo of a phase (2026-11-18)").
 """
@@ -740,7 +740,7 @@ function history_state(t::Target, h, τ::Real; mean = ())
     N = nelements(t)
     length(alb[1]) == N ||
         throw(DimensionMismatch("the history has $(length(alb[1])) elements, the target $N"))
-    # the steps around τ and the weight of the later one (0 at a step's own time)
+    # the steps around τ and the weight of the later one (0 at the time of a step)
     k = searchsortedlast(ts, τ)
     w = k == length(ts) ? 0.0 : (τ - ts[k]) / (ts[k+1] - ts[k])
     at(v) = w == 0 ? copy(v[k]) : (1 - w) .* v[k] .+ w .* v[k+1]

@@ -66,7 +66,7 @@ end
 const _CANVAS_GLYPHS = vcat(Char(32):Char(126), collect("°±²³·×θφεΔσ–—−…→≤≥≈"))
 
 # Rendering these glyphs takes seconds, so the warmed atlas is cached on disk next to
-# Makie's own atlas cache and loaded on the next start, provided no screen uses the
+# the Makie atlas cache and loaded on the next start, provided no screen uses the
 # session's atlas yet and the cache holds every glyph it has.
 const _ATLAS_KEY = (2048, 64)                        # GLMakie's atlas
 _atlas_cache_path() = Makie.get_cache_path(_ATLAS_KEY...) * ".briareusgui"
@@ -125,7 +125,7 @@ function _warm_canvases!(sh)
     sc = scene_canvas(ws)
     _field_colorbar!(sc.colorbar, 1.3e14)
     _show_colorbar!(sc, true)
-    # the window's own canvas
+    # the canvas of the window
     c = sh.scene
     sh.sess.target.ghost[] === nothing && _update!(c.ghost, _NOTRI...; visible = true)
     if !c.colorbar.blockscene.visible[]
@@ -658,18 +658,18 @@ end
 
 _num(x::Real) = isfinite(x) ? Controllers.display_number(x) : ""
 _fix(x::Real, d::Integer = 3) = isfinite(x) ? @sprintf("%.*f", d, x) : "–"
-# A fraction as a percentage; one that rounds to zero prints without a sign ("-0.00 %").
+# A fraction as a percentage; one that rounds to zero prints without a sign ("-0.00%").
 function _pct(x::Real, d::Integer = 2)
     isfinite(x) || return "–"
-    t = @sprintf("%.*f %%", d, 100x)
+    t = @sprintf("%.*f%%", d, 100x)
     return startswith(t, "-") && all(c -> c in "0.", t[2:end-2]) ? t[2:end] : t
 end
 # A laser power (TW) and its fraction of the delivered power: four significant digits
 # and two decimals of a percent; a power below 1 GW as "< 0.001" and a fraction below
-# 0.005 % as "< 0.01 %" (when the beams reach only the wall, the other parts sum to
+# 0.005% as "< 0.01%" (when the beams reach only the wall, the other parts sum to
 # round-off, ~10⁻¹³ TW).
 _power_text(p::Real) = abs(p) < 1e-3 ? "< 0.001" : @sprintf("%.4g", p)
-_power_pct(x::Real) = isfinite(x) && abs(x) < 5e-5 ? "< 0.01 %" : _pct(x)
+_power_pct(x::Real) = isfinite(x) && abs(x) < 5e-5 ? "< 0.01%" : _pct(x)
 _g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"
 
 function _refresh!(sh::BriareusShell)
@@ -933,10 +933,10 @@ function _refresh_selection!(sh::BriareusShell)
             frames = _part_frame_choices(sess, p)
             _set!(sh, "frameLabels", [_frame_label(f) for f in frames])
             _set!(sh, "partFrame", something(findfirst(==(p.frame), frames), 0) - 1)
-            # the move row: along an axis of any frame (the part's own frame by default)
+            # the move row: along an axis of any frame (the part frame by default)
             mf = _move_frame_choices(sess)
             _set!(sh, "moveFrames", [_frame_label(f) for f in mf])
-            # (the part's own frame when another part is selected; kept by name as frames come and go)
+            # (the part frame when another part is selected; kept by name as frames come and go)
             get(sh.shown, "_movePart", nothing) === p.name || (sh.shown["_movePart"] = p.name;
                                                                 sh.shown["_moveFrameName"] = p.name)
             _set!(sh, "moveFrame", something(findfirst(==(_move_frame(sh)), mf), 1) - 1)
@@ -1087,7 +1087,7 @@ function _refresh_drive!(sh::BriareusShell)
                           @sprintf("%.3g W/cm² · Tr %.1f eV", to_Wcm2(cavs[k].flux), cavs[k].Tr))
     s = res === nothing ? nothing : res.spot
     _set!(sh, "spotText", s === nothing ? "" :
-                          @sprintf("in r ≤ %.3g mm: mean %.2e W/cm², peak %.2e W/cm², rms nonuniformity %.1f %%, %.1f %% of the delivered power",
+                          @sprintf("in r ≤ %.3g mm: mean %.2e W/cm², peak %.2e W/cm², rms nonuniformity %.1f%%, %.1f%% of the delivered power",
                                    s.radius, s.mean, s.peak, 100 * s.rms, 100 * s.fraction))
     modes = res === nothing ? ModeRow[] :
             [ModeRow(m.l, _pct(m.epsilon), _pct(m.legendre), "", "") for m in res.modes]
@@ -1279,10 +1279,10 @@ function _refresh_optimize!(sh::BriareusShell)
                                       r.before.capsule_clearance, r.after.capsule_clearance) : ""))
     _set!(sh, "optSpot", r === nothing ? "" :
                          r.after.spot !== nothing ?
-                         @sprintf("spot rms nonuniformity %.1f %% → %.1f %%", 100 * r.before.spot.rms,
+                         @sprintf("spot rms nonuniformity %.1f%% → %.1f%%", 100 * r.before.spot.rms,
                                   100 * r.after.spot.rms) :
                          get(r.after, :face, nothing) !== nothing ?
-                         @sprintf("face rms nonuniformity %.2f %% → %.2f %% · mean flux %.3g → %.3g W/cm²",
+                         @sprintf("face rms nonuniformity %.2f%% → %.2f%% · mean flux %.3g → %.3g W/cm²",
                                   100 * r.before.face.rms, 100 * r.after.face.rms,
                                   to_Wcm2(r.before.face.mean), to_Wcm2(r.after.face.mean)) : "")
     modes = r === nothing || isempty(r.after.modes) ? ModeRow[] :
@@ -2124,13 +2124,13 @@ function br_part_frame(index)
     end
 end
 
-# The frames a placement step of part `p` can refer to (every frame but the part's own),
+# The frames a placement step of part `p` can refer to (every frame but the part frame),
 # with "" first for none where the step allows it, and their menu labels.
 function _step_ref_options(sess, p, st)
     frames = [f for f in _move_frame_choices(sess) if f !== p.name]
     labels = _frame_label.(frames)
     st isa Roll && return [Symbol(""); frames], ["(relative: from the current roll)"; labels]
-    st isa Offset && return [Symbol(""); frames], ["(the part's own axes)"; labels]
+    st isa Offset && return [Symbol(""); frames], ["(the part axes)"; labels]
     return frames, labels
 end
 
@@ -2284,7 +2284,7 @@ function br_sweep_part()
     end
 end
 # The selected part's role in the analyses (index into `roleLabels`); a refused role
-# shows the part's own again.
+# shows the current role of the part again.
 function br_part_role(index)
     _with_shell() do sh
         idx = _selected_parts(sh)
@@ -2310,7 +2310,7 @@ function br_part_role(index)
     end
 end
 # The selected piece's role (index into `pieceRoleLabels`); a refused role shows the
-# piece's own again.
+# current role of the piece again.
 function br_piece_role(index)
     _with_shell() do sh
         name = selected_component(sh.sess)
@@ -2573,7 +2573,7 @@ function _command_beams(sh, id)
     isempty(String(id)) && return selected_beams(sh.sess)
     return sort!(unique!(reduce(vcat, (node_beams(sh.sess.beams, n) for n in _acted_nodes(sh, id)); init = Int[])))
 end
-# The selection after quads were split (`split`) or merged: a quad's own node in place
+# The selection after quads were split (`split`) or merged: the quad node in place
 # of its beam's (or its beams'); other nodes as they were.
 function _reselect_quads!(sh, ids, quads, split::Bool)
     sess = sh.sess

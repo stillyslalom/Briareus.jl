@@ -1,4 +1,4 @@
-// The Help window: a window of its own (it resizes, moves and stays open beside the
+// The Help window: a separate window (it resizes, moves and stays open beside the
 // design) with the pages of common/help.js on the left and the page's topics on the
 // right; a filter above the list shows the topics of every page that contain its words.
 // `openAt(topic)` shows the topic's page with the topic marked, as an ⓘ does when
@@ -50,7 +50,7 @@ Window {
     Shortcut { sequence: "Escape"; onActivated: help.close() }
 
     // the window's background as an item, so that an image grabbed of the content has it
-    // too (the window's own color is not part of its content item)
+    // too (the window color is not part of its content item)
     Rectangle { anchors.fill: parent; color: palette.window }
 
     SplitView {

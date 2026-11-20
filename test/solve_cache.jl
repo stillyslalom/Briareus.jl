@@ -94,7 +94,7 @@ end
     dep = deposit(DepositionOperator(t, q), q)
     ew = [e for e in 1:nelements(t) if Briareus.element_material(t, e).albedo === w]
     s = solve(m, dep; time = 1.0)
-    # the reference: the albedo model at each wall element's own incident-flux temperature
+    # the reference: the albedo model at the incident-flux temperature of each wall element
     αref = albedo.(Ref(w), 1.0, radiation_temperature.(s.H[ew]))
     @test s.converged && s.residual < 1e-4 && s.iterations < 50
     @test maximum(abs.(αref .- s.albedo[ew])) < 1e-4

@@ -320,7 +320,7 @@ The profile is cut where α reaches ln 1000 (10⁻³ of its local peak), and I�
 beam's power in every transverse plane. A surface absorbs I |n·k| of the beam axis, where
 the axis reaches it unobstructed.
 
-The forms of a, b, n, f and ΔL are those of VisRad's own parameters, which it exports
+The forms of a, b, n, f and ΔL are those of the VisRad parameters, which it exports
 with the beam–target intersection points. These were exported at 299 beam hits
 (|z| ≤ 15 mm), and the forms reproduce them to 5 × 10⁻⁵ in a and b, 1.4 × 10⁻⁴ in n,
 5 × 10⁻⁴ in f, and 1.3 × 10⁻³ in ΔL. Only M and the cut were fitted, to VisRad's
@@ -533,7 +533,7 @@ end
 # exp(−α) over the quarter plane in scaled polar coordinates (u = a(z) r cos θ,
 # v = b(z) r sin θ), out to the cut-off radius along each θ (α grows with r), by
 # composite Gauss–Legendre rules in θ and r; a taper's share is subtracted, integrated
-# on its own band. Built once per (a, b, n, F, env, taper) and cached; frames are built
+# on the taper band. Built once per (a, b, n, F, env, taper) and cached; frames are built
 # per beam and work unit, so reads take no lock and allocate nothing: a miss copies the
 # cache, adds the entry and swaps it in under the lock.
 const _VR_NTAB_H = 0.1

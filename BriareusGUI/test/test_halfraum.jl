@@ -22,7 +22,7 @@ using LinearAlgebra: norm
     # an open end has no cap to hold the wall role, and the enclosure is not closed
     @test wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top]
     @test !closed_design(ts)
-    # the bottom entrance hole of its own radius (0: the LEH radius)
+    # the bottom entrance hole of a separate radius (0: the LEH radius)
     @test edit_part!(ts, i, :bottom_end, "1") && edit_part!(ts, i, :bottom_leh_radius, "1.0")
     t = ts.target[]
     @test sum(t.elem_area[elements(t, :hohlraum_leh_bottom)]) ≈ π rtol = 1e-12
@@ -46,7 +46,7 @@ end
     zs(n) = extrema(v[3] for c in t.components if c.name === n for v in c.mesh.vertices)
     @test all(isapprox.(zs(:package_top), 1.0; atol = 1e-12)) && zs(:halfraum_top_wall)[1] ≈ 1.0
     @test all(isapprox.(zs(:package_bottom), -1.0; atol = 1e-12)) && zs(:halfraum_bottom_wall)[2] ≈ -1.0
-    # and meet the walls' end rings vertex for vertex, at the coarse and standard element
+    # and meet the walls' end rings at shared vertices, at the coarse and standard element
     # sizes (no gap at the seam: the disks take the wall's azimuthal count)
     function ring(t, n, z)
         vs = [v for c in t.components if c.name === n for v in c.mesh.vertices
@@ -170,15 +170,15 @@ end
     V = Briareus.Vec3
     top, bot = Symbol("hohlraum.leh_top"), Symbol("hohlraum.leh_bottom")
     upper(bs) = [b.port[3] > 0 for b in bs]
-    # the default design: the quads in its entrance holes' frames, their chamber aims the
-    # example cone pointing's own, bit for bit (`isequal` tells -0.0 from 0.0)
+    # the default design: the quads in its entrance holes' frames, their chamber aims
+    # bitwise those of the example cone pointing (`isequal` tells -0.0 from 0.0)
     cone = Controllers._cone_pointing(nif_quads(power = 8.0), Controllers.NIF_CONE_POINTING)
     s = DesignSession(resolution = :coarse)
     bt = s.beams
     up = upper(bt.beams[])
     @test all(isequal(a.aim, b.aim) for (a, b) in zip(bt.beams[], cone)) && bt.beams[] == cone
     @test bt.aim_frame[] == [u ? top : bot for u in up] && all(bt.enabled[])
-    # the drive equals the drive of the same beams held at TCC (the former preset), bit for bit
+    # the drive equals the drive of the same beams held at TCC (the former preset), bitwise
     s0 = DesignSession(resolution = :coarse, beams = cone)
     @test all(==(:tcc), s0.beams.aim_frame[])
     build_scenario!(s)
@@ -270,7 +270,7 @@ end
 
 @testset "per-cavity wall temperature (no GL)" begin
     # the default design, one cavity: its drive and drive history equal those computed
-    # without cavities (the path before them), bit for bit, and the cavity's wall
+    # without cavities (the path before them), bitwise, and the cavity's wall
     # temperature is the history's wall temperature
     sess = DesignSession(resolution = :coarse)
     ts = sess.target
@@ -302,7 +302,7 @@ end
     @test !any(q -> endswith(q.label, "wall Tr"), time_chart(sess, :drive).left.series)
 
     # the shock tube, two cavities, half the lower beams off: each halfraum's wall temperature
-    # against Σ H A / Σ A of its own wall pieces' elements (found by component name here)
+    # against Σ H A / Σ A of the elements of its wall pieces (found by component name here)
     st = DesignSession(starter = :shock_tube, resolution = :coarse)
     ts = st.target
     walls = [:halfraum_top => [:halfraum_top_wall, :halfraum_top_cap_top],
@@ -354,7 +354,7 @@ end
 
 @testset "per-cavity balancing (no GL)" begin
     # the shock tube: each halfraum and the package face closing its open end form a
-    # cavity (the package's outer face in neither), each balanced on its own
+    # cavity (the package's outer face in neither), each balanced separately
     st = DesignSession(starter = :shock_tube, resolution = :coarse)
     ts = st.target
     t = ts.target[]
@@ -366,7 +366,7 @@ end
           sort(cs[2].elements) == named("halfraum_bottom_", "package_bottom")
     side = elements(t, :package)
     @test !isempty(side) && !any(e -> e in cs[1].elements || e in cs[2].elements, side)
-    @test all(c -> c.leak < 1e-5, cs)        # the holes meet the caps vertex for vertex (7.5e-3, 7.8e-3 at half the count)
+    @test all(c -> c.leak < 1e-5, cs)        # the holes meet the caps at shared vertices (7.5e-3, 7.8e-3 at half the count)
     build_scenario!(st)
     @test occursin("balanced per cavity: halfraum_top, halfraum_bottom", st.drive.status[])
     s = st.drive.scenario[]
@@ -376,7 +376,7 @@ end
     @test all(c -> maximum(abs.(rows(F0, c.elements) .- 1)) > 1e-5, cs)
     @test all(c -> maximum(abs.(rows(F, c.elements) .- 1)) < 1e-10, cs)
     # energy, exactly per cavity: a source in the upper halfraum's wall alone; its power
-    # equals what its own elements absorb and its hole lets out, Σ (1 − α) H A over them,
+    # equals what its elements absorb and its hole lets out, Σ (1 − α) H A over them,
     # and the lower cavity receives nothing
     P = zeros(nelements(t))
     P[elements(t, :halfraum_top_wall)] .= 1.0
@@ -437,7 +437,7 @@ end
 
     # Drive ▸ Cavity on a hohlraum with a black plate beyond its upper entrance hole: the
     # enclosure around TCC reaches the plate through the hole; the hohlraum is balanced
-    # on its own and the plate keeps its raw rows (balancing the enclosure as one forced
+    # separately and the plate keeps its raw rows (balancing the enclosure as one forced
     # them to one)
     @test add_part!(sess.target, :disk; name = :plate, z = 6.5, r1 = 2.0, inward = true)
     set_cavity!(sess.drive, true; point = (0, 0, 0))
@@ -461,7 +461,7 @@ end
     @test [piece_role(p, s) for s in hohlraum_pieces(p)] == [:wall, :wall, :wall, :none, :none]
     @test piece_roles(ts, cap).roles == PIECE_ROLES && piece_roles(ts, :hohlraum_wall).roles == (:none, :wall)
     @test piece_roles(ts, :hohlraum_leh_top).roles == (:none,) && piece_roles(ts, :capsule) === nothing
-    # refused: an aperture, a curved piece observed, a part's own component
+    # refused: an aperture, a curved piece observed, the component of a part
     @test !set_piece_role!(ts, :hohlraum_leh_top, :wall) && occursin("aperture", ts.error[])
     @test !set_piece_role!(ts, :hohlraum_wall, :observed) && occursin("curved", ts.error[])
     @test !set_piece_role!(ts, :capsule, :wall)
@@ -498,7 +498,7 @@ end
     @test Controllers._retune_kind(s, nothing, :auto) === :face
     @test_throws ArgumentError Controllers._make_objective(Controllers._objective_settings(sess.optimize; observed = cap),
                                                            s, nothing, 0.5)
-    # the drive history: the face's Tr per step, the cavity's from its own walls, and the
+    # the drive history: the face's Tr per step, the cavity's from its walls, and the
     # energy kept apart for the cap, against core histories on the same scenario
     use_pulse_shape!(sess; step = 1.0)
     start_history!(sess)
@@ -576,7 +576,7 @@ end
     ev0 = evaluate(sub, sess.beams.beams[][r.indices])
     @test r.initial_value ≈ 1 + 10 * (clipped_fraction(ev0)^2 + missed_fraction(ev0)^2 +
                                       power_fraction(ev0, :sample)^2) rtol = 1e-12
-    # and the shape counts at weight 1 (measured 7.3e-5 → 3.0e-7, missed light 12.1 % → 4.5 %)
+    # and the shape counts at weight 1 (measured 7.3e-5 → 3.0e-7, missed light 12.1% → 4.5%)
     @test r.after.face.rms < 0.05 * r.before.face.rms
     @test missed_fraction(evaluate(sub, r.beams)) < missed_fraction(ev0)
     # the setting round trips in a session; an older one loads with the default weight

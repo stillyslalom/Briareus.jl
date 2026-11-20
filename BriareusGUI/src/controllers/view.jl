@@ -843,7 +843,7 @@ end
     node_components(sess, id) -> Vector{Symbol}
 
 The components a model-tree node stands for when it is shown, hidden or given a display
-mode: a component's or window's own name, a part's components (a hohlraum part's
+mode: the name of a component or window, a part's components (a hohlraum part's
 pieces), an assembly's every component of its subtree ([`assembly_parts`](@ref)); in the
 calculations or left out, entrance holes' lips not listed (they follow their holes).
 Empty for other nodes.

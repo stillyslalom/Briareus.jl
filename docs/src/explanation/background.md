@@ -35,7 +35,7 @@ cones in each hemisphere, at polar angles of 23.5° and 30° (the *inner* cones)
 inner-cone beams cross the hohlraum at a shallower angle and strike it near the waist.
 The share of the laser power carried by the inner cones, the **cone fraction**, is the
 main control of the pole-to-waist balance of the drive. The HYBRID-E designs run a
-peak cone fraction near 33 % (research notes, "Wavelength detuning (NIF)").
+peak cone fraction near 33% (research notes, "Wavelength detuning (NIF)").
 
 **In Briareus.** A [`Target`](@ref) is a list of [`Component`](@ref)s: meshed surfaces
 with a [`Material`](@ref) (albedo and conversion efficiency) and, for curved walls, the
@@ -147,7 +147,7 @@ The factor ``1/[1 - \alpha(1 - f)]`` is the cavity's multiplier: about 9 at
 ``\alpha = 0.95`` and ``f = 6\,\%``. It also multiplies any radiation a discretization
 loses or creates, so a closure error of 10⁻³ per row matters at high albedo. At
 ``\alpha = 0.925``, a 5 × 10⁻⁴ shift of the wall's mean row sum moves the capsule drive
-of a NIF hohlraum by 0.3 % and its P2 by about 0.05 % ([`RadiationModel`](@ref)).
+of a NIF hohlraum by 0.3% and its P2 by about 0.05% ([`RadiationModel`](@ref)).
 
 The flux on the capsule is linear in the laser deposition, as long as the albedos are
 fixed: ``H_{\text{capsule}} = R\,P`` for a response matrix ``R`` that depends on the
@@ -172,7 +172,7 @@ reference page is [Radiation](@ref).
 
 A capsule converges to a small fraction of its initial radius, and a small variation
 of the drive around it grows into a large distortion of the compressed fuel. The
-tolerance is of order 1 % in the time-integrated flux for the lowest modes (Lindl 1995;
+tolerance is of order 1% in the time-integrated flux for the lowest modes (Lindl 1995;
 Lindl et al. 2004). Variations of the flux over the capsule are measured by its
 expansion about the capsule center. For a hohlraum with azimuthal symmetry, a Legendre
 expansion in the polar angle ``\theta`` from the hohlraum axis suffices,
@@ -210,7 +210,7 @@ On NIF, about 2.7 µm of hot-spot P2 follows from each percent of cone fraction
 
 **In Briareus.** [`legendre_moments`](@ref) and [`ylm_moments`](@ref) integrate the
 harmonics over each facet's exact solid angle as seen from the capsule center (a
-centroid rule leaks P0 into P2 at the 0.5 % level); [`mode_amplitude`](@ref) gives the
+centroid rule leaks P0 into P2 at the 0.5% level); [`mode_amplitude`](@ref) gives the
 rotation-invariant size of each degree, and [`flux_moments`](@ref) the moments of a
 scenario's capsule flux. [`symmetry_objective`](@ref) and [`optimize_pointing`](@ref)
 null chosen modes at a held drive, and [`hotspot_velocity`](@ref) converts mode 1 to a
@@ -224,7 +224,7 @@ implosion metrics](@ref); the reference pages are [Mode analysis](@ref),
 The laser pulse of a NIF hohlraum shot lasts several nanoseconds (5.5–14.1 ns over the
 39 shots of Callahan et al. 2018). A low-power picket launches the
 first shock, a trough holds the drive, and a rise to peak power sets the final
-implosion velocity. Each cone has its own pulse, so the cone fraction varies through
+implosion velocity. Each cone has a separate pulse, so the cone fraction varies through
 the shot. Light crosses a hohlraum in tens of picoseconds, so the radiation field
 follows the drive at each instant; the slow parts of the problem are the wall's stored
 energy and the hohlraum's plasma.
@@ -254,8 +254,8 @@ The hohlraum changes during the pulse in ways that move the drive symmetry:
   power out of the LEH before it reaches the wall (Kruer 1988).
 
 **What Briareus models, and what it does not.** The drive is quasi-static: at each time
-the radiosity is solved for that time's deposition, wall albedos and geometry. Each wall
-element's loss follows its own temperature history. Wall motion, LEH closure, the bubble,
+the radiosity is solved for that time's deposition, wall albedos and geometry. The loss
+of each wall element follows its temperature history. Wall motion, LEH closure, the bubble,
 CBET and backscatter are reduced models, calibrated to published simulations and
 measurements that the research notes record. Briareus solves no hydrodynamics, traces
 no refraction, and stores no energy in the hohlraum plasma; after the laser turns off
@@ -269,7 +269,7 @@ code.
 and [`drive_history`](@ref) runs the quasi-static history. [`WallMotion`](@ref),
 [`LipClosure`](@ref) and [`GapClosure`](@ref), [`BubbleAbsorption`](@ref),
 [`CBET`](@ref) and [`TwoZoneCBET`](@ref), and [`Backscatter`](@ref) are the reduced
-models; `Beam.dlambda` is the detuning at the beam's own (3ω) wavelength.
+models; `Beam.dlambda` is the detuning at the (3ω) wavelength of the beam.
 [`dante1`](@ref) reads the drive as the Dante instrument does. The tutorial
 [Retuning a drive to a reference shot](@ref) runs a history; the reference pages are
 [Radiation](@ref) and [Laser–plasma models](@ref), and `examples/n221204.jl` is the
