@@ -885,11 +885,26 @@ struct Evaluation{T,B,E}
     deposition::Deposition{T}
     _flux::Base.RefValue{Union{Nothing,Vector{T}}}   # observed flux, once computed
     _split::Union{Nothing,_GroupSplit{T}}            # the scenario's group sets' powers
+    _moments::Base.RefValue{Union{Nothing,Vector{T}}}  # cached Legendre moments, once computed
+    _ylm::Base.RefValue{Union{Nothing,Vector{T}}}      # cached Y_lm coefficients, once computed
 end
 
 Evaluation(s::Scenario, beams::Vector, effective::Vector, d::Deposition{T},
-           flux::Base.RefValue{Union{Nothing,Vector{T}}}) where {T} =
-    Evaluation(s, beams, effective, d, flux, nothing)
+           flux::Base.RefValue{Union{Nothing,Vector{T}}}, split = nothing) where {T} =
+    Evaluation(s, beams, effective, d, flux, split, Ref{Union{Nothing,Vector{T}}}(nothing),
+               Ref{Union{Nothing,Vector{T}}}(nothing))
+
+# The scenario's cached moment (`moment_response`) or Y_lm (`ylm_response`) products with
+# the deposition, each computed once per evaluation: a gate, a drive floor and a ceiling
+# and the objective on one phase read them alike.
+function _cached_product(c::Base.RefValue{Union{Nothing,Vector{T}}}, R::Matrix{Float64},
+                         P::Vector{T}) where {T}
+    v = c[]
+    v === nothing || return v
+    w = _mul(R, P)
+    c[] = w
+    return w
+end
 
 Base.getproperty(ev::Evaluation, name::Symbol) =
     name === :flux ? _flux(ev) : getfield(ev, name)
@@ -978,7 +993,7 @@ function flux_moments(ev::Evaluation; lmax::Integer = 8, axis = Vec3(0, 0, 1),
     _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
     if lmax <= _CACHED_LMAX && Vec3(axis...) == Vec3(0, 0, 1) &&
        (center === nothing || Vec3(center...) == mode_center(s.target, s.observed))
-        return _mul(s.moment_response, ev.deposition.element)[1:lmax+1]
+        return _cached_product(getfield(ev, :_moments), s.moment_response, ev.deposition.element)[1:lmax+1]
     end
     return legendre_moments(_full(ev), s.target, s.observed; lmax, axis, center)
 end
@@ -1097,7 +1112,7 @@ Real spherical-harmonic coefficients of the observed incident flux in the flat
 function flux_ylm(ev::Evaluation; lmax::Integer = _CACHED_YLM_LMAX)
     _radiative(ev.scenario) || throw(ArgumentError("scenario has no radiation response"))
     lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
-    return _mul(ev.scenario.ylm_response, ev.deposition.element)[1:(lmax+1)^2]
+    return _cached_product(getfield(ev, :_ylm), ev.scenario.ylm_response, ev.deposition.element)[1:(lmax+1)^2]
 end
 
 """

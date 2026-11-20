@@ -13,6 +13,15 @@ using Briareus, Test
     s = Scenario(t, p; observe = :capsule)
     moments(sc, x) = flux_moments(evaluate(sc, x))
 
+    # an evaluation computes its moments and Y_lm coefficients once: every read is the
+    # scenario's response product with the deposition, a copy of the stored one
+    ev = evaluate(s, x0)
+    E = ev.deposition.element
+    m1, y1 = flux_moments(ev; lmax = 4), flux_ylm(ev; lmax = 3)
+    @test m1 == (s.moment_response*E)[1:5] && y1 == (s.ylm_response*E)[1:16]
+    m1[1] = y1[1] = 0.0
+    @test mean_flux(ev) == (s.moment_response*E)[1] && flux_ylm(ev) == s.ylm_response * E
+
     # the laser–plasma model: nothing rebuilt
     lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))
     sl = remake(s; lpi)

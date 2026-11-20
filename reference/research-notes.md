@@ -14262,26 +14262,28 @@ Case B, per evaluation (ms):
 
 | step, threads | 10-22 | 0.1.0 | 0.2.0 | 0.2.1 | faa37b8 | 0.3.0 | fixed |
 |---|---|---|---|---|---|---|---|
-| `evaluate`, 1 | 4.0 | 22.3 | 22.3 | 22.2 | 22.1 | 22.3 | 3.1 |
-| gradient (serial chunks), 1 | 53 | 223 | 229 | 230 | 235 | 264 | 69 |
-| optimizer, per evaluation, 1 | 54 | 234 | 244 | 240 | 237 | 273 | 71 |
-| optimizer, per evaluation, 8 | 17.7 | 31.7, 36.0 | 34.5, 42.3 | 34.8, 39.8 | 53.5, 39.9 | 50.6, 47.6 | 14.0, 12.0 |
+| `evaluate`, 1 | 4.0 | 22.3 | 22.3 | 22.2 | 22.1 | 22.3 | 3.2 |
+| gradient (serial chunks), 1 | 53 | 223 | 229 | 230 | 235 | 264 | 54 |
+| optimizer, per evaluation, 1 | 54 | 234 | 244 | 240 | 237 | 273 | 56 |
+| optimizer, per evaluation, 8 | 17.7 | 31.7, 36.0 | 34.5, 42.3 | 34.8, 39.8 | 53.5, 39.9 | 50.6, 47.6 | 9.0, 9.2 |
 | keep-out gradient (92 parameters), 1 | 2.8 | 2.9 | 11.8 | 11.6 | 11.9 | 30.3 | 17.4 |
-| gradient's allocations (MB) | 17.3 | 17.2 | 18.4 | 18.4 | 18.4 | 45.9 | 31.1 |
+| gradient's allocations (MB) | 17.3 | 17.2 | 18.4 | 18.4 | 18.4 | 45.9 | 19.3 |
 
 At 8 threads a short run's time per evaluation varies by about 20 % between runs: the
 row gives a single run and the best of three where both were taken. Since fix 5 below
 (2026-11-20) the keep-out's gradient in case B is 1.8 ms on one thread (v0.1.0: 3.4,
 "fixed" above: 18.2, rerun beside it) and its allocations 1.3 MB.
 
-The "fixed" column's first four rows are fixes 1–4, 6 and 8 below (fix 7 does not
-enter case B; with fixes 1–4 alone: 12.3, 162, 168, and 24.6 and 25.6 ms at 8
-threads; with fixes 1–4 and 6: 5.9, 112, 117, and 18.7 and 18.5 ms), measured
-before fix 5.
+The "fixed" column is fixes 1–9 below, measured together on 2026-11-20 (fix 7 does
+not enter case B), except the keep-out's row, fixes 1–4 (fix 5's number is in the
+sentence above). The first four rows with fixes 1–4 alone: 12.3, 162, 168, and 24.6
+and 25.6 ms at 8 threads; with fixes 1–4 and 6: 5.9, 112, 117, and 18.7 and 18.5 ms;
+with fixes 1–4, 6 and 8 (before fix 5): 3.1, 69, 71, and 14.0 and 12.0 ms.
 
 Case A, per evaluation (ms): `evaluate` 9.0–9.4 on one thread in every version; the
 serial-chunk gradient 152, 149, 157, 158, 162, 181 and 165 (fixed); the optimizer per
-evaluation on one thread 163, 163, 171, 172, 173, 194 and 178; the keep-out's gradient
+evaluation on one thread 163, 163, 171, 172, 173, 194 and 178 (fixes 1–9: 151 and
+160, at 8 threads 22–23 ms); the keep-out's gradient
 2.7, 2.7, 10.0, 9.7, 9.7, 28.2 and 14.1 (1.5 since fix 5). Building the operator takes 2.1–2.4 s and the
 radiation model 5.7 s (10-22), 7.2 s (0.1.0) and 7.7–8.1 s since (one thread; build
 time, not per evaluation; the step at 0.1.0 not bisected: the near-field view-factor
@@ -14406,24 +14408,37 @@ quadrature changed in those days).
    Building VisRad's frames once per beam instead of per work unit showed no difference
    beyond the machine's noise (about 10 %) and allocated 8 % more per gradient: not
    landed.
+9. An evaluation computes its moment and Y_lm products once (2026-11-20): `flux_moments`
+   (on the cached degrees, axis and center), `mean_flux` through it, and `flux_ylm`
+   read the scenario's response product with the deposition from the evaluation after
+   the first read, instead of each forming it again (a dual matrix product, about
+   0.4 ms per read per dual pass on the multi-phase study, where a phase's gate, drive
+   floor, drive ceiling and the objective read the same products: 16 products a pass
+   before, at most two a phase after). Bit for bit (the same product, read as a copy).
+   On the study the optimizer's augmented-Lagrangian gradient allocates 2.14 GB instead
+   of 2.34 GB; its time at 8 threads moved within the machine's noise that session (1.17
+   to 1.69 s before, 1.51 to 1.62 s after, alternating, another job on the second slot).
 
-Together, on case B the optimizer's evaluation costs 0.26 of 0.3.0's on one thread (71
-against 273 ms) and 0.24–0.29 at 8 threads (12.0–14.0 against 47.6–50.6 ms), 0.3–0.4
-of v0.1.0's, and 1.3 times the 2026-10-22 tree's on one thread (0.7–0.8 at 8 threads);
-fixes 1–4 alone (0.52–0.62 of 0.3.0's) left every result bit for bit 0.3.0's, and
-fixes 6–8 change depositions at the rounding level only. The keep-out's gradient, 6
-times v0.1.0's after fixes 1–4 (the refined rim and the window), is 0.53 of it after
-fix 5. On a multi-phase study's
-evaluation (scratch runs: six phases, 552 parameters, 17 constraints, 8 threads) the
-augmented Lagrangian's gradient fell from 7.9 to 3.6 s (0.45) with fixes 1–4, and the
-constraints from 0.98 to 0.40 of the objective's gradient: before the fixes the
-keep-out over the six phases and the three picket ceilings' depositions each cost about
-a quarter of the gradient. Fix 6 then takes the objective's gradient from 2.83 to
-1.62 s and the augmented Lagrangian's from 3.80 to 2.44 s (the two measured in one
-session; another run may have shared the machine, whose second lock slot is open to
-other jobs), fix 7 the latter to 1.87 s and fix 8 the two to 0.88 and 1.32 s. The
-gradient's chunks
-run threaded on the phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
+Together, on case B the optimizer's evaluation costs 0.21 of 0.3.0's on one thread (56
+against 273 ms) and 0.18–0.19 at 8 threads (9.0–9.2 against 47.6–50.6 ms), 0.24–0.29
+of v0.1.0's, and about the 2026-10-22 tree's on one thread (1.04; 0.5 at 8 threads), all
+nine fixes measured together on 2026-11-20 (case A: 160 ms on one thread, 22–23 ms at 8).
+Fixes 1–4 alone (0.52–0.62 of 0.3.0's) left every result bit for bit 0.3.0's; fixes
+6–8 change depositions at the rounding level only, and fix 9 nothing. The keep-out's
+gradient, 6 times v0.1.0's after fixes 1–4 (the refined rim and the window), is 0.53 of
+it after fix 5. On a multi-phase study's evaluation (scratch runs: six phases, 552
+parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient fell from
+7.9 to 3.6 s (0.45) with fixes 1–4, and the constraints from 0.98 to 0.40 of the
+objective's gradient: before the fixes the keep-out over the six phases and the three
+picket ceilings' depositions each cost about a quarter of the gradient. Fix 6 then
+takes the objective's gradient from 2.83 to 1.62 s and the augmented Lagrangian's from
+3.80 to 2.44 s (the two measured in one session; another run may have shared the
+machine, whose second lock slot is open to other jobs), fix 7 the latter to 1.87 s and
+fix 8 the two to 0.88 and 1.32 s; with all nine, on one thread, 7.1 and 7.7 s. The six
+phases' depositions are now more than half of a dual pass (56 % before fix 9), and they
+deposit on two meshes (three phases each, the same operator points): the law is
+evaluated six times where two would do. The gradient's chunks run threaded on the
+phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
 at 16, fast and slow cores).
 
 **By design, not changed.** Phase 1 (on by default in constrained runs since 2026-11-19)

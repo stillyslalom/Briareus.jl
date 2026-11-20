@@ -384,15 +384,16 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       deposition at a 1.2e-13 relative change of Float64 VisRad depositions (an
       evaluation at 0.37–0.43 of 0.3.0's); the picket ceilings at the beams' own powers
       read from the evaluation's own deposition inside a constrained run (the group sets
-      they read kept in the same pass); and VisRad's screens tightened (a bound on the
+      they read kept in the same pass); VisRad's screens tightened (a bound on the
       law's weighted sum, runs of points by bounding ball, no value screen on duals) with
       a dual beam's coordinates sharing their partials: a VisRad deposition at 0.5 of the
-      inlined screen's, a study-sized evaluation at 0.24–0.29 of 0.3.0's. *Left:* the
+      inlined screen's; and an evaluation's moment and Y_lm products formed once: a
+      study-sized evaluation at 0.18–0.21 of 0.3.0's with every fix. *Left:* the
       same coordinate reuse on the f-cone model (−12 % per dual deposition, measured; it
       moves the dropped-bundle tutorial's long constrained runs, whose quoted numbers
       then need re-deriving); phases on one mesh evaluating the law once (a multi-phase
-      study's six phases share two operators' points; the depositions are 56 % of a dual
-      pass); the keep-out's rim search on values, repeated in every chunk of a gradient
+      study's six phases share two operators' points; the depositions are more than half
+      of a dual pass); the keep-out's rim search on values, repeated in every chunk of a gradient
       (now its whole cost: 1.8 ms for 46 quads on one thread; a cache across chunks would
       cut that to about a fifth, at the price of state in the keep-out); the
       envelope-radius test behind fix 1 (about 3 ms a dual pass on 184 beams over five
