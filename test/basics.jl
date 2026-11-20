@@ -290,7 +290,7 @@ end
     # a fixed order, so it matches a serial beam-by-beam sum bit for bit whatever the
     # thread count, also when cut into many small units; a beam subset gets its own plan
     opc = DepositionOperator(tc, qc)
-    small = Briareus._deposit_plan(nelements(tc), opc.dest; unit = 64)
+    small = Briareus._deposit_plan(nelements(tc), opc.dest, opc.pts; unit = 64)
     @test size(small.boff, 1) > 10 && length(small.back) > length(qc)
     fine = DepositionOperator(tc, opc.ports, opc.dirs, opc.pts, opc.w, opc.normal, opc.mask,
                               opc.dest, small)
@@ -431,11 +431,11 @@ end
     @test ForwardDiff.derivative(gd, 0.37) ≈ (gd(0.37 + 1e-5) - gd(0.37 - 1e-5)) / 2e-5 rtol = 1e-4
     @test op[[1]].profile === prof && op[[1]].envelope == [ρd]
     @test Scenario(tf, [b]; deposition_kw = (; profile = prof)).deposition.profile === prof
-    # the deposition's bound without powers (`_vr_far`) passes only points where the law
-    # is cut off, and over half of those on a grid out to 3 mm across and 10 mm along the
-    # beam (on the order 4.5 spot 94 %): beams of order 4.5, 2 and 1.5 (its Gaussian
-    # term's bound q ≥ (ln 1000)^(2/n) above 1), one with a halo, one with its b axis the
-    # major one, the hard cut and a taper
+    # the deposition's bound without logarithms or exponentials (`_vr_far`) passes only
+    # points where the law is cut off, and over 80 % of those on a grid out to 3 mm across
+    # and 10 mm along the beam (0.97 on the order 4.5 spot, 0.85 on order 1.5): beams of
+    # order 4.5, 2 and 1.5 (its Gaussian term's bound q ≥ (ln 1000)^(2/n) above 1), one
+    # with a halo, one with its b axis the major one, the hard cut and a taper
     xs = [at(s, u, v) for s in (-10.0, -2.0, 0.0, 0.5, 5.0, 8.0), u in -3:0.05:3, v in -3:0.05:3]
     spots = (spot, SuperGaussianSpot(a0, b0; order = 2.0), SuperGaussianSpot(b0, a0; order = 1.5, angle = 0.4),
              SuperGaussianSpot(a0, b0; order = n, halo = 0.2, halo_scale = 2.0))
@@ -443,9 +443,37 @@ end
         fx = Briareus._VRFrame(Briareus.BeamFrame(bx), Briareus._vr_envelope(pr, bx), pr.taper)
         far = [Briareus._vr_far(fx, x) for x in xs]
         return all(i -> !far[i] || (Briareus._vr_beyond(fx, xs[i]) && intensity(pr, bx, xs[i]) == 0), eachindex(xs)) &&
-               count(far) > count(x -> Briareus._vr_beyond(fx, x), xs) ÷ 2
+               count(far) > 0.8 * count(x -> Briareus._vr_beyond(fx, x), xs)
     end
     @test all(((sp, pr),) -> sound(remake(b; spot = sp), pr), [(sp, pr) for sp in spots for pr in (prof, VisRadProfile(; taper = 1.0))])
+    # over a ball (`_vr_far_ball`, which skips a run of the operator's points): only where
+    # its center and 26 points on its surface (along the axes, their diagonals and the
+    # corners' directions) are cut off, balls of radius 0.05 and 0.3 mm on every third
+    # point of the grid (of which it passes 29–81 %); the operator's balls hold their
+    # points
+    dirs26 = [normalize(Vec3(i, j, l)) for i in -1:1, j in -1:1, l in -1:1 if (i, j, l) != (0, 0, 0)]
+    function ball_sound(bx, pr, R)
+        fx = Briareus._VRFrame(Briareus.BeamFrame(bx), Briareus._vr_envelope(pr, bx), pr.taper)
+        on(c, d) = c + R * d
+        cs = filter(c -> Briareus._vr_far_ball(fx, (c[1], c[2], c[3], R)), xs[1:3:end])
+        return length(cs) > length(xs) ÷ 12 &&
+               all(c -> all(p -> Briareus._vr_beyond(fx, p) && intensity(pr, bx, p) == 0, vcat([c], [on(c, d) for d in dirs26])), cs)
+    end
+    @test all(((sp, pr, R),) -> ball_sound(remake(b; spot = sp), pr, R),
+              [(sp, pr, R) for sp in spots for pr in (prof, VisRadProfile(; taper = 1.0)) for R in (0.05, 0.3)])
+    opb = DepositionOperator(tf, [b]; profile = prof)
+    @test all(t -> all(q -> norm(opb.pts[1][q] - Vec3(opb.plan.tiles[1][t][1:3]...)) <= opb.plan.tiles[1][t][4],
+                       Briareus._TILE*(t-1)+1:min(Briareus._TILE * t, length(opb.pts[1]))), eachindex(opb.plan.tiles[1]))
+    # a dual beam's coordinates from its values' (the partials every point shares) are its
+    # frame's own, values and partials (bit for bit on this machine; to 1e-14 of the
+    # coordinates' scale here)
+    bd = remake(b; aim = Tuple(ForwardDiff.Dual{:c}(b.aim[i], ntuple(j -> Float64(i == j), 3)) for i in 1:3),
+                defocus = ForwardDiff.Dual{:c}(0.3, (0.1, 0.2, 0.3)))
+    fd = Briareus._VRFrame(Briareus.BeamFrame(bd), ρd, 0.0)
+    fv = Briareus._VRFrame(Briareus.BeamFrame(Briareus._value_beam(bd)), ρd, 0.0)
+    vp(c) = reduce(vcat, [[ForwardDiff.value(y); collect(ForwardDiff.partials(y))] for y in c])
+    @test all(x -> isapprox(vp(Briareus._vr_coords(fd, x, Briareus._vr_coords(fv, x))), vp(Briareus._vr_coords(fd, x));
+                            atol = 1e-13), xs[1:7:end])
     @test_throws ArgumentError VisRadProfile(; envelope = 0)
     @test_throws ArgumentError VisRadProfile(; envelope = Dict("b" => -1.0))
     # the same spot with its axes swapped (a < b, turned 90°) is the same beam

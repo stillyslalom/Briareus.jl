@@ -420,6 +420,8 @@ struct _VRComponent{T}
     h::Float64
     taper::Float64            # width in α of the taper below the cut (0: the hard cut)
     qfar::Float64             # `_vr_far`'s bound on the Gaussian term's q
+    gk::Int                   # n₀/2 ≥ gk + gj/4: `_vr_far`'s power of q in its bound
+    gj::Int
 end
 
 function _VRComponent(c::_SGComponent, F, env, taper, active::Bool)
@@ -433,7 +435,14 @@ function _VRComponent(c::_SGComponent, F, env, taper, active::Bool)
                              Float64(taper)) : _VR_NONE
     return _VRComponent(c.a2, c.b2, 1 / (2F^2), c.halfn, 1 / za, za * zb, dl0, dls,
                         c.power_norm * _sg_norm(n), ntab, _VR_NTAB_H, Float64(taper),
-                        max(1.0, _VR_FAR_CUT^(1 / c.halfn)))
+                        max(1.0, _VR_FAR_CUT^(1 / c.halfn)), _vr_far_powers(c.halfn)...)
+end
+
+# The integer and quarter parts (k, j) of a Gaussian exponent n₀/2 ≥ k + j/4, for
+# `_vr_far`'s bound q^(n₀/2) ≥ q^k (q^(1/4))^j at q ≥ 1.
+function _vr_far_powers(hn)
+    k = floor(Int, hn)
+    return k, floor(Int, 4 * (hn - k))
 end
 
 const _VR_NONE = Float64[]           # no table (an inactive halo; shared, never mutated)
@@ -481,18 +490,42 @@ end
 
 @inline _vr_outside(c::_VRComponent, u, v, s) = _vr_alpha(c, u, v, s)[1] > _VR_CUT * (1 + 1e-9)
 
-# Whether (u, v, s) lies beyond the cut-off by a bound that takes no powers: α = f sq +
-# (1 − f) gauss with 0 ≤ f < 1 is at least the smaller of the two terms; sq ≥ (m/ΔL)^M
-# with m = max(|u|, |v|) and M ≥ M₀ = 10, so m ≥ ΔL c^(1/10) gives sq ≥ c; gauss = q^hn
-# with hn ≥ n₀/2, so q ≥ max(1, c^(2/n₀)) gives gauss ≥ c; c = ln 1000 (1 + 1e-6), far
-# above the screens' allowance of 1e-9 and the rounding of α. A point it passes lies
-# beyond `_vr_outside`'s cut (and `_vr_eval` would give an exact zero there).
+# Whether (u, v, s) lies beyond the cut-off by a bound that takes no logarithm or
+# exponential: α = f sq + (1 − f) gauss with 0 ≤ f < 1; sq ≥ r^M with r = max(|u|, |v|)/ΔL
+# and M ≥ M₀ = 10, so sq ≥ r^10 for r ≥ 1; gauss = q^hn with hn ≥ n₀/2 ≥ k + j/4, so
+# gauss ≥ q^k (q^(1/4))^j for q ≥ 1. First the smaller of the two terms (both at least c:
+# r ≥ c^(1/10) and q ≥ max(1, c^(2/n₀))), then their weighted sum with f = z/√(z² + z_A z_B),
+# against c = ln 1000 (1 + 1e-6), far above the screens' allowance of 1e-9 and the
+# rounding of α. A point it passes lies beyond `_vr_outside`'s cut (and `_vr_eval` would
+# give an exact zero there).
 const _VR_FAR_CUT = _VR_CUT * (1 + 1e-6)
 const _VR_FAR_T = _VR_FAR_CUT^(1 / _VR_M0)
-@inline function _vr_far(c::_VRComponent, u, v, s)
-    z = abs(s)
-    max(abs(u), abs(v)) >= _VR_FAR_T * (c.dl0 + c.dls * z) || return false
-    return u^2 / (c.a2 + z^2 * c.g2) + v^2 / (c.b2 + z^2 * c.g2) >= c.qfar
+@inline _vr_far(c::_VRComponent, u, v, s) = (z = abs(s); _vr_far(c, abs(u), abs(v), z, z))
+
+# The same bound over a set of points with |u| ≥ au, |v| ≥ av and zlo ≤ |s| ≤ zhi: ΔL, a(z)
+# and b(z) grow with |z|, so r and q are least at zhi, and f (growing with |z|) is taken
+# at whichever end gives the smaller sum.
+@inline function _vr_far(c::_VRComponent, au, av, zlo, zhi)
+    r = max(au, av) / (c.dl0 + c.dls * zhi)
+    q = au^2 / (c.a2 + zhi^2 * c.g2) + av^2 / (c.b2 + zhi^2 * c.g2)
+    r >= _VR_FAR_T && q >= c.qfar && return true
+    sq = r >= 1 ? (r2 = r * r; r4 = r2 * r2; r4 * r4 * r2) : zero(r)
+    g = zero(q)
+    if q >= 1
+        g = one(q)
+        for _ in 1:c.gk
+            g *= q
+        end
+        if c.gj > 0
+            q4 = sqrt(sqrt(q))
+            for _ in 1:c.gj
+                g *= q4
+            end
+        end
+    end
+    flo = zlo / sqrt(zlo^2 + c.zab)
+    fhi = zhi == zlo ? flo : zhi / sqrt(zhi^2 + c.zab)
+    return min(flo * sq + (1 - flo) * g, fhi * sq + (1 - fhi) * g) >= _VR_FAR_CUT
 end
 
 # The normalization table of a component with focal semi-axes a, b (along its axes),
@@ -595,34 +628,59 @@ struct _VRFrame{T}
     core::_VRComponent{T}
     halo::_VRComponent{T}
     has_halo::Bool
+    c0::SVector{3,T}          # the origin's coordinates: their partials are every point's
 end
 
 # `env`: the beam's envelope ratio (`_vr_envelope`); `taper`: the profile's
-_VRFrame(f::BeamFrame, env, taper) =
-    _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, env, taper, true),
-             _VRComponent(f.halo, f.fnumber, env, taper, f.has_halo), f.has_halo)
+function _VRFrame(f::BeamFrame, env, taper)
+    d0 = zero(Vec3) - f.focus
+    return _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, env, taper, true),
+                    _VRComponent(f.halo, f.fnumber, env, taper, f.has_halo), f.has_halo,
+                    SVector(dot(d0, f.e1), dot(d0, f.e2), dot(d0, f.k)))
+end
 
 @inline function _vr_coords(f::_VRFrame, x)
     d = x - f.focus
     return dot(d, f.e1), dot(d, f.e2), dot(d, f.k)
 end
 
-@inline function _vr_intensity(f::_VRFrame, x)
-    u, v, s = _vr_coords(f, x)
+# A point's coordinates in the frame `f` from those in its Float64 frame (`uvs`, of the
+# beam's values): on duals the values with the partials of the origin's coordinates,
+# which every point shares (the frame's axes carry none), instead of three dual dot
+# products per point.
+@inline _vr_coords(f::_VRFrame{Float64}, x, uvs) = uvs
+@inline function _vr_coords(f::_VRFrame{ForwardDiff.Dual{G,Float64,N}}, x, (u, v, s)) where {G,N}
+    D = ForwardDiff.Dual{G,Float64,N}
+    return D(u, ForwardDiff.partials(f.c0[1])), D(v, ForwardDiff.partials(f.c0[2])),
+           D(s, ForwardDiff.partials(f.c0[3]))
+end
+@inline _vr_coords(f::_VRFrame, x, uvs) = _vr_coords(f, x)
+
+@inline _vr_intensity(f::_VRFrame, x) = _vr_intensity(f, _vr_coords(f, x)...)
+@inline function _vr_intensity(f::_VRFrame, u, v, s)
     I = _vr_eval(f.core, u, v, s)
     f.has_halo && (I += _vr_eval(f.halo, u, v, s))
     return I
 end
 
-@inline function _vr_beyond(f::_VRFrame, x)
-    u, v, s = _vr_coords(f, x)
-    return _vr_outside(f.core, u, v, s) && (!f.has_halo || _vr_outside(f.halo, u, v, s))
-end
+# Whether a point lies beyond the cut-off by the law itself (the reference that
+# `_vr_far`'s bound is checked against).
+@inline _vr_beyond(f::_VRFrame, x) = _vr_beyond(f, _vr_coords(f, x)...)
+@inline _vr_beyond(f::_VRFrame, u, v, s) =
+    _vr_outside(f.core, u, v, s) && (!f.has_halo || _vr_outside(f.halo, u, v, s))
 
 # `_vr_beyond` by `_vr_far`'s bound: true only where `_vr_beyond` is (a Float64 frame).
-@inline function _vr_far(f::_VRFrame{Float64}, x)
-    u, v, s = _vr_coords(f, x)
-    return _vr_far(f.core, u, v, s) && (!f.has_halo || _vr_far(f.halo, u, v, s))
+@inline _vr_far(f::_VRFrame{Float64}, x) = _vr_far(f, _vr_coords(f, x)...)
+@inline _vr_far(f::_VRFrame{Float64}, u, v, s) =
+    _vr_far(f.core, u, v, s) && (!f.has_halo || _vr_far(f.halo, u, v, s))
+
+# `_vr_far` for every point of a ball (center and radius): the frame's coordinates are
+# orthonormal, so each lies within the radius of the center's.
+@inline function _vr_far_ball(f::_VRFrame{Float64}, (x, y, z, R)::NTuple{4,Float64})
+    u, v, s = _vr_coords(f, Vec3(x, y, z))
+    au, av = max(abs(u) - R, 0.0), max(abs(v) - R, 0.0)
+    zlo, zhi = max(abs(s) - R, 0.0), abs(s) + R
+    return _vr_far(f.core, au, av, zlo, zhi) && (!f.has_halo || _vr_far(f.halo, au, av, zlo, zhi))
 end
 
 """

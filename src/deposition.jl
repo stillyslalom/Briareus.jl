@@ -27,10 +27,34 @@ end
 # sums. Units are handed to threads dynamically, largest first; every output is summed
 # in a fixed order (an element over beams, then points, as a serial loop would), so the
 # result is bitwise independent of thread count and scheduling.
+#
+# `tiles[bi][t]` bounds beam `bi`'s points `_TILE (t - 1) + 1 : _TILE t` (in their stored
+# order, by destination) by a ball, center and radius, so that a screen can skip a run of
+# points that all lie beyond a beam's cut-off (`_vr_far_ball`).
 struct _DepositPlan
     boff::Matrix{Int}                     # (nblock+1) × nb: first point of each element block; last row: first back-side point
     back::Vector{Tuple{Int,UnitRange{Int}}}  # back-side pieces (beam, points)
     order::Vector{Int}                    # units by decreasing size; ≤ nblock: element block, else back-side piece
+    tiles::Vector{Vector{NTuple{4,Float64}}}  # per beam, per run of `_TILE` points: ball center and radius
+end
+
+const _TILE = 8
+
+# The balls of `_DepositPlan.tiles` for one beam's points: the bounding box's center and
+# the largest distance from it, grown by 1e-12 relative (a bound, not the least ball).
+function _point_tiles(P::Vector{Vec3})
+    tiles = Vector{NTuple{4,Float64}}(undef, cld(length(P), _TILE))
+    for t in eachindex(tiles)
+        r = _TILE*(t-1)+1:min(_TILE * t, length(P))
+        lo, hi = P[first(r)], P[first(r)]
+        for q in r
+            lo, hi = min.(lo, P[q]), max.(hi, P[q])
+        end
+        c = (lo + hi) / 2
+        R = maximum(q -> norm(P[q] - c), r)
+        tiles[t] = (c[1], c[2], c[3], R * (1 + 1e-12) + 1e-12)
+    end
+    return tiles
 end
 
 """
@@ -113,7 +137,8 @@ end
 
 const _DEPOSIT_UNIT = 4096   # points per work unit
 
-function _deposit_plan(ne::Integer, dest::Vector{Vector{Int32}}; unit::Integer = _DEPOSIT_UNIT)
+function _deposit_plan(ne::Integer, dest::Vector{Vector{Int32}}, pts::Vector{Vector{Vec3}};
+                       unit::Integer = _DEPOSIT_UNIT)
     nb = length(dest)
     cnt = zeros(Int, ne)
     for D in dest, d in D
@@ -150,12 +175,12 @@ function _deposit_plan(ne::Integer, dest::Vector{Vector{Int32}}; unit::Integer =
     end
     cost = vcat([sum(boff[j+1, bi] - boff[j, bi] for bi in 1:nb; init = 0) for j in 1:nblock],
                 [length(r) for (_, r) in back])
-    return _DepositPlan(boff, back, sortperm(cost; rev = true))
+    return _DepositPlan(boff, back, sortperm(cost; rev = true), [_point_tiles(P) for P in pts])
 end
 
 DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest,
                    profile::Union{Nothing,VisRadProfile} = nothing, envelope = Float64[]) =
-    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, _deposit_plan(nelements(t), dest),
+    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, _deposit_plan(nelements(t), dest, pts),
                        profile, envelope)
 DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest, plan::_DepositPlan) =
     DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, plan, nothing, Float64[])
@@ -729,21 +754,30 @@ end
 
 # VisRad's profile: each stored point sees the beam axis (the operator's one direction)
 # and absorbs the profile at its own distance from focus times |n·k|. Points outside
-# the envelope (on values) contribute exact zeros: every beam skips those that a bound
-# without powers puts beyond the cut-off (`_vr_far`: most of a beam's points); a dual
-# beam then skips the others outside on values; a Float64 one evaluates them (the
-# profile is exactly zero there, and screening first would compute the semi-axes twice).
+# the envelope (on values) contribute exact zeros: every beam skips a run of `_TILE`
+# points whose ball a bound without logarithms puts beyond the cut-off, then each point
+# the bound puts there (`_vr_far`: on case B of the research notes 99 % of the points
+# beyond the cut, and 90 % of the points left lit); the law evaluates the rest, and is
+# exactly zero, value and partials, at those beyond its cut (screening them on values
+# first costs more than the few it would skip). A point's coordinates are taken once, on
+# values; a dual beam's carry the partials every point shares (`_vr_coords(f, x, uvs)`).
 function _sum_points_visrad(sink::F, op::DepositionOperator, bi, f::_VRFrame, fv::_VRFrame{Float64},
                             r, ::Type{T}, η = nothing) where {F,T}
     P, W, Nr, D = op.pts[bi], op.w[bi], op.normal[bi], op.dest[bi]
+    tiles = op.plan.tiles[bi]
     k = f.k
     acc = zero(T)
-    @inbounds for q in r
-        _vr_far(fv, P[q]) && continue
-        T === Float64 || !_vr_beyond(fv, P[q]) || continue
-        val = W[q] * _vr_intensity(f, P[q]) * _absorbed(η, abs(dot(Nr[q], k)))
-        sink(D[q], val)
-        acc += val
+    isempty(r) && return acc
+    @inbounds for t in fld(first(r) - 1, _TILE)+1:fld(last(r) - 1, _TILE)+1
+        _vr_far_ball(fv, tiles[t]) && continue
+        for q in max(first(r), _TILE * (t - 1) + 1):min(last(r), _TILE * t)
+            x = P[q]
+            uvs = _vr_coords(fv, x)
+            _vr_far(fv, uvs...) && continue
+            val = W[q] * _vr_intensity(f, _vr_coords(f, x, uvs)...) * _absorbed(η, abs(dot(Nr[q], k)))
+            sink(D[q], val)
+            acc += val
+        end
     end
     return acc
 end
