@@ -1,14 +1,15 @@
 # What a multi-phase re-pointing study writes on the phased scenario: a drive band, gates
 # at a fraction of the noise floor (or physical gates above it), a shifted target shape,
 # keep-outs over every phase, the power scales inside an objective and in a table, their
-# beam-weighted regularization, a phase from a drive history, the summary against gates
-# and floors, and a picket ceiling whose reference sits on another target.
+# beam-weighted regularization, the scenario rebuilt at another deposition resolution, a
+# phase from a drive history, the summary against gates and floors, and a picket ceiling
+# whose reference sits on another target.
 #
 # References: the quantities by hand (mean flux, keep-out clearances per phase, the
 # pulses' powers, per-degree gates, beam counts per scale, the history's state and the
 # scenario remade from it); the Legendre moments against the spherical-harmonic
 # coefficients on the same sub-triangles for the shift's units; the closed-form gradient
-# of a quadratic in the scales.
+# of a quadratic in the scales; the phased scenario built afresh at the new resolution.
 
 @testset "phased study API" begin
     geom = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 1.2, capsule_h = 0.9)
@@ -185,6 +186,36 @@
         @test_throws ArgumentError power_scale_objective(pc; weight = b -> -1.0)
         @test_throws ArgumentError power_scale_objective(pc; weight = b -> 0.0)
         @test_throws ArgumentError power_scale_objective(remake(ps; scaled = Symbol[]))
+    end
+
+    @testset "a phased scenario on another deposition resolution" begin
+        dk2 = (; resolution = 0.45, reach = 1.0, level = 0)
+        pf = remake(ps; deposition_kw = dk2)
+        # the phased scenario built afresh on that resolution (the ready picket scenario
+        # remade with it)
+        fresh = PhasedScenario(gq, [Phase(:picket, remake(sP; deposition_kw = dk2); power = picket_power),
+                                    Phase(:step, tK; pulses, time = 2.5, viewfactor_kw = vf),
+                                    Phase(:peak, tK; power = 2.0, scaled = false, viewfactor_kw = vf)];
+                            by = :quad, observe = :capsule, deposition_kw = dk2)
+        ef, eg = evaluate(pf, y), evaluate(fresh, y)
+        rel(a, b) = maximum(abs, a .- b) / maximum(abs, b)
+        @test all(k -> rel(ef[k].deposition.element, eg[k].deposition.element) < 1e-12 &&
+                       rel(flux_ylm(ef[k]), flux_ylm(eg[k])) < 1e-12, keys(ps))
+        # another operator than before, the rest of every phase kept
+        @test sum(length, pf[:picket].deposition.pts) != sum(length, ps[:picket].deposition.pts)
+        @test all(k -> pf[k].model === ps[k].model && pf[k].moment_response === ps[k].moment_response &&
+                       pf[k].target === ps[k].target && pf[k].time == ps[k].time, keys(ps))
+        # the phases on one mesh share the rebuilt operator's points (each on its own
+        # target) and deposit in one pass
+        @test pf._mesh == [1, 1, 1] && pf[:step].deposition === pf[:peak].deposition
+        @test pf[:picket].deposition.pts === pf[:step].deposition.pts && pf[:step].deposition.target === tK
+        bs = apply(pf.param, y)
+        @test Briareus._deposit_groups(pf, bs.values) == [[1, 2, 3]]
+        @test power_scales(pf, ef) ≈ power_scales(ps, ev) rtol = 1e-14
+        # with another pointing, the operators are built for its beams
+        gz = GroupPointing(quads; by = :quad, fields = (:z,), relative = true, mirror = false)
+        pz = remake(ps; pointing = gz, deposition_kw = dk2)
+        @test nparams(pz.param) == 48 + length(pp.keys) && pz[:picket].deposition.pts == pf[:picket].deposition.pts
     end
 
     @testset "the summary against gates and floors" begin

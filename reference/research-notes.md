@@ -14722,3 +14722,30 @@ per scale of a cone), a per-beam weight and the closed-form gradient
 `2 W_j (s_j/s0_j − 1)/s0_j / Σ W`. In the script the objective's three lines of counts
 and reference scales became `power_scale_objective(ps; reference = (key, phase) ->
 S0[phase])`: the start's objective agrees to 17 digits.
+
+### 3. A phased scenario at another deposition resolution
+
+The script's check evaluated a finished design on a finer deposition operator by
+building every phase's target, reference and scenario again. `remake(::Scenario;
+deposition_kw)` already rebuilt one scenario's operator; `remake(::PhasedScenario;
+deposition_kw)` now rebuilds every phase's for the pointing's beams and keeps each
+phase's target, radiation model, response, laser–plasma model and time. Phases that
+shared one operator share the rebuilt one, and a phase on a target of an earlier
+phase's mesh (the same triangles, sides, components, opacity and elements; materials
+may differ) takes that phase's rebuilt operator on its own target (an operator reads
+the geometry and the ports, not the materials), so one operator is built per mesh
+instead of per phase and the phases of one mesh keep depositing in one pass (the
+`_mesh` classes of "Evaluation cost, measured (2026-11-19)", fix 10). On the mock-up of
+`test/phased_study.jl` (three phases on targets that differ in albedo) the remade
+scenario's depositions and modes equal those of the phased scenario built afresh at the
+new resolution to 1e-12, its three phases in one class and one pass. A phase's own
+`deposition_kw` is replaced too: one set of options for every phase. In the script the
+check of a finished design on the finer operator (the study's default resolution, for
+the designed windows) built the six references, the six phases and the ceiling's
+scenario again; rewritten, it remakes them (`remake(ps; deposition_kw)` for the phases,
+`remake(scenario; deposition_kw)` for the references and the ceiling), with two
+operators built for the six phases instead of six. Run on a finished design of the
+ladder (100 parameters, quads moved by tenths of a millimeter), the rewritten check prints the same
+log as the original, character for character, the drive ratios and departures of every
+phase printed to 17 digits included; the leg took 3.6 instead of 5.5 minutes, setup
+included (8 threads; another run may have shared the machine).

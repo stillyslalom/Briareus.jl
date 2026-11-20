@@ -837,7 +837,7 @@ end
 (o::_ScaleObjective)(ev::PerPhase) = sum(o.w .* abs2.(power_scales(o.param, ev) ./ o.s0 .- 1)) / o.W
 
 """
-    remake(scenario::PhasedScenario; pointing, by, scaled) -> PhasedScenario
+    remake(scenario::PhasedScenario; pointing, by, scaled, deposition_kw) -> PhasedScenario
 
 Copy of a phased scenario with another `pointing` (a parameterization of the same beams,
 whose ports the phases' deposition operators serve: per quad, then per beam), another
@@ -845,8 +845,20 @@ grouping `by` of the power scales (a function giving several quads one key ties 
 scales) or other `scaled` phases (their names); every phase's operators, radiation
 model and response are kept, and the phases' powers are set again on the new
 pointing's beams.
+
+`deposition_kw` rebuilds every phase's deposition operator with these options (as
+`remake(scenario; deposition_kw)` does for one [`Scenario`](@ref), for the pointing's
+beams; options not given take their defaults, a phase's own `deposition_kw` included),
+keeping each phase's target, radiation model, response, laser–plasma model and time: a
+finished design checked on a finer operator, `evaluate(remake(ps; deposition_kw =
+(; resolution = 0.3)), r.x)`. With `pointing` as well, the operators are built for the
+new pointing's beams, so its ports need not be the old ones'. Phases that shared one
+operator share the rebuilt one, and a phase on a target of the same mesh as an earlier
+phase's (a target that differs in its materials) takes that phase's rebuilt operator
+on its own target, so that phases on one mesh still deposit in one pass.
 """
-function remake(ps::PhasedScenario; pointing = _UNCHANGED, by = _UNCHANGED, scaled = _UNCHANGED)
+function remake(ps::PhasedScenario; pointing = _UNCHANGED, by = _UNCHANGED, scaled = _UNCHANGED,
+                deposition_kw = _UNCHANGED)
     p = pointing === _UNCHANGED ? ps.param.pointing : pointing
     b = by === _UNCHANGED ? ps.param.by : by
     phases = ps.phases
@@ -857,9 +869,48 @@ function remake(ps::PhasedScenario; pointing = _UNCHANGED, by = _UNCHANGED, scal
         phases = [Phase(ph.name, ph.source, ph.power, ph.pulses, ph.time, ph.pulse_by, ph.name in scaled, ph.kwargs)
                   for ph in phases]
     end
-    scen = pointing === _UNCHANGED ? ps.scenarios : [remake(s; parameterization = p) for s in ps.scenarios]
+    scen = deposition_kw !== _UNCHANGED ? _rebuilt_operators(ps.scenarios, p, deposition_kw) :
+           pointing === _UNCHANGED ? ps.scenarios : [remake(s; parameterization = p) for s in ps.scenarios]
     return _phased(p, phases, scen, b)
 end
+
+# The phases' scenarios on the pointing `p` with deposition operators built with `kw` for
+# its beams, everything else kept. One operator per old operator; a phase on a target of
+# an earlier phase's mesh (`_same_mesh`) takes that phase's operator on its own target
+# (an operator depends on the geometry and the ports alone).
+function _rebuilt_operators(scen::AbstractVector{<:Scenario}, p, kw)
+    beams = _scenario_beams(p)
+    built = Tuple{DepositionOperator,DepositionOperator}[]   # (old, rebuilt)
+    return map(scen) do s
+        i = findfirst(o -> first(o) === s.deposition, built)
+        op = if i !== nothing
+            last(built[i])
+        else
+            j = findfirst(o -> _same_mesh(last(o).target, s.target), built)
+            new = j === nothing ? DepositionOperator(s.target, beams; kw...) : _on_target(last(built[j]), s.target)
+            push!(built, (s.deposition, new))
+            new
+        end
+        Scenario(s.target, p, op, s.model, s.observed, s.moment_weights, s.ylm_weights, s.moment_response,
+                 s.ylm_response, s.lpi, s.time, getfield(s, :_response), s.albedo)
+    end
+end
+
+# Whether two targets have the same mesh: the same triangles, their sides' elements and
+# components, opacity and elements (materials may differ). Everything a deposition
+# operator's construction reads of a target.
+_same_mesh(a::Target, b::Target) =
+    a === b || nelements(a) == nelements(b) && length(a.components) == length(b.components) &&
+    a.tri_v0 == b.tri_v0 && a.tri_e1 == b.tri_e1 && a.tri_e2 == b.tri_e2 && a.tri_normal == b.tri_normal &&
+    a.tri_area == b.tri_area && a.tri_comp == b.tri_comp && a.tri_front == b.tri_front &&
+    a.tri_back == b.tri_back && a.tri_opaque == b.tri_opaque && a.elem_comp == b.elem_comp &&
+    a.elem_side == b.elem_side && a.elem_tris == b.elem_tris
+
+# The operator `op` on the target `t` of the same mesh.
+_on_target(op::DepositionOperator, t::Target) =
+    op.target === t ? op :
+    DepositionOperator(t, op.ports, op.dirs, op.pts, op.w, op.normal, op.mask, op.dest, op.plan, op.profile,
+                       op.envelope)
 
 # The optimizer's view of a phased scenario on VisRad's profile with its hard cut: each
 # phase's scenario tapered (`_tapered(::Scenario)`); `nothing` when no phase has one.

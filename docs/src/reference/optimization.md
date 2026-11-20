@@ -90,8 +90,9 @@ limit, [`phase_beams`](@ref) puts reference beams at each phase's powers,
 [`power_scales`](@ref) reads the scales inside an objective (differentiable),
 [`power_scale_objective`](@ref) holds them near a reference drive (each scale weighted
 by the beams it governs) and [`power_scale_table`](@ref) tabulates them per key and
-phase, and [`pointing_summary`](@ref) reports each phase, against its gates and
-pointing floor.
+phase, `remake(scenario; deposition_kw)` rebuilds every phase's deposition operator (a
+finished design checked on a finer one), and [`pointing_summary`](@ref) reports each
+phase, against its gates and pointing floor.
 
 ```@autodocs
 Modules = [Briareus]
