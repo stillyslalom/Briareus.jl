@@ -14589,3 +14589,47 @@ tree ends at 0.105–0.142 mm and 0.257 mm, with l = 1–3 within 0.02 % either 
 now reads 0.09–0.14 mm and 0.25 mm. The repository's constrained runs with an aperture
 keep-out floor (`test/phased.jl`) hold it far below the designs' clearance; their tests
 pass, plain and with bounds checks.
+
+## The dropped-bundle tutorial's long runs under rounding (2026-11-20) *measured*
+
+Why the documentation build failed on CI's Linux runner at the dropped-bundle tutorial's
+per-beam polish (`@assert` on every limit's normalized violation at most 0.01) while the
+same commit printed the expected output on a Windows machine, and what the tutorial's
+long constrained runs determine.
+
+**Method** (scratch runs, 8 threads; another job held the machine's second lock slot).
+The tutorial's runs repeated from 13 starts: the tutorial's own on two trees (the tree
+before the f-cone model's shared coordinates and the tree with them, whose depositions
+differ at 1e-15), and starts moved by 10⁻¹² or 10⁻⁹ mm in a random direction (seeds 1–5,
+on both trees). On one tree and one start the runs are the same at 4 and 8 threads,
+bit for bit (every printed digit and evaluation count): the threading is deterministic,
+and a CPU that rounds differently (CI's) moves a run as a start moved by 10⁻¹² mm does.
+
+**What is determined** (ranges over the 13 starts):
+
+| run | determined | not determined |
+|---|---|---|
+| re-pointing within limits (drive, gates, ceiling; ~1,000 evaluations) | outcome converged (`:interior` or `:box`), no limit violated; drive 0.9616–0.9625 of the 48-quad drive; peak 0.992–1.0006 of the ceiling | which gates are active (departure/gate l = 1 0.78–1.000, l = 2 0.994–1.000, l = 3 0.91–1.000, l = 4 0.66–1.000); evaluations 843–1,500; the caps' worst-case clearance, −38 to +4 µm, 0–2 beams failing |
+| the same limits as penalty terms | drive 0.959208, departures/gate 0.002 0.120 0.005 0.066 at the printed digits, peak 1.0089–1.0098 | evaluations 1,072–1,142; caps (not printed) |
+| stage 1 (quads, four limits) | outcome `:box`, no limit violated, no beam failing the caps' check | drive 0.950–0.957; cones 0.990–1.000 (23.5°), 0.967–0.985 (30°), 1.000 (44.5°), 0.990–1.000 (50°); gates active 1–3; keep-out least 13–66 µm; evaluations 656–1,653 |
+| stage 2 (per-beam polish, 120 evaluations) | outcome `:evaluations`; gates within 0.2 % and the keep-out within 1.3 µm of their limits (largest normalized violation of the gates, keep-out and light ceiling 0.0019); the ceiling's 64-norm 0.944–0.994 of its limit; drive 0.15–0.36 % above the first stage's aims on beams; no beam failing the caps' check, worst 8–49 µm | the wall's peak, 0.966–1.020 of the ceiling (over it by 1.2–2.0 % on 3 of 13 starts); drive 0.952–0.959 |
+| least re-pointing at 0.5 % per degree | outcome `:interior`; 62.6–62.8 µm rms, 0.1046–0.1047 mm at most, drive 0.95936; departures at the printed digits | evaluations 508–768 |
+
+**The failure.** The budget-stopped polish holds the irradiance ceiling's smooth
+stand-in, the area-weighted 64-norm, not the peak over the elements: the exact ceiling
+compares the peak with the limit and lowers the stand-in's working limit only once a run
+has converged on the stand-in (`irradiance_ceiling(...; exact = true)`). Stopped after
+120 evaluations, the polish's peak lands anywhere in a 5 % band about the ceiling, and on
+3 of the 13 starts above the 1 % the assert allowed. The other limits the polish works
+on are held well inside 0.01.
+
+**The tutorial now** asserts for the polish what every start meets with margin: the
+outcome, the gates', keep-out's and light ceiling's normalized violations at most 0.01
+(largest 0.0019), the stand-in at most 1 % over its limit (largest 0.994 of it), and the
+clearance check passing; the peak over the elements is printed, not asserted, and the
+text gives its range. The within-limits run's and the first stage's text quotes ranges
+for what the family does not determine (drive, active gates, the caps' clearance)
+instead of the run's own digits. The penalty run and the least re-pointing are
+determined, and their text keeps its numbers. Making the polish's peak determined would
+take a converged polish (861 evaluations on an earlier first stage, minutes of the docs
+build), left as the user decided ("Defaults changed (2026-11-19)" §6).
