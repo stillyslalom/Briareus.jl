@@ -243,21 +243,92 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam)
     side[j] > 0 || return _no_clearance(b)
     rim = k.rims[j]
     isempty(rim) && return _no_clearance(b)        # an aperture without a rim
+    f = _RimFrame(k, b)
+    # a dual beam's samples and golden sections run on its values (`_RimValues`)
+    return _rim_clearance(k, rim, f, b isa Beam{Float64} ? nothing : _RimValues(k, rim, _RimFrame(k, _value_beam(b)))) -
+           k.transverse - k.focus * f.cone
+end
+
+# What the distance from a rim point to a beam's envelope reads of the beam (in its number
+# type): the envelope's semi-axes at best focus, the beam frame, the focus and the f-cone.
+struct _RimFrame{T}
+    A::T
+    B::T
+    kv::Vec3
+    e1::Vec3
+    e2::Vec3
+    focus::SVector{3,T}
+    cone::Float64
+    margin::Float64
+end
+
+function _RimFrame(k::ApertureKeepOut, b::Beam{T}) where {T}
     ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
-    A, B = ρ * b.spot.a, ρ * b.spot.b
     kv = direction(b)
     e1, e2 = spot_axes(b)
-    focus = b.aim + b.defocus * kv
-    cone = 1 / (2b.fnumber)
-    # the distance from the rim point at `τ` on piece `r` to the envelope
-    function dist(r, τ)
-        d = _rim_point(r, τ) - focus
-        s, u, v = dot(d, kv), dot(d, e1), dot(d, e2)
-        return _sampson_distance(u, v, A, B) - cone * abs(s) - k.margin
+    return _RimFrame{T}(ρ * b.spot.a, ρ * b.spot.b, kv, e1, e2, b.aim + b.defocus * kv, 1 / (2b.fnumber), k.margin)
+end
+
+# The distance from the rim point at `τ` on piece `r` to the envelope.
+function _rim_distance(f::_RimFrame, r::_RimPiece, τ::Float64)
+    d = _rim_point(r, τ) - f.focus
+    s, u, v = dot(d, f.kv), dot(d, f.e1), dot(d, f.e2)
+    return _sampson_distance(u, v, f.A, f.B) - f.cone * abs(s) - f.margin
+end
+
+# A dual beam's rim distances on its values (`frame` of `_value_beam`), the samples
+# piece after piece: the values of the dual distances, which decide every comparison of
+# `_rim_clearance` but those between equal values (decided by the partials there).
+struct _RimValues
+    frame::_RimFrame{Float64}
+    samples::Vector{Float64}
+end
+_RimValues(k::ApertureKeepOut, rim, f::_RimFrame{Float64}) =
+    _RimValues(f, Float64[_rim_distance(f, r, τ) for r in rim for τ in r.taus])
+
+# The smooth minimum of the refined interval minima over the rim (`ApertureKeepOut`).
+# With `values` (a dual beam's `_RimValues`), the samples outside the window and the
+# golden sections' trajectories come from the values, and only the points that enter the
+# result (the closest samples, each refined interval's ends and its golden section's
+# last two points) are evaluated in duals: the same arithmetic on the same points as on
+# the dual beam throughout, so the result is that one bit for bit; an interval whose
+# golden section meets two equal values, which the dual comparison orders by the
+# partials, is refined in duals.
+function _rim_clearance(k::ApertureKeepOut, rim::Vector{_RimPiece}, f::_RimFrame{T}, values) where {T}
+    n = sum(r -> length(r.taus), rim)
+    vals = Vector{T}(undef, n)
+    have = falses(n)
+    pj, τj = Vector{Int}(undef, n), Vector{Float64}(undef, n)       # each sample's piece and τ
+    m = 0
+    for (p, r) in enumerate(rim), τ in r.taus
+        m += 1
+        pj[m], τj[m] = p, τ
     end
-    # the samples, piece after piece
-    vals = [dist(r, τ) for r in rim for τ in r.taus]
-    best = minimum(vals)
+    # the distance of sample `j`, in the beam's number type
+    function sample(j)
+        if !have[j]
+            vals[j] = _rim_distance(f, rim[pj[j]], τj[j])
+            have[j] = true
+        end
+        return vals[j]
+    end
+    if values === nothing
+        for j in 1:n
+            sample(j)
+        end
+        best = minimum(vals)
+        vb = 0.0
+    else
+        # the least sample: the dual minimum of the samples whose value is the least
+        vb = minimum(values.samples)
+        best = zero(T)
+        found = false
+        for j in 1:n
+            values.samples[j] == vb || continue
+            best = found ? min(best, sample(j)) : sample(j)
+            found = true
+        end
+    end
     # the intervals whose nearer end lies within `W` of the closest sample, refined by
     # golden section, weighted 1 there and falling (C¹) to 0 at 2W; their smooth minimum
     # summed on the fly (lo: the least refined minimum, sw: Σ σ exp(−(g − lo)/λ))
@@ -267,12 +338,18 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam)
     j0 = 0
     for r in rim
         for i in 1:length(r.taus)-1
-            x = (min(vals[j0+i], vals[j0+i+1]) - best - W) / W
+            a, b = j0 + i, j0 + i + 1
+            # outside the window on values (its dual weight would be exactly 0)
+            values === nothing ||
+                (min(values.samples[a], values.samples[b]) - vb - W) / W > 1 && continue
+            x = (min(sample(a), sample(b)) - best - W) / W
             x >= 1 && continue
             σ = x <= 0 ? one(x) : 1 - x^2 * (3 - 2x)
             # (with its ends: on an interval where the distance is not unimodal, golden
             # section can end at the higher end, and switch ends as the beam moves)
-            g = min(_golden_min(τ -> dist(r, τ), r.taus[i], r.taus[i+1]), vals[j0+i], vals[j0+i+1])
+            gs = values === nothing ? _golden_min(τ -> _rim_distance(f, r, τ), r.taus[i], r.taus[i+1]) :
+                 _golden_min_on_values(f, values.frame, r, r.taus[i], r.taus[i+1])
+            g = min(gs, sample(a), sample(b))
             if λ == 0
                 lo = min(lo, g)
             elseif g < lo
@@ -284,8 +361,32 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam)
         end
         j0 += length(r.taus)
     end
-    soft = λ == 0 ? lo : lo - λ * log(sw)
-    return soft - k.transverse - k.focus * cone
+    return λ == 0 ? lo : lo - λ * log(sw)
+end
+
+# `_golden_min` of the dual distance on [a, b], its trajectory found on the values
+# (frame `fv`): the dual distance at its last two points; in duals throughout if the
+# trajectory meets two equal values.
+function _golden_min_on_values(f::_RimFrame, fv::_RimFrame{Float64}, r::_RimPiece, a::Float64, b::Float64;
+                               iterations = 40)
+    φ = (sqrt(5.0) - 1) / 2
+    a0, b0 = a, b
+    c, d = b - φ * (b - a), a + φ * (b - a)
+    gc, gd = _rim_distance(fv, r, c), _rim_distance(fv, r, d)
+    for _ in 1:iterations
+        gc == gd && return _golden_min(τ -> _rim_distance(f, r, τ), a0, b0; iterations)
+        if gc < gd
+            b, d, gd = d, c, gc
+            c = b - φ * (b - a)
+            gc = _rim_distance(fv, r, c)
+        else
+            a, c, gc = c, d, gd
+            d = a + φ * (b - a)
+            gd = _rim_distance(fv, r, d)
+        end
+    end
+    gc == gd && return _golden_min(τ -> _rim_distance(f, r, τ), a0, b0; iterations)
+    return min(_rim_distance(f, r, c), _rim_distance(f, r, d))
 end
 
 # The window (mm) above the closest rim sample within which `ApertureKeepOut` refines the

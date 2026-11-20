@@ -143,6 +143,21 @@ end
     slope(x) = ForwardDiff.derivative(y -> c(ks, y), x)
     @test abs(slope(-30λ)) < 1e-3 && abs(slope(30λ) + 1) < 1e-3 && -0.9 < slope(0.0) < -0.1
     @test slope(0.0) ≈ (c(ks, 1e-7) - c(ks, -1e-7)) / 2e-7 atol = 1e-6
+
+    # a dual beam's samples and golden sections run on its values, and only the points
+    # that enter the result in duals: value and partials bit for bit those of evaluating
+    # every point in duals (the reference: `_rim_clearance` without values)
+    function full(k, b)
+        f = Briareus._RimFrame(k, b)
+        rim = k.rims[argmax([dot(c, b.port) for c in k.centers])]
+        return Briareus._rim_clearance(k, rim, f, nothing) - k.transverse - k.focus * f.cone
+    end
+    D(x, p...) = ForwardDiff.Dual{:rim}(x, p...)
+    dual_beam(b) = remake(b; aim = (D(b.aim[1], 1.0, 0.0, 0.0), D(b.aim[2], 0.0, 1.0, 0.0), D(b.aim[3], 0.0, 0.0, 1.0)),
+                          defocus = D(b.defocus, 0.3, -0.2, 0.1), power = D(b.power, 0.0, 0.0, 0.0))
+    cases = [(k, dual_beam(b)) for k in (ks, ko(tr), ko(te), ko(cut)) for b in (sw(-30λ), sw(0.0), sw(1e-5), down, de, tilt)]
+    bitwise(c, e) = ForwardDiff.value(c) === ForwardDiff.value(e) && ForwardDiff.partials(c) === ForwardDiff.partials(e)
+    @test all(((k, b),) -> bitwise(only(aperture_clearance(k, [b])), full(k, b)), cases)
 end
 
 # The hardware keep-out against direct geometry: plates normal and parallel to a beam
