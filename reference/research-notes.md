@@ -14262,10 +14262,10 @@ Case B, per evaluation (ms):
 
 | step, threads | 10-22 | 0.1.0 | 0.2.0 | 0.2.1 | faa37b8 | 0.3.0 | fixed |
 |---|---|---|---|---|---|---|---|
-| `evaluate`, 1 | 4.0 | 22.3 | 22.3 | 22.2 | 22.1 | 22.3 | 12.3 |
-| gradient (serial chunks), 1 | 53 | 223 | 229 | 230 | 235 | 264 | 162 |
-| optimizer, per evaluation, 1 | 54 | 234 | 244 | 240 | 237 | 273 | 168 |
-| optimizer, per evaluation, 8 | 17.7 | 31.7, 36.0 | 34.5, 42.3 | 34.8, 39.8 | 53.5, 39.9 | 50.6, 47.6 | 24.6, 25.6 |
+| `evaluate`, 1 | 4.0 | 22.3 | 22.3 | 22.2 | 22.1 | 22.3 | 5.9 |
+| gradient (serial chunks), 1 | 53 | 223 | 229 | 230 | 235 | 264 | 112 |
+| optimizer, per evaluation, 1 | 54 | 234 | 244 | 240 | 237 | 273 | 117 |
+| optimizer, per evaluation, 8 | 17.7 | 31.7, 36.0 | 34.5, 42.3 | 34.8, 39.8 | 53.5, 39.9 | 50.6, 47.6 | 18.7, 18.5 |
 | keep-out gradient (92 parameters), 1 | 2.8 | 2.9 | 11.8 | 11.6 | 11.9 | 30.3 | 17.4 |
 | gradient's allocations (MB) | 17.3 | 17.2 | 18.4 | 18.4 | 18.4 | 45.9 | 31.1 |
 
@@ -14273,6 +14273,9 @@ At 8 threads a short run's time per evaluation varies by about 20 % between runs
 row gives a single run and the best of three where both were taken. Since fix 5 below
 (2026-11-20) the keep-out's gradient in case B is 1.8 ms on one thread (v0.1.0: 3.4,
 "fixed" above: 18.2, rerun beside it) and its allocations 1.3 MB.
+
+The "fixed" column's first four rows are fixes 1–4 and 6 below (with fixes 1–4 alone:
+12.3, 162, 168, and 24.6 and 25.6 ms at 8 threads), measured before fix 5.
 
 Case A, per evaluation (ms): `evaluate` 9.0–9.4 on one thread in every version; the
 serial-chunk gradient 152, 149, 157, 158, 162, 181 and 165 (fixed); the optimizer per
@@ -14321,16 +14324,8 @@ quadrature changed in those days).
    bit for bit (elements and per-beam totals, values and partials, against 0.3.0 on
    those cases). No skipped point has a nonzero intensity (every point of the 48
    quads' operator checked, and a grid across and along four spots in
-   `test/basics.jl`). The screen sits behind a `@noinline` barrier: inlined, it changes
-   how the compiler inlines the law's `exp` and `log` in the deposition loop, and the
-   depositions change at the rounding level, up to 1.2e-13 relative per element.
-
-   *An option for the user, not built:* the inlined screen, about twice as fast again
-   on those cases (180 ms on Float64, 299 ms on Dual{12}; case B's optimizer 116 ms per
-   evaluation on one thread, 18.7–23.6 ms at 8; the multi-phase study's gradient 2.5 s
-   at 8 threads), at that rounding-level change of every VisRad deposition (it can
-   move an optimizer run onto another path, and the evaluation counts and digits that
-   tutorials and notes quote with it).
+   `test/basics.jl`). The screen first sat behind a `@noinline` barrier, which kept the
+   depositions bit for bit.
 5. (2026-11-20) `ApertureKeepOut` finds each sample interval's minimum exactly from the
    distance's slopes at the samples, without a window of refined intervals, and takes a
    dual beam's partials by the chain rule from the clearance's sensitivities to the focus
@@ -14338,16 +14333,33 @@ quadrature changed in those days).
    (2026-11-20)"). Case B, 46 quads: value 1.49 to 0.20 ms (v0.1.0: 0.11), gradient
    with serial chunks 18.2 to 1.8 ms (v0.1.0: 3.4), the optimizer's threaded gradient at
    8 threads 2.96 to 0.50 ms (v0.1.0: 0.47). Results move by at most 1.2e-7 µm.
+6. The far screen inlined (2026-11-19 evening, after the user's ruling that a
+   rounding-level change is judged against physics tolerances): the compiler then
+   inlines the law's `exp` and `log` in the loop differently, about half the cost
+   again. On the 12 cases: 370 to 173 ms on Float64 and 493 to 292 ms on Dual{12} (one
+   thread, the two measured in one session). Result change, Float64 depositions only:
+   10,905 element entries differ, by at most 1.24e-13 of the element's own value (3.7e-16
+   of the largest element), per-beam totals by at most 3.3e-16; the Dual{12}
+   depositions, values and partials, are bit for bit. Against the tolerances of
+   delivered power (2–5 %) and the drive's modes (tenths of a percent), 1e-11 of the
+   smallest. Case B's objective prints the same 15 digits and its six-iteration run
+   takes the same 8 evaluations to the same value; the dropped-bundle tutorial, run as
+   a script, prints the same output.
 
-Together, on case B the optimizer's evaluation costs 0.52–0.62 of 0.3.0's (168 against
-273 ms on one thread, 24.6–25.6 against 47.6–50.6 ms at 8 threads), 0.7–0.8 of
-v0.1.0's, and 1.4 (8 threads) to 3.1 (one thread) times the 2026-10-22 tree's, every
-result bit for bit 0.3.0's (fixes 1–4). The keep-out's gradient, 6 times v0.1.0's after
-fixes 1–4 (the refined rim and the window), is 0.53 of it after fix 5. On a multi-phase study's evaluation (scratch runs: six
-phases, 552 parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient
-fell from 7.9 to 3.6 s (0.45), and the constraints from 0.98 to 0.40 of the objective's
+Together, on case B the optimizer's evaluation costs 0.52–0.62 of 0.3.0's with fixes
+1–4 (168 against 273 ms on one thread, 24.6–25.6 against 47.6–50.6 ms at 8 threads),
+0.7–0.8 of v0.1.0's, every result bit for bit 0.3.0's, and 0.43 of 0.3.0's on one
+thread (117 ms) and 0.37–0.39 at 8 threads (18.5–18.7 ms) with fix 6, which changes
+Float64 VisRad depositions at the rounding level only. The keep-out's gradient, 6 times
+v0.1.0's after fixes 1–4 (the refined rim and the window), is 0.53 of it after fix 5.
+On a multi-phase study's evaluation (scratch runs: six phases, 552 parameters, 17
+constraints, 8 threads) the augmented Lagrangian's gradient fell from 7.9 to 3.6 s
+(0.45) with fixes 1–4, and the constraints from 0.98 to 0.40 of the objective's
 gradient: before the fixes the keep-out over the six phases and the three picket
-ceilings' depositions each cost about a quarter of the gradient. The gradient's chunks
+ceilings' depositions each cost about a quarter of the gradient. Fix 6 then takes the
+objective's gradient from 2.83 to 1.62 s and the augmented Lagrangian's from 3.80 to
+2.44 s (the two measured in one session; another run may have shared the machine,
+whose second lock slot is open to other jobs). The gradient's chunks
 run threaded on the phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
 at 16, fast and slow cores).
 

@@ -620,10 +620,7 @@ end
 end
 
 # `_vr_beyond` by `_vr_far`'s bound: true only where `_vr_beyond` is (a Float64 frame).
-# Not inlined: inlined, the screen changes how the deposition loop inlines the law's `exp`
-# and `log` and the depositions at the rounding level (up to 1.2e-13 relative); behind the
-# barrier they are bit for bit those without the screen.
-@noinline function _vr_far(f::_VRFrame{Float64}, x)
+@inline function _vr_far(f::_VRFrame{Float64}, x)
     u, v, s = _vr_coords(f, x)
     return _vr_far(f.core, u, v, s) && (!f.has_halo || _vr_far(f.halo, u, v, s))
 end
