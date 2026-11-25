@@ -192,3 +192,35 @@ end
               "part.leh_closure"]
     @test issubset(survey, keys_)
 end
+
+@testset "the first-frame precompile list (no GL)" begin
+    list = joinpath(pkgdir(BriareusGUI), "src", "qt", "first_frame.jl")
+    lines = filter(l -> startswith(l, "precompile("), readlines(list))
+    @test !isempty(lines) && issorted(lines) && allunique(lines)
+    # no anonymous closure named by its numbers, no closure of the GUI, no function of the GUI
+    # as the callee (those are explicit statements in the workload)
+    @test !any(l -> occursin(r"#\d+#\d+\"", l), lines)
+    @test !any(l -> occursin(r"BriareusGUI(\.\w+)*\.var\"#", l), lines)
+    @test !any(l -> startswith(l, "precompile(Tuple{typeof(BriareusGUI."), lines)
+    # the recorder's filter keeps the whole list (in the repository, where dev/ exists)
+    filter_file = joinpath(pkgdir(BriareusGUI), "..", "dev", "gui_first_frame_filter.jl")
+    if isfile(filter_file)
+        m = Module()
+        Base.include(m, filter_file)
+        @test Base.invokelatest(m.filter_signatures, lines) == lines
+        keep(l) = Base.invokelatest(m.keep_signature, l)
+        @test !keep("precompile(Tuple{BriareusGUI.var\"#95#96\"{BriareusGUI.BriareusShell}, Bool})")
+        @test !keep("precompile(Tuple{GLMakie.var\"#_#81#83\", Base.Dict{String, String}})")
+        @test !keep("precompile(Tuple{typeof(Base._all), BriareusGUI.var\"#f##0#f##1\"{Int64}, Base.Colon})")
+        @test !keep("precompile(Tuple{typeof(BriareusGUI.briareus)})")
+        @test !keep("# a comment")
+        @test keep("precompile(Tuple{typeof(QML.rowcount), QML.ItemModelData{Array{BriareusGUI.TreeItem, 1}}})")
+        @test keep("precompile(Tuple{GLMakie.var\"#add_scene!##2#add_scene!##3\"{GLMakie.Screen{QMLMakie.QMLWindow}}, Bool})")
+    end
+    # the replay counts what compiles and what does not
+    f = joinpath(mktempdir(), "list.jl")
+    write(f, "# header\nprecompile(Tuple{typeof(Base.sin), Float64})\nprecompile(Tuple{typeof(NoSuchModule.f), Int64})\n" *
+             "precompile(Tuple{typeof(Base.no_such_function_here), Int64})\n")
+    @test BriareusGUI._replay_precompiles(f) == (; compiled = 1, failed = 2)
+    @test BriareusGUI._replay_precompiles(joinpath(dirname(f), "missing.jl")) == (; compiled = 0, failed = 0)
+end

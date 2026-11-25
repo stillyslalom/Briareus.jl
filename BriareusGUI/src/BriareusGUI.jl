@@ -200,26 +200,31 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 # The window's first frames on its screen type, which the workload cannot render (no GL
 # context): the `precompile` signatures dev/gui_first_frame.jl records, each resolved
-# against the loaded packages by name. Signatures that no longer resolve (a dependency's
-# update renamed a closure) are skipped. Returns how many compiled.
+# against the loaded packages by name. The list holds no signature with a name that
+# changes from one build to the next (dev/gui_first_frame_filter.jl). A signature that no
+# longer resolves or compiles (an update of a dependency renamed a function) is skipped
+# and counted; the counts are logged at the debug level (`JULIA_DEBUG=BriareusGUI` while
+# the package precompiles). Returns `(; compiled, failed)`.
 module _PrecompileNames end                      # the loaded packages, by name
 function _replay_precompiles(path)
-    isfile(path) || return 0
+    isfile(path) || return (; compiled = 0, failed = 0)
     include_dependency(path)                     # a new recording rebuilds the cache
     names = _PrecompileNames
     for mod in values(Base.loaded_modules)
         isdefined(names, nameof(mod)) || Core.eval(names, :(const $(nameof(mod)) = $mod))
     end
-    n = 0
+    compiled = failed = 0
     for line in eachline(path)
         startswith(line, "precompile(") || continue
-        n += try
+        ok = try
             Core.eval(names, Meta.parse(line)) === true
         catch
             false
         end
+        ok ? (compiled += 1) : (failed += 1)
     end
-    return n
+    @debug "replayed the first-frame precompile signatures" path compiled failed
+    return (; compiled, failed)
 end
 
 # The time-to-first-window workload runs the controllers on a coarse hohlraum and builds
@@ -298,7 +303,11 @@ end
         _refresh!(sh)
         _register_qml_functions()
     end
+    # the window's functions that only a window calls (no closure names, so these stay valid
+    # when the code around them changes)
     precompile(br_tick, ())
+    precompile(_set_window_icon, ())
+    precompile(briareus, ())
     _replay_precompiles(joinpath(@__DIR__, "qt", "first_frame.jl"))
     # an import's beams (0.17 s of its commit on the GUI thread)
     kw = NamedTuple{(:preset, :enabled, :cluster),Tuple{Symbol,Vector{Bool},Vector{Symbol}}}

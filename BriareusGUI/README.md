@@ -83,7 +83,11 @@ window, since the Qt application of QML exists while precompiling. The workload 
 context, so the rendering code of the first frame on the screen type of the window comes
 from `precompile` signatures. `julia dev/gui_first_frame.jl` records them into
 `src/qt/first_frame.jl`, and the workload replays them. Rerun the recorder after updating
-GLMakie, QMLMakie or Makie, or after changing what the canvases plot. The workload and the
+GLMakie, QMLMakie or Makie, or after changing what the canvases plot. Each recording replaces
+the list and leaves out signatures with names that change from one build to the next
+(numbered anonymous closures and closures of the GUI, `dev/gui_first_frame_filter.jl`).
+With `JULIA_DEBUG=BriareusGUI` the precompilation logs how many signatures compiled and
+how many no longer resolve. The workload and the
 recorded signatures together cut the time to the first frame by more than half; most of the
 rest is loading the package images, GLMakie and QML about equally, and the `__init__` of
 QML. `julia -m` loads the whole package of an app before its `@main` runs, so the splash
