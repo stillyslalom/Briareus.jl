@@ -2,6 +2,56 @@
 # part, the CAD read from VisRad workspaces and STL files and remeshed, the parts meshed on
 # workers, and the targets built from the components.
 
+# A cache that keeps its `kept` most recently used entries, as the cache of built targets
+# did with a dictionary and a separate list of keys. Looking an entry up (`get`, `getindex`)
+# makes it the most recent; an entry stored beyond `kept` drops the least recent. Every
+# access holds `_STL_LOCK` (`_cached`, `_iscached`, `clear_caches!`).
+struct _LRU{K,V}
+    data::Dict{K,V}
+    order::Vector{K}                 # least recently used first
+    kept::Int
+end
+_LRU{K,V}(kept::Integer) where {K,V} = _LRU{K,V}(Dict{K,V}(), K[], Int(kept))
+
+Base.haskey(c::_LRU, key) = haskey(c.data, key)
+Base.length(c::_LRU) = length(c.data)
+Base.isempty(c::_LRU) = isempty(c.data)
+Base.empty!(c::_LRU) = (empty!(c.data); empty!(c.order); c)
+Base.delete!(c::_LRU, key) = (delete!(c.data, key); filter!(!=(key), c.order); c)
+
+function _touch!(c::_LRU, key)
+    isempty(c.order) || c.order[end] == key || (filter!(!=(key), c.order); push!(c.order, key))
+    return c
+end
+
+function Base.get(c::_LRU, key, default)
+    haskey(c.data, key) || return default
+    _touch!(c, key)
+    return c.data[key]
+end
+
+function Base.getindex(c::_LRU, key)
+    v = c.data[key]
+    _touch!(c, key)
+    return v
+end
+
+function Base.setindex!(c::_LRU, v, key)
+    haskey(c.data, key) ? _touch!(c, key) : push!(c.order, key)
+    c.data[key] = v
+    while length(c.order) > c.kept
+        delete!(c.data, popfirst!(c.order))
+    end
+    return c
+end
+
+# The entries kept per CAD part (`_VRW_PARTS`, `_STL_CACHE`: a design of many CAD parts
+# holds two per part, the remeshed elements and the file facets drawn while they mesh) and
+# per CAD file (`_VRW_CACHE`, `_STL_SOLIDS`). An entry dropped is read or meshed again when
+# a design asks for it. These are engineering defaults.
+const _CAD_PARTS_KEPT = 512
+const _CAD_FILES_KEPT = 16
+
 const _PART_MEMO = Dict{Any,Vector{Component}}()
 
 # Whether a part is meshed as the capsule (`capsule_h`, geodesic).
@@ -119,7 +169,11 @@ end
 # primitives on VisRad's grid unless the part sets a separate element size), kept per
 # workspace version and settings: every edit rebuilds the target, and remeshing a CAD
 # part of 10⁵ facets takes tens of seconds.
-const _VRW_PARTS = Dict{Any,Vector{Component}}()
+# The key of `_visrad_key`: the file and its modification time, the object, the element
+# size, the point open sheets face, two-sidedness, albedo, conversion, the part and `raw`.
+const _VrwPartKey = Tuple{String,Float64,String,Float64,Union{Nothing,NTuple{3,Float64}},Bool,Float64,Float64,
+                          Symbol,Bool}
+const _VRW_PARTS = _LRU{_VrwPartKey,Vector{Component}}(_CAD_PARTS_KEPT)
 
 # `cache[key]`, computed by `f()` outside the lock when missing (parts mesh in parallel,
 # and a long meshing never holds up the GUI thread's lookups of other parts). A key
@@ -127,15 +181,18 @@ const _VRW_PARTS = Dict{Any,Vector{Component}}()
 # part remeshes in the background asks for the same part again).
 const _INFLIGHT = Dict{Any,Base.Event}()
 
-function _cached(f, cache::AbstractDict, key)
-    ev, mine = lock(_STL_LOCK) do
-        haskey(cache, key) && return (nothing, false)
+function _cached(f, cache, key)
+    # (no cache holds `nothing`; the entry is taken under the lock that found it, since
+    # a bounded cache may drop it afterwards)
+    found, ev, mine = lock(_STL_LOCK) do
+        v = get(cache, key, nothing)
+        v === nothing || return (v, nothing, false)
         e = get(_INFLIGHT, key, nothing)
-        e === nothing || return (e, false)
+        e === nothing || return (nothing, e, false)
         e = _INFLIGHT[key] = Base.Event()
-        return (e, true)
+        return (nothing, e, true)
     end
-    ev === nothing && return lock(() -> cache[key], _STL_LOCK)
+    found === nothing || return found
     if !mine
         wait(ev)
         v = lock(() -> get(cache, key, nothing), _STL_LOCK)
@@ -151,7 +208,24 @@ function _cached(f, cache::AbstractDict, key)
     end
 end
 
-_iscached(cache::AbstractDict, key) = lock(() -> haskey(cache, key), _STL_LOCK)
+_iscached(cache, key) = lock(() -> haskey(cache, key), _STL_LOCK)
+
+"""
+    clear_caches!()
+
+Empty the caches the target builds keep between edits: the components of each part, the
+VisRad workspaces and STL files read, the CAD parts remeshed from them, the built
+targets, and the curved pieces fitted to CAD parts. They release their memory (a remeshed
+NIF CAD workspace holds 10⁵ facets and more), and the next build reads and meshes its CAD
+again; a test calls this for the state of a new process. A part being meshed on a worker
+is stored when it is done.
+"""
+function clear_caches!()
+    lock(_STL_LOCK) do
+        foreach(empty!, (_PART_MEMO, _VRW_PARTS, _VRW_CACHE, _STL_CACHE, _STL_SOLIDS, _TARGETS, _FIT_MEMO))
+    end
+    return nothing
+end
 
 # The cache key of a VisRad part's components, the element size a primitive takes
 # (`nothing`: VisRad's grid, which reproduces VisRad's element table) and whether the
@@ -219,7 +293,8 @@ visrad_component_names(o::VisRadObject) =
     o.kind === :mesh ? [Symbol(o.name)] : [c.name for c in visrad_component(o)]
 
 # A VisRad workspace's object, the workspace read once per file version.
-const _VRW_CACHE = Dict{Any,VisRadWorkspace}()
+const _FileKey = Tuple{String,Float64,Int64}          # path, modification time, size
+const _VRW_CACHE = _LRU{_FileKey,VisRadWorkspace}(_CAD_FILES_KEPT)
 
 function _visrad_workspace(file::AbstractString)
     isfile(file) || throw(ArgumentError("VisRad workspace not found: $file"))
@@ -239,7 +314,10 @@ end
 # their material, open sheets toward `toward`, flipped for `inward`) and remeshed into
 # elements of `h`; with `raw` the facets as they are (drawing only). Every edit rebuilds
 # the target, so the result is kept per file version and settings.
-const _STL_CACHE = Dict{Any,Mesh}()
+# (the key of `_stl_key`: the file's path, modification time and size, the solid, the
+# scale, the element size, the point open sheets face, and whether the mesh faces inward)
+const _StlKey = Tuple{String,Float64,Int64,String,Float64,Float64,Union{Nothing,NTuple{3,Float64}},Bool}
+const _STL_CACHE = _LRU{_StlKey,Mesh}(_CAD_PARTS_KEPT)
 const _STL_LOCK = ReentrantLock()
 
 function _stl_key(p::PartSpec, h, toward, raw::Bool)
@@ -339,7 +417,7 @@ _with_surface(c::Component, surf) =
                                      surface = surf)
 
 # The solids of a multi-solid (ASCII) STL file, read once per version.
-const _STL_SOLIDS = Dict{Any,Vector{Pair{String,Mesh}}}()
+const _STL_SOLIDS = _LRU{_FileKey,Vector{Pair{String,Mesh}}}(_CAD_FILES_KEPT)
 
 function _stl_solids(file::AbstractString)
     isfile(file) || throw(ArgumentError("STL file not found: $file"))
@@ -466,24 +544,15 @@ end
 # instead of being built twice.
 # Keyed by the components' object ids: the entry holds the components, so no other
 # object takes their ids while it is kept.
-const _TARGETS = Dict{Vector{UInt},Pair{Vector{Component},Target}}()
-const _TARGETS_ORDER = Vector{UInt}[]          # least recently used first
 const _TARGETS_KEPT = 6                        # calculation targets and ghosts of 3 designs
+const _TARGETS = _LRU{Vector{UInt},Pair{Vector{Component},Target}}(_TARGETS_KEPT)
 
 _target_key(comps::Vector{Component}) = UInt[objectid(c) for c in comps]
 _target_built(comps::Vector{Component}) = _iscached(_TARGETS, _target_key(comps))
 
 function _target_of(comps::Vector{Component})
     key = _target_key(comps)
-    e = _cached(() -> comps => Target(comps), _TARGETS, key)
-    lock(_STL_LOCK) do
-        filter!(!=(key), _TARGETS_ORDER)
-        push!(_TARGETS_ORDER, key)
-        while length(_TARGETS_ORDER) > _TARGETS_KEPT
-            delete!(_TARGETS, popfirst!(_TARGETS_ORDER))
-        end
-    end
-    return e.second
+    return _cached(() -> comps => Target(comps), _TARGETS, key).second
 end
 
 # A design's components split into the target of those in the calculations and that of

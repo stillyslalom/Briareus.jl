@@ -1083,8 +1083,7 @@ end
     s2 = DesignSession(resolution = :coarse)
     s2.deliver[] = g -> put!(queue, g)
     s2.spawn[] = true
-    empty!(Controllers._VRW_PARTS)                            # as in a new window
-    empty!(Controllers._PART_MEMO)
+    clear_caches!()                                           # as in a new window
     load_session!(s2, f)
     @test s2.target.pending[] == Set([:CAD_0]) && length(elements(s2.target.target[], :CAD_0)) == 4
     drain_until(() -> isempty(s2.target.pending[]), queue)
@@ -1099,6 +1098,49 @@ end
     while isready(queue)                                      # the dropped job's delivery
         take!(queue)()
     end
+end
+
+@testset "bounded caches of CAD and targets (no GL)" begin
+    # the cache keeps its most recently used entries: a lookup makes an entry the most recent
+    c = Controllers._LRU{Int,String}(3)
+    foreach(k -> (c[k] = string(k)), 1:3)
+    @test length(c) == 3 && get(c, 1, nothing) == "1" && get(c, 9, nothing) === nothing
+    c[4] = "4"                                               # 2 is the least recent
+    @test !haskey(c, 2) && all(k -> haskey(c, k), (1, 3, 4)) && length(c) == 3
+    @test c[3] == "3"
+    c[5] = "5"                                               # then 1
+    @test !haskey(c, 1) && c.order == [4, 3, 5]
+    c[4] = "four"                                            # stored again: no entry dropped
+    @test c[4] == "four" && length(c) == 3 && c.order == [3, 5, 4]
+    delete!(c, 3)
+    @test !haskey(c, 3) && c.order == [5, 4] && isempty(empty!(c)) && isempty(c.order)
+    # the CAD caches are bounded and typed
+    caches = (Controllers._VRW_PARTS, Controllers._VRW_CACHE, Controllers._STL_CACHE,
+              Controllers._STL_SOLIDS, Controllers._TARGETS)
+    @test all(x -> x isa Controllers._LRU && x.kept > 0 && isconcretetype(valtype(x.data)), caches)
+    @test all(x -> keytype(x.data) !== Any, caches)
+    # `_cached` computes an entry once and takes it from the cache afterwards
+    n = Ref(0)
+    lru = Controllers._LRU{Int,Vector{Int}}(2)
+    f(k) = Controllers._cached(() -> (n[] += 1; [k]), lru, k)
+    @test f(1) == [1] && f(1) === f(1) && n[] == 1
+    @test f(2) == [2] && f(3) == [3] && n[] == 3 && !Controllers._iscached(lru, 1)
+    @test f(1) == [1] && n[] == 4                             # dropped, so computed again
+    # a build fills the caches, and clear_caches! empties every one of them
+    dir = mktempdir()
+    stl = joinpath(dir, "plate.stl")
+    write_stl(stl, cylinder_mesh(0.5, -0.5, 0.5; nz = 2, nphi = 16))
+    s = DesignSession(resolution = :coarse)
+    @test add_part!(s.target, :mesh; name = :plate, file = stl, z = 8.0)
+    filled = (Controllers._PART_MEMO, Controllers._STL_CACHE, Controllers._TARGETS)
+    @test all(!isempty, filled)
+    @test all(k -> k isa Controllers._StlKey, Controllers._STL_CACHE.order)
+    t = s.target.target[]
+    @test clear_caches!() === nothing
+    @test all(isempty, (filled..., caches..., Controllers._FIT_MEMO))
+    # The design is unchanged, and the next edit reads and meshes the file again.
+    @test s.target.target[] === t && edit_part!(s.target, part_index(s.target, :plate), :z, "8.5")
+    @test all(!isempty, filled) && :plate in component_names(s.target.target[])
 end
 
 @testset "target builds and capsule fits in the background (no GL)" begin
@@ -1158,7 +1200,6 @@ end
         drain_until(() -> target_ready(ts), queue)
         record!(s)
         empty!(Controllers._TARGETS)                          # built again, on a worker
-        empty!(Controllers._TARGETS_ORDER)
         @test undo!(s) && part_index(ts, :Rectangle_0) !== nothing && ts.building[]
         drain_until(() -> target_ready(ts), queue)
         @test :Rectangle_0 in component_names(ts.target[])

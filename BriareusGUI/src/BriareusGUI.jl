@@ -82,7 +82,7 @@ export import_visrad_workspace!, export_visrad_workspace, export_results, retune
 export TargetSetup, MeshSpec, MESH_PRESETS,
        MESH_RESOLUTIONS, build_target, new_target!,
        set_resolution!, edit_mesh!, target_summary, component_names, surface_names,
-       target_ready, await_target!, BACKGROUND_TRIANGLES, LEH_CLOSURE_FIELDS, set_leh_closure!,
+       target_ready, await_target!, BACKGROUND_TRIANGLES, clear_caches!, LEH_CLOSURE_FIELDS, set_leh_closure!,
        is_lip, shown_component, with_lips
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, remove_parts!, replaced_parts, remove_nodes!,
