@@ -893,12 +893,16 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       `_init_history_state`, `_solve_history_step!`, `_record_history_step!` and
       `_assemble_history_output` waits for a state struct. `test/inference.jl` (one
       compiled instance for every closure, JET `report_call`) must stay green through it.
-    - **Type parameters that need compile-time measurements first.** `Scenario.lpi` and
-      `Evaluation.scenario` are abstract on purpose (one dispatch per evaluation, no
-      recompilation of the optimizer per model); `Scenario{P,M,L}`,
-      `Evaluation{T,B,E,S}` and a parametric `CBET` (eight `Any` fields, read through
-      `_tvalue`) would each compile the optimizer or the CBET kernels once per model or
-      schedule type. `VisRadWorkspace.beams` is `Vector{Beam}`.
+    - **Type parameters that need compile-time measurements first.** `Scenario.model`
+      and `Evaluation.scenario` are abstract. `Scenario{P,M}` and `Evaluation{T,B,E,S}`
+      would compile the optimizer once per model storage, and the gain is unmeasured.
+      `CBET` has eight `Any` fields read through `_tvalue`; a small concrete schedule
+      type would type them without a type parameter per closure. `VisRadWorkspace.beams`
+      is `Vector{Beam}`. `Scenario.lpi` stays untyped (declined 2026-11-25): a type
+      parameter for the model recompiles the optimizer and the history march for every
+      model and every schedule closure, which "Compile latency (2026-10-25)" measured
+      at 52 s of inference in the suite before the march was despecialized, and the
+      constraint check that wanted the type takes it from `_ReferenceModel{L}` instead.
     - **Keep-out distance.** `ApertureKeepOut` and `SphereKeepOut` use the first-order
       (Sampson) ellipse distance, and `clearance`, `talis_check` and the design rules the
       exact one. The frames are shared (`_BeamConeFrame`); moving the keep-outs to the
