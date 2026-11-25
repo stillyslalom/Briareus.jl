@@ -579,15 +579,13 @@ function picket_ceiling(reference::Evaluation, names::Symbol...; pulses = nothin
     sum(P[e] for e in res) > 0 ||
         throw(ArgumentError("the reference's picket deposits no power on $(join(rn, ", "))"))
     ref = Float64(ForwardDiff.value(_picket_measure(P, t, res, mo, reference.beams)))
-    factor = measure === :peak ? ref / _irradiance_norm(P, t, res, Float64(p)) : 1.0
-    lim = limit === nothing ? ref : Float64(limit)
-    lim > 0 || throw(ArgumentError("the picket irradiance limit must be positive"))
+    factor = measure === :peak ? _peak_factor(ref, P, t, res, p) : 1.0
     # parts of the design on the target of the reference, resolved at evaluation when the
     # targets differ
     es = same ? res : Int[]
     value = _PicketValue(t, es, collect(Symbol, names), gs, pw, lpi, mo, Float64(p), factor, exact,
                          lpi ? _ReferenceModel(reference.scenario) : nothing)
-    return Constraint(Symbol(:picket_, measure), value; upper = lim, scale = something(scale, lim))
+    return _ceiling_constraint(Symbol(:picket_, measure), value, limit, ref, scale, "picket irradiance")
 end
 
 # The value of the picket ceiling. For `:peak` it is the p-norm of the picket irradiance

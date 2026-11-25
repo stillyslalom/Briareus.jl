@@ -275,11 +275,23 @@ function irradiance_ceiling(reference::Evaluation, names::Symbol...;
     P = Float64.(ForwardDiff.value.(_counted_power(reference, weight)))
     pk = _peak(P, t, es)
     pk > 0 || throw(ArgumentError("the reference deposits no laser power on $(join(names, ", "))"))
-    n_ref = _irradiance_norm(P, t, es, Float64(p))
-    lim = limit === nothing ? pk : Float64(limit)
-    lim > 0 || throw(ArgumentError("the irradiance limit must be positive"))
-    value = _CeilingValue(t, es, Float64(p), pk / n_ref, weight, exact, _ReferenceModel(reference.scenario))
-    return Constraint(:irradiance, value; upper = lim, scale = something(scale, lim))
+    value = _CeilingValue(t, es, Float64(p), _peak_factor(pk, P, t, es, p), weight, exact,
+                          _ReferenceModel(reference.scenario))
+    return _ceiling_constraint(:irradiance, value, limit, pk, scale, "irradiance")
+end
+
+# The parts that the ceilings on an irradiance share (`irradiance_ceiling`,
+# `picket_ceiling`). `_peak_factor` is the factor that puts the smooth p-norm of the
+# irradiance `P/A` over the elements `es` on the scale of its reference value `ref`, so
+# that the norm equals `ref` at the reference. `_ceiling_constraint` makes the constraint
+# `value ≤ limit`, with the reference value as the default limit and the limit as the
+# default scale.
+_peak_factor(ref, P, t::Target, es, p) = ref / _irradiance_norm(P, t, es, Float64(p))
+
+function _ceiling_constraint(name, value, limit, ref, scale, what::String)
+    lim = limit === nothing ? ref : Float64(limit)
+    lim > 0 || throw(ArgumentError("the $what limit must be positive"))
+    return Constraint(name, value; upper = lim, scale = something(scale, lim))
 end
 
 # `_ReferenceModel` contains the laser–plasma model and time of a reference evaluation. A
