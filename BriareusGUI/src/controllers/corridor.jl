@@ -43,20 +43,23 @@ function corridor_kwargs(rv::ReviewState, tl::TaLISState)
 end
 
 """
-    update_corridor!(cs::CorridorState, rv, tl, beams, sight_lines) -> cs
+    update_corridor!(cs::CorridorState, rv, tl, beams, sight_lines; omitted = String[]) -> cs
 
 Compute the keep-out map of `beams` and `sight_lines` on the sphere of `cs.radius` about
 TCC, with the settings of [`corridor_kwargs`](@ref), and leave it in `cs.map`. The map of
-192 beams takes a fraction of a second, so it is computed in place.
+192 beams takes a fraction of a second, so it is computed in place. The status line ends
+with the names in `omitted`, the diagnostics that gave no line of sight.
 """
 function update_corridor!(cs::CorridorState, rv::ReviewState, tl::TaLISState, beams::AbstractVector,
-                          sight_lines::AbstractVector)
+                          sight_lines::AbstractVector; omitted::AbstractVector{<:AbstractString} = String[])
     kw = corridor_kwargs(rv, tl)
     bs = collect(beams)
     sl = collect(SightLine, sight_lines)
     m = corridor_map(bs; sight_lines = sl, radius = cs.radius[], kw...)
     cs.inputs[] = (bs, sl, cs.radius[], kw)
-    cs.status[] = corridor_text(m; tight = tl.tight[])
+    text = corridor_text(m; tight = tl.tight[])
+    isempty(omitted) || (text *= "; left out, no line of sight: " * join(omitted, ", "))
+    cs.status[] = text
     cs.map[] = m
     return cs
 end

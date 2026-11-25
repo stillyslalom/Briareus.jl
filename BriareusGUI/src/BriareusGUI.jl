@@ -157,7 +157,7 @@ export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, TALIS_
        talis_role
 export PORT_MARK_ANGLE, OMEGA1_CONTOURS, set_omega1_contour!
 export CorridorState, CORRIDOR_COLORS, CORRIDOR_OPACITY, corridor_kwargs, update_corridor!, clear_corridor!,
-       corridor_stale, corridor_text, corridor_surface, corridor_sight_lines, show_corridor!, set_corridor_radius!
+       corridor_stale, corridor_text, corridor_surface, corridor_sight_lines, corridor_omitted, show_corridor!, set_corridor_radius!
 export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance,
        has_unconverted, unconverted_footprint, unconverted_beamlets, unconverted_square,
        closest_approach_surface, reflection_cone, daylight_view, grazing_view,

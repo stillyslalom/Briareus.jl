@@ -330,6 +330,14 @@ end
     @test any(<=(0), cm.map[].omega1) && any(<=(0), cm.map[].sight) && any(>(0), cm.map[].margin)
     set_corridor_radius!(sess, 120.0)
     @test cm.map[].radius == 120.0 && !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), lines)
+    # a ticked diagnostic that gives no line of sight is named in the status line
+    @test isempty(corridor_omitted(sess)) && !occursin("left out", cm.status[])
+    sess.time.diagnostics[] = ["nif_dante1", "no_such_camera"]
+    @test length(corridor_sight_lines(sess)) == 1
+    @test corridor_omitted(sess) == ["no_such_camera (not on the diagnostic search path)"]
+    show_corridor!(sess)
+    @test endswith(cm.status[], "; left out, no line of sight: no_such_camera (not on the diagnostic search path)")
+    @test count(s -> s[1] === :sight, cm.map[].sources) == 1
     sess.time.diagnostics[] = String[]
     @test corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess))
     @test_throws ArgumentError set_corridor_radius!(sess, 0.0)

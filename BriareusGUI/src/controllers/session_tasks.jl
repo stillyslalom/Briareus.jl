@@ -108,25 +108,41 @@ start_talis!(sess::DesignSession; spawn::Bool = true) =
 
 cancel_talis!(sess::DesignSession) = (cancel_talis!(sess.talis); sess)
 
+# The lines of sight of the ticked diagnostics, and the ticked diagnostics that give none
+# with the reason.
+function _corridor_lines(sess::DesignSession)
+    lines, omitted = SightLine[], String[]
+    for d in _recorded_definitions(sess)
+        if d.def === nothing
+            push!(omitted, string(d.name, " (", d.note, ")"))
+            continue
+        end
+        try
+            push!(lines, sight_line(d.def; name = d.name))
+        catch e
+            e isa ArgumentError || rethrow()
+            push!(omitted, string(d.name, " (", e.msg, ")"))
+        end
+    end
+    return lines, omitted
+end
+
 """
     corridor_sight_lines(sess::DesignSession) -> Vector{SightLine}
 
 The lines of sight of the ticked diagnostics of the session (`Briareus.sight_line`), in
 the order ticked. A definition without a direction or a field of view, or with a field
-centered on a part, is left out.
+centered on a part, gives none: [`corridor_omitted`](@ref) lists those.
 """
-function corridor_sight_lines(sess::DesignSession)
-    out = SightLine[]
-    for d in _recorded_definitions(sess)
-        d.def === nothing && continue
-        try
-            push!(out, sight_line(d.def; name = d.name))
-        catch e
-            e isa ArgumentError || rethrow()
-        end
-    end
-    return out
-end
+corridor_sight_lines(sess::DesignSession) = first(_corridor_lines(sess))
+
+"""
+    corridor_omitted(sess::DesignSession) -> Vector{String}
+
+The ticked diagnostics that the keep-out map leaves out, each as its name with the reason
+in parentheses. The status line of the map names them.
+"""
+corridor_omitted(sess::DesignSession) = last(_corridor_lines(sess))
 
 """
     show_corridor!(sess::DesignSession, on::Bool = true) -> sess
@@ -137,8 +153,12 @@ Draw the keep-out map of the enabled beams and the ticked diagnostics in the 3D 
 function show_corridor!(sess::DesignSession, on::Bool = true)
     cs = sess.corridor
     _assign!(cs.shown, on)
-    on ? update_corridor!(cs, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess)) :
-         clear_corridor!(cs)
+    if on
+        lines, omitted = _corridor_lines(sess)
+        update_corridor!(cs, sess.review, sess.talis, active_beams(sess.beams), lines; omitted)
+    else
+        clear_corridor!(cs)
+    end
     return sess
 end
 
