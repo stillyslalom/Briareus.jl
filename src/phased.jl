@@ -979,12 +979,13 @@ end
 # them with power.
 function _phase_evaluations(ps::PhasedScenario, beams::AbstractVector)
     scen = ps.scenarios
-    eff = [apply_lpi(scen[k].lpi, beams[k], scen[k].time) for k in eachindex(scen, beams)]
+    lpi = [_resolve_lpi(scen[k].lpi, beams[k]) for k in eachindex(scen, beams)]
+    eff = [apply_lpi(lpi[k], beams[k], scen[k].time) for k in eachindex(scen, beams)]
     evs = Vector{Any}(undef, length(scen))
     for g in _deposit_groups(ps, eff)
         if length(g) == 1
             k = only(g)
-            evs[k] = _evaluate(scen[k], beams[k], eff[k])
+            evs[k] = _evaluate(scen[k], beams[k], eff[k], lpi[k])
         else
             _shared_evaluations!(evs, scen, beams, eff, g)
         end

@@ -565,11 +565,12 @@ Base.@nospecializeinfer function _drive_history(
             while true
                 b0 = beams_at(τ)
                 P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
-                bl = apply_lpi(lpi, b0, τ)
+                lr = _resolve_lpi(lpi, b0)      # resolved once for the step
+                bl = apply_lpi(lr, b0, τ)
                 # for the per-group M-band, the cones are split in the same deposition pass
                 msplit = emission === nothing || emission.groups === nothing ? nothing :
                          _mband_split(emission, t, bl)
-                dep = _lpi_deposit(lpi, operator_at(τ), bl, τ, msplit)
+                dep = _lpi_deposit(lr, operator_at(τ), bl, τ, msplit)
                 Il = _lip_intensities(lips, bl)
                 sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc = step(τ0, τ, dep, last, Il, b0)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)

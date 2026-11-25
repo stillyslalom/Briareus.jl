@@ -44,6 +44,15 @@ function _lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time, split)
 end
 _deposits(m) = false
 
+# Returns the model with its state that depends on the setup `beams` resolved, so that the
+# `apply_lpi` and `lpi_deposit` of one evaluation share it. A model without such state is
+# returned itself. In a tuple or vector every model is resolved on the setup beams, which
+# is valid for state that depends on the pointing, spots and focus only, since the models
+# before it change the powers only.
+_resolve_lpi(m, beams) = m
+_resolve_lpi(ms::Tuple, beams) = map(m -> _resolve_lpi(m, beams), ms)
+_resolve_lpi(ms::AbstractVector, beams) = [_resolve_lpi(m, beams) for m in ms]
+
 # Returns the ridge split of the single beam `b`, for the beam-error sensitivities, whose
 # computation deposits each beam separately. The result is `nothing`, or `(; g, es, w)`
 # when the operator deposits 1 − g of beam `b` and the fraction g is deposited on the

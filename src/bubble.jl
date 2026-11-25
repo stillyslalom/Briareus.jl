@@ -86,8 +86,12 @@ first, and the bubble then takes its share of the power in the inner beams.
   `footprint` (`(:outer50,)`), the beam groups that lose and receive the power;
   `wall` (`nothing`), a [`WallMotion`](@ref) that moves the footprint plane with the
   radiating wall. The axes of the outer beams reach the moved wall nearer the entrance
-  hole, and the bubble tip and the ridge are measured from the initial wall in either
-  case. `footprint_z` (`nothing`) fixes |``z_b``| instead.
+  hole. The bubble tip, the density factor R/(R − ``x_{bub}``) and the ridge stay on the
+  initial wall radius in either case: every radius of the model is a laboratory radius
+  about the hohlraum axis. The tip positions of Izumi 2021 and the ridge radius of Izumi
+  2023 were measured from the initial wall of hohlraums whose walls moved, so the fitted
+  `speed`, `opacity` and `ridge` already contain that motion, and a tip measured from
+  the moved wall would count it twice. `footprint_z` (`nothing`) fixes |``z_b``| instead.
 - Calibration: `speed` (0.36 mm/ns), `delay` (0.25 ns), `opacity` ``τ_b`` (0.111),
   `density_exponent` q (1.8), `depth_exponent` p (0.5) and its reference depth `x_ref`
   (1.0 mm).

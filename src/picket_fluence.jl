@@ -727,8 +727,9 @@ is not the picket power; in a chain after CBET it is not even the setup power. E
 only on the pointing, spots and focus of the beams, so it is constant through a drive
 history.
 
-Cost: two picket depositions per evaluation, one in [`apply_lpi`](@ref) and one in
-[`lpi_deposit`](@ref). Generic in the number type. E and the bubble carry the
+Cost: one picket deposition per evaluation of a scenario and per step of a drive
+history, which resolve the bubble once for [`apply_lpi`](@ref) and [`lpi_deposit`](@ref).
+A direct call of either function resolves it again. Generic in the number type. E and the bubble carry the
 ForwardDiff duals of the beams, so a pointing gradient includes the response of the
 bubble to the picket fluence. Thread-safe, since the model has no state. The per-beam
 sensitivities of the uncertainty analysis ([`mode_sensitivity`](@ref),
@@ -828,6 +829,11 @@ apply_lpi(m::PicketLinkedBubble, beams::AbstractVector{<:Beam}, time = 0.0) =
     apply_lpi(linked_bubble(m, beams), beams, time)
 
 _deposits(::PicketLinkedBubble) = true
+
+# An evaluation resolves the bubble once for its `apply_lpi` and `lpi_deposit`. The picket
+# powers do not depend on the beam powers, so the bubble of the setup beams is that of
+# the effective beams.
+_resolve_lpi(m::PicketLinkedBubble, beams) = linked_bubble(m, beams)
 
 _lpi_deposit(m::PicketLinkedBubble, op::DepositionOperator, beams::AbstractVector{<:Beam}, time, split) =
     _lpi_deposit(linked_bubble(m, beams), op, beams, time, split)

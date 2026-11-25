@@ -321,6 +321,16 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     depth and pointing (ForwardDiff through `speed`, `opacity` and the beams).
   - The tip is measured from the initial wall; only the footprint plane follows a
     moving wall.
+  - Reviewed 2026-11-25 (*decision*, user and code review): the mixed frame stays. The
+    depth x_bub, the factor R/(R − x_bub) and the ridge radius 0.73 R are laboratory
+    radii about the axis, anchored on the initial wall radius, because the calibration
+    data are: the tip positions of Izumi 2021 Fig. 8a and the ridge of Izumi 2023 were
+    measured from the initial wall of hohlraums whose walls moved. Anchoring them on
+    `wall_radius(wall, R, t)` would add the wall motion to a tip position that already
+    contains it, and a refit in the moved frame would need the wall trajectory of each
+    calibration shot, which is not published and would tie the bubble fit to the
+    separately fitted `WallMotion`. The footprint plane z_b is the one quantity set by
+    where the outer beam axes reach the wall at time t, so it follows the moved wall.
 - **Defaults** (superseded 2026-10-24: speed, launch, opacity, q and collision refitted, "Hohlraum dynamics calibrated to published data" below; engineering, **M**): v_ref 0.35 mm/ns at 0.3 mg/cc (Izumi PoP 28,
   022706, 2021, 345 µm/ns; Meezan 2020 measured 321–461 µm/ns); scalings E^0.2, ρ₀^−0.2
   (Izumi 2021, ±0.03 each); delay 0.2 ns (Izumi: intercept 0.5 ± 0.1 ns for a 0.3 ns

@@ -983,12 +983,16 @@ end
 """
 evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x))
 
-evaluate(s::Scenario, beams::AbstractVector{<:Beam}) = _evaluate(s, beams, apply_lpi(s.lpi, beams, s.time))
+function evaluate(s::Scenario, beams::AbstractVector{<:Beam})
+    lpi = _resolve_lpi(s.lpi, beams)
+    return _evaluate(s, beams, apply_lpi(lpi, beams, s.time), lpi)
+end
 
-# Computes `evaluate` for the setup `beams` and their effective beams `eff`.
-function _evaluate(s::Scenario, beams::AbstractVector{<:Beam}, eff)
+# Computes `evaluate` for the setup `beams` and their effective beams `eff` under `lpi`,
+# the laser–plasma model of the scenario resolved for the setup beams (`_resolve_lpi`).
+function _evaluate(s::Scenario, beams::AbstractVector{<:Beam}, eff, lpi)
     sets = getfield(s, :_split)
-    (isempty(sets) || !_plain_deposit(s.lpi)) && return _evaluation(s, beams, eff, lpi_deposit(s.lpi, s.deposition, eff, s.time), nothing)
+    (isempty(sets) || !_plain_deposit(lpi)) && return _evaluation(s, beams, eff, lpi_deposit(lpi, s.deposition, eff, s.time), nothing)
     # The element powers of the group sets that the constraints of the run read
     # (`_with_split`) are computed in the same pass.
     T = mapreduce(b -> typeof(b.power), promote_type, eff)
