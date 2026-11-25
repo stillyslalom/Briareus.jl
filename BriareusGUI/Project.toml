@@ -1,7 +1,7 @@
 name = "BriareusGUI"
 uuid = "27459d3e-0914-41cf-82e2-9495bb7270ba"
+version = "0.4.0"
 authors = ["Alex Ames <alexander.m.ames@gmail.com> and contributors"]
-version = "0.3.0"
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
@@ -22,7 +22,7 @@ ZipArchives = "49080126-0e18-4c2a-b176-c102e4b3760c"
 
 [compat]
 Base64 = "1"
-Briareus = "0.3"
+Briareus = "0.4"
 GLMakie = "0.13"
 Libdl = "1"
 LinearAlgebra = "1"
