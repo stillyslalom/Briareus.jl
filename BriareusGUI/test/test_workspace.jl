@@ -28,6 +28,7 @@
     s2 = DesignSession()
     load_session!(s2, path)
     @test session_state(s2) == session_state(s)
+    @test s2.view.omega1_contour[] === :nominal                   # a choice of the window, not saved
     @test s2.beams.beams[] == s.beams.beams[]                # ports and aims exact
     @test s2.beams.enabled[] == s.beams.enabled[] && s2.beams.cluster[] == s.beams.cluster[]
     @test hohlraum_windows(s2.target) == hohlraum_windows(s.target) && s2.target.mesh[] == s.target.mesh[]

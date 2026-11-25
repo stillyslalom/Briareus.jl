@@ -78,6 +78,7 @@ end
         @test narrow(() -> B.br_cut_kind("plane")) == ((:view,), true)
         @test narrow(() -> B.br_cut_offset(0.3)) == ((:view,), true)
         @test narrow(() -> B.br_show_off(!s.view.show_off[])) == ((:view,), true)
+        @test narrow(() -> B.br_omega1_contour("talis_10pct")) == ((:view,), true)
         @test all(st -> narrow(() -> B.br_beam_style(String(st))) == ((:view,), true), filter(!=(s.view.beams[]), BEAM_STYLES))
         @test narrow(() -> (s.view.beam_length[] = 7.5)) == ((:view,), true)
         @test narrow(() -> (s.view.beam_color[] = BEAM_COLORINGS[end])) == ((:view,), true)

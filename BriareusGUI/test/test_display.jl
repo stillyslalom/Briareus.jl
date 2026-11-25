@@ -196,6 +196,15 @@ end
     @test minimum(dot(p - f, ô) for p in sq(bls[1], 0.0)) ≈ fp.edge rtol = 1e-12
     u = unconverted_light(b, 1; length = 10.0)
     @test length(u.vertices) == 32 && length(u.faces) == 32 && length(u.outlines) == 16
+    # the drawn 1ω light follows the chosen contour: its near edge at the 3ω focus, and
+    # the 2ω light keeps its nominal footprint
+    near(u) = minimum(dot(p - f, ô) for seg in u.outlines[1:4] for p in seg)
+    @test near(u) ≈ fp.edge && near(unconverted_light(b, 1; length = 10.0, mode = :talis_10pct)) ≈ c10.edge
+    @test near(unconverted_light(b, 1; length = 10.0, mode = :talis_worst)) ≈ Briareus.omega1_contour(mode = :talis_worst).edge
+    @test unconverted_light(b, 2; length = 10.0, mode = :talis_worst).outlines == unconverted_light(b, 2; length = 10.0).outlines
+    vs = ViewState()
+    @test vs.omega1_contour[] === :nominal && set_omega1_contour!(vs, :talis_10pct).omega1_contour[] === :talis_10pct
+    @test_throws ArgumentError set_omega1_contour!(vs, :other)
 end
 
 @testset "1ω closest-approach geometry (no GL)" begin

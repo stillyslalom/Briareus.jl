@@ -190,7 +190,7 @@ function scene_canvas(sess::DesignSession)
           v.cut_shift)
     onany((_...) -> _draw_beams!(c, sess), sess.target.target, sess.beams.beams,
           sess.beams.enabled, sess.beams.cluster, v.beams, v.beam_color, v.beam_length, sess.review.report,
-          sess.talis.report, v.hidden_beams, v.show_off, v.shown_1w, v.shown_2w)
+          sess.talis.report, v.hidden_beams, v.show_off, v.shown_1w, v.shown_2w, v.omega1_contour)
     onany((_...) -> _draw_selection!(c, sess), v.selection, v.extra, sess.target.target,
           v.cutaway, v.cut_azimuth, v.cut_width, v.cut_components, v.cut_kind, v.cut_axis,
           v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, sess.beams.beams, sess.beams.cluster)
@@ -895,7 +895,7 @@ function _draw_unconverted!(c::SceneCanvas, sess::DesignSession, bs, style, L)
     for b in bs, h in 1:2
         beam_drawn(v, b.name, h) || continue
         col = UNCONVERTED_COLORS[h]
-        u = unconverted_light(b, h; length = L)
+        u = unconverted_light(b, h; length = L, mode = v.omega1_contour[])
         for (a, z) in (style === :rays ? vcat(u.outlines, u.axes) : u.outlines)
             push!(segs, Point3f(a...), Point3f(z...))
             push!(scols, col, col)

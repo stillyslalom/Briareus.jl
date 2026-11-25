@@ -247,7 +247,10 @@ without changing any result. The unconverted 1ω and 2ω light is drawn for NIF 
 beams as `unconverted_deposition` deposits it. For each beamlet the drawing shows the
 `nif_unconverted` footprint square at the 3ω best-focus plane, displaced toward the
 position of the beamlet in its quad, and the square beam converging to its focus.
-Outlines and center lines are drawn as rays and the converging beam as a volume. The
+Outlines and center lines are drawn as rays and the converging beam as a volume. View ▸
+Beams switches the drawn 1ω light from the nominal footprint to the 10% contour that the
+TaLIS rules measure to, or to that contour grown by the default errors and clearance
+([`omega1_contour`](@ref)); the choice changes the drawing only. The
 participation dots of a color switch once the drive has a power ratio for that color
 (below).
 

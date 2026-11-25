@@ -183,7 +183,7 @@ function _dirty_sources(sess::DesignSession)
               tm.catalog, tm.issues, tm.running,
               tm.status, tm.prepulse, tm.threshold, tm.irradiance, tm.checking]
     # the viewer's options, which the View menu and the cut settings show
-    view = Any[v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway,
+    view = Any[v.beams, v.beam_color, v.show_off, v.omega1_contour, v.cut_components, v.beam_length, v.cutaway,
                v.cut_kind, v.cut_axis, v.cut_range, v.cut_point, v.cut_normal, v.cut_shift,
                v.cut_line, v.cut_rotation, v.cut_azimuth, v.cut_width, v.camera]
     # the progress of a job: its panel, its row of the model tree and the list of running jobs
@@ -291,6 +291,7 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "beamLength", v.beam_length[] > 0 ? _num(v.beam_length[]) : "")
     _set!(sh, "cutaway", v.cutaway[])
     _set!(sh, "showOff", v.show_off[])
+    _set!(sh, "omega1Contour", String(v.omega1_contour[]))
     _set!(sh, "cutWidth", v.cut_width[])
     _set!(sh, "cutAzimuth", v.cut_azimuth[])
     _set!(sh, "cutKind", String(v.cut_kind[]))

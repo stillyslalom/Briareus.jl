@@ -302,6 +302,10 @@ ApplicationWindow {
                 Action { text: "Color by cone"; checkable: true; checked: app.beamColor === "group"; onTriggered: Julia.br_beam_color("group") }
                 Action { text: "Color by clearance"; checkable: true; checked: app.beamColor === "clearance"; onTriggered: Julia.br_beam_color("clearance") }
                 Action { text: "Color by TaLIS"; checkable: true; checked: app.beamColor === "talis"; onTriggered: Julia.br_beam_color("talis") }
+                MenuSeparator {}
+                Action { text: "1ω light: nominal footprint"; checkable: true; checked: app.omega1Contour === "nominal"; onTriggered: Julia.br_omega1_contour("nominal") }
+                Action { text: "1ω light: 10% contour of the TaLIS rules"; checkable: true; checked: app.omega1Contour === "talis_10pct"; onTriggered: Julia.br_omega1_contour("talis_10pct") }
+                Action { text: "1ω light: worst-case contour"; checkable: true; checked: app.omega1Contour === "talis_worst"; onTriggered: Julia.br_omega1_contour("talis_worst") }
             }
             AutoMenu {
                 title: "Color target by"

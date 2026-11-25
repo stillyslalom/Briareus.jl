@@ -75,7 +75,8 @@ target's size), `display` (component name => display mode, one of
 [`DISPLAY_MODES`](@ref); a component not listed is opaque; see [`set_display!`](@ref)),
 `hidden_beams` (beams whose 3ω light is not drawn), `shown_1w` and `shown_2w` (beams
 whose unconverted 1ω or 2ω light is drawn, none by default; see
-[`set_beams_drawn!`](@ref)), `show_off` (draw the beams switched off, faint; an
+[`set_beams_drawn!`](@ref)), `omega1_contour` (the contour that the drawn 1ω light follows,
+one of [`OMEGA1_CONTOURS`](@ref)), `show_off` (draw the beams switched off, faint; an
 imported VisRad workspace whose beams are mostly off turns it off), `selection` (a
 tree node id, `""` for none: what Properties shows), `extra` (more nodes of the same
 family, beams or components, selected with Ctrl or Shift: edited together with the
@@ -147,6 +148,7 @@ struct ViewState
     triads::Observable{Set{Symbol}}
     beam_sort::Observable{Tuple{Symbol,Bool}}
     camera::Observable{Any}
+    omega1_contour::Observable{Symbol}
 end
 
 ViewState(; cut_components = ()) =
@@ -160,7 +162,27 @@ ViewState(; cut_components = ()) =
                         Observable((-Inf, Inf)), Observable((0.0, 0.0, 0.0)),
                         Observable((0.0, -1.0, 0.0)), Observable(0.0),
                         Observable((0.0, 0.0, 0.0)), Observable(0.0), Observable(Set{Symbol}()),
-                        Observable((:row, false)), Observable{Any}(nothing))
+                        Observable((:row, false)), Observable{Any}(nothing), Observable(:nominal))
+
+"""
+The contours that the drawn 1ω footprints can follow ([`set_omega1_contour!`](@ref)): the
+nominal footprint that the deposition uses, the 10% contour that the TaLIS rules measure
+to, and that contour grown by the default errors and required clearance.
+"""
+const OMEGA1_CONTOURS = (:nominal, :talis_10pct, :talis_worst)
+
+"""
+    set_omega1_contour!(v::ViewState, mode::Symbol) -> v
+
+Choose the contour that the drawn 1ω light follows, one of [`OMEGA1_CONTOURS`](@ref)
+([`unconverted_footprint`](@ref)). The choice changes the drawing only: the deposition and
+the TaLIS rules keep their footprints. A session file does not hold it.
+"""
+function set_omega1_contour!(v::ViewState, mode::Symbol)
+    mode in OMEGA1_CONTOURS || throw(ArgumentError("the 1ω contour is one of $(OMEGA1_CONTOURS)"))
+    _assign!(v.omega1_contour, mode)
+    return v
+end
 
 """
     set_cut!(v::ViewState; kind, azimuth, width, axis, range, components) -> v

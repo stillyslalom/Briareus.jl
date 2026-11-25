@@ -191,7 +191,7 @@ function unconverted_square((k, f, ô), h::Integer, s::Real; mode::Symbol = :nom
 end
 
 """
-    unconverted_light(b::Beam, harmonic; length) -> (; vertices, faces, outlines, axes)
+    unconverted_light(b::Beam, harmonic; length, mode = :nominal) -> (; vertices, faces, outlines, axes)
 
 What the 3D view draws of beam `b`'s unconverted light of `harmonic` (1 or 2), per
 beamlet: the converging square beam (`vertices`, `faces`: index triples) from `length`
@@ -199,14 +199,16 @@ mm before the aim to `length` mm past it, drawn through the target, since unconv
 light mostly passes it and only the deposition resolves its shadows, the
 footprint square at
 the 3ω best-focus plane (`outlines`, segments) and the footprint's center line
-(`axes`, segments). Empty for a beam without a footprint.
+(`axes`, segments). Empty for a beam without a footprint. `mode` is the contour of the 1ω
+footprint ([`unconverted_footprint`](@ref)); the 2ω footprint is always the nominal one.
 """
-function unconverted_light(b::Beam, h::Integer; length::Real)
+function unconverted_light(b::Beam, h::Integer; length::Real, mode::Symbol = :nominal)
+    mode = h == 1 ? mode : :nominal
     verts, faces = Vec3[], NTuple{3,Int}[]
     outlines, axes = NTuple{2,Vec3}[], NTuple{2,Vec3}[]
     for bl in unconverted_beamlets(b)
         s0, s1 = -(length + b.defocus), length - b.defocus
-        A, B = unconverted_square(bl, h, s0), unconverted_square(bl, h, s1)
+        A, B = unconverted_square(bl, h, s0; mode), unconverted_square(bl, h, s1; mode)
         o = Base.length(verts)
         append!(verts, A)
         append!(verts, B)
@@ -214,7 +216,7 @@ function unconverted_light(b::Beam, h::Integer; length::Real)
             j = mod1(i + 1, 4)
             push!(faces, (o + i, o + j, o + 4 + j), (o + i, o + 4 + j, o + 4 + i))
         end
-        S = unconverted_square(bl, h, 0.0)
+        S = unconverted_square(bl, h, 0.0; mode)
         for i in 1:4
             push!(outlines, (S[i], S[mod1(i + 1, 4)]))
         end
