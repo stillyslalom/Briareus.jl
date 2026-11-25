@@ -658,18 +658,10 @@ function _picket_parts(c::_PicketValue, ev::Evaluation)
         throw(ArgumentError("picket_ceiling: the evaluation is on another target than the reference: a ceiling " *
                             "on the peak holds on the reference's mesh only (the measures :average, :weighted " *
                             "and :corridor take a reference on another target)"))
-    _check_picket_model(c.model, ev)
+    _check_model(c.model, "picket_ceiling", ev)
     t === c.target && return t, isempty(c.elements) ? _part_elements(t, c.names) : c.elements
     return t, _part_elements(t, c.names)
 end
-
-# Compares the model of the reference with that of the evaluation (with `lpi`). The
-# models are untyped, so the comparison is called through `invokelatest`, and the
-# inferred value then has no dynamic dispatch. The check runs once per new model
-# (`_check_reference_model`).
-_check_picket_model(::Nothing, ev::Evaluation) = nothing
-_check_picket_model(m::_ReferenceModel, ev::Evaluation) =
-    (Base.invokelatest(_check_model, m, "picket_ceiling", ev); nothing)
 
 # `_named_elements` for a vector of names (`elements(t, names...)`, in its order, without
 # the splat).

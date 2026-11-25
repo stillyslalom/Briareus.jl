@@ -836,26 +836,31 @@ function irradiance_ceiling(reference::Evaluation, names::Symbol...;
     n_ref = _irradiance_norm(P, t, es, Float64(p))
     lim = limit === nothing ? pk : Float64(limit)
     lim > 0 || throw(ArgumentError("the irradiance limit must be positive"))
-    rs = reference.scenario
-    value = _CeilingValue(t, es, Float64(p), pk / n_ref, weight, exact, rs.lpi, rs.time,
-                          Ref{Any}(rs.lpi))
+    value = _CeilingValue(t, es, Float64(p), pk / n_ref, weight, exact, _ReferenceModel(reference.scenario))
     return Constraint(:irradiance, value; upper = lim, scale = something(scale, lim))
 end
 
+# `_ReferenceModel` contains the laser–plasma model and time of a reference evaluation. A
+# constraint with one throws on evaluations with another model (`_check_model`). The
+# model type is a parameter, so the comparison with the model of a scenario, which is
+# untyped there, is inferred after one type test.
+struct _ReferenceModel{L}
+    lpi::L
+    time::Float64
+end
+_ReferenceModel(s::Scenario) = _ReferenceModel(s.lpi, s.time)
+
 # The value of the ceiling is the irradiance norm on the peak scale of the reference. With
-# `exact`, the reported value is the peak itself. `lpi` and `time` are the laser–plasma
-# model and time of the reference scenario, which every evaluation must share. `checked`
-# contains the last model found equal to it, and later checks compare identity with it.
-struct _CeilingValue{W}
+# `exact`, the reported value is the peak itself. `model` contains the laser–plasma model
+# and time of the reference scenario, which every evaluation must share.
+struct _CeilingValue{W,M<:_ReferenceModel}
     target::Target
     elements::Vector{Int}
     p::Float64
     factor::Float64
     weight::W
     exact::Bool
-    lpi::Any
-    time::Float64
-    checked::Base.RefValue{Any}
+    model::M
 end
 
 function (c::_CeilingValue)(ev::Evaluation)
@@ -864,66 +869,61 @@ function (c::_CeilingValue)(ev::Evaluation)
 end
 
 function _check_ceiling(c::_CeilingValue, ev::Evaluation)
-    s = ev.scenario
-    s.target === c.target ||
+    ev.scenario.target === c.target ||
         throw(ArgumentError("irradiance_ceiling: the evaluation is on another target than the reference"))
-    _check_reference_model("irradiance_ceiling", c.lpi, c.time, c.checked, s)
+    _check_model(c.model, "irradiance_ceiling", ev)
     return nothing
 end
 
 # Check that the reference evaluation of a constraint and the optimized scenario share the
 # laser–plasma model and, with a model, its time. Otherwise throw an `ArgumentError` that
-# names `who`. The models are compared on every field. `checked` contains the last model
-# found equal, and later checks compare identity with it.
-function _check_reference_model(who::String, ref_lpi, ref_time::Float64, checked::Base.RefValue{Any},
-                                s::Scenario)
+# names `who`. The models are compared on every field (`_same_model`) at each evaluation,
+# and identical models are equal at once. The check keeps no state, so the evaluations of
+# concurrent gradient chunks share nothing through it.
+_check_model(::Nothing, who, ev::Evaluation) = nothing
+function _check_model(m::_ReferenceModel{L}, who::String, ev::Evaluation) where {L}
+    s = ev.scenario
     lpi = s.lpi
-    if lpi !== checked[]
-        _same_model(lpi, ref_lpi) ||
-            throw(ArgumentError("$who: the reference was evaluated with another laser–plasma " *
-                                "model than the scenario's ($(_model_name(ref_lpi)) against " *
-                                "$(_model_name(lpi))), so its limit bounds another quantity: evaluate the " *
-                                "reference in a scenario with the same `lpi`, e.g. " *
-                                "`evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`"))
-        checked[] = lpi
-    end
-    lpi === nothing || s.time == ref_time ||
-        throw(ArgumentError("$who: the reference was evaluated at time $(ref_time) ns and the " *
+    lpi isa L && _same_model(lpi, m.lpi) ||
+        throw(ArgumentError("$who: the reference was evaluated with another laser–plasma " *
+                            "model than the scenario's ($(_model_name(m.lpi)) against " *
+                            "$(_model_name(lpi))), so its limit bounds another quantity: evaluate the " *
+                            "reference in a scenario with the same `lpi`, e.g. " *
+                            "`evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`"))
+    lpi === nothing || s.time == m.time ||
+        throw(ArgumentError("$who: the reference was evaluated at time $(m.time) ns and the " *
                             "scenario's laser–plasma model at $(s.time) ns: evaluate the reference at the " *
                             "scenario's time (`remake(reference_scenario; time)`)"))
     return nothing
 end
 
-# `_ReferenceModel` contains the laser–plasma model and time of a reference evaluation. A
-# constraint with one throws on evaluations with another model (`_check_reference_model`).
-struct _ReferenceModel
-    lpi::Any
-    time::Float64
-    checked::Base.RefValue{Any}
-end
-_ReferenceModel(s::Scenario) = _ReferenceModel(s.lpi, s.time, Ref{Any}(s.lpi))
-
-_check_model(::Nothing, who, ev::Evaluation) = nothing
-_check_model(m::_ReferenceModel, who, ev::Evaluation) =
-    _check_reference_model(who, m.lpi, m.time, m.checked, ev.scenario)
-
-_model_name(::Nothing) = "none"
-_model_name(m) = string(nameof(typeof(m)))
-_model_name(m::Union{Tuple,AbstractVector}) = "(" * join(map(_model_name, m), ", ") * ")"
+# The name of a model in the messages: its type, which for a tuple of models lists theirs.
+# One method on an untyped argument, so the messages add no dispatch to the checks.
+Base.@nospecializeinfer _model_name(@nospecialize(m)) = m === nothing ? "none" : string(typeof(m)::DataType)
 
 # Test two laser–plasma models for structural equality, so that two models built alike
 # are the same model. They are equal when they are identical, or when they have one type
-# and equal fields, with arrays and dictionaries compared by their entries.
+# and equal fields, with arrays compared by their entries and dictionaries, strings,
+# numbers and symbols by `isequal`. The field comparison is generated per type, so models
+# of one concrete type with concretely typed fields are compared without dispatch.
 function _same_model(a, b)
     a === b && return true
     typeof(a) === typeof(b) || return false
-    a isa Union{AbstractArray,Tuple} &&
-        return length(a) == length(b) && all(i -> _same_model(a[i], b[i]), eachindex(a, b))
-    a isa Union{AbstractDict,AbstractString,Number,Symbol} && return isequal(a, b)
-    n = nfields(a)
-    n == 0 && return isequal(a, b)
-    return all(i -> _same_model(getfield(a, i), getfield(b, i)), 1:n)
+    return _same_fields(a, b)
 end
+
+@generated function _same_fields(a::T, b::T) where {T}
+    T <: AbstractArray && return :(_same_entries(a, b))
+    (T <: Union{AbstractDict,AbstractString,Number,Symbol} || fieldcount(T) == 0) && return :(isequal(a, b))
+    ex = :(true)
+    for i in fieldcount(T):-1:1
+        ex = :(_same_model(getfield(a, $i), getfield(b, $i)) && $ex)
+    end
+    return ex
+end
+
+_same_entries(a::AbstractArray, b::AbstractArray) =
+    length(a) == length(b) && all(i -> _same_model(a[i], b[i]), eachindex(a, b))
 
 function _exact_value(c::_CeilingValue, ev::Evaluation)
     c.exact || return nothing
@@ -1371,8 +1371,8 @@ end
 
 # The value of the floor or ceiling is the mean flux on the capsule, evaluated with the
 # laser–plasma model of the reference.
-struct _DriveValue
-    model::_ReferenceModel
+struct _DriveValue{M<:_ReferenceModel}
+    model::M
     ceiling::Bool
 end
 function (d::_DriveValue)(ev::Evaluation)
