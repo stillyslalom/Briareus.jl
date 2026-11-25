@@ -747,6 +747,25 @@ end
     rl = visrad_residuals(ws, sol)
     @test all(==(0), rl.residual[ec])
     @test rl.visrad[ec] ≈ qcad ./ 100 rtol = 1e-12
+    @test visrad_residuals(ws, t, sol.laser).residual[ec] == rl.residual[ec]
+    half = visrad_residuals(ws, t, 0.5 .* sol.laser)
+    @test half.residual[ec] ≈ -0.5 .* qcad ./ 100 rtol = 1e-12
+    # Resampled onto another mesh of the same objects: a refined tetrahedron takes the
+    # VisRad value of the facet whose plane holds each centroid.
+    cad = only(c for c in t.components if c.name === :CAD_0)
+    fine = Mesh()
+    for (i, j, k) in cad.mesh.triangles
+        a, b, c = cad.mesh.vertices[i], cad.mesh.vertices[j], cad.mesh.vertices[k]
+        m = (a + b + c) / 3
+        foreach(p -> add_polygon!(fine, collect(p)), ((a, b, m), (b, c, m), (c, a, m)))
+    end
+    tf = Target(Component(:CAD_0, fine, cad.material))
+    @test nelements(tf) == 12
+    lf = collect(range(0.1, 1.2; length = 12))
+    rf = visrad_residuals(ws, tf, lf; resample = true)
+    facet(c) = argmin(k -> abs(dot(t.elem_normal[ec[k]], c - t.elem_centroid[ec[k]])), 1:4)
+    @test rf.visrad ≈ [qcad[facet(c)] / 100 for c in tf.elem_centroid] rtol = 1e-12
+    @test rf.residual ≈ lf ./ tf.elem_area .- rf.visrad && isempty(rf.skipped)
     @test_throws ArgumentError visrad_residuals(ws, sol; quantity = :nothing)
     # A 1-based index is found from the largest index, and ambiguous tables are refused.
     part = (; header = ["Surf Index", "Flux Out (TW/cm2)"], labels = fill("", 3), data = [1.0 1; 2 2; 3 3])

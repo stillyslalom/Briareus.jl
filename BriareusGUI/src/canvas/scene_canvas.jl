@@ -471,8 +471,13 @@ function _body_coloring(sess::DesignSession)
     (field === :component || field in DISPOSITION_MODES) && return nothing
     t = sess.target.target[]
     dr = sess.drive
-    vals = cursor_values(sess, field)
-    if vals === nothing
+    vals = field === :visrad_residual ? visrad_parity(sess) : cursor_values(sess, field)
+    if field === :visrad_residual
+        vals === nothing && return nothing
+        res = dr.result[]
+        res.evaluation.scenario.target === t && return vals
+        res.evaluation.scenario === dr.scenario[] || return nothing
+    elseif vals === nothing
         res = dr.result[]
         res === nothing && return nothing
         s = res.evaluation.scenario
@@ -604,19 +609,26 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
         lo, hi = isempty(fin) ? (0.0, 1.0) : extrema(fin)
         v.color[] === :laser && (lo = 0.0)
         hi > lo || (hi = lo + 1)
+        parity = v.color[] === :visrad_residual
+        if parity                                     # a diverging scale about zero
+            hi = max(abs(lo), abs(hi))
+            hi > 0 || (hi = 1.0)
+            lo = -hi
+        end
         # a drive history's step: one scale for the whole history
-        rng = cursor_range(sess, v.color[])
+        rng = parity ? nothing : cursor_range(sess, v.color[])
         rng === nothing || ((lo, hi) = rng)
-        at = time_label(sess)
-        cmap = Makie.to_colormap(FIELD_COLORMAP)
+        at = parity ? "" : time_label(sess)
+        cmap = Makie.to_colormap(parity ? MARGIN_COLORMAP : FIELD_COLORMAP)
         for k in used
             x = tv(k)
             col[k] = isfinite(x) ? _cmap_color(cmap, (x - lo) / (hi - lo)) : NAN_COLOR
         end
-        cb.colormap[] = FIELD_COLORMAP
+        cb.colormap[] = parity ? MARGIN_COLORMAP : FIELD_COLORMAP
         cb.limits[] = (lo, hi)
         cb.ticks[] = Makie.automatic
-        cb.label[] = DRIVE_FIELD_LABELS[v.color[]] * (isempty(at) ? "" : " at " * at[5:end])
+        cb.label[] = parity ? "absorbed laser intensity, Briareus − VisRad (W/cm²)" :
+                     DRIVE_FIELD_LABELS[v.color[]] * (isempty(at) ? "" : " at " * at[5:end])
         _show_colorbar!(c, true)
     end
     n = length(otri)

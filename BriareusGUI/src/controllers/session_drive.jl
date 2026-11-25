@@ -625,6 +625,45 @@ function _set_visrad_ratio!(dr::DriveState, uc, beams)
 end
 
 """
+    visrad_parity(sess::DesignSession) -> Union{Nothing,Vector{Float64}}
+
+The absorbed laser intensity of the drive less the deposition that the imported VisRad
+workspace saves (W/cm²), per element of the drive scenario, for the coloring
+`:visrad_residual`. The window meshes the objects of a workspace again, so the VisRad
+values are resampled onto the mesh of the window (`Briareus.visrad_residuals` with
+`resample = true`): the comparison holds for the objects that stand where the workspace
+placed them. An element of an object without saved power sources is `NaN`, and so is
+every element of an object whose VisRad element order is not established, such as a
+hohlraum.
+
+`nothing`, with the reason in `sess.status`, when the design does not come from a
+workspace, the drive is not computed, or the workspace saves no deposition for the parts
+of the drive.
+"""
+function visrad_parity(sess::DesignSession)
+    src = sess.visrad_source[]
+    isempty(src) && return nothing
+    res = sess.drive.result[]
+    res === nothing && return nothing
+    ev = res.evaluation
+    r = try
+        ws = _visrad_workspace(src)
+        sources = visrad_power_sources(ws; stale = :nothing)
+        sources === nothing ? nothing :
+            visrad_residuals(ws, ev.scenario.target, ev.deposition.element; sources, resample = true)
+    catch err
+        err isa ArgumentError || rethrow()
+        nothing
+    end
+    if r === nothing || all(isnan, r.visrad)
+        sess.status[] = "no comparison with VisRad: the workspace saves no laser deposition for the parts of the drive" *
+                        (r === nothing || isempty(r.skipped) ? "" : " (left out: " * join(r.skipped, ", ") * ")")
+        return nothing
+    end
+    return to_Wcm2.(r.residual)
+end
+
+"""
     export_visrad_workspace(sess::DesignSession, path) -> path
 
 Write the design's beams (pointing, focus, power, on/off) into a copy of the VisRad

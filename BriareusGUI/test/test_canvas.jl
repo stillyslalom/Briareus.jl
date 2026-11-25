@@ -449,3 +449,23 @@ end
     @test tc.ax.yscale[] === identity && shown(tc.left) == length(time_chart(sess).left.series)
     @test (length(tc.ax.scene.plots), length(tc.ax2.scene.plots)) == nplots
 end
+
+@testset "comparison with VisRad as a coloring (offscreen)" begin
+    isdefined(@__MODULE__, :synthetic_workspace) || include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
+    dir = mktempdir()
+    src = joinpath(dir, "parity.vrw")
+    write(src, synthetic_workspace() * "\n" * power_source_section(["CAD_0" => [10.0, 0.0, 2.5, 7.25]]))
+    sess = DesignSession(resolution = :coarse)
+    import_visrad_workspace!(sess, src; include = o -> o.name == "CAD_0")
+    sc = B.scene_canvas(sess)
+    set_color!(sess, :visrad_residual)
+    build_scenario!(sess)
+    r = visrad_parity(sess)
+    m = maximum(abs, filter(isfinite, r))
+    # a diverging scale about zero that spans the largest residual
+    @test sc.colorbar.blockscene.visible[] && occursin("Briareus − VisRad", sc.colorbar.label[])
+    @test sc.colorbar.limits[][1] == -sc.colorbar.limits[][2] && sc.colorbar.limits[][2] ≈ m
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    set_color!(sess, :component)
+    @test !sc.colorbar.blockscene.visible[]
+end

@@ -355,8 +355,9 @@ ToolBar {
                     { text: "X-ray radiosity", value: "radiosity" },
                     { text: "Incident x-ray flux", value: "incident" },
                     { text: "1ω disposition", value: "omega1_disposition" },
-                    { text: "1ω clearance margin", value: "omega1_margin" }]
-            currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident", "omega1_disposition", "omega1_margin"].indexOf(app.colorBy))
+                    { text: "1ω clearance margin", value: "omega1_margin" },
+                    { text: "Laser, Briareus − VisRad", value: "visrad_residual" }]
+            currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident", "omega1_disposition", "omega1_margin", "visrad_residual"].indexOf(app.colorBy))
             onActivated: Julia.br_set_color(currentValue)
             tip: "Color by component, by a drive field (W/cm²), or by the 1ω verdict or margin of the TaLIS check"
         }

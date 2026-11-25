@@ -535,11 +535,14 @@ the surface it reaches, with the aim point marked. Beams are colored by group or
 their worst clearance or TaLIS status, in the colors of the tree. Scan outages in the
 beam properties runs the beam rules of engagement on the drive of the design with the
 default criteria (`Briareus.roe_default_criteria`, engineering defaults) and colors each
-beam by tier: green may drop, amber needs approval and red holds the shot. A selected
+beam by tier: green may drop, amber needs approval and red delays the shot. A selected
 beam shows the criterion that binds it and its quad, with the score and the thresholds.
 The target is colored
 by component or by the absorbed laser intensity, the x-ray radiosity or the incident
-x-ray flux (W/cm²); a drive coloring computes the drive when it is missing. Two further
+x-ray flux (W/cm²); a drive coloring computes the drive when it is missing. For a design
+imported from a VisRad workspace that saves its laser deposition, the coloring Laser,
+Briareus − VisRad paints the difference of the absorbed intensity on a diverging scale,
+with the VisRad values resampled onto the mesh of the window. Two further
 views share the canvas. One is the capsule θ–φ flux map, or the foil face for a foil.
 The other is an x-ray image (Compute ▸ X-ray image along the view, `xray_image!`), the
 radiance of the surfaces seen along the direction of the 3D view, framed as the view

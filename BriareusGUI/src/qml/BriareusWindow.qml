@@ -318,6 +318,7 @@ ApplicationWindow {
                 MenuSeparator {}
                 Action { text: "1ω disposition"; checkable: true; checked: app.colorBy === "omega1_disposition"; onTriggered: Julia.br_set_color("omega1_disposition") }
                 Action { text: "1ω clearance margin"; checkable: true; checked: app.colorBy === "omega1_margin"; onTriggered: Julia.br_set_color("omega1_margin") }
+                Action { text: "Absorbed laser, Briareus − VisRad"; checkable: true; checked: app.colorBy === "visrad_residual"; enabled: app.visradSource !== ""; onTriggered: Julia.br_set_color("visrad_residual") }
             }
             MenuSeparator {}
             Action {

@@ -240,6 +240,7 @@ const _VR_RESIDUAL_COLUMNS = Dict(:flux_in => (r"flux\s*in"i, :H), :flux_out => 
     visrad_residuals(workspace, sol; quantity = :laser, elements = Dict(),
                      sources = visrad_power_sources(workspace; stale = :nothing), relative = false,
                      index_base = nothing) -> (; residual, briareus, visrad, unit)
+    visrad_residuals(workspace, target, laser; sources = …, relative = false, resample = false)
 
 Element residuals `Briareus − VisRad` of one quantity, on the elements of the target of
 `sol`, for coloring the mesh by the disagreement. [`compare_visrad`](@ref) gives the
@@ -253,6 +254,16 @@ as described there.
   Properties export per object in `elements`, mapped as in
   [`visrad_element_values`](@ref).
 
+The second form takes the absorbed laser power per element (TW), such as the `element`
+field of a deposition, where no radiation solution exists. With `resample = true` the
+target may be meshed differently from VisRad, as after `remesh`: the VisRad value of a
+front element is that of the VisRad element nearest to its centroid on the object named
+by the part of the element, by the distance to the triangles of the VisRad elements. The
+comparison is then exact where the centroid lies on a VisRad element, and it assumes that
+the object stands where the workspace places it. An object whose VisRad element order is
+not established, such as a hohlraum, is left out and named in the field `skipped` of the
+result.
+
 `residual`, `briareus` and `visrad` have one entry per element. An element without a
 VisRad value is `NaN` in `visrad` and `residual`. With `relative = true` the residual is
 divided by the largest absolute VisRad value of the quantity, so the entries are
@@ -264,16 +275,8 @@ function visrad_residuals(ws::VisRadWorkspace, sol::RadiationSolution; quantity:
                           index_base::Union{Nothing,Integer} = nothing)
     t = sol.model.target
     v = ForwardDiff.value
-    if quantity === :laser
-        sources === nothing && throw(ArgumentError("the laser residual needs the power sources of the workspace"))
-        names = Set(keys(sources.tables))
-        PV = Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
-            visrad_deposition(ws, t; sources)
-        end
-        B = [v(sol.laser[e]) / t.elem_area[e] for e in eachindex(PV)]
-        V = [String(t.components[t.elem_comp[e]].name) in names ? PV[e] / t.elem_area[e] : NaN for e in eachindex(PV)]
-        unit = "TW/mm2"
-    else
+    quantity === :laser && return visrad_residuals(ws, t, sol.laser; sources, relative)
+    begin
         haskey(_VR_RESIDUAL_COLUMNS, quantity) ||
             throw(ArgumentError("quantity must be :laser, :flux_in, :flux_out, :rad_t or :emis_t, got :$quantity"))
         re, k = _VR_RESIDUAL_COLUMNS[quantity]
@@ -290,6 +293,52 @@ function visrad_residuals(ws::VisRadWorkspace, sol::RadiationSolution; quantity:
         B = k in (:TH, :TB) ? radiation_temperature.(H) : H
         unit = k in (:TH, :TB) ? "eV" : "TW/mm2"
     end
+    return _vr_residual(B, V, unit, relative)
+end
+
+function visrad_residuals(ws::VisRadWorkspace, t::Target, laser::AbstractVector;
+                          sources = visrad_power_sources(ws; stale = :nothing), relative::Bool = false,
+                          resample::Bool = false)
+    sources === nothing && throw(ArgumentError("the laser residual needs the power sources of the workspace"))
+    length(laser) == nelements(t) || throw(ArgumentError("the laser power has $(length(laser)) entries for $(nelements(t)) elements"))
+    v = ForwardDiff.value
+    if resample
+        B = [v(laser[e]) / t.elem_area[e] for e in 1:nelements(t)]
+        V = fill(NaN, nelements(t))
+        skipped = String[]
+        for name in sort!(collect(String, keys(sources.tables)))
+            es = [e for e in 1:nelements(t) if t.components[t.elem_comp[e]].part === Symbol(name) && t.elem_side[e] == 1]
+            isempty(es) && continue
+            tv, PV = try
+                Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+                    tv = visrad_target(ws; select = o -> o.name == name)
+                    tv, visrad_deposition(ws, tv; sources)
+                end
+            catch err
+                err isa ArgumentError || rethrow()
+                push!(skipped, name)
+                continue
+            end
+            tris = [k for k in eachindex(tv.tri_front) if tv.tri_front[k] > 0]
+            for e in es
+                c = t.elem_centroid[e]
+                k = argmin(k -> _point_triangle_distance(c, tv.tri_v0[k], tv.tri_v0[k] + tv.tri_e1[k], tv.tri_v0[k] + tv.tri_e2[k]), tris)
+                ve = tv.tri_front[k]
+                V[e] = PV[ve] / tv.elem_area[ve]
+            end
+        end
+        return (; _vr_residual(B, V, "TW/mm2", relative)..., skipped)
+    end
+    names = Set(keys(sources.tables))
+    PV = Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+        visrad_deposition(ws, t; sources)
+    end
+    B = [v(laser[e]) / t.elem_area[e] for e in eachindex(PV)]
+    V = [String(t.components[t.elem_comp[e]].name) in names ? PV[e] / t.elem_area[e] : NaN for e in eachindex(PV)]
+    return _vr_residual(B, V, "TW/mm2", relative)
+end
+
+function _vr_residual(B, V, unit, relative::Bool)
     residual = B .- V
     if relative
         peak = maximum(abs, (x for x in V if !isnan(x)); init = 0.0)

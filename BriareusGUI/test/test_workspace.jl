@@ -673,6 +673,41 @@ end
     @test occursin("0.1 to 0.2", note) && occursin("power-weighted mean", note)
 end
 
+@testset "comparison with the deposition a VisRad workspace saves (no GL)" begin
+    dir = mktempdir()
+    src = joinpath(dir, "parity.vrw")
+    qcad = [10.0, 0.0, 2.5, 7.25]                                  # TW/cm² on the four facets
+    write(src, synthetic_workspace() * "\n" * power_source_section(["CAD_0" => qcad]))
+    s = DesignSession(resolution = :coarse)
+    @test visrad_parity(s) === nothing
+    set_color!(s, :visrad_residual)
+    @test occursin("imported from a VisRad workspace", s.status[])
+    import_visrad_workspace!(s, src; include = o -> o.name == "CAD_0")
+    @test visrad_parity(s) === nothing                              # no drive yet
+    set_color!(s, :visrad_residual)
+    build_scenario!(s)
+    res = s.drive.result[]
+    @test res !== nothing
+    t = res.evaluation.scenario.target
+    r = visrad_parity(s)
+    ec = [e for e in elements(t, :CAD_0) if t.elem_side[e] == 1]
+    mine = element_values(res, :laser)
+    # The VisRad facet of an element of the window's mesh is the one whose plane holds its
+    # centroid, found without the nearest-centroid search of the comparison.
+    tv = visrad_target(read_visrad_workspace(src); select = o -> o.name == "CAD_0")
+    facet(c) = argmin(k -> abs(sum(tv.elem_normal[k] .* (c - tv.elem_centroid[k]))), 1:4)
+    theirs = [1e12 * qcad[facet(t.elem_centroid[e])] for e in ec]
+    @test r !== nothing && length(ec) >= 4 && nelements(tv) == 4
+    @test r[ec] ≈ mine[ec] .- theirs rtol = 1e-9
+    @test all(isnan, r[setdiff(1:nelements(t), ec)])
+    # without saved power sources there is no comparison
+    src0 = joinpath(dir, "none.vrw")
+    write(src0, synthetic_workspace())
+    import_visrad_workspace!(s, src0; include = o -> o.name == "CAD_0")
+    build_scenario!(s)
+    @test visrad_parity(s) === nothing && occursin("saves no laser deposition", s.status[])
+end
+
 @testset "VisRad workspaces in the window (no GL)" begin
     dir = mktempdir()
     src = joinpath(dir, "work.vrw")

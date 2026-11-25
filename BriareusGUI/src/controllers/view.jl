@@ -9,11 +9,13 @@ What the 3D view colors the target by: `:component`, a drive field (see
 disposition of the TaLIS check (see [`DISPOSITION_MODES`](@ref): the verdict of each
 facet, or its 1ω clearance margin).
 """
-const COLOR_MODES = (:component, :laser, :radiosity, :incident, :omega1_disposition, :omega1_margin)
+const COLOR_MODES = (:component, :laser, :radiosity, :incident, :omega1_disposition, :omega1_margin,
+                     :visrad_residual)
 
 const COLOR_LABELS = Dict(:component => "Components", :laser => "Absorbed laser",
                           :radiosity => "X-ray radiosity", :incident => "Incident x-ray flux",
-                          :omega1_disposition => "1ω disposition", :omega1_margin => "1ω clearance margin")
+                          :omega1_disposition => "1ω disposition", :omega1_margin => "1ω clearance margin",
+                          :visrad_residual => "Absorbed laser, Briareus − VisRad")
 
 """
 Beam colorings: by group (`:group`), by worst status in the clearance or TaLIS report, or

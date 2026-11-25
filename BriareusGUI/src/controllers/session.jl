@@ -433,6 +433,10 @@ function set_color!(sess::DesignSession, mode::Symbol)
     if mode in DISPOSITION_MODES
         disposition_of(sess.talis, sess.target.target[]) === nothing &&
             (sess.status[] = "run the TaLIS check (Review) to color the hardware by its 1ω disposition")
+    elseif mode === :visrad_residual
+        isempty(sess.visrad_source[]) ?
+            (sess.status[] = "the comparison with VisRad needs a design imported from a VisRad workspace") :
+            (_drive_current(sess) || sess.drive.building[] || build_scenario!(sess))
     elseif mode !== :component
         set_field!(sess.drive, mode)
         _drive_current(sess) || sess.drive.building[] || build_scenario!(sess)
