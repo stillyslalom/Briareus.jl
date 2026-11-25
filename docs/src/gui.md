@@ -81,7 +81,10 @@ hohlraum. These thresholds are engineering defaults, and a shot sheet needs the 
 of the experiment, passed to `roe_scan` from a script. `diff` compares a design with a
 reference through `Briareus.design_diff`: parts and beams are matched by name, each
 design is checked with the TaLIS settings saved in it, and the page lists the rows that
-newly fail first. The commands load the same
+newly fail first. File ▸ Export Julia script writes the design as a script for
+`briareus run`: the state of the session as a literal, then the target, the enabled
+beams, the TaLIS check and the drive as values that a sweep or an optimization changes
+and evaluates again. The commands load the same
 package as the window, which takes most of their time.
 
 `pkg> app update BriareusGUI` updates the app, and `pkg> app rm BriareusGUI` removes it

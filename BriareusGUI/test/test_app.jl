@@ -302,6 +302,23 @@ end
                   isfile(joinpath(dir, "clidiff", "diff.html"))
             @test A._main(["diff", src, "--out", joinpath(dir, "clidiff")]) == 1
 
+            # the design as a script: run, it gives the target, beams, check and drive of the session
+            sp = write_session_script(joinpath(dir, "design.jl"), s1)
+            text = read(sp, String)
+            @test session_script(s1; title = "design.jl") == text && !occursin("\"window\"", text)
+            ms = A.run_script(sp)
+            m = (; (n => Base.invokelatest(getglobal, ms, n) for n in (:target, :beams, :talis, :evaluation, :session))...)
+            await_target!(s1.target)
+            t1 = s1.target.target[]
+            @test m.target.elem_area == t1.elem_area && [c.name for c in m.target.components] == [c.name for c in t1.components]
+            @test [(b.name, b.aim, b.power, b.spot) for b in m.beams] == [(b.name, b.aim, b.power, b.spot) for b in active_beams(s1.beams)]
+            ref1 = talis_check(t1, active_beams(s1.beams); talis_kwargs(s1.talis, s1.review)...)
+            @test [(x.beam, x.rule, x.status, x.margin) for x in m.talis.rows] == [(x.beam, x.rule, x.status, x.margin) for x in ref1.rows]
+            s1.spawn[] = false
+            build_scenario!(s1)
+            @test mean_flux(m.evaluation) ≈ mean_flux(evaluate(s1.drive.scenario[], display_beams(s1.beams))) rtol = 1e-12
+            @test session_state(m.session)["beams"] == session_state(s1)["beams"]
+
             # a foil design with no hohlraum: criteria from the foil, on OMEGA beams, where
             # the TaLIS rules do not apply
             fsrc = joinpath(dir, "foil.briar.toml")

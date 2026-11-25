@@ -1274,6 +1274,7 @@ end
 br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.sess, _url_to_path(String(url))))
 br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
 br_export_stl(url) = _with_shell(sh -> export_target_stl(sh.sess, _url_to_path(String(url))))
+br_export_script(url) = _with_shell(sh -> write_session_script(_url_to_path(String(url)), sh.sess))
 # The retune's errors show in its dialog, where it was asked for.
 function br_retune(table, out, by, cap, stay, on, target, level, load)
     _with_shell() do sh
@@ -1612,7 +1613,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
     @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
     @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
-    @qmlfunction br_part_role br_piece_role br_active_foil br_drive_cavity br_export_stl br_cavity br_cavity_point br_part_film
+    @qmlfunction br_part_role br_piece_role br_active_foil br_drive_cavity br_export_stl br_export_script br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_new_assembly br_move_into_assembly br_ungroup_assembly br_rename_node
     @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform

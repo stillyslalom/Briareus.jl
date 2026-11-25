@@ -196,6 +196,7 @@ ApplicationWindow {
                 onTriggered: resultsDialog.open()
             }
             Action { text: "Export target as STL…"; onTriggered: exportStlDialog.open() }
+            Action { text: "Export Julia script…"; onTriggered: exportScriptDialog.open() }
             MenuSeparator {}
             Action { text: "Save view as image…"; onTriggered: saveViewDialog.open() }
             MenuSeparator {}
@@ -605,6 +606,14 @@ ApplicationWindow {
         defaultSuffix: "stl"
         nameFilters: ["STL mesh (*.stl)", "All files (*)"]
         onAccepted: Julia.br_export_stl(selectedFile.toString())
+    }
+    FileDialog {
+        id: exportScriptDialog
+        title: "Export the design as a Julia script"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "jl"
+        nameFilters: ["Julia script (*.jl)", "All files (*)"]
+        onAccepted: Julia.br_export_script(selectedFile.toString())
     }
     // VisRad workspaces import a design, and the export writes its beams into a copy of the
     // imported one.

@@ -81,11 +81,13 @@ include("controllers/session_tasks.jl")       # optimization, checks, new target
 include("controllers/timeline.jl")            # pulses, drive histories, the time cursor
 include("controllers/timeline_diagnostics.jl") # recorded diagnostics, the history export
 include("controllers/workspace.jl")           # session files, undo and redo
+include("controllers/script_export.jl")       # the session as a Julia script
 include("controllers/placement_triad.jl")     # the 3D view's placement triad
 
 export display_number
 export import_visrad_workspace!, export_visrad_workspace, export_results, retune_pulses,
-       retune_to_reference!, session_state, restore!, save_session, load_session!, cad_source, relink_cad!,
+       retune_to_reference!, session_state, restore!, save_session, load_session!, session_script,
+       write_session_script, cad_source, relink_cad!,
        reload_cad_sources!, EditHistory, record!, undo!,
        redo!, can_undo, can_redo, reset_history!
 export TargetSetup, MeshSpec, MESH_PRESETS,
