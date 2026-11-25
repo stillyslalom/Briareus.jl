@@ -39,7 +39,7 @@ module Controllers
 using Briareus
 using Observables
 using Printf
-using LinearAlgebra: dot, norm, normalize, cross, eigen, Symmetric
+using LinearAlgebra: dot, norm, normalize, cross, eigen, Symmetric, qr, ColumnNorm
 import TOML
 using SHA: sha256
 using ZipArchives: ZipWriter, ZipReader, zip_newfile, zip_commitfile, zip_findlast_entry, zip_readentry

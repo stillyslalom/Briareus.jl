@@ -478,7 +478,8 @@ end
 
 A sphere through most of `points` (mm), weighted by `weights` (e.g. the surface area
 each point stands for, so a finely tessellated fill tube does not outweigh the capsule
-it is attached to): a sphere fitted to every point (weighted least squares, algebraic),
+it is attached to): a sphere fitted to every point (weighted least squares, algebraic,
+solved from the 4 × 4 normal equations about the weighted centroid),
 then refitted to the points within 0.3, then four times within `inlier`, × its radius.
 Robust to a minority of the weight off the sphere. A shell modeled with both faces
 fits between them; the radius returned is the outer face's (the weighted 75th
@@ -490,36 +491,52 @@ function fit_sphere(points::AbstractVector, weights::AbstractVector = ones(lengt
     w = Float64.(weights)
     length(P) >= 4 && length(w) == length(P) && all(>=(0), w) && sum(w) > 0 ||
         throw(ArgumentError("a sphere needs at least four points with nonnegative weights"))
-    function wmedian(x, w)
-        o = sortperm(x)
-        cw = cumsum(w[o])
-        return x[o[searchsortedfirst(cw, cw[end] / 2)]]
-    end
-    c = sum(w .* P) / sum(w)
-    r = wmedian([norm(p - c) for p in P], w)
+    m = sum(w .* P) / sum(w)
+    c = m
+    r = _weighted_quantile([norm(p - m) for p in P], w, 0.5)
+    M, g = zeros(4, 4), zeros(4)
     for it in 1:6
         # every point first, then those near the sphere
         band = (it == 1 ? Inf : it == 2 ? 0.3 : Float64(inlier)) * r
-        sel = [k for k in eachindex(P) if abs(norm(P[k] - c) - r) <= band && w[k] > 0]
-        length(sel) >= 4 || break
-        # |p|² = 2 c·p + (r² − |c|²): linear in (c, k); rows weighted by √w
-        sw = sqrt.(w[sel])
-        A = reduce(vcat, [sw[j] * [2P[k][1] 2P[k][2] 2P[k][3] 1.0] for (j, k) in enumerate(sel)])
-        b = [sw[j] * dot(P[k], P[k]) for (j, k) in enumerate(sel)]
-        x = A \ b
-        c = Vec3(x[1], x[2], x[3])
-        r = sqrt(max(x[4] + dot(c, c), 0.0))
+        # |y|² = 2 d·y + (r² − |d|²) with y = p − m and d = c − m: linear in (d, k). The
+        # weighted normal equations MᵀM x = Mᵀb are summed point by point (rows 2y, 1).
+        fill!(M, 0.0)
+        fill!(g, 0.0)
+        n = 0
+        for k in eachindex(P)
+            (w[k] > 0 && abs(norm(P[k] - c) - r) <= band) || continue
+            n += 1
+            y = P[k] - m
+            a = (2y[1], 2y[2], 2y[3], 1.0)
+            q = dot(y, y)
+            for j in 1:4
+                g[j] += w[k] * a[j] * q
+                for i in 1:4
+                    M[i, j] += w[k] * a[i] * a[j]
+                end
+            end
+        end
+        n >= 4 || break
+        # (pivoted, so points that fix no sphere, such as coplanar ones, give a finite answer)
+        x = qr(M, ColumnNorm()) \ g
+        d = Vec3(x[1], x[2], x[3])
+        c = m + d
+        r = sqrt(max(x[4] + dot(d, d), 0.0))
     end
     # a shell's inner and outer faces fit in between: take the outer one (the radiating
     # surface), the weighted 75th percentile of the distances near the sphere
-    near = [k for k in eachindex(P) if abs(norm(P[k] - c) - r) <= 0.2r]
-    if length(near) >= 4
-        d = [norm(P[k] - c) for k in near]
-        o = sortperm(d)
-        cw = cumsum(w[near][o])
-        r = d[o[searchsortedfirst(cw, 0.75 * cw[end])]]
-    end
-    return c, r
+    # (the fit under names assigned once: a closure over `c` or `r` would box them)
+    cf, rf = c, r
+    near = [k for k in eachindex(P) if abs(norm(P[k] - cf) - rf) <= 0.2rf]
+    length(near) >= 4 || return cf, rf
+    return cf, _weighted_quantile([norm(P[k] - cf) for k in near], w[near], 0.75)
+end
+
+# The value of `x` at fraction `q` of the total weight `w`, in the order of `x`.
+function _weighted_quantile(x::AbstractVector, w::AbstractVector, q::Real)
+    o = sortperm(x)
+    cw = cumsum(w[o])
+    return x[o[searchsortedfirst(cw, q * cw[end])]]
 end
 
 # Role `:observed` for CAD part `i`: a sphere part with the role, fitted to it, in its place in
