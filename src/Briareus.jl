@@ -40,7 +40,7 @@ export foil_material, FOIL_ELEMENTS
 export hohlraum, hohlraum_counts, capsule_counts, foil, HohlraumProfile, frustraum_profile
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,
-       beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, NIF_DIAGNOSTIC_PORTS, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
+       beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, NIF_DIAGNOSTIC_PORTS, NIF_LENS_DISTANCE, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, CoronaProfile, CoronaOperator, ablation_pressure_proxy, shell_displacement_proxy, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
 export Enclosure, enclosure, cad_target

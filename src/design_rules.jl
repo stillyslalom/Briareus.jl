@@ -812,7 +812,7 @@ end
     Omega1KeepOut(target, parts; pointing = 0.05, target_offset = 0.025,
                   hardware_tolerance = 0.0, focus = 1.0, tolerance = 0.5, pivot = :tcc,
                   omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
-                  lens_distance = 7700.0, offsets = nothing, resolution = 1e-9,
+                  lens_distance = NIF_LENS_DISTANCE, offsets = nothing, resolution = 1e-9,
                   minimum = 0.2, weight = 100.0)
 
 Keep-out of named parts from the 1ω footprints of the beams.
@@ -861,7 +861,7 @@ end
 function Omega1KeepOut(t::Target, parts; pointing = 0.05, target_offset = 0.025,
                        hardware_tolerance = 0.0, focus = 1.0, tolerance = 0.5, pivot = :tcc,
                        omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
-                       lens_distance = 7700.0, offsets = nothing, resolution = 1e-9, minimum = 0.2,
+                       lens_distance = NIF_LENS_DISTANCE, offsets = nothing, resolution = 1e-9, minimum = 0.2,
                        weight = 100.0)
     resolution > 0 || throw(ArgumentError("resolution must be > 0"))
     names = _part_names(parts)

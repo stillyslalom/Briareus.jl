@@ -193,7 +193,7 @@ end
 
 """
     unconverted_deposition(target, beams; ratio, colors = nif_unconverted(), offsets = nothing,
-                           lens_distance = 7700.0, coarse = 0.5, resolution = 0.02)
+                           lens_distance = NIF_LENS_DISTANCE, coarse = 0.5, resolution = 0.02)
         -> NamedTuple
 
 Laser power of the unconverted (1ω, 2ω) light absorbed by the target. The result
@@ -241,7 +241,7 @@ this is a fixed source and lies outside the differentiable deposition path
 """
 function unconverted_deposition(t::Target, beams::AbstractVector{<:Beam}; ratio,
                                 colors = nif_unconverted(), offsets = nothing,
-                                lens_distance::Real = 7700.0, coarse::Real = 0.5,
+                                lens_distance::Real = NIF_LENS_DISTANCE, coarse::Real = 0.5,
                                 resolution::Real = 0.02)
     0 < resolution <= coarse || throw(ArgumentError("need 0 < resolution ≤ coarse"))
     lens_distance > 0 || throw(ArgumentError("lens_distance must be positive"))
@@ -515,7 +515,7 @@ end
 
 """
     unconverted_history(target, beams, pulses, times; ratio, prepulse = (;), by = :group,
-                        colors = nif_unconverted(), offsets = nothing, lens_distance = 7700.0,
+                        colors = nif_unconverted(), offsets = nothing, lens_distance = NIF_LENS_DISTANCE,
                         coarse = 0.5, resolution = 0.02) -> IrradianceHistory
 
 Irradiance of the unconverted (1ω, 2ω) light on the target at each of `times` (ns), from
@@ -571,7 +571,7 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
                                                      @nospecialize(ratio), @nospecialize(prepulse = (;)),
                                                      @nospecialize(by = :group),
                                                      colors = nif_unconverted(), offsets = nothing,
-                                                     lens_distance::Real = 7700.0, coarse::Real = 0.5,
+                                                     lens_distance::Real = NIF_LENS_DISTANCE, coarse::Real = 0.5,
                                                      resolution::Real = 0.02)
     ts = collect(Float64, times)
     issorted(ts) || throw(ArgumentError("times must be sorted"))

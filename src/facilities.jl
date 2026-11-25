@@ -334,6 +334,19 @@ function nif_quads(beams::AbstractVector{<:Beam}; fnumber = 7.9, spot = nothing,
     return identity.(out)
 end
 
+"""
+    NIF_LENS_DISTANCE
+
+The distance (mm) of the NIF final focus lens upstream of the 3ω focus, 7700 mm. The
+unconverted-light footprints ([`unconverted_deposition`](@ref), [`talis_check`](@ref),
+[`Omega1KeepOut`](@ref)) converge on the chief ray from the lens center at this distance,
+and it is the default of their `lens_distance`. The value is *derived* for the 1ω
+footprint model, with medium confidence (research notes, "Later search (2026-10-16): LMF
+Shot RI Resources and the VisRad manual", under the 1ω footprint model). No facility
+document gives it as a design-rule constant.
+"""
+const NIF_LENS_DISTANCE = 7700.0
+
 function _nif_beam_table()
     _, rows = read_csv(joinpath(@__DIR__, "..", "data", "nif_beams.csv"))
     return [(beam = r[1], bundle = r[2], hemisphere = r[3], theta = parse(Float64, r[5]),

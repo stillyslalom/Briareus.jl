@@ -262,7 +262,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                      capture_contour = 0.1, capture_margin = 0.5, max_incidence = 70.0,
                      clearance_contour = 0.01, clearance_margin = 0.5,
                      omega1::Bool = true, omega1_margin = 0.2, omega1_edge = 4.45,
-                     omega1_size = nothing, omega1_focus = nothing, lens_distance = 7700.0,
+                     omega1_size = nothing, omega1_focus = nothing, lens_distance = NIF_LENS_DISTANCE,
                      offsets = nothing, open_ports = :nif, reflection_angle = 20.0,
                      cylinder_radius = 2.0, sphere_radius = 5.0, curvature = Dict{Symbol,Any}(),
                      stay_in = 19.0, level::Integer = 2, resolution = 1e-4, rtol = 0.01)
