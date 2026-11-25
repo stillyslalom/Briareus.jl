@@ -1,9 +1,9 @@
 # Briareus.jl Cleanup & Refactoring Roadmap
 
-This file is the working copy of the cleanup plan of 2026-11-25, kept on the branch so
-that a session can resume from it. The status section comes first; the plan as handed
-over follows unchanged except for the status marks. The lasting record of what stayed
-open or was declined is item 33 of [reference/ROADMAP.md](reference/ROADMAP.md).
+Archived on 2026-11-25. This was the working copy of the cleanup plan of that date; the
+status section comes first and the plan as handed over follows. The lasting record of what
+stayed open or was declined is item 33 of [reference/ROADMAP.md](../ROADMAP.md). The plan
+that followed is [USERBASE_ROADMAP.md](../../USERBASE_ROADMAP.md).
 
 ## Status (2026-11-25)
 
