@@ -197,6 +197,7 @@ ApplicationWindow {
             }
             Action { text: "Export target as STL…"; onTriggered: exportStlDialog.open() }
             Action { text: "Export Julia script…"; onTriggered: exportScriptDialog.open() }
+            Action { text: "Export 1ω review report…"; onTriggered: reviewReportDialog.open() }
             MenuSeparator {}
             Action { text: "Save view as image…"; onTriggered: saveViewDialog.open() }
             MenuSeparator {}
@@ -608,6 +609,11 @@ ApplicationWindow {
         defaultSuffix: "stl"
         nameFilters: ["STL mesh (*.stl)", "All files (*)"]
         onAccepted: Julia.br_export_stl(selectedFile.toString())
+    }
+    FolderDialog {
+        id: reviewReportDialog
+        title: "Folder for the 1ω review report (HTML, CSV and one SVG slice per tight pair)"
+        onAccepted: Julia.br_tl_review(selectedFolder.toString())
     }
     FileDialog {
         id: exportScriptDialog

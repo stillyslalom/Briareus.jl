@@ -72,7 +72,10 @@ briareus run script.jl args...                         # a script with Briareus 
 ```
 
 `review-1w` takes `--threshold` (mm, default 1.0) for the margin below which a passing
-pair is drawn. The checks run with the settings saved in the design, through
+pair is drawn. With `--images` the page also shows a rendered Daylight view of up to
+24 pairs, the tightest first; File ▸ Export 1ω review report writes the same packet from
+the window without the pictures, since the offscreen drawing and the window cannot share
+a process. The checks run with the settings saved in the design, through
 `Briareus.talis_check`, `Briareus.omega1_review` and `Briareus.roe_scan`, so a script
 that calls those functions gets the same numbers. `roe` scans the drive scenario of the
 design against the criteria that `Briareus.roe_default_criteria` selects from the

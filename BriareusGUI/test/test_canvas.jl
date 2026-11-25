@@ -469,3 +469,21 @@ end
     set_color!(sess, :component)
     @test !sc.colorbar.blockscene.visible[]
 end
+
+@testset "Daylight pictures of the 1ω review (offscreen)" begin
+    sess = DesignSession(resolution = :coarse)
+    inp = B._talis_inputs(sess)
+    review = omega1_review(inp.target, inp.beams; threshold = 50.0, inp.kw...)
+    @test length(review.items) >= 2
+    pics = B.review_images(sess, review; max_images = 2)
+    @test sort!(collect(keys(pics))) == [1, 2] && sess.talis.focus[] === nothing
+    # a PNG as a data URI (the signature of a PNG encodes as iVBORw0KGgo), one per approach
+    @test all(p -> startswith(p, "data:image/png;base64,iVBORw0KGgo"), values(pics)) && pics[1] != pics[2]
+    dir = mktempdir()
+    page = read(write_omega1_review(dir, review; images = pics)[1], String)
+    @test count("<img alt=\"view of approach", page) == 2 && occursin(pics[1], page)
+    # the camera of the last picture is the Daylight view of its approach
+    a = review.items[2].approach
+    cam = sess.view.camera[]
+    @test cam.ortho && collect(cam.lookat) ≈ collect((a.x_hw + a.x_beam) / 2)
+end

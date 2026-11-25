@@ -13,8 +13,9 @@ usage:
   briareus run script.jl [args...]            run a Julia script with Briareus and the controllers loaded
   briareus talis <design> --out report.csv [--json]
                                               the TaLIS checks as CSV (and JSON); exit code 2 when a check fails
-  briareus review-1w <design> --out dir/ [--threshold 1.0] [--json]
-                                              the 1ω review packet: HTML, CSV and one SVG slice per tight pair
+  briareus review-1w <design> --out dir/ [--threshold 1.0] [--json] [--images]
+                                              the 1ω review packet: HTML, CSV and one SVG slice per tight pair;
+                                              --images adds a rendered Daylight view of each pair
   briareus roe <design> --out dir/ [--json]   the beam rules of engagement: HTML, CSV, Markdown and port map
   briareus diff <reference> <design> --out dir/ [--json]
                                               what changed between two designs: parts, beams, TaLIS margins, physics
@@ -23,12 +24,13 @@ usage:
 """
 
 """
-    parse_command(args) -> (; command, files, out, threshold, json, tab, rest)
+    parse_command(args) -> (; command, files, out, threshold, json, images, tab, rest)
 
 The arguments of the `briareus` command. `command` is `"run"`, `"talis"`, `"review-1w"`,
 `"roe"` or `"diff"`, or `""` for the window. `files` are the arguments that are not options,
 `out`, `threshold` and `tab` the values of `--out`, `--threshold` and `--tab` (`nothing`
-when absent), `json` whether `--json` was given, and `rest` every argument after the
+when absent), `json` and `images` whether `--json` and `--images` were given, and `rest`
+every argument after the
 script of `run`. An option without its value or a `--threshold` that is not a number
 throws an `ArgumentError`.
 """
@@ -36,10 +38,10 @@ function parse_command(args::AbstractVector{<:AbstractString})
     command = !isempty(args) && args[1] in ("run", "talis", "review-1w", "roe", "diff") ? String(args[1]) : ""
     as = command == "" ? collect(String, args) : collect(String, args[2:end])
     if command == "run"
-        return (; command, files = first(as, 1), out = nothing, threshold = nothing, json = false, tab = nothing,
-                rest = as[2:end])
+        return (; command, files = first(as, 1), out = nothing, threshold = nothing, json = false, images = false,
+                tab = nothing, rest = as[2:end])
     end
-    files, out, threshold, tab, json = String[], nothing, nothing, nothing, false
+    files, out, threshold, tab, json, images = String[], nothing, nothing, nothing, false, false
     i = 1
     while i <= length(as)
         a = as[i]
@@ -51,12 +53,14 @@ function parse_command(args::AbstractVector{<:AbstractString})
              threshold === nothing && throw(ArgumentError("--threshold needs a number of mm, got \"$v\"")))
         elseif a == "--json"
             json = true
+        elseif a == "--images"
+            images = true
         elseif !startswith(a, "--")
             push!(files, a)
         end
         i += 1
     end
-    return (; command, files, out, threshold, json, tab, rest = String[])
+    return (; command, files, out, threshold, json, images, tab, rest = String[])
 end
 
 """
@@ -102,18 +106,60 @@ function talis_command(sess::DesignSession, out::AbstractString; json::Bool = fa
 end
 
 """
-    review_1w_command(sess::DesignSession, out; threshold = 1.0, json = false, title = "1ω review")
-        -> (; review, paths)
+    review_images(sess::DesignSession, review; max_images = 24) -> Dict{Int,String}
+
+A rendered Daylight view of each approach of a 1ω review (`Briareus.omega1_review` of the
+session), as PNG data URIs keyed by the index in `review.items`, for the `images` of
+`Briareus.write_omega1_review`. Each picture is the 3D view of the session with the row
+under inspection ([`focus_talis_row!`](@ref)) and the camera of
+[`daylight_view`](@ref), drawn offscreen. At most `max_images` approaches are drawn, the
+tightest first.
+
+The pictures need a graphics context of GLMakie, which cannot share a process with the
+window: this function serves the headless command and scripts, and it throws an
+`ArgumentError` while the window is open.
+"""
+function review_images(sess::DesignSession, review::Omega1Review; max_images::Integer = 24)
+    _SHELL[] === nothing ||
+        throw(ArgumentError("the Daylight pictures are drawn offscreen, which the open window does not allow"))
+    images = Dict{Int,String}()
+    isempty(review.items) && return images
+    tl = sess.talis
+    start_talis!(sess; spawn = false)
+    rows = talis_rows(tl)
+    sc = scene_canvas(sess)
+    mktempdir() do dir
+        for (i, it) in enumerate(review.items)
+            length(images) >= max_images && break
+            k = findfirst(x -> x.beam == it.row.beam && x.rule === it.row.rule && x.component === it.row.component, rows)
+            k === nothing && continue
+            focus_talis_row!(tl, k)
+            talis_view!(sess, :daylight)
+            png = joinpath(dir, "view.png")
+            GLMakie.save(png, sc.fig; px_per_unit = 1)
+            images[i] = "data:image/png;base64," * base64encode(read(png))
+        end
+    end
+    clear_talis_focus!(tl)
+    return images
+end
+
+"""
+    review_1w_command(sess::DesignSession, out; threshold = 1.0, json = false, images = false,
+                      title = "1ω review") -> (; review, paths)
 
 The `briareus review-1w` command on a session: `Briareus.omega1_review` with the settings
-of the session, written into the folder `out` (`Briareus.write_omega1_review`).
+of the session, written into the folder `out` (`Briareus.write_omega1_review`). With
+`images` the page also shows a rendered Daylight view of each approach
+([`review_images`](@ref)).
 """
 function review_1w_command(sess::DesignSession, out::AbstractString; threshold::Real = 1.0, json::Bool = false,
-                           title::AbstractString = "1ω review")
+                           images::Bool = false, title::AbstractString = "1ω review")
     inp = _talis_inputs(sess)
     inp isa String && throw(ArgumentError(inp))
     review = omega1_review(inp.target, inp.beams; threshold, inp.kw...)
-    return (; review, paths = write_omega1_review(out, review; json, title))
+    pics = images ? review_images(sess, review) : Dict{Int,String}()
+    return (; review, paths = write_omega1_review(out, review; json, title, images = pics))
 end
 
 """
@@ -225,7 +271,7 @@ function _run_command(c, io::IO = stdout)
         foreach(p -> println(io, "wrote ", p), r.paths)
         return n(:fail) > 0 ? 2 : 0
     elseif c.command == "review-1w"
-        r = review_1w_command(sess, c.out; threshold = something(c.threshold, 1.0), c.json, title = "1ω review: " * name)
+        r = review_1w_command(sess, c.out; threshold = something(c.threshold, 1.0), c.json, c.images, title = "1ω review: " * name)
         println(io, r.review)
         foreach(p -> println(io, "wrote ", p), first(r.paths, 2))
         length(r.paths) > 2 && println(io, "wrote ", length(r.paths) - 2, " more files in ", c.out)

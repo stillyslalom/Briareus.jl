@@ -229,6 +229,8 @@ end
         @test c.command == "" && c.files == ["design.briar"] && c.tab == "talis" && !c.json
         c = A.parse_command(["review-1w", "in.vrw", "--out", "dir", "--threshold", "0.5", "--json"])
         @test (c.command, c.files, c.out, c.threshold, c.json) == ("review-1w", ["in.vrw"], "dir", 0.5, true)
+        @test A.parse_command(["review-1w", "in.vrw", "--out", "dir", "--images"]).images && !c.images
+        @test A.parse_command(["diff", "a.briar", "b.vrw", "--out", "d"]).files == ["a.briar", "b.vrw"]
         c = A.parse_command(["run", "s.jl", "--out", "x", "talis"])
         @test c.command == "run" && c.files == ["s.jl"] && c.rest == ["--out", "x", "talis"] && c.out === nothing
         @test A.parse_command(String[]).files == String[] && A.parse_command(["--from-shortcut"]).files == String[]
