@@ -38,6 +38,11 @@ enough to scatter, clear by its reflection, to review, or failing
 ([`Omega1Disposition`](@ref)). [`omega1_slice`](@ref) gives the plane across the beamlet
 through the hardware point of an approach as 2-D geometry, and
 [`write_omega1_slice_svg`](@ref) draws it as a vector file without a graphics context.
+[`corridor_map`](@ref) turns the same keep-outs around: it samples a sphere about a point
+or a plane and gives the margin of each sample to the 3ω envelopes, the 1ω footprints and
+the lines of sight of the diagnostics ([`SightLine`](@ref), [`sight_line`](@ref)), so the
+open region shows where new hardware may be placed. [`corridor_margin`](@ref) gives the
+margins of one point, and [`write_corridor_map_svg`](@ref) draws the map.
 [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency
@@ -45,6 +50,6 @@ fitted to published foil data ([`kshell_ce`](@ref)) to the photons at the detect
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl", "src/omega1_slice.jl", "src/design_rules.jl"]
+Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl", "src/omega1_slice.jl", "src/corridor.jl", "src/design_rules.jl"]
 Private = false
 ```
