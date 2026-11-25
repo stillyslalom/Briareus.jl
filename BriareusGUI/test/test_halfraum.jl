@@ -535,8 +535,7 @@ end
     @test undo!(sess) && observed_name(ts) === :capsule
     @test cavity_walls(ts) == [:hohlraum => [:hohlraum_wall, cap, :hohlraum_cap_bottom]]
     @test redo!(sess) && observed_name(ts) === cap
-    # In sessions the role round-trips (version 11), and a version-10 session loads with
-    # the default roles of the pieces.
+    # In sessions the role round-trips.
     f = joinpath(mktempdir(), "cap.briar.toml")
     save_session(f, sess)
     saved = TOML.parsefile(f)
@@ -545,12 +544,6 @@ end
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test observed_name(s2.target) === cap && cavity_walls(s2.target) == [:hohlraum => walls]
-    old = session_state(sess)
-    old["version"] = 10
-    foreach(q -> delete!(q, "piece_roles"), old["target"]["parts"])
-    old["target"]["parts"][findfirst(q -> q["name"] == "capsule", old["target"]["parts"])]["observed"] = true
-    restore!(s2, old)
-    @test observed_name(s2.target) === :capsule && all(q -> isempty(q.piece_roles), s2.target.parts[])
     # the capsule given the role again: the cap gives it up and is a wall again
     @test set_part_role!(ts, part_index(ts, :capsule), :observed)
     @test observed_name(ts) === :capsule && isempty(ts.parts[][part_index(ts, :hohlraum)].piece_roles)
@@ -593,13 +586,13 @@ end
     # missed light from 12.1% to 4.5%.
     @test r.after.face.rms < 0.05 * r.before.face.rms
     @test missed_fraction(evaluate(sub, r.beams)) < missed_fraction(ev0)
-    # the setting round trips in a session; an older one loads with the default weight
+    # the setting round trips in a session
     st.uniformity[] = 3.0
     state = session_state(sess)
     @test state["optimize"]["uniformity"] == 3.0 && state["optimize"]["objective"] == "face"
-    delete!(state["optimize"], "uniformity")
+    st.uniformity[] = 1.0
     restore!(sess, state)
-    @test st.uniformity[] == 1.0
+    @test st.uniformity[] == 3.0
 end
 
 @testset "the opacity sample's retune: a uniform flux at a set level (no GL)" begin

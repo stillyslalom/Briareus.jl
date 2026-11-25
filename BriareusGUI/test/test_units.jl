@@ -129,13 +129,12 @@ end
     @test s.time.pulses[].unit === :beam && [total(τ) for τ in times] ≈ 4 .* P0
     @test Controllers._pulse_beams(s.time.pulses[], bt.beams[], bt.enabled[], 2.0) == with_pulses(bt.beams[], pul, 2.0)
     @test_throws ArgumentError set_pulse_unit!(s, :cone)
-    # in a session; one saved before the unit read every beam at its column's power
+    # in a session
     st = Controllers._pulse_state(s.time.pulses[])
     @test st["unit"] == "beam" && Controllers._state_pulses(st).unit === :beam
     set_pulse_unit!(s, :quad)
     st = Controllers._pulse_state(s.time.pulses[])
     @test st["unit"] == "quad" && Controllers._state_pulses(st).unit === :quad
-    @test Controllers._state_pulses(delete!(copy(st), "unit")).unit === :beam
     # A table per beam name is per beam, whatever is asked, and a shape does not have a
     # unit to set.
     perbeam = Dict(Symbol(b.name) => PulseShape(times, [0.0, 1.0, 2.0, 0.0]) for b in bt.beams[])
@@ -262,7 +261,6 @@ end
         st = Controllers._pulse_state(src)
         @test st["shape"] == String(key) && Controllers._state_pulses(st).key === key
     end
-    @test Controllers._state_pulses(Dict("kind" => "shape", "step" => 0.5)).key === :n221204   # sessions before the name
     @test_throws ArgumentError use_pulse_shape!(s, :n000000)
     use_pulse_shape!(s; step = 1.0)
     @test s.time.pulses[].key === :n221204

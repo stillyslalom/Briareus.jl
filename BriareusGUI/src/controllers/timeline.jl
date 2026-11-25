@@ -124,11 +124,10 @@ function _pulse_state(src)
 end
 
 _state_pulses(d) =
-    d["kind"] == "shape" ? _shape_pulses(Float64(d["step"]), Symbol(get(d, "shape", "n221204"))) :
+    d["kind"] == "shape" ? _shape_pulses(Float64(d["step"]), Symbol(d["shape"])) :
     _table_pulses(Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(Float64.(v["t"]), Float64.(v["power"]))
                                           for (k, v) in d["table"]),
-                  # In a session from before the unit, every beam fired the power of its column.
-                  Symbol(d["by"]), d["label"]; unit = Symbol(get(d, "unit", "beam")))
+                  Symbol(d["by"]), d["label"]; unit = Symbol(d["unit"]))
 
 """
     use_pulse_shape!(sess::DesignSession, shape = :n221204; step = 0.2) -> sess

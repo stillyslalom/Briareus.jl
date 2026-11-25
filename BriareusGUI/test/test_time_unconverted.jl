@@ -368,7 +368,7 @@ end
     line = only(filter(x -> x.label == "3ω on foil", time_chart(f, :irradiance).left.series))
     @test line.style === :dot && _near(line.y, max.(peak3, 1e-4 * tm.threshold[]))
 
-    # sessions keep the prepulse and the threshold; older ones load the defaults
+    # sessions keep the prepulse and the threshold
     set_irradiance_threshold!(tm, 3e8)
     st = session_state(f)
     @test st["time"]["prepulse"] == [P, 0.0, -4.0, 0.5] && st["time"]["threshold"] == 3e8
@@ -376,11 +376,6 @@ end
     set_irradiance_threshold!(tm, 1e9)
     restore!(f, st)
     @test tm.prepulse[] == (P, 0.0, -4.0, 0.5) && tm.threshold[] == 3e8
-    old = deepcopy(st)
-    delete!(old["time"], "prepulse")
-    delete!(old["time"], "threshold")
-    restore!(f, old)
-    @test tm.prepulse[] == DEFAULT_PREPULSE && tm.threshold[] == DEFAULT_THRESHOLD
 end
 
 @testset "time panel: a foil's retune with unconverted light and a prepulse (no GL)" begin

@@ -153,15 +153,6 @@ end
     restore!(s2, state)
     @test session_state(s2) == state
     @test [q.assembly for q in s2.target.parts[]] == [q.assembly for q in ts.parts[]]
-    # a version-9 session (no assemblies, no `assembly` keys) loads as it is, at the top level
-    s9 = DesignSession(resolution = :coarse)
-    add_part!(s9.target, :disk; name = :shield, x = 4.0, theta = 90.0, r1 = 0.5)
-    old = session_state(s9)
-    old["version"] = 9
-    foreach(q -> delete!(q, "assembly"), old["target"]["parts"])
-    s3 = DesignSession(resolution = :coarse)
-    restore!(s3, old)
-    @test all(q -> q.assembly === TOP_LEVEL, s3.target.parts[]) && session_state(s3) == session_state(s9)
     # a starter inserted in an assembly's frame from the window joins it; here by hand
     @test insert_starter!(ts, :foil; frame = :mount) && move_into_assembly!(ts, [:foil, :main], :mount)
     @test assembly_parts(ts.parts[], :mount) == [:shield, :foil, :main]

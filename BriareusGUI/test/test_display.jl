@@ -285,34 +285,4 @@ end
     @test v2.cut_kind[] === :plane && v2.cut_axis[] === :x && v2.cut_range[] == (-1.0, Inf)
     @test all(isapprox.(v2.cut_normal[], (0.0, 1.0, 0.0))) && cut_offset(v2) ≈ 0.4
     @test participates(s2.beams, 5, 1) && s2.drive.unconverted_ratio[] == (0.03, 0.01)
-
-    # a session from before display modes, unconverted light and the plane cut: hidden
-    # components become invisible, the rest takes its defaults
-    old = session_state(s)
-    for k in ("display", "hidden_beams", "shown_1w", "shown_2w", "cut_kind", "cut_axis", "cut_range",
-              "cut_point", "cut_normal", "cut_shift", "cut_line", "cut_rotation")
-        delete!(old["view"], k)
-    end
-    old["view"]["hidden"] = ["capsule"]
-    delete!(old["drive"], "unconverted_ratio")
-    foreach(r -> (delete!(r, "omega1"); delete!(r, "omega2")), old["beams"]["beam"])
-    s3 = DesignSession(resolution = :coarse)
-    restore!(s3, old)
-    v3 = s3.view
-    @test v3.display[] == Dict(:capsule => :invisible)
-    @test isempty(v3.hidden_beams[]) && isempty(v3.shown_1w[]) && isempty(v3.shown_2w[])
-    @test v3.cut_kind[] === :sector && v3.cut_axis[] === :z && v3.cut_range[] == (-Inf, Inf)
-    @test v3.cut_width[] == 120 && v3.cut_azimuth[] == 30
-    @test !any(u -> u[1] || u[2], s3.beams.unconverted[]) && s3.drive.unconverted_ratio[] == (0.0, 0.0)
-
-    # a session from before the plane's offset and line of sight: the point it kept was
-    # on the plane, so the plane is the same, at offset 0 and on no line
-    old = session_state(s)
-    old["view"]["cut_point"] = [0.0, 0.4, 0.0]
-    foreach(k -> delete!(old["view"], k), ("cut_shift", "cut_line", "cut_rotation"))
-    s4 = DesignSession(resolution = :coarse)
-    restore!(s4, old)
-    v4 = s4.view
-    @test isapprox(cut_region(v4; on = true).c, cut_region(v; on = true).c; rtol = 1e-12) && cut_offset(v4) == 0
-    @test v4.cut_line[] == (0.0, 0.0, 0.0) && v4.cut_rotation[] == 0
 end

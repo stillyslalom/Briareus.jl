@@ -156,12 +156,6 @@ end
         @test r3["group_dante1_fov"].origin === :session && r3["group_dante1_fov"].usable
         @test [d.id for d in Controllers._recorded_definitions(s3) if d.def !== nothing] == tm.diagnostics[]
         @test isempty(diagnostic_diff(Controllers._definition(s3, "group_dante1_fov"), orig))
-
-        # sessions before version 6 record Dante 1
-        old = session_state(sess)
-        delete!(old, "time")
-        restore!(s3, old)
-        @test s3.time.diagnostics[] == DEFAULT_DIAGNOSTICS
     end
 end
 

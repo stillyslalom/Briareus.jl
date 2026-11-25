@@ -145,15 +145,4 @@ end
     @test session_state(s2) == session_state(s)
     @test part_frames(s2.target) == part_frames(ts) && s2.beams.aim_frame[][1:2] == [:port_Q31B, :port_Q31B]
     @test is_port_frame(s2.target.parts[][part_index(s2.target, :port_Q31B)])
-    # a version 8 session (no user frames, no drawn axes) loads as it is
-    v = DesignSession(resolution = :coarse)
-    st = session_state(v)
-    old = deepcopy(st)
-    old["version"] = 8
-    delete!(old["view"], "triads")
-    v8 = DesignSession(resolution = :coarse)
-    @test add_frame!(v8.target)                                    # replaced by the loaded design
-    set_triad!(v8.view, :frame_1, true)
-    restore!(v8, old)
-    @test session_state(v8) == st && isempty(user_frames(v8.target)) && isempty(v8.view.triads[])
 end

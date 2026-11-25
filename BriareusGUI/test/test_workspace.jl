@@ -44,12 +44,55 @@
     bad = joinpath(mktempdir(), "other.toml")
     write(bad, "format = \"something else\"\n")
     @test_throws ArgumentError load_session!(DesignSession(resolution = :coarse), bad)
-    write(bad, "format = \"BriareusGUI session\"\nversion = 99\n")
-    @test_throws ArgumentError load_session!(DesignSession(resolution = :coarse), bad)
+    # Only the current schema loads: the error names the version found and the one supported.
+    refused(v) = "session version $v is not supported: this program loads version $(Controllers.SESSION_VERSION) only"
+    for v in (99, Controllers.SESSION_VERSION - 1)
+        write(bad, "format = \"BriareusGUI session\"\nversion = $v\n")
+        @test_throws ArgumentError(refused(v)) load_session!(DesignSession(resolution = :coarse), bad)
+    end
+    write(bad, "format = \"BriareusGUI session\"\n")
+    @test_throws ArgumentError(refused("none")) load_session!(DesignSession(resolution = :coarse), bad)
+    old = session_state(s)
+    old["version"] = Controllers.SESSION_VERSION - 1
+    @test_throws ArgumentError(refused(Controllers.SESSION_VERSION - 1)) restore!(s2, old)
+    @test session_state(s2) == session_state(s)                   # refused before anything is set
+end
+
+# A session file of the current schema, kept in the repository: the current code loads it
+# as the design it was saved from, and saves that design as the same file. A change of
+# what a session file holds fails this test until the version and the file change with it.
+include("session_fixture.jl")
+
+@testset "the session file of the current schema (no GL)" begin
+    file = joinpath(@__DIR__, "data", "session_v$(Controllers.SESSION_VERSION).briar.toml")
+    saved = TOML.parsefile(file)
+    @test saved["version"] == Controllers.SESSION_VERSION
+    s = _fixture_design()
+    f = joinpath(mktempdir(), "again.briar.toml")
+    save_session(f, s)
+    @test _same_state(TOML.parsefile(f), saved)
+    s2 = DesignSession(starter = :none, resolution = :coarse)
+    load_session!(s2, file)
+    @test _same_state(session_state(s2), session_state(s))
+    ts, bt = s2.target, s2.beams
+    @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :frame_1, :shield, :mount]
+    @test only(ts.parts[][1].windows).phi == 60 && ts.parts[][1].values[:leh_closure] == 1
+    @test ts.parts[][4].frame === Symbol("hohlraum.leh_top") && ts.parts[][4].assembly === :mount &&
+          :shield in ts.excluded[]
+    @test piece_role(ts.parts[][1], :cap_bottom) === :none
+    @test bt.aim_frame[] == [:tcc, :tcc, Symbol("hohlraum.leh_bottom"), Symbol("hohlraum.leh_bottom")]
+    @test bt.enabled[] == [true, true, true, false] && bt.unconverted[][2] == (true, false)
+    @test all(i -> isapprox(bt.beams[][i].aim, to_chamber(bt.frames[][bt.aim_frame[][i]], bt.aim_local[][i]); atol = 1e-12),
+              eachindex(bt.beams[]))
+    @test s2.drive.beam_model[] === :visrad && s2.drive.cavity[] && s2.drive.films[] == Set([:hohlraum_window_1])
+    @test s2.time.pulses[].kind === :shape && s2.time.chart[] === :energy && isempty(s2.time.diagnostics[])
+    @test s2.sweep.subject[] === :shield && s2.sweep.step[] == 0.25 && s2.sweep.los[]
+    @test s2.view.cut_kind[] === :plane && :frame_1 in s2.view.triads[] && s2.view.camera[].ortho
+    @test nelements(ts.target[]) == nelements(s.target.target[]) && !can_undo(s2)
 end
 
 # The window as it was left (the camera, the drive's view and the Time chart): saved with
-# the session and restored, older sessions with the defaults, never an undo step.
+# the session and restored, never an undo step.
 @testset "the window saved with the session (no GL)" begin
     s = DesignSession(resolution = :coarse)
     reset_history!(s)
@@ -79,13 +122,16 @@ end
     @test !record!(s2)
     @test undo!(s2) && s2.target.parts[][1].values[:length] == 10.1
     @test s2.view.camera[] == pose2 && s2.drive.view[] === :map && s2.time.chart[] === :energy
-    # a session from before version 13: the default camera, the 3D view, the Pulses chart
-    old = session_state(s)
-    old["version"] = 12
-    delete!(old, "window")
-    restore!(s2, old)
+    # an empty window section: the default camera, the 3D view, the Pulses chart
+    w = session_state(s)
+    w["window"] = Dict{String,Any}()
+    restore!(s2, w)
     @test s2.view.camera[] === nothing && s2.drive.view[] === :scene && s2.drive.image_request[] === nothing
     @test s2.time.chart[] === :pulses
+    # a state with no window section leaves the window as it is
+    set_view!(s2.drive, :map)
+    restore!(s2, delete!(session_state(s), "window"))
+    @test s2.drive.view[] === :map && s2.view.camera[] === nothing
     # an image view without its camera (a diagnostic's image is not saved) opens on the 3D view
     w = session_state(s)
     delete!(w["window"], "image")
@@ -593,12 +639,6 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     p2 = s2.drive.profile[]
     @test p2 == prof
     @test session_state(s2) == session_state(s)
-    # sessions from before the choice load with the f-cone
-    state = session_state(s)
-    delete!(state["drive"], "beam_model")
-    delete!(state["drive"], "profile")
-    restore!(s2, state)
-    @test s2.drive.beam_model[] === :fcone && s2.drive.profile[].envelope === nothing
 end
 
 @testset "VisRad workspaces in the window (no GL)" begin

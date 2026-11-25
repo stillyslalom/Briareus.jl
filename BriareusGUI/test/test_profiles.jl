@@ -100,16 +100,6 @@ end
     @test session_state(s2) == session_state(s)
     @test s2.target.parts[][1].sections == s.target.parts[][1].sections
     @test nelements(s2.target.target[]) == nelements(s.target.target[])
-    s0 = DesignSession(resolution = :coarse)
-    state = session_state(s0)
-    for p in state["target"]["parts"]
-        delete!(p, "sections")
-        foreach(k -> delete!(p["values"], k), ("profile", "end_radius", "bottom_end_radius"))
-    end
-    s3 = DesignSession(resolution = :coarse)
-    restore!(s3, state)
-    @test session_state(s3) == session_state(s0)
-    @test all(_same_component(a, b) for (a, b) in zip(s3.target.target[].components, s0.target.target[].components))
 end
 
 @testset "frustraum pointing: the preset in its holes, spots and clearance (no GL)" begin

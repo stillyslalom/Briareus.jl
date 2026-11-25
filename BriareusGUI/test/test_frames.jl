@@ -304,44 +304,18 @@ end
     @test occursin("at least one check", sw.status[])
 end
 
-@testset "sessions: version 2 converted, version 3 round trip (no GL)" begin
-    file = joinpath(@__DIR__, "data", "session_v2.briar.toml")
-    saved = TOML.parsefile(file)
-    @test saved["version"] == 2
-    s = DesignSession(resolution = :coarse)
-    load_session!(s, file)
+@testset "sessions: parts and aims in frames round trip (no GL)" begin
+    # a substrate in the foil's frame, a tab in the substrate's, beams aimed in both frames and at TCC
+    s = DesignSession(starter = :foil, resolution = :coarse)
     ts, bt = s.target, s.beams
-    # the saved chamber aims are kept; each beam that followed a component aims in its frame
-    @test [b.aim for b in bt.beams[]] == [V3(r["aim"]...) for r in saved["beams"]["beam"]]
-    @test bt.aim_frame[] == [:foil, :foil, :substrate, :tcc, :tcc]        # the template's foil: a part
-    @test _aims_held(bt)
-    # the old foil frame re-expressed in the foil part's frame: the vertices where they were,
-    # against the old frames written out (axes [0 0 1; 0 1 0; -1 0 0] at the foil's center)
-    @test [p.name for p in ts.parts[]][1:2] == [:foil, :main]
-    @test [p.frame for p in ts.parts[][3:end]] == [:foil, :substrate, :tcc, :foil]
-    d = ts.parts[][1].values[:x]
-    Rfoil, tfoil = [0.0 0.0 1.0; 0.0 1.0 0.0; -1.0 0.0 0.0], [d, 0.0, 0.0]
-    old = Dict(p["name"] => p for p in saved["target"]["parts"])
-    vals(n) = old[n]["values"]
-    function old_frame(n)
-        p = old[n]
-        R0, t0 = p["anchor"] == "foil" ? (Rfoil, tfoil) : p["anchor"] == "tcc" ? (Matrix(1.0I, 3, 3), zeros(3)) :
-                 old_frame(p["anchor"])
-        v = vals(n)
-        return R0 * _old_rotation(v["theta"], v["phi"], v["rotation"]), R0 * [v["x"], v["y"], v["z"]] + t0
-    end
-    worst = 0.0
-    for n in keys(old)
-        p = ts.parts[][part_index(ts, Symbol(n))]
-        sizes = Dict(k => p.values[k] for (k, _, _, _) in PART_SIZE_FIELDS[p.kind])
-        loc = part_component(PartSpec(p.kind; name = p.name, values = sizes), ts.mesh[].h).mesh.vertices
-        got = ts.target[].components[findfirst(c -> c.name === p.name, ts.target[].components)].mesh.vertices
-        R, t = old_frame(n)
-        worst = max(worst, maximum(norm(g - (R * v + t)) for (g, v) in zip(got, loc)))
-    end
-    @test worst < 1e-12
-    # Saved again, the session is version 3 and loads back unchanged.
-    f = joinpath(mktempdir(), "v3.briar.toml")
+    @test add_part!(ts, :disk; name = :substrate, frame = :foil, z = -0.3, theta = 20, r1 = 0.8)
+    @test add_part!(ts, :rectangle; name = :tab, frame = :substrate, x = 0.5, phi = 30, r1 = 0.2, r2 = 0.3)
+    set_aim_frame!(s, 1:2, :foil)
+    set_aim_frame!(s, 3:3, :substrate; keep = false)
+    set_aim_frame!(s, 4:4, :tcc)
+    @test bt.aim_frame[][1:4] == [:foil, :foil, :substrate, :tcc] && _aims_held(bt)
+    @test [p.frame for p in ts.parts[]] == [:tcc, :tcc, :foil, :substrate]
+    f = joinpath(mktempdir(), "frames.briar.toml")
     set_sweep!(s.sweep; subject = :substrate, axis = :x, los = true)
     edit_sweep!(s.sweep, :step, "0.25")
     save_session(f, s)
@@ -349,7 +323,9 @@ end
     s3 = DesignSession(resolution = :coarse)
     load_session!(s3, f)
     @test session_state(s3) == session_state(s)
-    @test s3.beams.aim_local[] == bt.aim_local[] && s3.beams.beams[] == bt.beams[]
+    @test s3.beams.aim_frame[] == bt.aim_frame[] && s3.beams.aim_local[] == bt.aim_local[] &&
+          s3.beams.beams[] == bt.beams[] && _aims_held(s3.beams)
+    @test [p.frame for p in s3.target.parts[]] == [p.frame for p in ts.parts[]]
     @test s3.target.target[].tri_v0 == ts.target[].tri_v0
     @test s3.sweep.subject[] === :substrate && s3.sweep.step[] == 0.25 && s3.sweep.los[]
     @test isnan(s3.sweep.los_theta[])
@@ -546,20 +522,6 @@ end
     @test set_part_role!(ts, part_index(ts, :foil_a), :foil) && active_foil(ts) === :foil_a
     @test edit_part!(ts, part_index(ts, :foil_a), :name, "shield") && ts.active_foil[] === :shield &&
           active_foil(ts) === :shield
-
-    # In a version 4 session, the part named `backlighter` loads as the active foil.
-    s4 = DesignSession(starter = :none, resolution = :coarse)
-    @test add_part!(s4.target, :disk; name = :plate, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
-    @test add_part!(s4.target, :disk; name = :backlighter, x = -3.0, theta = 90, r1 = 0.6)
-    old = session_state(s4)
-    old["version"] = 4
-    delete!(old["target"], "active_foil")
-    foreach(p -> delete!(p, "foil"), old["target"]["parts"])
-    s5 = DesignSession(resolution = :coarse)
-    restore!(s5, old)
-    ps = s5.target.parts[]
-    @test [p.name for p in ps] == [:plate, :backlighter] &&
-          [part_role(p) for p in ps] == [:none, :foil] && active_foil(s5.target) === :backlighter
 end
 
 @testset "observed and wall roles belong to parts instead of names (no GL)" begin
@@ -584,19 +546,10 @@ end
     @test r1 !== nothing && length(r1.modes) > 0 && isfinite(r1.mean_flux) &&
           Controllers._observed_parts(s.drive.scenario[]) == (:ball,)
 
-    # The same design saved by version 6 has the sphere named capsule, since the name was
-    # the role. It loads with the role, and its drive is identical to that of the ball.
-    old = session_state(s)
-    old["version"] = 6
-    for p in old["target"]["parts"]
-        p["name"] == "ball" && (p["name"] = "capsule")
-        delete!(p, "observed")
-        delete!(p, "wall")
-    end
-    old["review"]["targets"] = replace(old["review"]["targets"], "ball" => "capsule")
+    # The design restored in another session keeps the role, and its drive is identical.
     s6 = DesignSession(resolution = :coarse)
-    restore!(s6, old)
-    @test observed_name(s6.target) === :capsule && part_role(s6.target.parts[][end]) === :observed
+    restore!(s6, session_state(s))
+    @test observed_name(s6.target) === :ball && part_role(s6.target.parts[][end]) === :observed
     build_scenario!(s6)
     r6 = s6.drive.result[]
     @test r6.modes == r1.modes && r6.mean_flux == r1.mean_flux && r6.solution.H == r1.solution.H &&
@@ -606,11 +559,11 @@ end
     start_history!(s)
     start_history!(s6)
     @test s.time.history[].Tr == s6.time.history[].Tr && length(s.time.history[].Tr) > 1
-    # From version 7 the name does not carry a role.
+    # The role is the part's flag: with the flag off the sphere is observed by nothing.
     st7 = session_state(s6)
     st7["target"]["parts"][end]["observed"] = false
     restore!(s6, st7)
-    @test observed_name(s6.target) === nothing && s6.target.parts[][end].name === :capsule &&
+    @test observed_name(s6.target) === nothing && s6.target.parts[][end].name === :ball &&
           drive_stale(s6)
 
     # A role change keeps the target and makes the drive stale, since its scenario

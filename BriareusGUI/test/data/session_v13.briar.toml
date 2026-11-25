@@ -1,0 +1,429 @@
+# BriareusGUI session: a Briareus design (target, beams, analysis settings).
+# Lengths in mm, power in TW, angles in degrees; results are not saved.
+format = "BriareusGUI session"
+version = 13
+visrad_source = ""
+
+[beams]
+by = "group"
+facility = "nif"
+preset = "custom"
+
+    [[beams.beam]]
+    aim = [-0.21264845099757987, -1.069055955639521, 3.2]
+    aim_frame = "tcc"
+    aim_local = [-0.21264845099757987, -1.069055955639521, 3.2]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q15T"
+    omega1 = false
+    omega2 = false
+    port = [0.0777920842602576, 0.39108721737637464, 0.917060074385124]
+    power = 8.0
+    quad = "Q15T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [1.069055955639521, -0.21264845099757967, 3.2]
+    aim_frame = "tcc"
+    aim_local = [1.069055955639521, -0.21264845099757967, 3.2]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q42T"
+    omega1 = true
+    omega2 = false
+    port = [-0.39108721737637464, 0.0777920842602576, 0.917060074385124]
+    power = 8.0
+    quad = "Q42T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [0.21264845099757998, 1.069055955639521, 3.2]
+    aim_frame = "hohlraum.leh_bottom"
+    aim_local = [0.21264845099757998, -1.069055955639521, -8.25]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q33T"
+    omega1 = false
+    omega2 = false
+    port = [-0.0777920842602576, -0.39108721737637464, 0.917060074385124]
+    power = 8.0
+    quad = "Q33T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [-1.069055955639521, 0.21264845099757979, 3.2]
+    aim_frame = "hohlraum.leh_bottom"
+    aim_local = [-1.069055955639521, -0.21264845099757979, -8.25]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = false
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q24T"
+    omega1 = false
+    omega2 = false
+    port = [0.39108721737637464, -0.0777920842602576, 0.917060074385124]
+    power = 8.0
+    quad = "Q24T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+
+[drive]
+beam_model = "visrad"
+cavity = true
+cavity_point = [0.0, 0.0, 0.0]
+films = ["hohlraum_window_1"]
+spot_radius = 0.6
+unconverted_ratio = [0.03, 0.01]
+
+    [drive.profile.envelope]
+    Q15T = 1.2
+
+[optimize]
+by = "group"
+capsule_keepout = true
+capsule_min = 0.0
+fields = ["z", "r"]
+hold_drive = true
+iterations = 37
+keepout = false
+keepout_min = 0.0
+max_evaluations = 1000
+objective = "legendre"
+spill = 0.2
+uniformity = 1.0
+
+    [optimize.deltas]
+    defocus = 2.0
+    phi = 1.0
+    power = 0.4
+    r = 1.0
+    u = 1.0
+    v = 1.0
+    w = 1.0
+    z = 1.0
+
+    [optimize.weights]
+    2 = 1.0
+    4 = 0.5
+
+[review]
+hardware = ["hohlraum_cap_top", "hohlraum_cap_bottom", "hohlraum_window_1"]
+peak_fraction = 0.2
+quality = "quick"
+targets = ["hohlraum_wall", "capsule"]
+wings = true
+
+    [review.errors]
+    focus = 1.0
+    hardware_tolerance = 0.0
+    pointing = 0.05
+    target_offset = 0.025
+
+[sweep]
+axis = "x"
+capture = false
+clearance = true
+frame = "none"
+los = true
+los_object = "none"
+mode = "translate"
+optimize = false
+quality = "quick"
+start = -1.0
+step = 0.25
+step_index = 0
+step_key = "none"
+stop = 1.0
+subject = "shield"
+
+[talis]
+capture = ["hohlraum_wall"]
+diagnostics = []
+hardware = ["hohlraum_cap_top", "hohlraum_cap_bottom", "hohlraum_window_1"]
+omega1 = true
+pivot = "tcc"
+pivot_point = [0.0, 0.0, 0.0]
+tolerance = 0.3
+
+[target]
+active_foil = ""
+excluded = ["shield"]
+
+    [target.mesh]
+    capsule_h = 0.3
+    h = 0.6
+
+    [[target.parts]]
+    aperture = false
+    assembly = ""
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "tcc"
+    inward = false
+    kind = "hohlraum"
+    name = "hohlraum"
+    object = ""
+    observed = false
+    sections = []
+    steps = []
+    two_sided = false
+    wall = false
+
+        [target.parts.piece_roles]
+        cap_bottom = "none"
+
+        [target.parts.values]
+        albedo = 0.8
+        bottom_end = 1.0
+        bottom_end_radius = 0.0
+        bottom_leh_radius = 0.0
+        conversion = 0.9
+        end_radius = 0.0
+        h = 0.0
+        leh_closure = 1.0
+        leh_closure_time = 5.0
+        leh_closure_width = 0.5
+        leh_open_fraction = 0.84
+        leh_radius = 1.55
+        length = 10.1
+        phi = 0.0
+        profile = 0.0
+        radius = 2.875
+        rotation = 0.0
+        theta = 0.0
+        top_end = 1.0
+        x = 0.0
+        y = 0.0
+        z = 0.0
+
+        [[target.parts.windows]]
+        albedo = 0.8
+        conversion = 0.9
+        height = 1.0
+        open = false
+        phi = 60.0
+        round = true
+        width = 1.0
+        z = 0.5
+    [[target.parts]]
+    aperture = false
+    assembly = ""
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "hohlraum"
+    inward = false
+    kind = "sphere"
+    name = "capsule"
+    object = ""
+    observed = true
+    sections = []
+    steps = []
+    two_sided = false
+    wall = false
+    windows = []
+
+        [target.parts.piece_roles]
+
+        [target.parts.values]
+        albedo = 0.3
+        capsule_mesh = 1.0
+        conversion = 0.3
+        h = 0.0
+        phi = 0.0
+        r1 = 0.9
+        rotation = 0.0
+        theta = 0.0
+        x = 0.0
+        y = 0.0
+        z = 0.0
+    [[target.parts]]
+    aperture = false
+    assembly = ""
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "tcc"
+    inward = false
+    kind = "frame"
+    name = "frame_1"
+    object = ""
+    observed = false
+    sections = []
+    steps = []
+    two_sided = false
+    wall = false
+    windows = []
+
+        [target.parts.piece_roles]
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        rotation = 0.0
+        theta = 0.0
+        x = 0.0
+        y = 0.0
+        z = 0.0
+    [[target.parts]]
+    aperture = false
+    assembly = "mount"
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "hohlraum.leh_top"
+    inward = false
+    kind = "disk"
+    name = "shield"
+    object = ""
+    observed = false
+    sections = []
+    two_sided = true
+    wall = false
+    windows = []
+
+        [target.parts.piece_roles]
+
+        [[target.parts.steps]]
+        delta = [0.0, 0.0, 0.0]
+        kind = "offset"
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        r1 = 2.0
+        rotation = 0.0
+        theta = 0.0
+        x = 0.0
+        y = 0.0
+        z = 0.8
+    [[target.parts]]
+    aperture = false
+    assembly = ""
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "tcc"
+    inward = false
+    kind = "assembly"
+    name = "mount"
+    object = ""
+    observed = false
+    sections = []
+    steps = []
+    two_sided = false
+    wall = false
+    windows = []
+
+        [target.parts.piece_roles]
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        rotation = 0.0
+        theta = 0.0
+        x = 0.0
+        y = 0.0
+        z = 0.0
+
+[time]
+diagnostics = []
+prepulse = [0.02, 0.0, -4.0, 0.5]
+threshold = 3.0e8
+
+    [time.pulses]
+    kind = "shape"
+    shape = "n221204"
+    step = 0.5
+
+[view]
+beam_color = "group"
+beam_length = 0.0
+beams = "volumes"
+color = "component"
+cut_axis = "x"
+cut_azimuth = 225.0
+cut_components = ["hohlraum_wall"]
+cut_kind = "plane"
+cut_line = [0.0, 0.0, 0.0]
+cut_normal = [0.0, 1.0, 0.0]
+cut_point = [0.0, 0.0, 0.0]
+cut_range = [-1.0, +inf]
+cut_rotation = 0.0
+cut_shift = 0.4
+cut_width = 90.0
+cutaway = true
+hidden_beams = ["Q42T"]
+show_off = true
+shown_1w = []
+shown_2w = []
+side = false
+triads = ["frame_1"]
+
+    [view.display]
+    hohlraum_wall = "wireframe"
+
+[window]
+drive_view = "scene"
+time_chart = "energy"
+
+    [window.camera]
+    eye = [12.5, -3.25, 6.0]
+    lookat = [0.0, 0.5, 1.0]
+    ortho = true
+    turntable = false
+    up = [0.0, 0.0, 1.0]

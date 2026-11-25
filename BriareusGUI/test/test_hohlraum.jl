@@ -1,18 +1,13 @@
 # This file tests the hohlraum part and its pieces. The starter "Hohlraum with capsule" is
 # checked against core `hohlraum`, the geometry of the earlier template with the names
-# mapped, and sessions with a template converted to parts against the drives of the
-# template-era GUI. The file also covers pieces and ends, the entrance-hole and window
-# frames, beams aimed in piece frames, roles, and unique names on insert.
+# mapped. The file also covers pieces and ends, the entrance-hole and window frames, beams
+# aimed in piece frames, roles, and unique names on insert.
 
 using LinearAlgebra: norm
 
 # The component name of a starter component in the earlier template (`wall` for
 # `hohlraum_wall`).
 _template_name(n::Symbol) = Symbol(replace(String(n), r"^hohlraum_" => ""))
-
-# Whether every beam aims where its frame and local aim put it.
-_in_frames(bt) = all(i -> isapprox(bt.beams[][i].aim, to_chamber(bt.frames[][bt.aim_frame[][i]], bt.aim_local[][i]); atol = 1e-12),
-                     eachindex(bt.beams[]))
 
 # Whether two components are the same up to their names and parts.
 _same_component(a, b) =
@@ -49,78 +44,6 @@ _same_component(a, b) =
     byname = Dict(_template_name(c.name) => c for c in tw.target[].components)
     @test Set(keys(byname)) == Set(c.name for c in refw.components)
     @test all(_same_component(c, byname[c.name]) for c in refw.components)
-end
-
-@testset "hohlraum part: sessions with a template convert to parts (no GL)" begin
-    data = joinpath(@__DIR__, "data")
-    old = TOML.parsefile(joinpath(data, "session_v7_expected.toml"))
-    # a hohlraum template with a window, closing holes, a shield at the top LEH, beams
-    # aimed in the bottom LEH's frame and display modes
-    s = DesignSession(resolution = :coarse)
-    load_session!(s, joinpath(data, "session_v7_hohlraum.briar.toml"))
-    ts, bt = s.target, s.beams
-    e = old["hohlraum"]
-    @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :shield]
-    @test ts.parts[][1].kind === :hohlraum && ts.parts[][1].values[:leh_closure] == 1 &&
-          only(ts.parts[][1].windows).phi == 60 && ts.parts[][2].observed && ts.parts[][2].frame === :hohlraum
-    @test ts.parts[][3].frame === Symbol("hohlraum.leh_top")
-    @test bt.aim_frame[] == [f == "tcc" ? :tcc : Symbol("hohlraum.", f) for f in e["aim_frames"]]
-    @test [collect(b.aim) for b in bt.beams[]] == e["aims"] && _in_frames(bt)
-    @test display_mode(s.view, :hohlraum_wall) === :wireframe && display_mode(s.view, :hohlraum_leh_top) === :transparent
-    t = ts.target[]
-    @test sort(_template_name.(c.name for c in t.components)) == sort(Symbol.(e["components"]))
-    @test sort(_template_name.(s.review.targets[])) == sort(Symbol.(e["review_targets"]))
-    @test sort(_template_name.(s.review.hardware[])) == sort(Symbol.(e["review_hardware"]))
-    @test _template_name.(s.talis.capture[]) == Symbol.(e["talis_capture"])
-    # The reference is the drive of the template-era GUI on the same session, which is the
-    # scenario without its cavities. That GUI left the view factors of this design
-    # unbalanced, because the shield lies outside the hohlraum. The capsule now comes after
-    # the window, so the agreement is within round-off.
-    build_scenario!(s)
-    rb = s.drive.result[]
-    out = Controllers._build_scenario(t, bt.beams[]; observed = observed_name(ts),
-                                      profile = Controllers._deposition_profile(s.drive))
-    r = Controllers._evaluate_drive(out.s, display_beams(bt), out.lookup, s.drive.spot_radius[];
-                                    ratio = unconverted_ratios(s), foil = active_foil(ts))
-    # The drive balances the cavity of the hohlraum and puts the shield in no cavity; the
-    # mean flux differs by +0.33%.
-    c = only(Controllers._closed_cavities(ts))
-    @test c.balanced && isempty(intersect(c.elements, elements(t, :shield)))
-    @test isapprox(rb.mean_flux, e["mean_flux"]; rtol = 5e-3) && !isapprox(rb.mean_flux, e["mean_flux"]; rtol = 1e-3)
-    @test isapprox(r.mean_flux, e["mean_flux"]; rtol = 1e-10)
-    @test all(isapprox(m.legendre, l; rtol = 1e-8, atol = 1e-12) for (m, l) in zip(r.modes, e["legendre"]))
-    inc = element_values(r, :incident)
-    sums = Dict(_template_name(c.name) => sum(inc[t.comp_elems[ci]]) for (ci, c) in enumerate(t.components))
-    # the holes and lips have twice their template-era elements (the caps' azimuthal count
-    # since 2026-11-03): their sums of element fluxes double, to 1.5e-3 of the element means
-    hole(k) = startswith(k, "leh")
-    @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-10) for (k, x) in e["incident_sum"] if !hole(k))
-    @test all(isapprox(sums[Symbol(k)] / 2, x; rtol = 3e-3) for (k, x) in e["incident_sum"] if hole(k))
-    # Saved again, the session has the current version and loads back unchanged.
-    f = joinpath(mktempdir(), "v10.briar.toml")
-    save_session(f, s)
-    @test TOML.parsefile(f)["version"] == Controllers.SESSION_VERSION
-    s8 = DesignSession(resolution = :coarse)
-    load_session!(s8, f)
-    @test session_state(s8) == session_state(s)
-
-    # a foil template with a substrate in the foil's frame and the OMEGA backlighter beams
-    b = DesignSession(starter = :foil, resolution = :coarse)
-    load_session!(b, joinpath(data, "session_v7_foil.briar.toml"))
-    e = old["foil"]
-    @test [p.name for p in b.target.parts[]] == [:foil, :main, :substrate]
-    @test b.target.parts[][1].foil && active_foil(b.target) === :foil && b.target.parts[][3].frame === :foil
-    @test b.beams.aim_frame[] == [f == "backlighter" ? :foil : Symbol(f) for f in e["aim_frames"]]
-    @test [collect(x.aim) for x in b.beams.beams[]] == e["aims"]
-    t = b.target.target[]
-    @test nelements(t) == e["elements"]
-    build_scenario!(b)
-    r = b.drive.result[]
-    las = element_values(r, :laser)
-    names(n) = n === :foil ? :backlighter : n
-    sums = Dict(names(c.name) => sum(filter(isfinite, las[t.comp_elems[ci]]); init = 0.0) for (ci, c) in enumerate(t.components))
-    @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-12) for (k, x) in e["laser_sum"])
-    @test isapprox(r.spot.mean, e["spot_mean"]; rtol = 1e-12) && isapprox(r.spot.peak, e["spot_peak"]; rtol = 1e-12)
 end
 
 @testset "hohlraum part: pieces, ends, frames, aims (no GL)" begin

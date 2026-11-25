@@ -86,13 +86,6 @@ end
     @test s3.time.pulses[].kind === :shape && s3.time.pulses[].times == tm.pulses[].times &&
           s3.time.pulses[].shape == tm.pulses[].shape
     @test undo!(sess) && tm.pulses[].kind === :table
-    # A session before version 12 does not have pulses, so it loads with none.
-    old = session_state(sess)
-    @test haskey(old["time"], "pulses")
-    delete!(old["time"], "pulses")
-    old["version"] = 11
-    restore!(s3, old)
-    @test s3.time.pulses[] === nothing
 end
 
 @testset "time panel: drive history and the time cursor (no GL)" begin
