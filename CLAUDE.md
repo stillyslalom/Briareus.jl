@@ -123,9 +123,15 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
 ## Layout
 
 `src/Briareus.jl` includes the files in dependency order (the list there is the map):
-roughly geometry, meshes and BVH → targets and CAD fitting → beams, facilities,
-deposition → view factors (`viewfactors.jl`, `storage.jl`, `hmatrix.jl`) → radiation →
-analysis, imaging, optimization → time dependence (`history.jl`, `spectral.jl`, Dante,
-`dynamics.jl`) → clearance, backlighters, uncertainty, implosion → LPI, VisRad and CSV
-I/O, CBET. `examples/` holds the facility studies (`n221204.jl` is the shot benchmark);
-`BriareusGUI/` is the GUI subpackage.
+roughly geometry, shared helpers (`utils.jl`, `csv.jl`), meshes and BVH → albedo models,
+materials, targets and CAD fitting → beams, facilities, deposition → view factors
+(`viewfactors.jl`, `storage.jl`, `hmatrix_tree.jl`, `hmatrix.jl`) → radiation → analysis,
+imaging, optimization (`pointing.jl`, `scenario.jl`, `objectives.jl`, `optimizer.jl`,
+`constraints.jl`, `al_solver.jl`) → time dependence (`history.jl`, `spectral.jl`, Dante,
+`dynamics.jl`) → clearance, backlighters, uncertainty, implosion → LPI, VisRad and I/O,
+CBET. Two submodules come last. `Briareus.Benchmarks` (`benchmarks.jl`) holds the
+published shot data and fitted fixtures, which are not exported from `Briareus`: a new
+digitized table goes there. `Briareus.GUIAPI` (`gui_api.jl`) lists every internal that
+the application uses; the application calls no other `Briareus._name`. `examples/` holds
+the facility studies (`n221204.jl` is the shot benchmark); `BriareusGUI/` is the GUI
+subpackage.

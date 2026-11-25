@@ -884,7 +884,32 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     gap"); a cheaper predictor for ACA give-ups (~20% of assembly) and near-field
     quadrature reuse; an `HMatrix` has no direct solve; `storage = Float64` densifies an
     `HMatrix` without warning; `Keyframes` build a deposition operator at every time.
-33. **Code health** *(survey)*. GUI radiography is untested (it records nothing yet).
-    `TabulatedCurve` interpolates as v₁ + w (v₂ − v₁), not through `_interp`: switching
-    changes its values at the last bit, so it waits for a change that remeasures the
-    Dante responses.
+33. **Code health** *(survey; cleanup of 2026-11-25)*. GUI radiography is untested (it
+    records nothing yet). `TabulatedCurve` interpolates as v₁ + w (v₂ − v₁), not through
+    `_interp`: switching changes its values at the last bit, so it waits for a change that
+    remeasures the Dante responses. Left open by the cleanup of 2026-11-25:
+    - **`_drive_history`** is still one 400-line function with closures over about forty
+      locals. Its per-element state is typed (`_StepState`), and the split into
+      `_init_history_state`, `_solve_history_step!`, `_record_history_step!` and
+      `_assemble_history_output` waits for a state struct. `test/inference.jl` (one
+      compiled instance for every closure, JET `report_call`) must stay green through it.
+    - **Type parameters that need compile-time measurements first.** `Scenario.lpi` and
+      `Evaluation.scenario` are abstract on purpose (one dispatch per evaluation, no
+      recompilation of the optimizer per model); `Scenario{P,M,L}`,
+      `Evaluation{T,B,E,S}` and a parametric `CBET` (eight `Any` fields, read through
+      `_tvalue`) would each compile the optimizer or the CBET kernels once per model or
+      schedule type. `VisRadWorkspace.beams` is `Vector{Beam}`.
+    - **Keep-out distance.** `ApertureKeepOut` and `SphereKeepOut` use the first-order
+      (Sampson) ellipse distance, and `clearance`, `talis_check` and the design rules the
+      exact one. The frames are shared (`_BeamConeFrame`); moving the keep-outs to the
+      exact distance changes optimization results and needs the smoothness checks of
+      "Defaults changed (2026-11-19)" repeated. `clearance_floor` ignores
+      `keepout.weight`; the weight could leave the keep-out types for the `keepout`
+      keyword of the objectives.
+    - **Include order.** `src/Briareus.jl` still has forward references between files
+      (functions only; types and constants are defined before use). The workspace and
+      JSON readers of VisRad call each other. The VisRad and diagnostics names are
+      candidates for submodules like `Briareus.Benchmarks`.
+    - **Lines of sight through closing lips.** The Dante footprint scans the lip
+      triangles linearly per ray. The image and Dante tabs of the application do not pass
+      the lip transmission history to `imager_record` (`keep_albedo` histories have it).
