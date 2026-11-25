@@ -406,6 +406,7 @@ function _click!(c::SceneCanvas, sess::DesignSession, o, d, px)
         t = sess.target.target[]
         id = component_id(sess.target, t.components[t.tri_comp[tri]].name)
         add ? select_add!(sess.view, id) : select!(sess.view, id)
+        pick_disposition!(sess, tri)                  # the 1ω verdict of the facet, in a 1ω color mode
     else
         add || select!(sess.view, "")
     end

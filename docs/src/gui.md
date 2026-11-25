@@ -689,7 +689,9 @@ The bottom panel has the following tabs.
   the transverse distance the rule measures, and *Grazing view* looks along the nearest
   side with the beam running up the view. *Pinch* adds the nearest side of every other
   beam whose 1ω margin to the same part is below the tight threshold, which shows the
-  beams that close in on a part without their whole 1ω volumes.
+  beams that close in on a part without their whole 1ω volumes. In a 1ω color mode a
+  click on a facet gives its verdict, margin, beamlet, radii and port angle in the status
+  line.
 
 ### Files in and out
 

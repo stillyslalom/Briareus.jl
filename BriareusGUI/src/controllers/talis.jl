@@ -437,6 +437,70 @@ function set_talis_pinch!(tl::TaLISState, on::Bool)
 end
 
 """
+    pick_disposition!(sess, triangle) -> Bool
+
+With the target colored by a 1ω mode ([`DISPOSITION_MODES`](@ref)), put what the check
+found at mesh triangle `triangle` ([`disposition_info`](@ref)) in the status line, after
+the name of its component. Returns whether it did: nothing happens in another color mode
+or without a disposition for the target.
+"""
+function pick_disposition!(sess, k::Integer)
+    sess.view.color[] in DISPOSITION_MODES || return false
+    t = sess.target.target[]
+    tl = sess.talis
+    (tl.inputs[] === nothing || !checkbounds(Bool, t.tri_comp, k)) && return false
+    info = disposition_info(tl, t, tl.inputs[][2], k)
+    isempty(info) && return false
+    sess.status[] = String(t.components[t.tri_comp[k]].name) * ": " * info
+    return true
+end
+
+"Take the row under inspection out of the 3D view ([`focus_talis_row!`](@ref))."
+clear_talis_focus!(tl::TaLISState) = (tl.focus[] === nothing || (tl.focus[] = nothing); tl)
+
+"""
+    talis_focus_text(tl::TaLISState) -> String
+
+The terms of the margin of the 1ω row under inspection, one per line from the nominal
+distance to the margin, then the reflection of a management row: its angle to the
+threatened port and the projected areas. Empty without such a row.
+"""
+function talis_focus_text(tl::TaLISState)
+    f = tl.focus[]
+    f === nothing && return ""
+    lines = f.surface === nothing ? String[] : copy(f.surface.budget)
+    x = f.reflection
+    isempty(f.pinch) ||
+        push!(lines, "also within the tight threshold: " *
+                     join((@sprintf("%s %+.3f mm", p.approach.beam, p.approach.margin) for p in f.pinch), ", "))
+    x === nothing ||
+        push!(lines, @sprintf("reflection %.1f° from open port %d, less %.1f° of normal spread; %.3g of %.3g mm² within the required angle",
+                              x.angle, x.port_index, x.spread, x.offending_area, x.exposed_area))
+    return join(lines, "\n")
+end
+
+"""
+    talis_view!(sess, kind::Symbol) -> sess
+
+Turn the 3D view to the 1ω row under inspection ([`focus_talis_row!`](@ref)), in
+orthographic projection: `:daylight` looks down the beamlet, so that the gap seen
+between the hardware and the 1ω contour is the transverse distance of the rule
+([`daylight_view`](@ref)); `:grazing` looks along the nearest side of the beamlet
+([`grazing_view`](@ref)). Nothing changes without such a row.
+"""
+function talis_view!(sess, kind::Symbol)
+    kind in (:daylight, :grazing) || throw(ArgumentError("the view is :daylight or :grazing"))
+    f = sess.talis.focus[]
+    (f === nothing || f.approach === nothing) && return sess
+    v = kind === :daylight ? daylight_view(f.approach) : grazing_view(f.approach)
+    # the camera shows a height of 2 D tan(fov/2) at its look-at distance D (fov 30°)
+    D = v.width / 2 / tand(15.0)
+    sess.view.camera[] = (; eye = Tuple(v.center - D * v.direction), lookat = Tuple(v.center),
+                          up = Tuple(v.up), ortho = true, turntable = false)
+    return sess
+end
+
+"""
     cancel_talis!(tl::TaLISState)
 
 Drop the check in progress. `talis_check` does not take a progress callback, so the

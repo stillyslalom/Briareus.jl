@@ -86,6 +86,13 @@ const B = BriareusGUI
     set_talis_pinch!(sess.talis, false)
     set_disposition_filter!(sess.talis; tight = 1.0)
     @test length(sc.focus_lines[1][]) == n0
+    # a click on a facet in a 1ω color mode gives its verdict in the status line
+    tk = findfirst(==(:clear), sess.talis.disposition[].status)
+    @test pick_disposition!(sess, tk) && startswith(sess.status[], String(sess.target.target[].components[sess.target.target[].tri_comp[tk]].name) * ": clear")
+    @test !pick_disposition!(sess, 0)
+    set_color!(sess, :component)
+    @test !pick_disposition!(sess, tk)
+    set_color!(sess, :omega1_disposition)
     clear_talis_focus!(sess.talis)
     @test !sc.focus_mesh.visible[] && !sc.focus_lines.visible[]
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))

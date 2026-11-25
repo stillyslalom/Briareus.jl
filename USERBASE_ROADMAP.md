@@ -16,7 +16,7 @@ Marks: **done**, **partial** (with what remains), **open**.
 | A.3 hardware disposition field | done | `omega1_disposition`, per mesh triangle, with the shadow flag; 85,000 triangles under 48 quads take about 4 s at `level = 0` and 26 s at `level = 2` on four threads |
 | A.4 VisRad 1ω/2ω beam import | done | `visrad_unconverted`; the import sets the participation flags and the drive ratios. Only the fraction-of-total model is measured on a workspace |
 | A.5 STEP B-rep import | open | optional |
-| B.1 disposition coloring | partial | the two color modes, the tight threshold and the curved-safe filter are in the 3D view; `disposition_info` gives the text of a facet, and no hover or pick shows it yet |
+| B.1 disposition coloring | partial | the two color modes, the tight threshold and the curved-safe filter are in the 3D view, and a click on a facet gives its verdict in the status line; there is no hover |
 | B.2 closest-approach faces, calipers, cones | partial | a click on a TaLIS row draws the nearest side, the clearance plane, the caliper and the reflection cone; the margin terms show on hover. the Pinch toggle adds every other beam within the tight threshold of the part. Left: the port highlight on a chamber indicator and a view toggle for the 1ω contour modes |
 | B.3 daylight and grazing views, slice | partial | the Daylight and Grazing buttons turn the camera to the row under inspection; the 2-D slice is in core as data and SVG (`omega1_slice`, `write_omega1_slice_svg`) and is not yet shown as an inset in the window |
 | B.4 to B.6 | open | |
