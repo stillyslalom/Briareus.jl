@@ -249,6 +249,10 @@ end
     @test length(rc.vertices) == 17 && length(rc.faces) == 16 && rc.port == (x.point, x.point + 10 * bl.port)
     @test all(v -> isapprox(acosd(dot(normalize(v - x.point), -k)), 24; atol = 1e-9) && norm(v - x.point) ≈ 10,
               rc.vertices[2:end])
+    # the ring that marks the port: a closed circle about the port direction, 3° in radius
+    @test length(rc.ring) == 16 && all(rc.ring[i][2] ≈ rc.ring[mod1(i + 1, 16)][1] for i in 1:16)
+    @test all(s -> isapprox(acosd(dot(normalize(s[1] - x.point), bl.port)), PORT_MARK_ANGLE; atol = 1e-6) &&
+                   norm(s[1] - x.point) ≈ 10, rc.ring)
 end
 
 @testset "participation sets the drive and visibility does not (no GL)" begin

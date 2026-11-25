@@ -155,7 +155,7 @@ export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, TALIS_
        talis_focus_text, talis_view!, pinch_approaches, set_talis_pinch!, pick_disposition!, slice_drawing, slice_text,
        talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale,
        talis_role
-export OMEGA1_CONTOURS, set_omega1_contour!
+export PORT_MARK_ANGLE, OMEGA1_CONTOURS, set_omega1_contour!
 export CorridorState, CORRIDOR_COLORS, CORRIDOR_OPACITY, corridor_kwargs, update_corridor!, clear_corridor!,
        corridor_stale, corridor_text, corridor_surface, corridor_sight_lines, show_corridor!, set_corridor_radius!
 export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance,

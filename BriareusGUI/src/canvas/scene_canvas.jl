@@ -681,6 +681,7 @@ function _draw_talis_focus!(c::SceneCanvas, sess::DesignSession)
         seg(f.cone.incident, FOCUS_RAY)
         seg(f.cone.reflected, FOCUS_RAY)
         seg(f.cone.port, FOCUS_PORT)
+        foreach(s -> seg(s, FOCUS_PORT), f.cone.ring)
     end
     if isempty(pts)
         _update!(c.focus_mesh, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)

@@ -189,7 +189,8 @@ end
     im = findfirst(x -> x.rule === :management_1w && x.component === :mirror, rows)
     focus_talis_row!(tl, im)
     @test tl.focus[].index == im && tl.focus[].reflection.component === :mirror
-    @test tl.focus[].cone.half_angle == 20 + 2 * 0.5 && occursin("reflection", talis_focus_text(tl))
+    @test tl.focus[].cone.half_angle == 20 + 2 * 0.5 && occursin("reflection", talis_focus_text(tl)) &&
+          occursin("ringed in the view", talis_focus_text(tl)) && length(tl.focus[].cone.ring) == 32
     focus_talis_row!(tl, findfirst(x -> x.rule === :capture_3w, rows))
     @test tl.focus[].approach === nothing && tl.focus[].surface === nothing && talis_focus_text(tl) == ""
     @test tl.focus[].slice === nothing

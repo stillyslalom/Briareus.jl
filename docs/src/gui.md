@@ -687,7 +687,8 @@ The bottom panel has the following tabs.
   contour, the worst-case clearance plane as a translucent sheet, and the caliper from the
   hardware point to the contour; the terms of the margin show on hover. For a management
   row decided on reflection it also shows the incident and reflected rays, the direction
-  to the threatened port and the cone that open ports must stay outside. *Daylight view*
+  to the threatened port with a ring about it, and the cone that open ports must stay
+  outside; the hover text gives the angles of the port. *Daylight view*
   turns the camera down that beamlet in orthographic projection, so that the gap seen is
   the transverse distance the rule measures, and *Grazing view* looks along the nearest
   side with the beam running up the view. *Pinch* adds the nearest side of every other

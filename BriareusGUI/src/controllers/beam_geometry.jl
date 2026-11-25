@@ -280,15 +280,23 @@ function closest_approach_surface(a::Omega1Approach; span::Real = 6.0)
 end
 
 """
+Angular radius (degrees) of the ring that marks an open port in the 3D view. The ring is a
+mark and does not show the size of the optic.
+"""
+const PORT_MARK_ANGLE = 3.0
+
+"""
     reflection_cone(x::Omega1Reflection; length = 10.0, required = 20.0, tolerance = 0.5, n = 32)
-        -> (; incident, reflected, port, vertices, faces, half_angle)
+        -> (; incident, reflected, port, ring, vertices, faces, half_angle)
 
 What the 3D view draws of the specular 1ω reflection behind a management row
 (`Briareus.omega1_reflection`): the `incident` ray into the reflecting point, the
 `reflected` axis and the direction to the threatened open `port` (segments of `length`
 mm), and the cone about the reflected axis that an open port must stay outside
 (`vertices`, `faces`), of half-angle `required` plus twice the rule `tolerance` plus the
-normal spread of the facet.
+normal spread of the facet. `ring` marks the port: a circle of segments about the port
+direction at the end of the `port` segment, [`PORT_MARK_ANGLE`](@ref) in angular radius as
+seen from the reflecting point. The ring lies inside the cone when the port is threatened.
 """
 function reflection_cone(x::Omega1Reflection; length::Real = 10.0, required::Real = 20.0,
                          tolerance::Real = 0.5, n::Integer = 32)
@@ -305,8 +313,13 @@ function reflection_cone(x::Omega1Reflection; length::Real = 10.0, required::Rea
         push!(verts, p + length * (cosd(half) * r + sind(half) * (cos(φ) * u + sin(φ) * v)))
     end
     faces = [(1, 1 + i, 1 + mod1(i + 1, n)) for i in 1:n]
+    d = normalize(x.port)
+    pu = normalize(cross(d, abs(d[3]) < 0.9 ? Vec3(0, 0, 1) : Vec3(1, 0, 0)))
+    pv = cross(d, pu)
+    rim(i) = p + length * (cosd(PORT_MARK_ANGLE) * d + sind(PORT_MARK_ANGLE) * (cos(2π * i / n) * pu + sin(2π * i / n) * pv))
+    ring = [(rim(i), rim(i + 1)) for i in 0:n-1]
     return (; incident = (p - length * x.incident, p), reflected = (p, p + length * r),
-            port = (p, p + length * x.port), vertices = verts, faces, half_angle = half)
+            port = (p, p + length * x.port), ring, vertices = verts, faces, half_angle = half)
 end
 
 """
