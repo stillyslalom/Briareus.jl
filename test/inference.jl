@@ -196,10 +196,16 @@ end
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
-        n = _inf_body_instances(Briareus._drive_history)
+        # the march and its parts: the setup, the step, the loop and the records
+        parts() = (_inf_body_instances(Briareus._init_history_state), _inf_instances(Briareus._solve_history_step!),
+                   _inf_instances(Briareus._march_history!), _inf_instances(Briareus._record_history_step!))
+        n, np = _inf_body_instances(Briareus._drive_history), parts()
         # new `beams_at`, `record` and `times` types
         history(τ -> with_pulses(quads, pulse, 0.9τ), 0.5:0.5:1.0; record = sol -> sol.H[1])
-        @test _inf_body_instances(Briareus._drive_history) == n
+        @test _inf_body_instances(Briareus._drive_history) == n && parts() == np
+        # options that are `nothing` or a value reuse the march (`_HistoryOptions`)
+        history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; flux_change = 0.5, transition = 0.5, mband = nothing)
+        @test _inf_instances(Briareus._march_history!) == np[3]
         # For unconverted light, new fraction functions reuse the body, whether given for
         # every beam, keyed, or one per beam.
         uq(r) = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; unconverted = (omega1 = r, omega2 = 0.0))

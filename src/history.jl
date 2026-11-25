@@ -309,6 +309,45 @@ drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times; kwargs
 # whole march, which took about 2 s. Their values reach the solves by dynamic dispatch, at
 # no measurable run-time cost, and the march is in the precompile workload of the package
 # (research notes, "Compile latency").
+# The options of a history that are `nothing` or a value, in one concrete type, so that the
+# march is compiled once for every combination of them.
+struct _HistoryOptions
+    transition::Union{Nothing,Float64}
+    flux_change::Union{Nothing,Float64}
+    emission::Union{Nothing,MBandEmission}
+    ulight::Union{Nothing,_UnconvertedLight}
+    min_step::Float64
+    tol::Float64
+    lmax::Int
+    ylm::Bool
+    observed_flux::Bool
+    keep_albedo::Bool
+    wall_release::Bool
+    per_component::Bool
+    has_record::Bool
+end
+
+# The state of the march at the last step taken: the drive integral `I`, burnthrough time
+# `tb` and integrand `rate` of each thin-foil element, the wall-energy integral `Iw` and
+# integrand `ratew` of each wall-loss element, the highest temperature `Tmax`, deficit
+# `Dw` and `cooled` flag of the wall release with the deficits and times of the steps
+# taken, and the depth, temperature and hole intensity of each computed lip.
+mutable struct _MarchState
+    I::Vector{Float64}
+    tb::Vector{Float64}
+    rate::Vector{Float64}
+    Iw::Vector{Float64}
+    ratew::Vector{Float64}
+    Tmax::Vector{Float64}
+    Dw::Vector{Float64}
+    deficits::Vector{Vector{Float64}}
+    dtimes::Vector{Float64}
+    cooled::BitVector
+    ldepth::Vector{Float64}
+    lT::Vector{Float64}
+    lI::Vector{Float64}
+end
+
 Base.@nospecializeinfer function _drive_history(
                         t::Target, @nospecialize(model_at), @nospecialize(operator_at),
                         @nospecialize(beams_at), @nospecialize(times);
@@ -321,6 +360,26 @@ Base.@nospecializeinfer function _drive_history(
                         @nospecialize(unconverted = nothing), colors = nif_unconverted(),
                         @nospecialize(unconverted_kw = (;)), @nospecialize(prepulse = nothing),
                         @nospecialize(by = :group), per_component::Bool = false)
+    cx, st, rec, spectral = _init_history_state(
+        t, beams_at, times; observe, lmax, wall, cavities, holes, ylm, observed_flux, transition, flux_change,
+        min_step, tol, keep_albedo, record, wall_history, wall_release, mband, spectral, unconverted, colors,
+        unconverted_kw, prepulse, by, per_component)
+    _march_history!(cx, st, rec, model_at, operator_at, beams_at, times, lpi, record, spectral)
+    return _assemble_history_output(cx, st, rec)
+end
+
+# Checks the options of a history on target `t` and returns what the march works with: the
+# context `cx` (the element sets and constants of the target with the options), the
+# state `st` of the march before the first step, the empty records `rec` with one
+# container per quantity, and the `spectral_solve` keywords of the M-band.
+Base.@nospecializeinfer function _init_history_state(
+                        t::Target, @nospecialize(beams_at), @nospecialize(times);
+                        observe, lmax::Integer, wall, @nospecialize(cavities), holes, ylm::Bool,
+                        observed_flux::Bool, transition, flux_change, min_step::Real, tol, keep_albedo::Bool,
+                        @nospecialize(record), wall_history::Bool, wall_release::Bool, mband,
+                        @nospecialize(spectral), @nospecialize(unconverted), colors,
+                        @nospecialize(unconverted_kw), @nospecialize(prepulse), @nospecialize(by),
+                        per_component::Bool)
     # fractions and depositions of the unconverted light (`nothing` without it)
     ulight = unconverted === nothing ? nothing :
              _UnconvertedLight(unconverted, prepulse, by, colors, unconverted_kw)
@@ -417,121 +476,155 @@ Base.@nospecializeinfer function _drive_history(
     moments = Vector{Float64}[]
     clm = Vector{Float64}[]
     Hobs = Vector{Float64}[]
-    escaped = Dict(n => Float64[] for n in apertures)
-    transmitted = Dict(t.components[ci].name => Float64[] for ci in transmitters)
-    front = Dict(t.components[ci].name => Float64[] for ci in foils)
+    escaped = Dict{Symbol,Vector{Float64}}(n => Float64[] for n in apertures)
+    transmitted = Dict{Symbol,Vector{Float64}}(t.components[ci].name => Float64[] for ci in transmitters)
+    front = Dict{Symbol,Vector{Float64}}(t.components[ci].name => Float64[] for ci in foils)
     window_loss = Float64[]
     albedo_steps = Vector{Float64}[]
     transmission_steps = Vector{Float64}[]
     recorded = Any[]
     names = [c.name for c in t.components]
     setup, lost = Float64[], Float64[]
-    laser = Dict(n => Float64[] for n in names)
-    source = Dict(n => Float64[] for n in names)
-    released = Dict(n => Float64[] for n in names)
-    absorbed = Dict(c.name => Float64[] for c in t.components
+    laser = Dict{Symbol,Vector{Float64}}(n => Float64[] for n in names)
+    source = Dict{Symbol,Vector{Float64}}(n => Float64[] for n in names)
+    released = Dict{Symbol,Vector{Float64}}(n => Float64[] for n in names)
+    absorbed = Dict{Symbol,Vector{Float64}}(c.name => Float64[] for c in t.components
                     if c.kind !== :aperture || _transmits(c.material.albedo))
-    lip_radius = Dict(L.name => Float64[] for L in lips)
+    lip_radius = Dict{Symbol,Vector{Float64}}(L.name => Float64[] for L in lips)
     mband_moments = Vector{Float64}[]
-    mband_laser = Dict(n => Float64[] for n in names)
-    uc_delivered = Dict(c.name => Float64[] for c in (ulight === nothing ? UnconvertedColor[] : ulight.colors))
+    mband_laser = Dict{Symbol,Vector{Float64}}(n => Float64[] for n in names)
+    uc_delivered = Dict{Symbol,Vector{Float64}}(c.name => Float64[] for c in (ulight === nothing ? UnconvertedColor[] : ulight.colors))
+    options = _HistoryOptions(transition === nothing ? nothing : Float64(transition),
+                              flux_change === nothing ? nothing : Float64(flux_change), emission, ulight,
+                              Float64(min_step), Float64(tol), Int(lmax), ylm, observed_flux, keep_albedo,
+                              wall_release, per_component, record !== nothing)
+    cx = (; t, obs, we, cavity_elems, weights, N, foils, foil_elems, transmitters, tracked, smooth,
+     lips, need, lossy, lossy_index, holes, apertures, partof, names, options)
+    st = _MarchState(I, tb, rate, Iw, ratew, Tmax, Dw, deficits, dtimes, cooled, ldepth, lT, lI)
+    rec = (; time, delivered, flux, Tr, wall_Tr, wall_albedo, cavity_Tr, moments, clm, Hobs,
+     escaped, transmitted, front, window_loss, albedo_steps, transmission_steps, recorded, setup,
+     lost, laser, source, released, absorbed, lip_radius, mband_moments, mband_laser, uc_delivered)
+    return cx, st, rec, spectral
+end
 
-    # Takes the step from τ0 (`nothing` at the first time) to τ and returns its solution
-    # and the thin-foil state at τ. The state at τ0 is left untouched, so a step can be
-    # retried. `Il` is the laser intensity through the hole of each computed lip at τ,
-    # and `b0` the beams at τ before the laser–plasma model, which give the powers of the
-    # unconverted light.
-    function step(τ0, τ, dep, guess, Il, b0)
-        Δ = τ0 === nothing ? 0.0 : τ - τ0
-        # The predictor advances each front through the step at its last temperature.
-        pred = copy(tb)
-        for e in tracked
-            isnan(tb[e]) && rate[e] > 0 && I[e] + Δ * rate[e] >= need[e] &&
-                (pred[e] = τ0 + (need[e] - I[e]) / rate[e])
-        end
-        mτ = model_at(τ)
-        uc = ulight === nothing ? nothing : _unconverted_at!(ulight, mτ.target, b0, τ)
-        ucs = uc === nothing ? nothing : _with_colors(uc, ulight.colors)   # as `solve` takes it
-        # The per-element state used by the albedos holds the burnthrough times and the
-        # wall-loss history of the `lossy` elements (`_WallHistory`).
-        hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, max(τ, 0.0)) :
-                          !wall_release ? _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2) :
-                          _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
-                                       cooled[e] ? _deficit_sum(wl(e), deficits, dtimes, lossy_index[e], τ) : 0.0,
-                                       Dw[e], Δ)) for e in lossy)
-        # closure depths of the lips at τ, from the lip temperatures `T1` at τ
-        depths(T1) = [τ0 === nothing ? 0.0 :
-                      clamp(_lip_advance(L.model, ldepth[k], Δ,
-                                         (_lip_speed(L.model, lT[k]) + _lip_speed(L.model, T1[k])) / 2,
-                                         (_lip_hold(L.model, lI[k]) + _lip_hold(L.model, Il[k])) / 2),
-                            0.0, L.r0 - L.rin) for (k, L) in enumerate(lips)]
-        ds = depths(lT)            # the predictor uses the lip temperatures of the last step
-        # the wall histories per element, as `solve` takes them (`_StepState`)
-        walls = Vector{Union{Nothing,_WallHistory}}(nothing, N)
-        for e in lossy
-            walls[e] = hist[e]
-        end
-        function state(bt)
-            isempty(lossy) && isempty(lips) && return bt
-            s = copy(bt)
-            for (k, L) in enumerate(lips), (j, e) in enumerate(L.elems)
-                s[e] = _ring_closed(L.ra[j], L.rb[j], L.r0 - ds[k])
-            end
-            return _StepState(s, walls)
-        end
-        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = ucs)
-        # The corrector sets the lip depths from the lip temperatures of this step.
-        for _ in 1:5
-            (isempty(lips) || τ0 === nothing) && break
-            dn = depths(_lip_temperatures(lips, sol))
-            maximum(abs.(dn .- ds)) <= 1e-5 && break
-            ds = dn
-            sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol, unconverted = ucs)
-        end
-        # The corrector computes the trapezoidal integral with the temperatures of this
-        # step, from the state at τ0 in `I0, tb0, rate0`. The `I, tb, rate` of the march
-        # are reassigned after each step, so if captured here they would be boxed, and
-        # possibly undefined to the report_call of JET.
-        I0, tb0, rate0 = I, tb, rate
-        function advance(sol)
-            # With `local`, the per-step `Ik, tk, rk` below are not captured. A capture
-            # would box them and could leave them undefined to the report_call of JET.
-            local Ik, tk, rk = copy(I0), copy(tb0), copy(rate0)
-            for e in foil_elems
-                rk[e] = _front_rate(model(e).front, radiation_temperature(ForwardDiff.value(sol.H[e])))
-                τ0 === nothing && continue
-                dI = Δ * (rate0[e] + rk[e]) / 2
-                if isnan(tk[e]) && Ik[e] + dI >= need[e]   # (explicit times are never NaN)
-                    tk[e] = τ0 + _linear_crossing(rate0[e], rk[e], Δ, need[e] - Ik[e])
-                end
-                Ik[e] += dI
-            end
-            return Ik, tk, rk
-        end
-        Ik, tk, rk = advance(sol)
-        # The step is solved again while its temperatures move a burnthrough that affects
-        # its albedo. This is a fixed point, and the transition is smooth, so it converges
-        # in a few passes.
-        used = pred
-        for _ in 1:20
-            moved(e) = !isequal(tk[e], used[e]) && min(_nan_inf(tk[e]), _nan_inf(used[e])) <= τ &&
-                       !(abs(tk[e] - used[e]) <= 1e-12 * max(abs(τ), 1.0))
-            any(moved, tracked) || break
-            used = tk
-            sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol, unconverted = ucs)
-            Ik, tk, rk = advance(sol)
-        end
-        # the wall-energy integrals at τ with the temperatures of this step (the heating
-        # response at the highest temperature so far when the release is on)
-        Iwk, rwk = copy(Iw), copy(ratew)
-        for e in lossy
-            T = radiation_temperature(ForwardDiff.value(sol.H[e]))
-            wall_release && (T = max(T, Tmax[e]))
-            rwk[e] = _loss_rate(wl(e), T)
-            Iwk[e] = τ0 === nothing ? max(τ, 0.0) * rwk[e] : hist[e].A + Δ * rwk[e] / 2
-        end
-        return sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc
+# Takes the step from τ0 (`nothing` at the first time) to τ and returns its solution
+# and the thin-foil state at τ. The state at τ0 is left untouched, so a step can be
+# retried. `Il` is the laser intensity through the hole of each computed lip at τ,
+# and `b0` the beams at τ before the laser–plasma model, which give the powers of the
+# unconverted light.
+Base.@nospecializeinfer function _solve_history_step!(cx, st::_MarchState, @nospecialize(model_at), τ0, τ, dep, guess,
+                                                      Il, b0)
+    (; t, obs, we, cavity_elems, weights, N, foils, foil_elems, transmitters, tracked, smooth,
+     lips, need, lossy, lossy_index, holes, apertures, partof, names) = cx
+    (; transition, flux_change, emission, ulight, min_step, tol, lmax, ylm, observed_flux,
+     keep_albedo, wall_release, per_component) = cx.options
+    model(e) = element_material(t, e).albedo
+    wl(e) = (m = model(e); m isa BurnthroughAlbedo ? m.before : m)
+    (; I, tb, rate, Iw, ratew, Tmax, Dw, deficits, dtimes, cooled, ldepth, lT, lI) = st
+    Δ = τ0 === nothing ? 0.0 : τ - τ0
+    # The predictor advances each front through the step at its last temperature.
+    pred = copy(tb)
+    for e in tracked
+        isnan(tb[e]) && rate[e] > 0 && I[e] + Δ * rate[e] >= need[e] &&
+            (pred[e] = τ0 + (need[e] - I[e]) / rate[e])
     end
+    mτ = model_at(τ)
+    uc = ulight === nothing ? nothing : _unconverted_at!(ulight, mτ.target, b0, τ)
+    ucs = uc === nothing ? nothing : _with_colors(uc, ulight.colors)   # as `solve` takes it
+    # The per-element state used by the albedos holds the burnthrough times and the
+    # wall-loss history of the `lossy` elements (`_WallHistory`).
+    hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, max(τ, 0.0)) :
+                      !wall_release ? _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2) :
+                      _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
+                                   cooled[e] ? _deficit_sum(wl(e), deficits, dtimes, lossy_index[e], τ) : 0.0,
+                                   Dw[e], Δ)) for e in lossy)
+    # closure depths of the lips at τ, from the lip temperatures `T1` at τ
+    depths(T1) = [τ0 === nothing ? 0.0 :
+                  clamp(_lip_advance(L.model, ldepth[k], Δ,
+                                     (_lip_speed(L.model, lT[k]) + _lip_speed(L.model, T1[k])) / 2,
+                                     (_lip_hold(L.model, lI[k]) + _lip_hold(L.model, Il[k])) / 2),
+                        0.0, L.r0 - L.rin) for (k, L) in enumerate(lips)]
+    ds = depths(lT)            # the predictor uses the lip temperatures of the last step
+    # the wall histories per element, as `solve` takes them (`_StepState`)
+    walls = Vector{Union{Nothing,_WallHistory}}(nothing, N)
+    for e in lossy
+        walls[e] = hist[e]
+    end
+    function state(bt)
+        isempty(lossy) && isempty(lips) && return bt
+        s = copy(bt)
+        for (k, L) in enumerate(lips), (j, e) in enumerate(L.elems)
+            s[e] = _ring_closed(L.ra[j], L.rb[j], L.r0 - ds[k])
+        end
+        return _StepState(s, walls)
+    end
+    sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = ucs)
+    # The corrector sets the lip depths from the lip temperatures of this step.
+    for _ in 1:5
+        (isempty(lips) || τ0 === nothing) && break
+        dn = depths(_lip_temperatures(lips, sol))
+        maximum(abs.(dn .- ds)) <= 1e-5 && break
+        ds = dn
+        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol, unconverted = ucs)
+    end
+    # The corrector computes the trapezoidal integral with the temperatures of this
+    # step, from the state at τ0 in `I0, tb0, rate0`. The `I, tb, rate` of the march
+    # are reassigned after each step, so if captured here they would be boxed, and
+    # possibly undefined to the report_call of JET.
+    I0, tb0, rate0 = I, tb, rate
+    function advance(sol)
+        # With `local`, the per-step `Ik, tk, rk` below are not captured. A capture
+        # would box them and could leave them undefined to the report_call of JET.
+        local Ik, tk, rk = copy(I0), copy(tb0), copy(rate0)
+        for e in foil_elems
+            rk[e] = _front_rate(model(e).front, radiation_temperature(ForwardDiff.value(sol.H[e])))
+            τ0 === nothing && continue
+            dI = Δ * (rate0[e] + rk[e]) / 2
+            if isnan(tk[e]) && Ik[e] + dI >= need[e]   # (explicit times are never NaN)
+                tk[e] = τ0 + _linear_crossing(rate0[e], rk[e], Δ, need[e] - Ik[e])
+            end
+            Ik[e] += dI
+        end
+        return Ik, tk, rk
+    end
+    Ik, tk, rk = advance(sol)
+    # The step is solved again while its temperatures move a burnthrough that affects
+    # its albedo. This is a fixed point, and the transition is smooth, so it converges
+    # in a few passes.
+    used = pred
+    for _ in 1:20
+        moved(e) = !isequal(tk[e], used[e]) && min(_nan_inf(tk[e]), _nan_inf(used[e])) <= τ &&
+                   !(abs(tk[e] - used[e]) <= 1e-12 * max(abs(τ), 1.0))
+        any(moved, tracked) || break
+        used = tk
+        sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol, unconverted = ucs)
+        Ik, tk, rk = advance(sol)
+    end
+    # the wall-energy integrals at τ with the temperatures of this step (the heating
+    # response at the highest temperature so far when the release is on)
+    Iwk, rwk = copy(Iw), copy(ratew)
+    for e in lossy
+        T = radiation_temperature(ForwardDiff.value(sol.H[e]))
+        wall_release && (T = max(T, Tmax[e]))
+        rwk[e] = _loss_rate(wl(e), T)
+        Iwk[e] = τ0 === nothing ? max(τ, 0.0) * rwk[e] : hist[e].A + Δ * rwk[e] / 2
+    end
+    return sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc
+end
+
+# Marches the history through `times`: plans each step, solves it (`_solve_history_step!`),
+# halves it while a transition or the flux shape moves too far, and records it
+# (`_record_history_step!`).
+Base.@nospecializeinfer function _march_history!(cx, st::_MarchState, rec, @nospecialize(model_at),
+                                                 @nospecialize(operator_at), @nospecialize(beams_at),
+                                                 @nospecialize(times), @nospecialize(lpi),
+                                                 @nospecialize(record), @nospecialize(spectral))
+    (; t, obs, we, cavity_elems, weights, N, foils, foil_elems, transmitters, tracked, smooth,
+     lips, need, lossy, lossy_index, holes, apertures, partof, names) = cx
+    (; transition, flux_change, emission, ulight, min_step, tol, lmax, ylm, observed_flux,
+     keep_albedo, wall_release, per_component) = cx.options
+    model(e) = element_material(t, e).albedo
+    wl(e) = (m = model(e); m isa BurnthroughAlbedo ? m.before : m)
     # the largest advance of a smooth transition from τ0 to τ, given burnthrough times
     advance_of(τ0, τ, tbs) =
         maximum((_transition_step(model(e), τ, _nan_inf(tbs[e])) -
@@ -543,6 +636,7 @@ Base.@nospecializeinfer function _drive_history(
     shape0 = nothing               # its observed flux shape
     for τgoal in times
         while true
+            (; I, tb, rate) = st       # the state at the last step taken
             τ = τgoal
             if τ0 !== nothing && transition !== nothing && !isempty(smooth)
                 # plan the step from the burnthrough times known or predicted at τ0
@@ -577,7 +671,8 @@ Base.@nospecializeinfer function _drive_history(
                          _mband_split(emission, t, bl)
                 dep = _lpi_deposit(lr, operator_at(τ), bl, τ, msplit)
                 Il = _lip_intensities(lips, bl)
-                sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc = step(τ0, τ, dep, last, Il, b0)
+                sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc =
+                    _solve_history_step!(cx, st, model_at, τ0, τ, dep, last, Il, b0)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
                 h = τ - τ0
@@ -588,124 +683,164 @@ Base.@nospecializeinfer function _drive_history(
                 too_far || break
                 τ = τ0 + h / 2
             end
-            I, tb, rate = Ik, tk, rk
-            Iw, ratew = Iwk, rwk
-            if !isempty(lips)
-                ldepth .= ds
-                lT .= _lip_temperatures(lips, sol)
-                lI .= Il
-                for (k, L) in enumerate(lips)
-                    push!(lip_radius[L.name], L.r0 - ds[k])
-                end
-            end
-            # The release is the power re-emitted from stored energy per component. The
-            # running maximum and deficit of each element at τ follow.
-            rel = zeros(N)
-            if wall_release
-                for e in lossy
-                    T = radiation_temperature(ForwardDiff.value(sol.H[e]))
-                    rel[e] = _wall_split(wl(e), hist[e], T)[3] * sol.model.target.elem_area[e]
-                    # A thin foil re-emits the stored wall energy scaled with its albedo.
-                    model(e) isa BurnthroughAlbedo &&
-                        (rel[e] *= _foil_history_split(model(e), τ, T, _FoilHistory(tb[e], hist[e]))[5])
-                    Th = max(T, Tmax[e])
-                    Dw[e] = _wall_potential(wl(e), Th) - _wall_potential(wl(e), T)
-                    Tmax[e] = Th
-                    Dw[e] != 0 && (cooled[e] = true)
-                end
-                push!(deficits, Dw[lossy])
-                push!(dtimes, τ)
-            end
+            _record_history_step!(cx, st, rec, record, spectral, τ, sol, dep, hist, ds, Il, uc, P0, msplit, a,
+                                  Ik, tk, rk, Iwk, rwk)
             τ0, last = τ, sol
             shape0 = shape(sol, a[1])
-            push!(time, τ)
-            # the unconverted light delivered and absorbed, per color (TW)
-            udel = 0.0
-            if uc !== nothing
-                for c in ulight.colors
-                    push!(uc_delivered[c.name], uc[c.name].delivered)
-                    udel += uc[c.name].delivered
-                end
-            end
-            push!(delivered, uc === nothing ? dep.delivered : dep.delivered + udel)
-            push!(moments, a)
-            ylm && push!(clm, weights(sol.model.target) * sol.H[obs])
-            observed_flux && push!(Hobs, sol.H[obs])
-            Aw = sol.model.target.elem_area[we]
-            push!(flux, a[1])
-            push!(Tr, radiation_temperature(a[1]))
-            Hw = sum(sol.H[we] .* Aw) / sum(Aw)
-            push!(wall_Tr, radiation_temperature(Hw))
-            for (name, es) in cavity_elems
-                push!(cavity_Tr[name], _wall_temperature(sol, es))
-            end
-            # The emission that a re-emitting wall adds to the source of the solution
-            # (TW/mm²). The wall albedo is the effective one, reflected over incident flux.
-            xe = wall_release && !isempty(lossy) ?
-                 ForwardDiff.value.(sol.source) .- ForwardDiff.value.(sol.converted) :
-                 nothing
-            αw = xe === nothing || all(iszero, xe) ? sol.albedo[we] :
-                 sol.albedo[we] .+ xe[we] ./ ForwardDiff.value.(sol.H[we])
-            push!(wall_albedo, sum(αw .* Aw) / sum(Aw))
-            keep_albedo && push!(albedo_steps, xe === nothing || all(iszero, xe) ? copy(sol.albedo) :
-                                   sol.albedo .+ xe ./ max.(ForwardDiff.value.(sol.H), eps()))
-            keep_albedo && push!(transmission_steps, copy(sol.transmission))
-            record === nothing || push!(recorded, record(sol))
-            if emission !== nothing
-                # The effective beams of this step give the share of each cone in the
-                # deposition, from only the beams of that cone, which equals
-                # `mband_power(emission, op, bl; lpi, time)`. The intensity form converts
-                # the deposition of the step directly.
-                tm = sol.model.target
-                PM = msplit === nothing ? mband_power(emission, tm, dep.element) :
-                     _mband_from_split(emission, tm, msplit)
-                sm = spectral_solve(sol; spectral..., mband = emission, mband_power = PM)
-                push!(mband_moments, legendre_moments(band_flux(sm, emission.band[1]), tm, obs; lmax))
-                for (ci, c) in enumerate(tm.components)
-                    push!(mband_laser[c.name], sum(sm.mband[e] * tm.elem_area[e] for e in tm.comp_elems[ci]; init = 0.0))
-                end
-            end
-            bal = energy_balance(sol; by = :component)
-            loss = 0.0
-            for n in apertures
-                push!(escaped[n], bal.escaped[n])
-                n in holes || partof[n] in holes || (loss += bal.escaped[n])
-            end
-            for ci in transmitters
-                c = t.components[ci]
-                push!(transmitted[c.name], bal.transmitted[c.name])
-                loss += bal.transmitted[c.name]
-            end
-            # the target of this step, whose element areas differ from those of `t` when
-            # the target moves
-            tg = sol.model.target
-            for ci in foils
-                c = t.components[ci]
-                es = t.comp_elems[ci]
-                push!(front[c.name], sum(_front_mass(model(e).front, I[e]) / areal_mass(model(e)) * tg.elem_area[e]
-                                         for e in es) / sum(tg.elem_area[es]))
-            end
-            push!(window_loss, loss)
-            push!(setup, uc === nothing ? P0 : P0 + udel)
-            push!(lost, bal.lost)
-            v = ForwardDiff.value
-            # The re-emission of the wall is part of the source of the solution, so the
-            # x-ray source is booked as converted laser (ηP) and the absorbed power net of
-            # the emission.
-            emitted = xe === nothing ? nothing : xe .* tg.elem_area
-            for (ci, c) in enumerate(tg.components)
-                es = tg.comp_elems[ci]
-                Ec = emitted === nothing ? 0.0 : sum(emitted[e] for e in es; init = 0.0)
-                Pl = sum(v(sol.laser[e]) for e in es; init = 0.0) + v(dep.backside[ci])
-                uc === nothing || (Pl += sum(uc[col.name].backside[ci] for col in ulight.colors; init = 0.0))
-                push!(laser[c.name], Pl)
-                push!(source[c.name], sum(v(sol.source[e]) * tg.elem_area[e] for e in es; init = 0.0) - Ec)
-                push!(released[c.name], sum(rel[e] for e in es; init = 0.0))
-                haskey(absorbed, c.name) && push!(absorbed[c.name], bal.absorbed[c.name] - Ec)
-            end
             τ == τgoal && break
         end
     end
+    return nothing
+end
+
+# Commits the step solved at `τ` to the state of the march and appends its records: the
+# thin-foil and wall states `Ik, tk, rk, Iwk, rwk`, the lip state (`ds`, `Il`), the wall
+# release, and one entry per recorded quantity from the solution `sol`, the deposition
+# `dep`, the unconverted light `uc`, the setup power `P0`, the M-band split `msplit` and
+# the moments `a`.
+Base.@nospecializeinfer function _record_history_step!(cx, st::_MarchState, rec, @nospecialize(record),
+                                                       @nospecialize(spectral), τ, sol, dep, hist, ds, Il, uc, P0,
+                                                       msplit, a, Ik, tk, rk, Iwk, rwk)
+    (; t, obs, we, cavity_elems, weights, N, foils, foil_elems, transmitters, tracked, smooth,
+     lips, need, lossy, lossy_index, holes, apertures, partof, names) = cx
+    (; transition, flux_change, emission, ulight, min_step, tol, lmax, ylm, observed_flux,
+     keep_albedo, wall_release, per_component) = cx.options
+    model(e) = element_material(t, e).albedo
+    wl(e) = (m = model(e); m isa BurnthroughAlbedo ? m.before : m)
+    (; time, delivered, flux, Tr, wall_Tr, wall_albedo, cavity_Tr, moments, clm, Hobs, escaped,
+     transmitted, front, window_loss, albedo_steps, transmission_steps, recorded, setup, lost,
+     laser, source, released, absorbed, lip_radius, mband_moments, mband_laser, uc_delivered) = rec
+    st.I, st.tb, st.rate = Ik, tk, rk
+    st.Iw, st.ratew = Iwk, rwk
+    (; I, tb, rate, Iw, ratew, Tmax, Dw, deficits, dtimes, cooled, ldepth, lT, lI) = st
+    if !isempty(lips)
+        ldepth .= ds
+        lT .= _lip_temperatures(lips, sol)
+        lI .= Il
+        for (k, L) in enumerate(lips)
+            push!(lip_radius[L.name], L.r0 - ds[k])
+        end
+    end
+    # The release is the power re-emitted from stored energy per component. The
+    # running maximum and deficit of each element at τ follow.
+    rel = zeros(N)
+    if wall_release
+        for e in lossy
+            T = radiation_temperature(ForwardDiff.value(sol.H[e]))
+            rel[e] = _wall_split(wl(e), hist[e], T)[3] * sol.model.target.elem_area[e]
+            # A thin foil re-emits the stored wall energy scaled with its albedo.
+            model(e) isa BurnthroughAlbedo &&
+                (rel[e] *= _foil_history_split(model(e), τ, T, _FoilHistory(tb[e], hist[e]))[5])
+            Th = max(T, Tmax[e])
+            Dw[e] = _wall_potential(wl(e), Th) - _wall_potential(wl(e), T)
+            Tmax[e] = Th
+            Dw[e] != 0 && (cooled[e] = true)
+        end
+        push!(deficits, Dw[lossy])
+        push!(dtimes, τ)
+    end
+    push!(time, τ)
+    # the unconverted light delivered and absorbed, per color (TW)
+    udel = 0.0
+    if uc !== nothing
+        for c in ulight.colors
+            push!(uc_delivered[c.name], uc[c.name].delivered)
+            udel += uc[c.name].delivered
+        end
+    end
+    push!(delivered, uc === nothing ? dep.delivered : dep.delivered + udel)
+    push!(moments, a)
+    ylm && push!(clm, weights(sol.model.target) * sol.H[obs])
+    observed_flux && push!(Hobs, sol.H[obs])
+    Aw = sol.model.target.elem_area[we]
+    push!(flux, a[1])
+    push!(Tr, radiation_temperature(a[1]))
+    Hw = sum(sol.H[we] .* Aw) / sum(Aw)
+    push!(wall_Tr, radiation_temperature(Hw))
+    for (name, es) in cavity_elems
+        push!(cavity_Tr[name], _wall_temperature(sol, es))
+    end
+    # The emission that a re-emitting wall adds to the source of the solution
+    # (TW/mm²). The wall albedo is the effective one, reflected over incident flux.
+    xe = wall_release && !isempty(lossy) ?
+         ForwardDiff.value.(sol.source) .- ForwardDiff.value.(sol.converted) :
+         nothing
+    αw = xe === nothing || all(iszero, xe) ? sol.albedo[we] :
+         sol.albedo[we] .+ xe[we] ./ ForwardDiff.value.(sol.H[we])
+    push!(wall_albedo, sum(αw .* Aw) / sum(Aw))
+    keep_albedo && push!(albedo_steps, xe === nothing || all(iszero, xe) ? copy(sol.albedo) :
+                           sol.albedo .+ xe ./ max.(ForwardDiff.value.(sol.H), eps()))
+    keep_albedo && push!(transmission_steps, copy(sol.transmission))
+    record === nothing || push!(recorded, record(sol))
+    if emission !== nothing
+        # The effective beams of this step give the share of each cone in the
+        # deposition, from only the beams of that cone, which equals
+        # `mband_power(emission, op, bl; lpi, time)`. The intensity form converts
+        # the deposition of the step directly.
+        tm = sol.model.target
+        PM = msplit === nothing ? mband_power(emission, tm, dep.element) :
+             _mband_from_split(emission, tm, msplit)
+        sm = spectral_solve(sol; spectral..., mband = emission, mband_power = PM)
+        push!(mband_moments, legendre_moments(band_flux(sm, emission.band[1]), tm, obs; lmax))
+        for (ci, c) in enumerate(tm.components)
+            push!(mband_laser[c.name], sum(sm.mband[e] * tm.elem_area[e] for e in tm.comp_elems[ci]; init = 0.0))
+        end
+    end
+    bal = energy_balance(sol; by = :component)
+    loss = 0.0
+    for n in apertures
+        push!(escaped[n], bal.escaped[n])
+        n in holes || partof[n] in holes || (loss += bal.escaped[n])
+    end
+    for ci in transmitters
+        c = t.components[ci]
+        push!(transmitted[c.name], bal.transmitted[c.name])
+        loss += bal.transmitted[c.name]
+    end
+    # the target of this step, whose element areas differ from those of `t` when
+    # the target moves
+    tg = sol.model.target
+    for ci in foils
+        c = t.components[ci]
+        es = t.comp_elems[ci]
+        push!(front[c.name], sum(_front_mass(model(e).front, I[e]) / areal_mass(model(e)) * tg.elem_area[e]
+                                 for e in es) / sum(tg.elem_area[es]))
+    end
+    push!(window_loss, loss)
+    push!(setup, uc === nothing ? P0 : P0 + udel)
+    push!(lost, bal.lost)
+    v = ForwardDiff.value
+    # The re-emission of the wall is part of the source of the solution, so the
+    # x-ray source is booked as converted laser (ηP) and the absorbed power net of
+    # the emission.
+    emitted = xe === nothing ? nothing : xe .* tg.elem_area
+    for (ci, c) in enumerate(tg.components)
+        es = tg.comp_elems[ci]
+        Ec = emitted === nothing ? 0.0 : sum(emitted[e] for e in es; init = 0.0)
+        Pl = sum(v(sol.laser[e]) for e in es; init = 0.0) + v(dep.backside[ci])
+        uc === nothing || (Pl += sum(uc[col.name].backside[ci] for col in ulight.colors; init = 0.0))
+        push!(laser[c.name], Pl)
+        push!(source[c.name], sum(v(sol.source[e]) * tg.elem_area[e] for e in es; init = 0.0) - Ec)
+        push!(released[c.name], sum(rel[e] for e in es; init = 0.0))
+        haskey(absorbed, c.name) && push!(absorbed[c.name], bal.absorbed[c.name] - Ec)
+    end
+    return nothing
+end
+
+# Returns the records of a history as its result, with the burnthrough times of the foils
+# and the pieces of split parts summed into their parts.
+function _assemble_history_output(cx, st::_MarchState, rec)
+    (; t, obs, we, cavity_elems, weights, N, foils, foil_elems, transmitters, tracked, smooth,
+     lips, need, lossy, lossy_index, holes, apertures, partof, names) = cx
+    (; transition, flux_change, emission, ulight, min_step, tol, lmax, ylm, observed_flux,
+     keep_albedo, wall_release, per_component) = cx.options
+    model(e) = element_material(t, e).albedo
+    wl(e) = (m = model(e); m isa BurnthroughAlbedo ? m.before : m)
+    (; time, delivered, flux, Tr, wall_Tr, wall_albedo, cavity_Tr, moments, clm, Hobs, escaped,
+     transmitted, front, window_loss, albedo_steps, transmission_steps, recorded, setup, lost,
+     laser, source, released, absorbed, lip_radius, mband_moments, mband_laser, uc_delivered) = rec
+    (; tb) = st
+    record = cx.options.has_record ? recorded : nothing
     burnthrough = Dict(t.components[ci].name => [_nan_inf(tb[e]) for e in t.comp_elems[ci]] for ci in foils)
     if !per_component && any(c -> c.part !== c.name, t.components)   # pieces of split parts summed into them
         escaped, transmitted, laser, source, absorbed, released =
