@@ -17,8 +17,8 @@ Marks: **done**, **partial** (with what remains), **open**.
 | A.4 VisRad 1ω/2ω beam import | done | `visrad_unconverted`; the import sets the participation flags and the drive ratios. Only the fraction-of-total model is measured on a workspace |
 | A.5 STEP B-rep import | open | optional |
 | B.1 disposition coloring | partial | the two color modes, the tight threshold and the curved-safe filter are in the 3D view; `disposition_info` gives the text of a facet, and no hover or pick shows it yet |
-| B.2 closest-approach faces, calipers, cones | partial | the geometry is built (`closest_approach_surface`, `reflection_cone`) and `unconverted_footprint` takes the mode; nothing draws them yet, and there is no pinch mode |
-| B.3 daylight and grazing views, slice | partial | the two poses are computed (`daylight_view`, `grazing_view`); no button, no 2-D slice |
+| B.2 closest-approach faces, calipers, cones | partial | a click on a TaLIS row draws the nearest side, the clearance plane, the caliper and the reflection cone; the margin terms show on hover. Left: the pinch mode over several beamlets, the port highlight on a chamber indicator, and a view toggle for the 1ω contour modes |
+| B.3 daylight and grazing views, slice | partial | the Daylight and Grazing buttons turn the camera to the row under inspection; the 2-D slice at the station is not built |
 | B.4 to B.6 | open | |
 | C.1 to C.3 | open | |
 | D.1 to D.4 | open | |

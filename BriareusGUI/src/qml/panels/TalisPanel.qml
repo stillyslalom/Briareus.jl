@@ -29,6 +29,10 @@ ColumnLayout {
         Info { topic: "talis.report" }
         Item { Layout.fillWidth: true }
         Label { text: "inputs changed since"; visible: app.tlStale; color: "#d08a00" }
+        Button { text: "Daylight view"; enabled: app.tlFocusApproach; onClicked: Julia.br_tl_view("daylight")
+                 tip: "Look down the 1ω beamlet of the selected row, in orthographic projection: the gap seen between the hardware and the contour is the transverse distance of the rule" }
+        Button { text: "Grazing view"; enabled: app.tlFocusApproach; onClicked: Julia.br_tl_view("grazing")
+                 tip: "Look along the nearest side of the 1ω beamlet of the selected row, with the beam running up the view" }
         Button { text: "Export CSV…"; enabled: !app.tlRunning; onClicked: win.openTalisExport()
                  tip: "Write every check to a CSV file" }
     }
@@ -141,8 +145,11 @@ ColumnLayout {
                     ScrollBar.vertical: ScrollBar {}
                     delegate: RowLayout {
                         spacing: 4
-                        Tip { visible: rowHover.hovered && model.note !== ""; text: model.note }
+                        opacity: app.tlFocus < 0 || app.tlFocus === index ? 1.0 : 0.55
+                        Tip { visible: rowHover.hovered && (model.note !== "" || (app.tlFocus === index && app.tlFocusText !== ""))
+                              text: app.tlFocus === index && app.tlFocusText !== "" ? app.tlFocusText : model.note }
                         HoverHandler { id: rowHover }
+                        TapHandler { onTapped: Julia.br_tl_focus(index) }
                         Cell { text: model.beam; Layout.preferredWidth: head.widths[0] }
                         Cell { text: model.rule; Layout.preferredWidth: head.widths[1] }
                         Cell { text: model.component; Layout.preferredWidth: head.widths[2] }

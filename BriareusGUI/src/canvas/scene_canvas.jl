@@ -90,6 +90,8 @@ struct SceneCanvas
     triad_at::Base.RefValue{Any}                 # (part index, name, frame) of the triad shown
     placing::Base.RefValue{Any}                  # the `TriadDrag` in progress, or nothing
     triad_hover::Base.RefValue{Any}              # the triad handle under the pointer, or nothing
+    focus_mesh::Any                              # the TaLIS row under inspection: the clearance
+    focus_lines::Any                             # plane and reflection cone, and their lines
 end
 
 """
@@ -138,6 +140,9 @@ function scene_canvas(sess::DesignSession)
                                  visible = false, overdraw = true)
     place_label = text!(sc, _NOPOINT3; text = [""], fontsize = 13, markerspace = :pixel,
                         align = (:left, :bottom), offset = (4, 2), visible = false, overdraw = true)
+    focus_mesh = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true, visible = false)
+    focus_lines = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2, visible = false,
+                                overdraw = true)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -147,7 +152,7 @@ function scene_canvas(sess::DesignSession)
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
-                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing))
+                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines)
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -173,6 +178,7 @@ function scene_canvas(sess::DesignSession)
     # A pose set by a loaded session; `nothing` gives the default view, fitted to the
     # target.
     on(p -> _apply_camera!(c, p), v.camera)
+    on(_ -> _draw_talis_focus!(c, sess), sess.talis.focus)
     onany((_...) -> v.color[] in DISPOSITION_MODES && _draw_body!(c, sess), sess.talis.disposition,
           sess.talis.tight, sess.talis.hide_curved)
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
@@ -631,6 +637,54 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
     end
     _update!(c.sections, isempty(secs) ? _NOSEG3 : secs; visible = !isempty(secs))
     c.ntriangles[] = n
+    c.dirty[] = true
+    return c
+end
+
+# The TaLIS row under inspection (`focus_talis_row!`): the nearest sides of the 1ω beamlet
+# as the outline of the 10% contour and the translucent worst-case clearance plane, the
+# caliper from the hardware to the contour, and for a reflection its rays and the cone
+# that open ports must stay outside. The lines are drawn over the geometry.
+const FOCUS_SHEET = RGBAf(0.84, 0.37, 0.0, 0.3)
+const FOCUS_CONE = RGBAf(0.9, 0.62, 0.0, 0.22)
+const FOCUS_CONTOUR = RGBAf(0.84, 0.37, 0.0, 1.0)
+const FOCUS_CALIPER = RGBAf(0.0, 0.0, 0.0, 1.0)
+const FOCUS_RAY = RGBAf(0.8, 0.0, 0.0, 1.0)
+const FOCUS_PORT = RGBAf(0.0, 0.45, 0.7, 1.0)
+
+function _draw_talis_focus!(c::SceneCanvas, sess::DesignSession)
+    f = sess.talis.focus[]
+    pts, cols = Point3f[], RGBAf[]
+    segs, scols = Point3f[], RGBAf[]
+    P(x) = Point3f(x...)
+    seg(s, col) = (push!(segs, P(s[1]), P(s[2])); push!(scols, col, col))
+    function tris(g, col)
+        for face in g.faces, i in face
+            push!(pts, P(g.vertices[i]))
+            push!(cols, col)
+        end
+    end
+    if f !== nothing && f.surface !== nothing
+        tris(f.surface, FOCUS_SHEET)
+        foreach(s -> seg(s, FOCUS_CONTOUR), f.surface.outline)
+        seg(f.surface.caliper, FOCUS_CALIPER)
+    end
+    if f !== nothing && f.cone !== nothing
+        tris(f.cone, FOCUS_CONE)
+        seg(f.cone.incident, FOCUS_RAY)
+        seg(f.cone.reflected, FOCUS_RAY)
+        seg(f.cone.port, FOCUS_PORT)
+    end
+    if isempty(pts)
+        _update!(c.focus_mesh, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
+    else
+        _update!(c.focus_mesh, pts, _faces(length(pts) ÷ 3); color = cols, visible = true)
+    end
+    if isempty(segs)
+        _update!(c.focus_lines, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], visible = false)
+    else
+        _update!(c.focus_lines, segs; color = scols, visible = true)
+    end
     c.dirty[] = true
     return c
 end

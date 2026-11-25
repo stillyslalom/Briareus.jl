@@ -1425,6 +1425,12 @@ function br_tl_tight(text)
     end
 end
 br_tl_hide_curved(on) = _with_shell(sh -> set_disposition_filter!(sh.sess.talis; hide_curved = Bool(on)))
+# Put row `i` (from 0) of the TaLIS table under inspection, or take it out when it is
+# already there; turn the 3D view to it.
+br_tl_focus(i) = _with_shell(sh -> (tl = sh.sess.talis; f = tl.focus[];
+                                    f !== nothing && f.index == Int(i) + 1 ? clear_talis_focus!(tl) :
+                                    focus_talis_row!(tl, Int(i) + 1)))
+br_tl_view(kind) = _with_shell(sh -> talis_view!(sh.sess, _sym(kind)))
 br_tl_start() = br_run_task("talis")
 br_tl_cancel() = _with_shell(sh -> cancel_talis!(sh.sess))
 br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(String(url))))
@@ -1614,7 +1620,7 @@ function _register_qml_functions()
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
     @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
-    @qmlfunction br_tl_cancel br_tl_export br_cancel_all br_tl_tight br_tl_hide_curved
+    @qmlfunction br_tl_cancel br_tl_export br_cancel_all br_tl_tight br_tl_hide_curved br_tl_focus br_tl_view
     @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway br_show_off
     @qmlfunction br_cut_width br_cut_azimuth br_cut_toward_view br_cut_component
     @qmlfunction br_cut_kind br_cut_axis br_cut_range br_cut_plane br_cut_offset

@@ -165,11 +165,31 @@ end
     im = disposition_info(tl, t, [bl], first(of(:mirror)))
     @test occursin("radii of curvature flat, flat", im) && occursin("from open port", im)
     @test occursin("above 5 mm", disposition_info(tl, t, [bl], first(of(:far))))
+    # a row under inspection: the approach of a clearance row with what the view draws of
+    # it, the reflection and cone of a management row decided on reflection
+    rows = talis_rows(tl)
+    @test tl.focus[] === nothing && talis_focus_text(tl) == ""
+    focus_talis_row!(tl, findfirst(x -> x.rule === :clearance_1w && x.component === :near, rows))
+    f = tl.focus[]
+    @test f.row.component === :near && f.approach.component === :near && f.approach.x_hw == f.row.point
+    @test length(f.surface.outline) == 4 && f.surface.caliper == (f.approach.x_hw, f.approach.x_beam)
+    @test f.reflection === nothing && f.cone === nothing
+    @test length(split(talis_focus_text(tl), '\n')) == 8 && startswith(talis_focus_text(tl), "nominal")
+    im = findfirst(x -> x.rule === :management_1w && x.component === :mirror, rows)
+    focus_talis_row!(tl, im)
+    @test tl.focus[].index == im && tl.focus[].reflection.component === :mirror
+    @test tl.focus[].cone.half_angle == 20 + 2 * 0.5 && occursin("reflection", talis_focus_text(tl))
+    focus_talis_row!(tl, findfirst(x -> x.rule === :capture_3w, rows))
+    @test tl.focus[].approach === nothing && tl.focus[].surface === nothing && talis_focus_text(tl) == ""
+    focus_talis_row!(tl, length(rows) + 1)
+    @test tl.focus[] === nothing
+    focus_talis_row!(tl, im)
     # another target has no disposition, and the 1ω rules off leave none
     @test disposition_of(tl, Target(plate(:mirror, 4.0, 8.0 * ô))) === nothing
     _assign(tl.omega1, false)
     start_talis!(tl, rv, t, [bl]; spawn = false)
     @test tl.disposition[] === nothing && tl.report[] isa TaLISReport
+    @test tl.focus[] === nothing                                      # a new check clears the focus
     @test Set(DISPOSITION_MODES) ⊆ Set(COLOR_MODES) && all(m -> haskey(COLOR_LABELS, m), COLOR_MODES)
 end
 

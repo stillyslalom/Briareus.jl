@@ -62,6 +62,22 @@ const B = BriareusGUI
     verdicts = Set(disposition_status(sess.talis, sess.target.target[]))
     @test issubset(Set(sc.body.color[]), Set(B._hexcolor(DISPOSITION_COLORS[v]) for v in verdicts))
     @test B._hexcolor(DISPOSITION_COLORS[:unchecked]) ∉ sc.body.color[] || :unchecked in verdicts
+    # a 1ω row under inspection is drawn, and the daylight view looks down its beamlet
+    @test !sc.focus_mesh.visible[] && !sc.focus_lines.visible[]
+    i1 = findfirst(x -> x.rule === :clearance_1w, talis_rows(sess.talis))
+    focus_talis_row!(sess.talis, i1)
+    a1 = sess.talis.focus[].approach
+    @test sc.focus_mesh.visible[] && sc.focus_lines.visible[]
+    talis_view!(sess, :daylight)
+    kv = sc.camera.lookat - sc.camera.eye
+    @test sc.camera.ortho && !sc.camera.turntable
+    @test kv / sqrt(sum(abs2, kv)) ≈ a1.beamlet[1] && collect(sc.camera.lookat) ≈ (a1.x_hw + a1.x_beam) / 2
+    talis_view!(sess, :grazing)
+    @test abs(sum((sc.camera.lookat - sc.camera.eye) .* a1.beamlet[1])) < 1e-9
+    @test_throws ArgumentError talis_view!(sess, :side)
+    clear_talis_focus!(sess.talis)
+    @test !sc.focus_mesh.visible[] && !sc.focus_lines.visible[]
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
     set_color!(sess, :omega1_margin)
     @test sc.colorbar.blockscene.visible[] && sc.colorbar.limits[] == (-DISPOSITION_RANGE, DISPOSITION_RANGE)
     @test occursin("1ω clearance margin", sc.colorbar.label[])

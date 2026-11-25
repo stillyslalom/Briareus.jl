@@ -678,7 +678,16 @@ The bottom panel has the following tabs.
   clearance margin* draws the worst-case margin on a scale of ±5 mm about zero. *Tight
   below* sets the margin up to which clearing hardware counts as tight, and a check box
   draws the curved hardware as clear, which leaves only tight, review and failing
-  hardware colored. Both change the drawing only.
+  hardware colored. Both change the drawing only. A click on a row of the report puts it
+  under inspection, and a second click takes it out. For a 1ω row the 3D view then shows
+  only the nearest side of the 1ω beamlet that sets the margin: the outline of its 10%
+  contour, the worst-case clearance plane as a translucent sheet, and the caliper from the
+  hardware point to the contour; the terms of the margin show on hover. For a management
+  row decided on reflection it also shows the incident and reflected rays, the direction
+  to the threatened port and the cone that open ports must stay outside. *Daylight view*
+  turns the camera down that beamlet in orthographic projection, so that the gap seen is
+  the transverse distance the rule measures, and *Grazing view* looks along the nearest
+  side with the beam running up the view.
 
 ### Files in and out
 

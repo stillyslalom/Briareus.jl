@@ -49,7 +49,8 @@ the hardware sampling come from the [`ReviewState`](@ref). Job: `running`, `star
 `disposition`, the 1ω verdict of every mesh triangle (a core `Omega1Disposition`), which
 the 3D view colors by ([`DISPOSITION_MODES`](@ref)); `tight` (mm) is the margin up to
 which hardware that clears is drawn as tight, and `hide_curved` draws hardware that
-scatters by its curvature as clear.
+scatters by its curvature as clear. `focus` is the row of the report under inspection
+with its geometry ([`focus_talis_row!`](@ref)), or `nothing`.
 """
 struct TaLISState
     capture::Observable{Vector{Symbol}}
@@ -67,6 +68,7 @@ struct TaLISState
     disposition::Observable{Union{Nothing,Omega1Disposition}}
     tight::Observable{Float64}
     hide_curved::Observable{Bool}
+    focus::Observable{Any}
     inputs::Base.RefValue{Any}
     known::Base.RefValue{Vector{Symbol}}
     generation::Base.RefValue{Int}
@@ -78,7 +80,7 @@ TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable
                           Observable(false), Observable(0.0), Observable(""), Observable(""),
                           Observable{Union{Nothing,TaLISReport}}(nothing),
                           Observable{Union{Nothing,Omega1Disposition}}(nothing), Observable(1.0),
-                          Observable(false), Ref{Any}(nothing),
+                          Observable(false), Observable{Any}(nothing), Ref{Any}(nothing),
                           Ref(Symbol[]), Ref(0))
 
 """
@@ -235,6 +237,7 @@ end
 function _finish_talis!(tl::TaLISState, out, g::Integer)
     g == tl.generation[] || return tl                  # canceled or superseded
     if out.err === nothing
+        clear_talis_focus!(tl)
         tl.disposition[] = last(out.value)
         tl.report[] = first(out.value)
         tl.status[] = @sprintf("done in %s: ", _seconds(time() - tl.started[])) * talis_brief(tl)
@@ -354,6 +357,76 @@ function disposition_info(tl::TaLISState, t::Target, beams::AbstractVector, k::I
                 d.settings.reflection_angle)
     d.shadowed[k] && print(io, "; shadowed by hardware upstream")
     return String(take!(io))
+end
+
+"""
+    focus_talis_row!(tl::TaLISState, i) -> tl
+
+Put row `i` of [`talis_rows`](@ref) under inspection. `tl.focus[]` becomes `(; index, row,
+approach, reflection, surface, cone)`. For a 1ω row, `approach` is the closest approach
+of the 1ω footprint to the point of the row (`Briareus.omega1_closest_approach`) and
+`surface` what the 3D view draws of it ([`closest_approach_surface`](@ref)); for a
+management row decided on reflection, `reflection` and `cone` are the reflection and its
+drawing ([`reflection_cone`](@ref)). The others are `nothing`. A row out of range clears
+the focus, as a new check does.
+"""
+function focus_talis_row!(tl::TaLISState, i::Integer)
+    rows = talis_rows(tl)
+    (tl.inputs[] === nothing || !checkbounds(Bool, rows, i)) && return clear_talis_focus!(tl)
+    row = rows[i]
+    t, bs, _ = tl.inputs[]
+    r = tl.report[]
+    approach = row.rule in (:clearance_1w, :management_1w, :diagnostic_1w) ?
+               omega1_closest_approach(t, bs, r, row) : nothing
+    reflection = omega1_reflection(r, row)
+    surface = approach === nothing ? nothing : closest_approach_surface(approach)
+    cone = reflection === nothing ? nothing :
+           reflection_cone(reflection; length = max(2.0, 0.5 * t.scale), required = r.settings.reflection_angle,
+                           tolerance = r.settings.tolerance)
+    tl.focus[] = (; index = Int(i), row, approach, reflection, surface, cone)
+    return tl
+end
+
+"Take the row under inspection out of the 3D view ([`focus_talis_row!`](@ref))."
+clear_talis_focus!(tl::TaLISState) = (tl.focus[] === nothing || (tl.focus[] = nothing); tl)
+
+"""
+    talis_focus_text(tl::TaLISState) -> String
+
+The terms of the margin of the 1ω row under inspection, one per line from the nominal
+distance to the margin, then the reflection of a management row: its angle to the
+threatened port and the projected areas. Empty without such a row.
+"""
+function talis_focus_text(tl::TaLISState)
+    f = tl.focus[]
+    f === nothing && return ""
+    lines = f.surface === nothing ? String[] : copy(f.surface.budget)
+    x = f.reflection
+    x === nothing ||
+        push!(lines, @sprintf("reflection %.1f° from open port %d, less %.1f° of normal spread; %.3g of %.3g mm² within the required angle",
+                              x.angle, x.port_index, x.spread, x.offending_area, x.exposed_area))
+    return join(lines, "\n")
+end
+
+"""
+    talis_view!(sess, kind::Symbol) -> sess
+
+Turn the 3D view to the 1ω row under inspection ([`focus_talis_row!`](@ref)), in
+orthographic projection: `:daylight` looks down the beamlet, so that the gap seen
+between the hardware and the 1ω contour is the transverse distance of the rule
+([`daylight_view`](@ref)); `:grazing` looks along the nearest side of the beamlet
+([`grazing_view`](@ref)). Nothing changes without such a row.
+"""
+function talis_view!(sess, kind::Symbol)
+    kind in (:daylight, :grazing) || throw(ArgumentError("the view is :daylight or :grazing"))
+    f = sess.talis.focus[]
+    (f === nothing || f.approach === nothing) && return sess
+    v = kind === :daylight ? daylight_view(f.approach) : grazing_view(f.approach)
+    # the camera shows a height of 2 D tan(fov/2) at its look-at distance D (fov 30°)
+    D = v.width / 2 / tand(15.0)
+    sess.view.camera[] = (; eye = Tuple(v.center - D * v.direction), lookat = Tuple(v.center),
+                          up = Tuple(v.up), ortho = true, turntable = false)
+    return sess
 end
 
 """
