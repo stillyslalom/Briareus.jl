@@ -39,7 +39,7 @@ _roe_pair(r, a, b) = only(p for p in r.pairs if Set(p.units) == Set((_roe_unit(r
     function reference(drop)
         d = direct(drop)
         return [(d0.a[1] - d.a[1]) / d0.a[1], abs(d.a[3] / d.a[1] - d0.a[3] / d0.a[1]),
-                abs(d.a[5] / d.a[1] - d0.a[5] / d0.a[1]), norm(d.v),
+                abs(d.a[5] / d.a[1] - d0.a[5] / d0.a[1]), norm(d.v - d0.v),
                 1 - implosion_metrics(d.v).total / implosion_metrics(d0.v).total,
                 (d0.wall - d.wall) / d0.wall]
     end
@@ -302,12 +302,15 @@ end
     @test length(r.units) == 60
     W = ylm_weights(t, 1:nelements(t); lmax = L)
     σ(drop) = mode_rms(W * (deposit(s.deposition, _roe_dropped(beams, drop)).element ./ t.elem_area), L)
-    @test all(isapprox(o.scores[1], σ(o.beams); rtol = 1e-9) for o in r.singles[[1, 17, 60]])
+    # the default score is the rise over the full shot
+    @test all(isapprox(o.scores[1], σ(o.beams) - σ(Int[]); rtol = 1e-8) for o in r.singles[[1, 17, 60]])
+    rv = roe_scan(s, beams, [roe_illumination_rms(t; lmax = L, measure = :value)]; pairs = :none)
+    @test all(isapprox(o.scores[1], σ(o.beams); rtol = 1e-9) for o in rv.singles[[1, 17, 60]])
     @test r.baseline[1] ≈ σ(Int[]) rtol = 1e-10
     # OMEGA beams come in opposed pairs, and a companion is the antipode
     @test all(i -> dot(beams[r.companions[i].beams[1]].port, beams[r.companions[i].beams[2]].port) < -0.999, 1:60)
     # a lost beam raises the nonuniformity
-    @test all(o -> o.scores[1] > r.baseline[1], r.singles)
+    @test all(o -> o.scores[1] > 0, r.singles)
 
     # The corona operator of three beams against its deposition with one beam off.
     prof = CoronaProfile(; critical_radius = 0.40, scale_length = 0.08, absorption = 1 - exp(-2.4))
@@ -315,6 +318,6 @@ end
     op = CoronaOperator(prof, three; ncone = 3)
     s3 = Scenario(t, three; deposition_kw = (; ncone = 1))
     rc = roe_scan(s3, three, [roe_corona_rms(op; lmax = 4)]; pairs = :none)
-    @test all(isapprox(o.scores[1], mode_rms(deposit(op, _roe_dropped(three, o.beams)).ylm, 4); rtol = 1e-10)
-              for o in rc.singles)
+    σc(drop) = mode_rms(deposit(op, _roe_dropped(three, drop)).ylm, 4)
+    @test all(isapprox(o.scores[1], σc(o.beams) - σc(Int[]); rtol = 1e-9, atol = 1e-12) for o in rc.singles)
 end

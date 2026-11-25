@@ -1662,7 +1662,7 @@ each a function of an `Evaluation` with a green and an amber threshold.
 |---|---|---|---|
 | `roe_drive`, `roe_face_flux` | fractional loss of the mean flux | 0.02 | 0.05 |
 | `roe_mode(l)` | change of `aₗ/a₀` | 0.01 | 0.03 |
-| `roe_hotspot_velocity` | speed, km/s | 10 | 30 |
+| `roe_hotspot_velocity` | magnitude of the velocity added to the full shot, km/s | 30 | 65 |
 | `roe_yield` | fractional loss of the piston-model yield | 0.02 | 0.10 |
 | `roe_face_nonuniformity` | rise of the RMS over the mean | 0.005 | 0.02 |
 | `roe_temperature` | change, eV | 2 | 5 |
@@ -1671,8 +1671,17 @@ each a function of an `Evaluation` with a green and an amber threshold.
 | `roe_foil_nonuniformity` | rise of the RMS over the mean | 0.05 | 0.15 |
 | `roe_foil_centroid` | shift, mm | 0.02 | 0.05 |
 | `roe_backlighter_signal` | fractional loss of He-α photons | 0.10 | 0.25 |
-| `roe_illumination_rms`, `roe_corona_rms` | RMS over the mean | 0.02 | 0.05 |
+| `roe_illumination_rms`, `roe_corona_rms` | rise of the RMS over the mean | 0.02 | 0.05 |
 
+- Every built-in scores the change that the outage makes to the full shot, so a nominal
+  asymmetry is not charged to each outage (`measure = :value` on the velocity and the two
+  direct-drive criteria scores the state with the outage). The velocity thresholds are
+  the speeds at which the piston model loses 2% and 10% of the yield at 380 km/s
+  (`mode1_tolerance`: 29.7 and 67.4 km/s), rounded, so that they agree with the
+  thresholds of `roe_yield`. An earlier default of 10 and 30 km/s on the total speed made
+  every quad and 176 of 192 beams red on a symmetric 10.1 mm hohlraum whose full shot has
+  no mode 1; a single beam adds 26 to 45 km/s there and a quad 127 to 171 km/s, at
+  100 km/s per percent of mode 1. Confidence **L**.
 - The tier rules are also choices of this package. A unit has the tier of its single
   outage, a green unit whose pair with another green unit is red is raised to amber, and
   the budget of a role allows two green units together only when every scanned pair of

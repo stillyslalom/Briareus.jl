@@ -28,16 +28,19 @@ function roe_mode(l::Integer; green::Real = 0.01, amber::Real = 0.03, name = Sym
 end
 
 """
-    roe_hotspot_velocity(; green = 10.0, amber = 30.0, measure = :value,
+    roe_hotspot_velocity(; green = 30.0, amber = 65.0, measure = :change,
                          name = :hotspot_velocity, case = :default, kwargs...) -> ROECriterion
 
 Hot-spot velocity (km/s) that mode 1 of the capsule flux drives
-([`hotspot_velocity`](@ref), which takes `kwargs`). With `measure = :value` the speed of
-the outage is scored, the nominal mode 1 included, and with `:change` the velocity that
-the outage adds. The thresholds are engineering defaults and not facility criteria;
-[`mode1_tolerance`](@ref) gives a speed from a yield loss.
+([`hotspot_velocity`](@ref), which takes `kwargs`). With `measure = :change` the score is
+the magnitude of the velocity vector that the outage adds to the velocity of the full
+shot, so a nominal mode 1 is not charged to every outage. With `:value` the score is the
+speed with the outage, the nominal mode 1 included. The default thresholds are the speeds
+at which the piston model loses 2% and 10% of the yield at an implosion velocity of
+380 km/s ([`mode1_tolerance`](@ref) gives 29.7 and 67.4 km/s), rounded. They are
+engineering defaults and not facility criteria.
 """
-function roe_hotspot_velocity(; green::Real = 10.0, amber::Real = 30.0, measure::Symbol = :value,
+function roe_hotspot_velocity(; green::Real = 30.0, amber::Real = 65.0, measure::Symbol = :change,
                               name = :hotspot_velocity, case::Symbol = :default, kwargs...)
     f = ev -> hotspot_velocity(ev; kwargs...)
     return ROECriterion(name, f; green, amber, measure, case, label = "km/s")
@@ -217,16 +220,17 @@ end
 
 """
     roe_illumination_rms(target, names = (:capsule,); lmax = 30, green = 0.02, amber = 0.05,
-                         measure = :value, name = :illumination_rms, case = :default) -> ROECriterion
+                         measure = :rise, name = :illumination_rms, case = :default) -> ROECriterion
 
 RMS nonuniformity `mode_rms` (1 ≤ l ≤ `lmax`) of the absorbed laser intensity on the
 parts `names` of `target`, for hard-sphere direct-drive illumination ([`mode_rms`](@ref)).
 The harmonic weights of the elements are built once, at construction. With `measure =
-:value` the nonuniformity of the outage is scored, and with `:rise` its increase. The
-thresholds are engineering defaults and not facility criteria.
+:rise` the score is the increase of the nonuniformity over the full shot, and with
+`:value` the nonuniformity with the outage. The thresholds are engineering defaults and
+not facility criteria.
 """
 function roe_illumination_rms(t::Target, names = (:capsule,); lmax::Integer = 30, green::Real = 0.02,
-                              amber::Real = 0.05, measure::Symbol = :value,
+                              amber::Real = 0.05, measure::Symbol = :rise,
                               name = :illumination_rms, case::Symbol = :default)
     es = elements(t, _roe_names(names)...)
     isempty(es) && throw(ArgumentError("no elements of $(join(_roe_names(names), ", "))"))
@@ -238,15 +242,16 @@ end
 
 """
     roe_corona_rms(op::CoronaOperator; lmax = op.lmax, green = 0.02, amber = 0.05,
-                   measure = :value, name = :corona_rms, case = :default) -> ROECriterion
+                   measure = :rise, name = :corona_rms, case = :default) -> ROECriterion
 
 RMS nonuniformity `mode_rms` (1 ≤ l ≤ `lmax`) of the laser power absorbed in the corona
 of `op` ([`CoronaOperator`](@ref)), for direct drive. The corona deposition is computed
-again for every outage from the effective beams. The thresholds are engineering defaults
-and not facility criteria.
+again for every outage from the effective beams. With `measure = :rise` the score is the
+increase over the full shot, and with `:value` the nonuniformity with the outage. The
+thresholds are engineering defaults and not facility criteria.
 """
 function roe_corona_rms(op::CoronaOperator; lmax::Integer = op.lmax, green::Real = 0.02,
-                        amber::Real = 0.05, measure::Symbol = :value, name = :corona_rms,
+                        amber::Real = 0.05, measure::Symbol = :rise, name = :corona_rms,
                         case::Symbol = :default)
     f = ev -> mode_rms(deposit(op, ev.effective).ylm, lmax)
     return ROECriterion(name, f; green, amber, measure, case, label = "of mean")
