@@ -202,6 +202,60 @@ function run_task!(sess::DesignSession, task::Symbol; spawn::Bool = true)
 end
 
 """
+    start_roe!(sess::DesignSession) -> sess
+
+Scan the beam rules of engagement of the session in place: the drive scenario
+([`build_scenario!`](@ref)) against the criteria that `Briareus.roe_default_criteria`
+selects from the observed part and the foils of the design, over the beams with power.
+The report goes to `sess.roe` and the 3D view colors the beams by tier. A design whose
+drive cannot be computed, or whose beams land on nothing, leaves the reason in
+`sess.roe.status` and no report. The thresholds are engineering defaults.
+"""
+function start_roe!(sess::DesignSession)
+    rs = sess.roe
+    old = sess.spawn[]
+    sess.spawn[] = false
+    try
+        build_scenario!(sess)
+    finally
+        sess.spawn[] = old
+    end
+    s = sess.drive.scenario[]
+    if s === nothing
+        rs.report[] = nothing
+        rs.status[] = "the drive could not be computed: " * sess.drive.status[]
+        return sess
+    end
+    beams = display_beams(sess.beams)
+    choice = roe_default_criteria(s, beams; foils = [f for f in foil_names(sess.target) if f in parts(s.target)])
+    rs.notes[] = choice.notes
+    if isempty(choice.criteria)
+        rs.report[] = nothing
+        rs.status[] = join(choice.notes, " ")
+        return sess
+    end
+    r = roe_scan(s, beams, choice.criteria)
+    rs.inputs[] = (sess.target.target[], beams)
+    rs.report[] = r
+    n(t) = count(==(t), r.tiers)
+    rs.status[] = string(length(r.units), " units against ", join((c.name for c in r.criteria), ", "), ": ", n(:red),
+                         " critical, ", n(:amber), " need approval, ", n(:green), " may drop (engineering defaults)")
+    _assign!(sess.view.beam_color, :roe)
+    return sess
+end
+
+"""
+    roe_stale(sess::DesignSession) -> Bool
+
+Whether the target or the beams changed since the last rules-of-engagement scan.
+"""
+function roe_stale(sess::DesignSession)
+    sess.roe.report[] === nothing && return false
+    t, beams = sess.roe.inputs[]
+    return t !== sess.target.target[] || beams != display_beams(sess.beams)
+end
+
+"""
     review_stale(sess::DesignSession) -> Bool
 
 Whether the target, the enabled beams or a setting changed since the clearance or TaLIS

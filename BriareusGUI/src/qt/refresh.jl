@@ -158,7 +158,7 @@ function _dirty_sources(sess::DesignSession)
     ts, bt, dr, st, rv, tl, v, tm, sw = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                         sess.talis, sess.view, sess.time, sess.sweep
     cm = sess.corridor
-    all = Any[sess.status, sess.meshing, sess.cad_changed, ts.mesh, ts.resolution,
+    all = Any[sess.roe.report, sess.roe.status, sess.status, sess.meshing, sess.cad_changed, ts.mesh, ts.resolution,
               ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
               bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
               dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
@@ -288,6 +288,11 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "colorBy", String(v.color[]))
     _set!(sh, "beamStyle", String(v.beams[]))
     _set!(sh, "beamColor", String(v.beam_color[]))
+    rs = sh.sess.roe
+    sel = selected_beams(sh.sess)
+    bs = sh.sess.beams.beams[]
+    _set!(sh, "roeText", rs.status[] * (roe_stale(sh.sess) ? " (out of date)" : ""))
+    _set!(sh, "roeBeamText", isempty(sel) || rs.report[] === nothing ? "" : roe_beam_text(rs, bs[sel[1]].name))
     _set!(sh, "beamLength", v.beam_length[] > 0 ? _num(v.beam_length[]) : "")
     _set!(sh, "cutaway", v.cutaway[])
     _set!(sh, "showOff", v.show_off[])

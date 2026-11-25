@@ -532,7 +532,12 @@ picking and the outline exact.
 
 Beams are drawn as rays or as volumes. A ray runs along each axis from the lens side to
 the surface it reaches, with the aim point marked. Beams are colored by group or by
-their worst clearance or TaLIS status, in the colors of the tree. The target is colored
+their worst clearance or TaLIS status, in the colors of the tree. Scan outages in the
+beam properties runs the beam rules of engagement on the drive of the design with the
+default criteria (`Briareus.roe_default_criteria`, engineering defaults) and colors each
+beam by tier: green may drop, amber needs approval and red holds the shot. A selected
+beam shows the criterion that binds it and its quad, with the score and the thresholds.
+The target is colored
 by component or by the absorbed laser intensity, the x-ray radiosity or the incident
 x-ray flux (W/cm²); a drive coloring computes the drive when it is missing. Two further
 views share the canvas. One is the capsule θ–φ flux map, or the foil face for a foil.

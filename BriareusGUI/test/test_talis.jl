@@ -346,3 +346,29 @@ end
     set_corridor_radius!(sess, 80.0)
     @test cm.radius[] == 80.0 && cm.map[] === nothing
 end
+
+@testset "beam rules of engagement (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    rs = sess.roe
+    @test rs.report[] === nothing && isempty(roe_tiers(rs)) && roe_beam_text(rs, "Q11T") == "" && !roe_stale(sess)
+    start_roe!(sess)
+    r = rs.report[]
+    @test r !== nothing && sess.view.beam_color[] === :roe && !roe_stale(sess)
+    # the scan is the core scan of the scenario of the session with the default criteria
+    sc = sess.drive.scenario[]
+    beams = display_beams(sess.beams)
+    direct = roe_scan(sc, beams, roe_default_criteria(sc, beams).criteria)
+    @test r.tiers == direct.tiers && [c.name for c in r.criteria] == [:drive, :P2, :P4, :hotspot_velocity]
+    tiers = roe_tiers(rs)
+    @test Set(keys(tiers)) == Set(r.beams) && all(i -> tiers[r.units[i].name] === r.tiers[i], eachindex(r.units))
+    i = argmax([o.scores[o.binding] for o in r.singles])
+    u, o = r.units[i], r.singles[i]
+    text = roe_beam_text(rs, u.name)
+    @test occursin(string(r.tiers[i]), text) && occursin(string(r.criteria[o.binding].name), text) && occursin("amber ≤", text)
+    @test roe_beam_text(rs, "nonesuch") == ""
+    @test occursin("units against drive", rs.status[]) && occursin("engineering defaults", rs.status[])
+    # a changed beam marks the scan out of date
+    bs = sess.beams.beams[]
+    set_beams!(sess.beams, [k == 1 ? remake(b; power = 0.5 * b.power) : b for (k, b) in enumerate(bs)])
+    @test roe_stale(sess)
+end

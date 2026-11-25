@@ -70,6 +70,7 @@ include("controllers/optimizer.jl")
 include("controllers/review.jl")
 include("controllers/talis.jl")
 include("controllers/corridor.jl")            # the keep-out map of the 3D view
+include("controllers/roe.jl")                 # the beam rules of engagement
 include("controllers/beam_geometry.jl")
 include("controllers/view.jl")
 include("controllers/cutaway.jl")            # the cut regions and clipped triangles
@@ -86,6 +87,7 @@ include("controllers/placement_triad.jl")     # the 3D view's placement triad
 
 export display_number
 export import_visrad_workspace!, export_visrad_workspace, export_results, retune_pulses,
+       ROEState, roe_tiers, roe_beam_text, start_roe!, roe_stale,
        retune_to_reference!, session_state, restore!, save_session, load_session!, session_script,
        write_session_script, cad_source, relink_cad!,
        reload_cad_sources!, EditHistory, record!, undo!,

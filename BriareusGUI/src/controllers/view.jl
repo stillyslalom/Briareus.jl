@@ -15,8 +15,11 @@ const COLOR_LABELS = Dict(:component => "Components", :laser => "Absorbed laser"
                           :radiosity => "X-ray radiosity", :incident => "Incident x-ray flux",
                           :omega1_disposition => "1ω disposition", :omega1_margin => "1ω clearance margin")
 
-"Beam colorings: by group (`:group`), or by worst status in the clearance or TaLIS report."
-const BEAM_COLORINGS = (:group, :clearance, :talis)
+"""
+Beam colorings: by group (`:group`), by worst status in the clearance or TaLIS report, or
+by the tier of the beam in the rules-of-engagement scan (`:roe`).
+"""
+const BEAM_COLORINGS = (:group, :clearance, :talis, :roe)
 
 """
 Categorical colors (hex) of components and beam groups, shared by the 3D view and the

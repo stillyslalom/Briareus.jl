@@ -98,6 +98,7 @@ struct DesignSession
     cad_changed::Observable{Vector{String}} # saved copies whose source changed since the save
     sweep::SweepState
     corridor::CorridorState
+    roe::ROEState
 end
 
 function DesignSession(; starter::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -118,7 +119,7 @@ function DesignSession(; starter::Symbol = :hohlraum, resolution::Symbol = :stan
                          TimeState(), ViewState(; cut_components = default_cut(ts)), Observable(""), ts.deliver,
                          ts.spawn, EditHistory(),
                          Observable(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
-                         Observable(String[]), SweepState(), CorridorState())
+                         Observable(String[]), SweepState(), CorridorState(), ROEState())
     _default_selections!(sess, ts.target[])
     _connect!(sess)
     _watch_changes!(sess)

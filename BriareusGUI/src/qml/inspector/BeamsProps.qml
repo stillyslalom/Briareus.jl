@@ -79,12 +79,24 @@ ColumnLayout {
             textRole: "text"; valueRole: "value"
             model: [{ text: "Cone", value: "group" },
                     { text: "Clearance status", value: "clearance" },
-                    { text: "TaLIS status", value: "talis" }]
-            currentIndex: Math.max(0, ["group", "clearance", "talis"].indexOf(app.beamColor))
+                    { text: "TaLIS status", value: "talis" },
+                    { text: "Rules-of-engagement tier", value: "roe" }]
+            currentIndex: Math.max(0, ["group", "clearance", "talis", "roe"].indexOf(app.beamColor))
             onActivated: Julia.br_beam_color(currentValue)
-            tip: "By cone, or by status in the latest check"
+            tip: "By cone, by status in the latest check, or by outage tier"
         }
     }
+    RowLayout {
+        Layout.fillWidth: true
+        Button {
+            text: "Scan outages"
+            onClicked: Julia.br_roe_start()
+            ToolTip.visible: hovered
+            ToolTip.text: "Score the loss of each beam and quad against the default criteria of the design (engineering defaults)"
+        }
+        Label { Layout.fillWidth: true; wrapMode: Text.Wrap; text: app.roeText }
+    }
+    Label { Layout.fillWidth: true; wrapMode: Text.Wrap; visible: app.roeBeamText !== ""; text: app.roeBeamText }
     PropRow {
         label: "Drawn length"
         value: app.beamLength

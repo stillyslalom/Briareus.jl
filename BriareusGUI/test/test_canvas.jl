@@ -368,6 +368,11 @@ end
     worst = B._beam_status(sess)
     @test Set(keys(worst)) == Set(b.name for b in active_beams(bt))
     @test sc.aims.color[][1] == B.STATUS_COLORS[worst[bt.beams[][1].name]]
+    # by the tier of the rules-of-engagement scan: green, amber and red as pass, review and fail
+    start_roe!(sess)
+    st = Dict(:green => :pass, :amber => :review, :red => :fail)
+    @test sess.view.beam_color[] === :roe &&
+          sc.aims.color[][1] == B.STATUS_COLORS[st[roe_tiers(sess.roe)[bt.beams[][1].name]]]
     remove_window!(sess.target, 2)
     remove_window!(sess.target, 1)
     @test finite(sc.outlines[1][]) == 0

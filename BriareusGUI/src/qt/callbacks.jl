@@ -1363,6 +1363,7 @@ br_opt_accept() = _with_shell(sh -> accept_optimum!(sh.sess))
 # Clearance
 br_rv_role(name, role) = _with_shell(sh -> set_role!(sh.sess.review, _sym(name), _sym(role)))
 br_rv_edit(key, text) = _with_shell(sh -> edit_review!(sh.sess.review, _sym(key), string(text)))
+br_roe_start() = _with_shell(sh -> start_roe!(sh.sess))
 br_cm_show(on) = _with_shell(sh -> show_corridor!(sh.sess, Bool(on)))
 function br_cm_radius(text)
     _with_shell() do sh
@@ -1632,7 +1633,7 @@ function _register_qml_functions()
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel br_cm_show br_cm_radius
     @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
     @qmlfunction br_tl_cancel br_tl_export br_cancel_all br_tl_tight br_tl_hide_curved br_tl_focus br_tl_view br_tl_pinch
-    @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway br_show_off br_omega1_contour
+    @qmlfunction br_set_color br_beam_style br_beam_color br_roe_start br_beam_length br_set_cutaway br_show_off br_omega1_contour
     @qmlfunction br_cut_width br_cut_azimuth br_cut_toward_view br_cut_component
     @qmlfunction br_cut_kind br_cut_axis br_cut_range br_cut_plane br_cut_offset
     @qmlfunction br_cut_angles br_cut_normal br_cut_point br_cut_through_selected br_cut_line
