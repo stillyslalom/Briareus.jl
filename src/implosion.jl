@@ -91,8 +91,8 @@ A response (Green's) function of time, piecewise linear through the table and ze
 outside it, callable as `k(t)`. A time may repeat once to make a step. Units are the
 observable per percent of drive mode per ns (km/s per % per ns for the hot-spot
 velocity, Young et al. 2020; µm per % per ns for a hot-spot P2 kernel, Masse et al.
-2019). Briareus does not include the published kernels: they are platform specific and
-appear only as figures.
+2019). The published kernels are platform specific and appear only as figures. One is
+included, digitized: the mode-1 kernel of N170827 (`young2020_kernel`).
 """
 struct ResponseKernel
     t::Vector{Float64}

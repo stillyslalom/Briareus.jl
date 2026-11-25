@@ -142,8 +142,9 @@ corrections. It does not solve hydrodynamics: wall motion, LEH closure and the
 inner-beam bubble are reduced models calibrated to published simulations and
 measurements. The radiosity is quasi-static and has no plasma energy store, so after the
 laser falls the synthetic Dante is 37–54 eV below the measured one at 9 ns on three
-shots. Briareus does not trace refraction. The CBET model assumes uniform LEH plasma and
-full pairwise overlap; its unsaturated coupling overpredicts transfer, so it is
+shots. Laser rays in a hohlraum are straight, without refraction (`DepositionOperator`);
+the direct-drive `CoronaOperator` refracts its rays in a spherical corona. The CBET model
+assumes uniform LEH plasma and full pairwise overlap; its unsaturated coupling overpredicts transfer, so it is
 calibrated with `calibrate_cbet` before its magnitudes are trusted. Radiosity is gray
 unless `spectral_solve` is used, which works about a gray solution. The `clearance`
 thresholds and wing models are engineering defaults; no facility criterion sets them.
