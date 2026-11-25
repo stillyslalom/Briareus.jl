@@ -1075,6 +1075,24 @@ struct _FoilHistory
     wall::_WallHistory
 end
 
+# The per-element state that `drive_history` passes to `solve` in place of the public
+# `burnthrough` vector. `values` is that vector: the burnthrough time of each thin-foil
+# element (NaN when none is known) and the closed fraction of each closing-lip element.
+# `wall` contains the wall-loss history of the elements whose loss follows their
+# temperature history, and `nothing` elsewhere.
+struct _StepState
+    values::Vector{Float64}
+    wall::Vector{Union{Nothing,_WallHistory}}
+end
+
+# Returns the burnthrough time or closed fraction of element `e`, and its wall history,
+# from the `burnthrough` argument of `solve`.
+_element_value(::Nothing, e) = NaN
+_element_value(b::AbstractVector, e) = b[e]
+_element_value(s::_StepState, e) = s.values[e]
+_element_wall(b, e) = nothing
+_element_wall(s::_StepState, e) = s.wall[e]
+
 # Return the albedo, intact albedo, transmitted fraction and emission of such a foil, and
 # the factor on the wall emission. While the foil is intact, these equal the values of the
 # wall, from `_wall_split` of `before`. Across the transition they blend

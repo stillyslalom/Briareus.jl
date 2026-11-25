@@ -698,17 +698,18 @@ function _albedos(t::Target, time, H, burnthrough)
         is_aperture(t, e) && !_transmits(element_material(t, e).albedo) && continue
         a = element_material(t, e).albedo
         T = H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e]))
-        state = burnthrough === nothing ? NaN : burnthrough[e]
-        if a isa WallLossAlbedo && state isa _WallHistory
-            α[e], E, _ = _wall_split(a, state, T)
+        state = _element_value(burnthrough, e)
+        wall = _element_wall(burnthrough, e)
+        if a isa WallLossAlbedo && wall !== nothing
+            α[e], E, _ = _wall_split(a, wall, T)
             intact[e] = α[e]
             if E != 0
                 emission === nothing && (emission = zeros(n))
                 emission[e] = E
             end
-        elseif a isa BurnthroughAlbedo && state isa _FoilHistory
+        elseif a isa BurnthroughAlbedo && wall !== nothing
             # a thin foil whose `before` follows the wall history of the element
-            α[e], intact[e], transmission[e], E, _ = _foil_history_split(a, time, T, state)
+            α[e], intact[e], transmission[e], E, _ = _foil_history_split(a, time, T, _FoilHistory(state, wall))
             if E != 0
                 emission === nothing && (emission = zeros(n))
                 emission[e] = E
@@ -909,8 +910,8 @@ with the value and partials sharing each product with `F`.
 solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs...)
 
 function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothing,
-               burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50, guess = nothing,
-               unconverted = nothing)
+               burnthrough::Union{Nothing,AbstractVector{<:Real},_StepState} = nothing,
+               tol = 1e-4, maxiter::Integer = 50, guess = nothing, unconverted = nothing)
     t = m.target
     S = _xray_source(t, P, time)
     laser = collect(P)

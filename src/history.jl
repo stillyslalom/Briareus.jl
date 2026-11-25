@@ -399,7 +399,10 @@ Base.@nospecializeinfer function _drive_history(
     # For re-emission (`wall_release`), the highest temperature of each element, the
     # deficit φ(T_max) − φ(T) at every step taken, and the times of those steps
     Tmax, Dw = zeros(N), zeros(N)
+    # (the deficits of the `lossy` elements only, in their order: `lossy_index`)
     deficits, dtimes = Vector{Float64}[], Float64[]
+    lossy_index = zeros(Int, N)
+    lossy_index[lossy] .= 1:length(lossy)
     cooled = falses(N)             # elements whose deficit has ever been nonzero
     holes = holes === nothing ?
             [c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface)] :
@@ -454,7 +457,7 @@ Base.@nospecializeinfer function _drive_history(
         hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, max(τ, 0.0)) :
                           !wall_release ? _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2) :
                           _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
-                                       cooled[e] ? _deficit_sum(wl(e), deficits, dtimes, e, τ) : 0.0,
+                                       cooled[e] ? _deficit_sum(wl(e), deficits, dtimes, lossy_index[e], τ) : 0.0,
                                        Dw[e], Δ)) for e in lossy)
         # closure depths of the lips at τ, from the lip temperatures `T1` at τ
         depths(T1) = [τ0 === nothing ? 0.0 :
@@ -463,16 +466,18 @@ Base.@nospecializeinfer function _drive_history(
                                          (_lip_hold(L.model, lI[k]) + _lip_hold(L.model, Il[k])) / 2),
                             0.0, L.r0 - L.rin) for (k, L) in enumerate(lips)]
         ds = depths(lT)            # the predictor uses the lip temperatures of the last step
+        # the wall histories per element, as `solve` takes them (`_StepState`)
+        walls = Vector{Union{Nothing,_WallHistory}}(nothing, N)
+        for e in lossy
+            walls[e] = hist[e]
+        end
         function state(bt)
             isempty(lossy) && isempty(lips) && return bt
-            s = Vector{Any}(bt)
-            for e in lossy
-                s[e] = model(e) isa BurnthroughAlbedo ? _FoilHistory(bt[e], hist[e]) : hist[e]
-            end
+            s = copy(bt)
             for (k, L) in enumerate(lips), (j, e) in enumerate(L.elems)
                 s[e] = _ring_closed(L.ra[j], L.rb[j], L.r0 - ds[k])
             end
-            return s
+            return _StepState(s, walls)
         end
         sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = ucs)
         # The corrector sets the lip depths from the lip temperatures of this step.
@@ -608,7 +613,7 @@ Base.@nospecializeinfer function _drive_history(
                     Tmax[e] = Th
                     Dw[e] != 0 && (cooled[e] = true)
                 end
-                push!(deficits, copy(Dw))
+                push!(deficits, Dw[lossy])
                 push!(dtimes, τ)
             end
             τ0, last = τ, sol
@@ -831,7 +836,8 @@ _lip_intensities(lips, beams) =
     [sum((ForwardDiff.value(b.power) for b in beams if dot(b.port, L.center) > 0); init = 0.0) / (π * L.r0^2)
      for L in lips]
 
-# Returns the wall-release Duhamel sum of element e at time τ over the steps taken. It is
+# Returns the wall-release Duhamel sum at time τ over the steps taken, for the element at
+# position e of the deficit vectors (those of the wall-loss elements of the history). It is
 # the deficit D, piecewise linear between the steps, convolved with the integral of the
 # kernel,
 # Σₖ (Dₖ − Dₖ₋₁)/(tₖ − tₖ₋₁) [(τ − tₖ₋₁)^b − (τ − tₖ)^b].
