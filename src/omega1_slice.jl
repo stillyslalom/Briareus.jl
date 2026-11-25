@@ -114,7 +114,7 @@ function omega1_slice_svg(sl; size::Integer = 480)
     println(io, "<line x1=\"12.000\" y1=\"", n(size - 14.0), "\" x2=\"", n(12 + bar * sc), "\" y2=\"", n(size - 14.0),
             "\" stroke=\"#000000\" stroke-width=\"2\"/>")
     println(io, "<text x=\"12.000\" y=\"", n(size - 20.0), "\">", @sprintf("%g", bar), " mm</text>")
-    println(io, "<text x=\"12.000\" y=\"18.000\">", sl.beam, " / ", sl.component, ": 1ω margin ",
+    println(io, "<text x=\"12.000\" y=\"18.000\">", _xml_escape(sl.beam), " / ", _xml_escape(sl.component), ": 1ω margin ",
             @sprintf("%+.3f", sl.margin), " mm at s = ", n(sl.s_star), " mm (focus ", @sprintf("%+g", sl.focus_shift),
             " mm)</text>")
     print(io, "</svg>\n")

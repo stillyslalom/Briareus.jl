@@ -163,3 +163,10 @@ end
     s, z = _splitmix(s)
     return s, (z >> 11) * 0x1.0p-53
 end
+
+# Text for the body or an attribute of XML and HTML: the five special characters as entities.
+function _xml_escape(s::AbstractString)
+    any(c -> c in ('&', '<', '>', '"', '\''), s) || return String(s)
+    return replace(s, '&' => "&amp;", '<' => "&lt;", '>' => "&gt;", '"' => "&quot;", '\'' => "&#39;")
+end
+_xml_escape(x) = _xml_escape(string(x))

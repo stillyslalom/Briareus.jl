@@ -72,9 +72,11 @@ same kind. Several cases in one scan cover the epochs of a pulse and several obs
 faces. The default thresholds of the built-in criteria are engineering defaults.
 [`roe_table`](@ref), [`write_roe_csv`](@ref) and [`roe_markdown`](@ref) export the sheet
 by role and tier, with the scores behind each tier and the pairs that are worse together.
+[`port_map_svg`](@ref) draws the ports of the beams of any facility on two polar disks,
+one per hemisphere, colored by the tiers of a report or by any value per beam or quad.
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl"]
+Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl", "src/port_map.jl"]
 Private = false
 ```
