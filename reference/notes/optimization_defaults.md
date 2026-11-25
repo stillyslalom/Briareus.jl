@@ -1677,6 +1677,13 @@ each a function of an `Evaluation` with a green and an amber threshold.
   outage, a green unit whose pair with another green unit is red is raised to amber, and
   the budget of a role allows two green units together only when every scanned pair of
   them stays green or the exceptions are listed. Three or more outages are not scanned.
+- `roe_default_criteria` selects a starting set from the design: observed elements whose
+  area-weighted normals sum to less than 5% of their area count as a closed capsule and
+  get drive, P2, P4 and hot-spot velocity, any other observed elements get the face
+  criteria, each named foil gets the three foil criteria, and with nothing observed each
+  part with at least 5% of the deposited power (up to four) gets the irradiance loss. The
+  5% closure test, the 5% share and the limit of four are choices of this package.
+  Confidence **L**: a shot sheet needs the criteria of the experiment.
 - Without a laser–plasma model the deposition is linear in the beam powers, and an outage
   is the nominal deposition less the deposition of the dropped beams alone. Checked
   against a fresh deposition, a radiosity solve and moments of the solved flux with the

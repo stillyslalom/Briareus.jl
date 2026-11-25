@@ -74,9 +74,21 @@ faces. The default thresholds of the built-in criteria are engineering defaults.
 by role and tier, with the scores behind each tier and the pairs that are worse together.
 [`port_map_svg`](@ref) draws the ports of the beams of any facility on two polar disks,
 one per hemisphere, colored by the tiers of a report or by any value per beam or quad.
+[`roe_default_criteria`](@ref) selects a starting set of criteria from what a design
+contains.
+
+## Review packets
+
+A packet is a folder that a reviewer opens without the package. [`omega1_review`](@ref)
+runs the TaLIS check and collects the 1ω disposition and the closest approach of every
+failing or tight pair, and [`write_omega1_review`](@ref) writes it as one self-contained
+HTML page with the slice drawings inline, the CSV of the check, one SVG per slice and
+optionally JSON. [`write_roe_packet`](@ref) writes the rules-of-engagement sheet in the
+same forms, with the chamber port map. The pages refer to no other file and to nothing
+on the network, and the same input gives the same text.
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl", "src/port_map.jl"]
+Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl", "src/port_map.jl", "src/review_packets.jl"]
 Private = false
 ```
