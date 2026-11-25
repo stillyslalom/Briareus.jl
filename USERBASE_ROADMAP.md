@@ -21,7 +21,9 @@ Marks: **done**, **partial** (with what remains), **open**.
 | B.3 daylight and grazing views, slice | done | the Daylight and Grazing buttons turn the camera to the row under inspection, and the TaLIS tab draws the 2-D slice of a selected 1ω row (`omega1_slice`; `write_omega1_slice_svg` for a file) |
 | B.4 safe-corridor map | partial | `corridor_map` in core, on a sphere or a plane, over 3ω envelopes, 1ω footprints and lines of sight (`SightLine`, `sight_line`), with `corridor_margin` for one point and `write_corridor_map_svg`; 192 beams on 90 by 180 samples take about 0.2 s. The clearance page draws the sphere about TCC in the 3D view. Left: a plane slice and a 2-D polar panel in the window, hardware shadowing, and lines of sight for diagnostics whose definitions lack a direction or field |
 | B.5, B.6 | open | |
-| C.1 to C.3 | open | |
+| C.1 outage engine | done | `roe_scan` over cases (a scenario and beams per epoch or observed face) and `ROECriterion` values: single beams, single quads, pairs, companion drops, roles by absorbing part. Linear tables without a laser–plasma model, full evaluation with one (`method`) |
+| C.2 criteria and tiers | partial | built-in criteria for capsule drive, modes, hot-spot velocity and yield, face flux and nonuniformity, temperature, flux balance, foil irradiance, nonuniformity, centroid and He-α signal, hard-sphere and corona nonuniformity; tiers with the binding criterion, pair escalation and a per-role budget. Left: a crystal (Bragg) throughput for CBI, the ablation-pressure proxy as a built-in, triple outages |
+| C.3 port map and export | partial | `roe_table`, `write_roe_csv`, `roe_markdown`. Left: the HTML sheet, the chamber port map, the tier coloring in the application and the `briareus roe` command |
 | D.3 handoff loop | partial | the SVG slice of a 1ω approach is written from core without a graphics context; no script export, no `--tab` |
 | D.1, D.2, D.4 | open | |
 | E.1, E.2 | open | |
