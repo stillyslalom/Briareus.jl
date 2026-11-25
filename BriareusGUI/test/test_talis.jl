@@ -183,6 +183,28 @@ end
     @test tl.focus[].approach === nothing && tl.focus[].surface === nothing && talis_focus_text(tl) == ""
     focus_talis_row!(tl, length(rows) + 1)
     @test tl.focus[] === nothing
+    # the pinch mode: every beam within the threshold of a part. The whole quad of the
+    # beamlet lights both sides of the 3ω axis, so the quad and the beamlet both come
+    # within 1 mm of the near plate, and only the beamlet is near in a check of it alone.
+    @test isempty(pinch_approaches(TaLISState(), :near))
+    pa = pinch_approaches(tl, :near)
+    @test [a.beam for a in pa] == [bl.name] && abs(pa[1].margin - f.approach.margin) < 1e-4
+    @test isempty(pinch_approaches(tl, :near; threshold = 0.05)) && isempty(pinch_approaches(tl, :far))
+    quad = only(q for q in nif_quads() if q.quad == bl.quad)
+    tl2 = TaLISState()
+    _assign(tl2.capture, [:mirror]); _assign(tl2.hardware, [:near, :far])
+    start_talis!(tl2, rv, t, [bl, quad]; spawn = false)
+    p2 = pinch_approaches(tl2, :near)
+    @test Set(a.beam for a in p2) == Set([bl.name, quad.name]) && issorted([a.margin for a in p2])
+    r2 = talis_rows(tl2)
+    i2 = findfirst(x -> x.rule === :clearance_1w && x.component === :near && x.beam == bl.name, r2)
+    focus_talis_row!(tl2, i2)
+    @test isempty(tl2.focus[].pinch)
+    set_talis_pinch!(tl2, true)
+    @test tl2.focus[].index == i2 && [p.approach.beam for p in tl2.focus[].pinch] == [quad.name]
+    @test length(tl2.focus[].pinch[1].surface.outline) >= 4 && occursin(quad.name, talis_focus_text(tl2))
+    set_talis_pinch!(tl2, false)
+    @test isempty(tl2.focus[].pinch) && !tl2.pinch[]
     focus_talis_row!(tl, im)
     # another target has no disposition, and the 1ω rules off leave none
     @test disposition_of(tl, Target(plate(:mirror, 4.0, 8.0 * ô))) === nothing

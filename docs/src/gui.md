@@ -687,7 +687,9 @@ The bottom panel has the following tabs.
   to the threatened port and the cone that open ports must stay outside. *Daylight view*
   turns the camera down that beamlet in orthographic projection, so that the gap seen is
   the transverse distance the rule measures, and *Grazing view* looks along the nearest
-  side with the beam running up the view.
+  side with the beam running up the view. *Pinch* adds the nearest side of every other
+  beam whose 1ω margin to the same part is below the tight threshold, which shows the
+  beams that close in on a part without their whole 1ω volumes.
 
 ### Files in and out
 

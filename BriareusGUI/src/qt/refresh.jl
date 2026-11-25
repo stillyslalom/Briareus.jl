@@ -176,7 +176,7 @@ function _dirty_sources(sess::DesignSession)
               rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
               rv.running, rv.status, rv.error, rv.report,
               tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
-              tl.running, tl.status, tl.error, tl.report, tl.tight, tl.hide_curved, tl.focus,
+              tl.running, tl.status, tl.error, tl.report, tl.tight, tl.hide_curved, tl.focus, tl.pinch,
               v.display, v.selection, v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted,
               v.triads, tm.pulses, tm.history, tm.retune, tm.diagnostics,
               tm.catalog, tm.issues, tm.running,
@@ -1012,6 +1012,7 @@ function _refresh_talis!(sh::BriareusShell)
     _set!(sh, "tlFocus", tl.focus[] === nothing ? -1 : tl.focus[].index - 1)
     _set!(sh, "tlFocusApproach", tl.focus[] !== nothing && tl.focus[].approach !== nothing)
     _set!(sh, "tlFocusText", talis_focus_text(tl))
+    _set!(sh, "tlPinch", tl.pinch[])
     _set!(sh, "tlRunning", tl.running[])
     _set!(sh, "tlElapsed", tl.running[] ? Controllers._seconds(time() - tl.started[]) : "")
     _set!(sh, "tlStatus", tl.status[])

@@ -29,6 +29,8 @@ ColumnLayout {
         Info { topic: "talis.report" }
         Item { Layout.fillWidth: true }
         Label { text: "inputs changed since"; visible: app.tlStale; color: "#d08a00" }
+        Button { text: "Pinch"; checkable: true; checked: app.tlPinch; onToggled: Julia.br_tl_pinch(checked)
+                 tip: "With a 1ω row selected, also draw the nearest side of every other beam whose 1ω margin to the same part is below the tight threshold" }
         Button { text: "Daylight view"; enabled: app.tlFocusApproach; onClicked: Julia.br_tl_view("daylight")
                  tip: "Look down the 1ω beamlet of the selected row, in orthographic projection: the gap seen between the hardware and the contour is the transverse distance of the rule" }
         Button { text: "Grazing view"; enabled: app.tlFocusApproach; onClicked: Julia.br_tl_view("grazing")

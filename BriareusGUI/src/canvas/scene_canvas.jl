@@ -646,6 +646,7 @@ end
 # caliper from the hardware to the contour, and for a reflection its rays and the cone
 # that open ports must stay outside. The lines are drawn over the geometry.
 const FOCUS_SHEET = RGBAf(0.84, 0.37, 0.0, 0.3)
+const FOCUS_PINCH = RGBAf(0.8, 0.47, 0.65, 0.3)
 const FOCUS_CONE = RGBAf(0.9, 0.62, 0.0, 0.22)
 const FOCUS_CONTOUR = RGBAf(0.84, 0.37, 0.0, 1.0)
 const FOCUS_CALIPER = RGBAf(0.0, 0.0, 0.0, 1.0)
@@ -668,6 +669,11 @@ function _draw_talis_focus!(c::SceneCanvas, sess::DesignSession)
         tris(f.surface, FOCUS_SHEET)
         foreach(s -> seg(s, FOCUS_CONTOUR), f.surface.outline)
         seg(f.surface.caliper, FOCUS_CALIPER)
+        for p in f.pinch                               # the other beams that pinch the part
+            tris(p.surface, FOCUS_PINCH)
+            foreach(s -> seg(s, FOCUS_CONTOUR), p.surface.outline)
+            seg(p.surface.caliper, FOCUS_CALIPER)
+        end
     end
     if f !== nothing && f.cone !== nothing
         tris(f.cone, FOCUS_CONE)

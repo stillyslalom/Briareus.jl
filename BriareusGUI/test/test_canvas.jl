@@ -75,6 +75,17 @@ const B = BriareusGUI
     talis_view!(sess, :grazing)
     @test abs(sum((sc.camera.lookat - sc.camera.eye) .* a1.beamlet[1])) < 1e-9
     @test_throws ArgumentError talis_view!(sess, :side)
+    # the pinch mode draws the other beams near the same part with it
+    n0 = length(sc.focus_lines[1][])
+    set_disposition_filter!(sess.talis; tight = DISPOSITION_RANGE)
+    set_talis_pinch!(sess.talis, true)
+    np = length(sess.talis.focus[].pinch)
+    @test length(sc.focus_lines[1][]) == n0 + sum(2 * (length(p.surface.outline) + 1) for p in sess.talis.focus[].pinch; init = 0)
+    @test np == count(a -> a.beam != a1.beam,
+                      pinch_approaches(sess.talis, sess.talis.focus[].row.component; threshold = DISPOSITION_RANGE))
+    set_talis_pinch!(sess.talis, false)
+    set_disposition_filter!(sess.talis; tight = 1.0)
+    @test length(sc.focus_lines[1][]) == n0
     clear_talis_focus!(sess.talis)
     @test !sc.focus_mesh.visible[] && !sc.focus_lines.visible[]
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
