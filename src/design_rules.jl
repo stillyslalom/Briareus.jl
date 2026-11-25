@@ -232,19 +232,6 @@ hardware_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) =
 
 keepout_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) = hardware_clearance(k, beams)
 
-# The envelope of a beam on values, with the best focus, axes, semi-axes, cone slope and
-# margin.
-struct _EnvelopeFrame
-    focus::Vec3
-    k::Vec3
-    e1::Vec3
-    e2::Vec3
-    A::Float64
-    B::Float64
-    cone::Float64
-    margin::Float64
-end
-
 # Return the envelope of a beam on values at the contour of rule `k`, which sets the
 # `intensity` or `peak_fraction` and the `margin`. Also return the contour radius in units
 # of the spot semi-axes and the aim point on values.
@@ -254,13 +241,13 @@ function _envelope_frame(k, b::Beam)
     kv = direction(b)
     e1, e2 = spot_axes(b)
     f0 = Vec3(bv.aim) + bv.defocus * kv
-    return _EnvelopeFrame(f0, kv, e1, e2, ρ * bv.spot.a, ρ * bv.spot.b, 1 / (2b.fnumber), k.margin), ρ,
+    return _BeamConeFrame{Float64}(f0, kv, e1, e2, ρ * bv.spot.a, ρ * bv.spot.b, 1 / (2b.fnumber), k.margin), ρ,
            Vec3(bv.aim)
 end
 
 # Return the axis of an envelope frame as a `BeamEnvelope`, which is all that
 # `_landing_hit` uses.
-_axis_envelope(ef::_EnvelopeFrame, aim::Vec3) = BeamEnvelope(ef.focus, aim, ef.k, ef.e1, ef.e2, ef.A, ef.B, ef.cone, 0.0)
+_axis_envelope(ef::_BeamConeFrame{Float64}, aim::Vec3) = BeamEnvelope(ef.focus, aim, ef.k, ef.e1, ef.e2, ef.A, ef.B, ef.cone, 0.0)
 
 function _hardware_clearance(k::HardwareKeepOut, b::Beam)
     ef, ρ, aim = _envelope_frame(k, b)
@@ -274,7 +261,7 @@ end
 # The envelope of the beam is `ef` at the contour radius `ρ`, and its aim on values is
 # `aim`. The result is the distance at the point found on values, in the number type of
 # the beam, and `Inf` if no point counts.
-function _envelope_clearance(k, b::Beam, ef::_EnvelopeFrame, ρ, aim::Vec3, cls, s_stop)
+function _envelope_clearance(k, b::Beam, ef::_BeamConeFrame{Float64}, ρ, aim::Vec3, cls, s_stop)
     found, x, w = _hardware_closest(cls, k.tolerance, ef, s_stop, aim)
     found || return _no_clearance(b)
     τ = k.tolerance
@@ -333,7 +320,7 @@ _tol_bound(τ::_TaLISTol, x::Vec3, aim::Vec3, ρ) = τ(x, aim) + τ.tanα * ρ
 # the beam. Return whether such a point exists, the point, and the direction along which
 # the distance is stationary at the point. That direction is the segment direction, or the
 # direction across the medial strip in the plane of a triangle (see `HardwareKeepOut`).
-function _hardware_closest(clusters::Vector{_TriangleCluster}, τ::_TaLISTol, ef::_EnvelopeFrame,
+function _hardware_closest(clusters::Vector{_TriangleCluster}, τ::_TaLISTol, ef::_BeamConeFrame{Float64},
                            s_stop::Float64, aim::Vec3)
     L = sqrt(1 + ef.cone^2)
     # Search best first over the clusters, bounded by their spheres, and the segments of
@@ -397,7 +384,7 @@ end
 # distance over its triangles upstream of `s_stop` lies (see `HardwareKeepOut`). Each
 # entry contains the bound, the ends, the balancing direction, and whether the segment is
 # a medial-strip crossing.
-function _cluster_segments!(segs, cl::_TriangleCluster, ef::_EnvelopeFrame, s_stop)
+function _cluster_segments!(segs, cl::_TriangleCluster, ef::_BeamConeFrame{Float64}, s_stop)
     for (p, q) in cl.edges
         _segment_pieces!(segs, ef, s_stop, p, q, q - p, false)
     end
@@ -429,7 +416,7 @@ function _cluster_segments!(segs, cl::_TriangleCluster, ef::_EnvelopeFrame, s_st
     return segs
 end
 
-_axial(ef::_EnvelopeFrame, x) = dot(x - ef.focus, ef.k)
+_axial(ef::_BeamConeFrame{Float64}, x) = dot(x - ef.focus, ef.k)
 
 # Return the crossing of triangle `tri` with the plane on which the signed heights `h` of
 # its vertices vanish. The function returns the two end points and their number, 0, 1 or
@@ -448,7 +435,7 @@ end
 
 # Push the pieces of segment `p`–`q` upstream of `s_stop`, split at best focus, each with
 # a lower bound of the envelope distance on it, the balancing direction `w` and `strip`.
-function _segment_pieces!(segs, ef::_EnvelopeFrame, s_stop, p, q, w, strip::Bool)
+function _segment_pieces!(segs, ef::_BeamConeFrame{Float64}, s_stop, p, q, w, strip::Bool)
     sp, sq = _axial(ef, p), _axial(ef, q)
     (sp > s_stop && sq > s_stop) && return segs
     if sp > s_stop || sq > s_stop
@@ -468,7 +455,7 @@ end
 # distance to the circumscribed circle and, outside the ellipse, the gap (g − 1) min(A, B)
 # to the homothetic ellipse through `x`. Both are at most the distance to the ellipse, and
 # both are 1-Lipschitz across the beam.
-function _point_bound(ef::_EnvelopeFrame, x)
+function _point_bound(ef::_BeamConeFrame{Float64}, x)
     d = x - ef.focus
     u, v, s = dot(d, ef.e1), dot(d, ef.e2), dot(d, ef.k)
     lo = hypot(u, v) - max(ef.A, ef.B)
@@ -481,15 +468,15 @@ end
 
 # Return a lower bound of the envelope distance on segment `p`–`q`, the bound at the
 # midpoint less the Lipschitz constant √(1 + cone²) times the half length.
-_segment_bound(ef::_EnvelopeFrame, p, q) =
+_segment_bound(ef::_BeamConeFrame{Float64}, p, q) =
     _point_bound(ef, (p + q) / 2) - sqrt(1 + ef.cone^2) * norm(q - p) / 2
 
 # Return the gradient of the envelope distance where the unit normal of the ellipse is
 # (n1, n2), on the side `σ` (±1) of best focus.
-_envelope_gradient(ef::_EnvelopeFrame, n1, n2, σ) = n1 * ef.e1 + n2 * ef.e2 - (σ * ef.cone) * ef.k
+_envelope_gradient(ef::_BeamConeFrame{Float64}, n1, n2, σ) = n1 * ef.e1 + n2 * ef.e2 - (σ * ef.cone) * ef.k
 
 # Return the envelope distance at `x` and its gradient on the side `σ` of best focus.
-function _envelope_value_gradient(ef::_EnvelopeFrame, x, σ)
+function _envelope_value_gradient(ef::_BeamConeFrame{Float64}, x, σ)
     d = x - ef.focus
     u, v = dot(d, ef.e1), dot(d, ef.e2)
     X0, X1, _ = _ellipse_closest(u, v, ef.A, ef.B)
@@ -503,7 +490,7 @@ end
 # function returns the smallest value inside the segment, or `Inf` if that value is at an
 # end. A bound at or above `best` ends the search early. With `gp` and `gq` the function
 # minimizes the distance plus the linear function that takes those values at `p` and `q`.
-function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true, gp = 0.0, gq = 0.0)
+function _segment_min(ef::_BeamConeFrame{Float64}, p, q, best, ends::Bool = true, gp = 0.0, gq = 0.0)
     Δ = q - p
     σ = _axial(ef, (p + q) / 2) < 0 ? -1 : 1
     fa, ga = _envelope_value_gradient(ef, p, σ)
@@ -662,7 +649,7 @@ function _capture_margin(k::CaptureKeepIn, b::Beam)
     # When the axis misses, find the part whose outline lies nearest the axis. The
     # distance is taken to the envelope of a point-like spot along the axis, without the
     # f-cone.
-    ax = _EnvelopeFrame(aim, ef.k, ef.e1, ef.e2, 0.0, 0.0, 0.0, 0.0)
+    ax = _BeamConeFrame{Float64}(aim, ef.k, ef.e1, ef.e2, 0.0, 0.0, 0.0, 0.0)
     j, d, xa = 0, Inf, aim
     for (i, cl) in enumerate(k.clusters)
         isempty(cl) && continue
@@ -881,12 +868,10 @@ function Omega1KeepOut(t::Target, parts; pointing = 0.05, target_offset = 0.025,
     idx = Set(ci for n in names for ci in part_pieces(t, n))
     tris = [tri for (k, tri) in zip(findall(in(idx), t.tri_comp), _part_triangles(t, idx)) if t.tri_area[k] > 0]
     isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
-    uc = first(c for c in nif_unconverted() if c.name === :omega1)
-    W0 = omega1_size === nothing ? uc.footprint + 2 * (uc.edge - omega1_edge) : Float64(omega1_size)
-    f1 = omega1_focus === nothing ? uc.focal_shift : Float64(omega1_focus)
-    c0, h0, L = omega1_edge + W0 / 2, W0 / 2, Float64(lens_distance)
+    (; c0, h0, f1) = _omega1_params(omega1_edge, omega1_size, omega1_focus)
+    L = Float64(lens_distance)
     return Omega1KeepOut(names, t, tris, pointing + target_offset + hardware_tolerance, focus,
-                         _talis_tol(tolerance, pivot), c0, h0, f1, L, 1 + hypot(c0 / L + h0 / f1, h0 / f1),
+                         _talis_tol(tolerance, pivot), c0, h0, f1, L, _omega1_lipschitz(c0, h0, f1, L),
                          offsets, _nif_beam_table(), resolution, minimum, weight)
 end
 

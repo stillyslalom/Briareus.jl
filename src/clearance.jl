@@ -85,6 +85,21 @@ function BeamEnvelope(b::Beam; intensity = nothing, peak_fraction = nothing,
                         ρ * ForwardDiff.value(b.spot.b), 1 / (2b.fnumber), Float64(margin))
 end
 
+# The envelope of one beam as the keep-outs and the design rules use it, in the number
+# type `T` of the quantities that carry derivatives. It holds the best focus, the unit
+# axis `k`, the spot axes, the semi-axes `A` and `B` of the contour at best focus, the
+# slope `cone` of the f-cone and the `margin`.
+struct _BeamConeFrame{T}
+    focus::SVector{3,T}
+    k::Vec3
+    e1::Vec3
+    e2::Vec3
+    A::T
+    B::T
+    cone::Float64
+    margin::Float64
+end
+
 """
     envelope_distance(env, x) -> (distance, s)
 

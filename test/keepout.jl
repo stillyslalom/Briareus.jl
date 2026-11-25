@@ -152,8 +152,8 @@ end
     # type of the beam.
     function in_beam_type(k, b)
         j = argmax([dot(c, b.port) for c in k.centers])
-        terms, imin = Briareus._rim_terms(k, k.rims[j], k.samples[j], Briareus._RimFrame(k, Briareus._value_beam(b)))
-        f = Briareus._RimFrame(k, b)
+        terms, imin = Briareus._rim_terms(k, k.rims[j], k.samples[j], Briareus._rim_frame(k, Briareus._value_beam(b)))
+        f = Briareus._rim_frame(k, b)
         return Briareus._rim_soft_min(k, terms, imin, f) - k.transverse - k.focus * f.cone
     end
     D(x, p...) = ForwardDiff.Dual{:rim}(x, p...)
@@ -172,7 +172,7 @@ end
     # sharply near the envelope's ends and, inside it, dips steeply near the beam's axis:
     # the exact minimum against the distance sampled at 10⁵ points per rim piece
     function sampled(k, b)
-        f = Briareus._RimFrame(k, b)
+        f = Briareus._rim_frame(k, b)
         return minimum(Briareus._rim_distance(f, r, τ) for r in k.rims[1] for τ in range(0, 1; length = 100_000))
     end
     thin(θ, φ, a, b, ψ, aim, d) = Beam("thin"; theta = θ, phi = φ, spot = SuperGaussianSpot(a, b; angle = ψ), aim, defocus = d,

@@ -305,42 +305,30 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam, ρ::Float64)
     side > 0 || return _no_clearance(b)
     rim = k.rims[j]
     isempty(rim) && return _no_clearance(b)        # an aperture without a rim
-    fv = _RimFrame(k, b isa Beam{Float64} ? b : _value_beam(b), ρ)
+    fv = _rim_frame(k, b isa Beam{Float64} ? b : _value_beam(b), ρ)
     # The rim is searched on the values of the beam, and the terms found enter in its
     # number type.
     terms, imin = _rim_terms(k, rim, k.samples[j], fv)
     return _rim_result(k, terms, imin, fv, b, ρ) - k.transverse - k.focus * fv.cone
 end
 
-# The quantities of the beam that the distance from a rim point to the envelope uses, in
-# the number type of the beam. They are the semi-axes of the envelope at best focus, the
-# beam frame, the focus and the f-cone.
-struct _RimFrame{T}
-    A::T
-    B::T
-    kv::Vec3
-    e1::Vec3
-    e2::Vec3
-    focus::SVector{3,T}
-    cone::Float64
-    margin::Float64
-end
-
-# (`ρ` is the envelope radius, computed from the values of the beam)
-function _RimFrame(k::ApertureKeepOut, b::Beam{T},
-                   ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)) where {T}
+# Returns the envelope of the beam for the distance from a rim point (`_BeamConeFrame`),
+# in the number type of the beam. `ρ` is the envelope radius, computed from the values of
+# the beam.
+function _rim_frame(k::ApertureKeepOut, b::Beam{T},
+                    ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)) where {T}
     kv = direction(b)
     e1, e2 = spot_axes(b)
-    return _RimFrame{T}(ρ * b.spot.a, ρ * b.spot.b, kv, e1, e2, b.aim + b.defocus * kv, 1 / (2b.fnumber), k.margin)
+    return _BeamConeFrame{T}(b.aim + b.defocus * kv, kv, e1, e2, ρ * b.spot.a, ρ * b.spot.b, 1 / (2b.fnumber), k.margin)
 end
 
 # The distance from the rim point `x` to the envelope.
-function _rim_distance(f::_RimFrame, x::Vec3)
+function _rim_distance(f::_BeamConeFrame, x::Vec3)
     d = x - f.focus
-    s, u, v = dot(d, f.kv), dot(d, f.e1), dot(d, f.e2)
+    s, u, v = dot(d, f.k), dot(d, f.e1), dot(d, f.e2)
     return _sampson_distance(u, v, f.A, f.B) - f.cone * abs(s) - f.margin
 end
-_rim_distance(f::_RimFrame, r::_RimPiece, τ::Float64) = _rim_distance(f, _rim_point(r, τ))
+_rim_distance(f::_BeamConeFrame, r::_RimPiece, τ::Float64) = _rim_distance(f, _rim_point(r, τ))
 
 # The smooth minimum counts at full weight the sample intervals whose least distance lies
 # within `_SOFT_FULL` softness of the least. Intervals up to `_SOFT_ZERO` count with a
@@ -354,7 +342,7 @@ const _SOFT_ZERO = 20.0
 # minimum inside. The term is kept with its rim point if it lies within `_SOFT_ZERO`
 # softness of the least; with `softness = 0` only the least is kept. Returns the terms
 # (distance, point) and the index of the least.
-function _rim_terms(k::ApertureKeepOut, rim::Vector{_RimPiece}, rs::_RimSamples, f::_RimFrame{Float64})
+function _rim_terms(k::ApertureKeepOut, rim::Vector{_RimPiece}, rs::_RimSamples, f::_BeamConeFrame{Float64})
     reach = _SOFT_ZERO * k.softness
     sf = _SlopeFrame(f)
     terms = sizehint!(Tuple{Float64,Vec3}[], 32)
@@ -392,7 +380,7 @@ _drop_above!(terms, cut) = filter!(t -> t[1] <= cut, terms)
 # The Float64 frame of the search, with the inverse squares of the semi-axes.
 struct _SlopeFrame
     focus::Vec3
-    kv::Vec3
+    k::Vec3
     e1::Vec3
     e2::Vec3
     ia::Float64
@@ -404,9 +392,9 @@ struct _SlopeFrame
     margin::Float64
     turn::Float64           # a quarter of the angle (envelope units) over which the direction factor turns at its peak
 end
-function _SlopeFrame(f::_RimFrame{Float64})
+function _SlopeFrame(f::_BeamConeFrame{Float64})
     e = max(f.A, f.B) / min(f.A, f.B)
-    return _SlopeFrame(f.focus, f.kv, f.e1, f.e2, inv(f.A), inv(f.B), inv(f.A^2), inv(f.B^2), min(f.A, f.B), f.cone,
+    return _SlopeFrame(f.focus, f.k, f.e1, f.e2, inv(f.A), inv(f.B), inv(f.A^2), inv(f.B^2), min(f.A, f.B), f.cone,
                        f.margin, e > 1 ? 0.25 / sqrt(e^2 - 1) : Inf)
 end
 
@@ -416,8 +404,8 @@ end
 # distance is S′ − cone·sign(s)·s′, since |s| has a concave kink where s = 0.
 @inline function _rim_slope(f::_SlopeFrame, x::Vec3, t::Vec3)
     d = x - f.focus
-    s, u, v = dot(d, f.kv), dot(d, f.e1), dot(d, f.e2)
-    ts, tu, tv = dot(t, f.kv), dot(t, f.e1), dot(t, f.e2)
+    s, u, v = dot(d, f.k), dot(d, f.e1), dot(d, f.e2)
+    ts, tu, tv = dot(t, f.k), dot(t, f.e1), dot(t, f.e2)
     ua, vb = u * f.ia2, v * f.ib2
     q = sqrt(u * ua + v * vb)
     g = sqrt(ua * ua + vb * vb)
@@ -547,7 +535,7 @@ end
 # Sampson distance (q − 1)·h falls to −h. Each split point is a candidate, and each part
 # is searched by `_part_min` on its branch of |s|.
 function _split_min(f::_SlopeFrame, r::_RimPiece, τa, τb, ea, eb, g, xg, kink, axes, τq)
-    k1, k2 = kink ? _crossings(f, r, τa, τb, f.kv) : (NaN, NaN)
+    k1, k2 = kink ? _crossings(f, r, τa, τb, f.k) : (NaN, NaN)
     u1, u2 = axes ? _crossings(f, r, τa, τb, f.e1) : (NaN, NaN)
     v1, v2 = axes ? _crossings(f, r, τa, τb, f.e2) : (NaN, NaN)
     m = τa < τq < τb ? τq : NaN
@@ -565,7 +553,7 @@ function _split_min(f::_SlopeFrame, r::_RimPiece, τa, τb, ea, eb, g, xg, kink,
             dr < g && ((g, xg) = (dr, x))
         end
         # the branch of |s| on (l, rr)
-        σ = kink ? sign(dot(_rim_point(r, (l + rr) / 2) - f.focus, f.kv)) : ea[2] != 0 ? sign(ea[2]) : sign(eb[2])
+        σ = kink ? sign(dot(_rim_point(r, (l + rr) / 2) - f.focus, f.k)) : ea[2] != 0 ? sign(ea[2]) : sign(eb[2])
         g, xg = _part_min(f, rim, 1, l, rr, dl, dr, Sl - c * σ * tl, Sr - c * σ * tr, σ, g, xg)
         rr == τb && break
         l, dl, Sl, tl = rr, dr, Sr, tr
@@ -633,7 +621,7 @@ end
 # Returns the smooth minimum of the distances of the terms (`ApertureKeepOut`), evaluated
 # in the frame `f`, as −λ log Σₖ σₖ exp(−dₖ/λ). The weight σₖ of each term is 1 within
 # `_SOFT_FULL` λ of the least and falls (C¹) to 0 at `_SOFT_ZERO` λ.
-function _rim_soft_min(k::ApertureKeepOut, terms, imin, f::_RimFrame)
+function _rim_soft_min(k::ApertureKeepOut, terms, imin, f::_BeamConeFrame)
     λ = k.softness
     lo = _rim_distance(f, terms[imin][2])
     λ == 0 && return lo
@@ -667,18 +655,17 @@ _rim_result(k::ApertureKeepOut, terms, imin, fv, ::Beam{Float64}, ρ) = _rim_sof
 
 function _rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam{<:ForwardDiff.Dual{<:Any,Float64}}, ρ)
     e(i) = ForwardDiff.Partials{5,Float64}(ntuple(j -> Float64(j == i), 5))
-    fs = _RimFrame{_RimDual}(_RimDual(fv.A, e(4)), _RimDual(fv.B, e(5)), fv.kv, fv.e1, fv.e2,
-                             SVector(_RimDual(fv.focus[1], e(1)), _RimDual(fv.focus[2], e(2)), _RimDual(fv.focus[3], e(3))),
-                             fv.cone, fv.margin)
+    fs = _BeamConeFrame{_RimDual}(SVector(_RimDual(fv.focus[1], e(1)), _RimDual(fv.focus[2], e(2)), _RimDual(fv.focus[3], e(3))),
+                                  fv.k, fv.e1, fv.e2, _RimDual(fv.A, e(4)), _RimDual(fv.B, e(5)), fv.cone, fv.margin)
     c = _rim_soft_min(k, terms, imin, fs)
     p = ForwardDiff.partials(c)
-    fb = _RimFrame(k, b, ρ)
+    fb = _rim_frame(k, b, ρ)
     Δ(x) = x - ForwardDiff.value(x)          # only the partials, at value 0
     return ForwardDiff.value(c) + p[1] * Δ(fb.focus[1]) + p[2] * Δ(fb.focus[2]) + p[3] * Δ(fb.focus[3]) +
            p[4] * Δ(fb.A) + p[5] * Δ(fb.B)
 end
 
-_rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam, ρ) = _rim_soft_min(k, terms, imin, _RimFrame(k, b, ρ))
+_rim_result(k::ApertureKeepOut, terms, imin, fv, b::Beam, ρ) = _rim_soft_min(k, terms, imin, _rim_frame(k, b, ρ))
 
 # Returns the first-order (Sampson) signed distance from (u, v) to the ellipse with
 # semi-axes A, B. It is exact on the ellipse and for circles, and smooth everywhere

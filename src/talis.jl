@@ -290,9 +290,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     edges = [vcat(NTuple{2,Vec3}[], (pe[ci] for ci in last(g))...) for g in cap_idx]
     cap_geo = [length(last(g)) == 1 ? geo[only(last(g))] : _merge_samples([geo[ci] for ci in last(g)])
                for g in cap_idx]
-    uc = first(c for c in nif_unconverted() if c.name === :omega1)
-    W0 = omega1_size === nothing ? uc.footprint + 2 * (uc.edge - omega1_edge) : Float64(omega1_size)
-    f1 = omega1_focus === nothing ? uc.focal_shift : Float64(omega1_focus)
+    o1 = _omega1_params(omega1_edge, omega1_size, omega1_focus)
+    f1 = o1.f1
     vb = [_value_beam(b) for b in beams]
     table = any(_is_nif, vb) ? _nif_beam_table() : nothing
     bls = [omega1 ? _omega1_beamlets(b, offsets, table) : nothing for b in vb]
@@ -301,13 +300,11 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           leh = Symbol[first(g) for g in leh_idx],
           geo, edges, cap_geo, capture_contour, capture_margin, max_incidence = Float64(max_incidence),
           clearance_contour, clearance_margin, tolerance = Float64(tolerance),
-          omega1_margin = Float64(omega1_margin), c0 = omega1_edge + W0 / 2, h0 = W0 / 2, f1,
+          omega1_margin = Float64(omega1_margin), o1.c0, o1.h0, f1,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
           curvature, ε = Float64(resolution), rtol = Float64(rtol),
-          # The Lipschitz constant of the 1ω footprint distance is 1 plus the taper of the
-          # center (c0/L) and half-side (h0/f1) of the footprint along the beam.
-          lip1 = 1 + hypot((omega1_edge + W0 / 2) / lens_distance + W0 / 2 / f1, W0 / 2 / f1))
+          lip1 = _omega1_lipschitz(o1.c0, o1.h0, f1, lens_distance))
     out = [TaLISRow[] for _ in vb]
     Threads.@threads for bi in eachindex(vb)
         _talis_beam!(out[bi], t, vb[bi], bls[bi], cx)
@@ -331,7 +328,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                 capture_margin = Float64(capture_margin), max_incidence = Float64(max_incidence),
                 clearance_contour = Float64(clearance_contour),
                 clearance_margin = Float64(clearance_margin), omega1_margin = Float64(omega1_margin),
-                omega1_edge = Float64(omega1_edge), omega1_size = W0, omega1_focus = f1,
+                omega1_edge = Float64(omega1_edge), omega1_size = 2 * o1.h0, omega1_focus = f1,
                 lens_distance = Float64(lens_distance), reflection_angle = Float64(reflection_angle),
                 cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
                 open_ports = length(ports), stay_in = Float64(stay_in),
@@ -561,6 +558,21 @@ function _omega1_distance(x, bl, cx)
     end
     return dn, dw
 end
+
+# Returns the 1ω footprint of a NIF beam for the rules: the offset `c0` of its center from
+# the chief ray and its half-side `h0` at the 3ω focus, and its focal shift `f1`, from the
+# edge distance, size and focus of the rule. The size and focus default to those of the
+# 1ω color of `nif_unconverted`.
+function _omega1_params(omega1_edge, omega1_size, omega1_focus)
+    uc = first(c for c in nif_unconverted() if c.name === :omega1)
+    W0 = omega1_size === nothing ? uc.footprint + 2 * (uc.edge - omega1_edge) : Float64(omega1_size)
+    f1 = omega1_focus === nothing ? uc.focal_shift : Float64(omega1_focus)
+    return (; c0 = omega1_edge + W0 / 2, h0 = W0 / 2, f1)
+end
+
+# The Lipschitz constant of the 1ω footprint distance, 1 plus the taper of the center
+# (c0/L) and half-side (h0/f1) of the footprint along the beam.
+_omega1_lipschitz(c0, h0, f1, L) = 1 + hypot(c0 / L + h0 / f1, h0 / f1)
 
 # Footprint square at axial position s = d·k from the 3ω focus. Its center is c0(1 + s/L)
 # along ô, the chief ray from the lens center, and its half-side is h0|1 − s/f1|, from the
