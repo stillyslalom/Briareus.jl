@@ -1,7 +1,7 @@
 # BriareusGUI session: a Briareus design (target, beams, analysis settings).
 # Lengths in mm, power in TW, angles in degrees; results are not saved.
 format = "BriareusGUI session"
-version = 13
+version = 14
 visrad_source = ""
 
 [beams]
@@ -201,24 +201,36 @@ excluded = ["shield"]
     h = 0.6
 
     [[target.parts]]
-    aperture = false
     assembly = ""
     coords = "cartesian"
-    file = ""
-    foil = false
     frame = "tcc"
-    inward = false
     kind = "hohlraum"
     name = "hohlraum"
     object = ""
-    observed = false
-    sections = []
     steps = []
-    two_sided = false
-    wall = false
 
-        [target.parts.piece_roles]
-        cap_bottom = "none"
+        [target.parts.geometry]
+        aperture = false
+        file = ""
+        foil = false
+        inward = false
+        observed = false
+        sections = []
+        two_sided = false
+        wall = false
+
+            [target.parts.geometry.piece_roles]
+            cap_bottom = "none"
+
+            [[target.parts.geometry.windows]]
+            albedo = 0.8
+            conversion = 0.9
+            height = 1.0
+            open = false
+            phi = 60.0
+            round = true
+            width = 1.0
+            z = 0.5
 
         [target.parts.values]
         albedo = 0.8
@@ -243,35 +255,27 @@ excluded = ["shield"]
         x = 0.0
         y = 0.0
         z = 0.0
-
-        [[target.parts.windows]]
-        albedo = 0.8
-        conversion = 0.9
-        height = 1.0
-        open = false
-        phi = 60.0
-        round = true
-        width = 1.0
-        z = 0.5
     [[target.parts]]
-    aperture = false
     assembly = ""
     coords = "cartesian"
-    file = ""
-    foil = false
     frame = "hohlraum"
-    inward = false
     kind = "sphere"
     name = "capsule"
     object = ""
-    observed = true
-    sections = []
     steps = []
-    two_sided = false
-    wall = false
-    windows = []
 
-        [target.parts.piece_roles]
+        [target.parts.geometry]
+        aperture = false
+        file = ""
+        foil = false
+        inward = false
+        observed = true
+        sections = []
+        two_sided = false
+        wall = false
+        windows = []
+
+            [target.parts.geometry.piece_roles]
 
         [target.parts.values]
         albedo = 0.3
@@ -286,29 +290,15 @@ excluded = ["shield"]
         y = 0.0
         z = 0.0
     [[target.parts]]
-    aperture = false
     assembly = ""
     coords = "cartesian"
-    file = ""
-    foil = false
     frame = "tcc"
-    inward = false
     kind = "frame"
     name = "frame_1"
     object = ""
-    observed = false
-    sections = []
     steps = []
-    two_sided = false
-    wall = false
-    windows = []
-
-        [target.parts.piece_roles]
 
         [target.parts.values]
-        albedo = 0.0
-        conversion = 0.0
-        h = 0.0
         phi = 0.0
         rotation = 0.0
         theta = 0.0
@@ -316,23 +306,25 @@ excluded = ["shield"]
         y = 0.0
         z = 0.0
     [[target.parts]]
-    aperture = false
     assembly = "mount"
     coords = "cartesian"
-    file = ""
-    foil = false
     frame = "hohlraum.leh_top"
-    inward = false
     kind = "disk"
     name = "shield"
     object = ""
-    observed = false
-    sections = []
-    two_sided = true
-    wall = false
-    windows = []
 
-        [target.parts.piece_roles]
+        [target.parts.geometry]
+        aperture = false
+        file = ""
+        foil = false
+        inward = false
+        observed = false
+        sections = []
+        two_sided = true
+        wall = false
+        windows = []
+
+            [target.parts.geometry.piece_roles]
 
         [[target.parts.steps]]
         delta = [0.0, 0.0, 0.0]
@@ -350,29 +342,15 @@ excluded = ["shield"]
         y = 0.0
         z = 0.8
     [[target.parts]]
-    aperture = false
     assembly = ""
     coords = "cartesian"
-    file = ""
-    foil = false
     frame = "tcc"
-    inward = false
     kind = "assembly"
     name = "mount"
     object = ""
-    observed = false
-    sections = []
     steps = []
-    two_sided = false
-    wall = false
-    windows = []
-
-        [target.parts.piece_roles]
 
         [target.parts.values]
-        albedo = 0.0
-        conversion = 0.0
-        h = 0.0
         phi = 0.0
         rotation = 0.0
         theta = 0.0

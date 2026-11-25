@@ -55,6 +55,18 @@ end
     @test [c.name for c in cs] == [piece_name(:hr, s) for s in hohlraum_pieces(p)]
     @test all(c -> c.part === :hr, cs)
     @test_throws ArgumentError PartSpec(:sphere; windows = [WindowSpec()])
+    # A frame and an assembly hold the placement only: no geometry, no surface values, and
+    # a geometry property answers false or empty. A part with geometry holds a PartGeometry.
+    fr, asm = PartSpec(:frame; name = :f), PartSpec(:assembly; name = :a, assembly = :b)
+    @test fr.geometry === nothing && asm.geometry === nothing && p.geometry isa PartGeometry &&
+          p.geometry.windows === p.windows
+    @test sort!(collect(keys(fr.values))) == [:phi, :rotation, :theta, :x, :y, :z] == sort!(collect(keys(asm.values)))
+    @test !fr.observed && !asm.two_sided && isempty(fr.windows) && isempty(asm.file) && isempty(fr.piece_roles)
+    @test_throws ArgumentError PartSpec(:frame; name = :f, observed = true)
+    @test_throws ArgumentError PartSpec(:assembly; name = :a, file = "a.stl")
+    @test_throws ArgumentError PartSpec(:frame; name = :f, values = Dict(:albedo => 0.5))
+    @test_throws ArgumentError Controllers._with(fr; two_sided = true)
+    @test Controllers._with(fr; frame = :a).frame === :a && Controllers._with(p; observed = true).observed
     @test_throws ArgumentError PartSpec(:hohlraum; name = :hr, frame = Symbol("hr.leh_top"))
 
     # A closed end has its hole merged into its cap, in the wall material.

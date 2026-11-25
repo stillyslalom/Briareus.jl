@@ -181,7 +181,6 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
     _check_part_index(ts, i)
     p = ts.parts[][i]
     try
-        _no_geometry(p) && key in (:albedo, :conversion, :h) && throw(ArgumentError("a $(p.kind) has no field :$key"))
         is_port_frame(p) && key in (:theta, :phi) &&
             throw(ArgumentError("a port frame's axis is its port's: change its roll, or place another frame in it"))
         if key === :name
@@ -347,7 +346,8 @@ function set_part_flag!(ts::TargetSetup, i::Integer, flag::Symbol, on::Bool)
     _check_part_index(ts, i)
     flag in (:two_sided, :inward, :aperture) || throw(ArgumentError("unknown part flag :$flag"))
     p = ts.parts[][i]
-    getfield(p, flag) == on && return true
+    getproperty(p, flag) == on && return true
+    _no_geometry(p) && (ts.error[] = "a $(p.kind) has no surface"; return false)
     if flag === :two_sided && on && p.observed && _part_shape(p) in _FLAT_OBSERVED
         ts.error[] = "the observed face is one-sided: give the role to another part first"
         return false

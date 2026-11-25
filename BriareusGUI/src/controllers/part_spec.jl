@@ -76,8 +76,9 @@ const PART_KIND_LABELS = Dict(:sphere => "Sphere", :disk => "Disk", :annulus => 
                               :visrad => "VisRad object", :hohlraum => "Hohlraum", :frame => "Frame",
                               :assembly => "Assembly")
 
-# Whether part `p` has no geometry: a user frame or an assembly.
-_no_geometry(p) = p.kind === :frame || p.kind === :assembly
+# Whether a part kind, or part `p`, has no geometry: a user frame or an assembly.
+_no_geometry(kind::Symbol) = kind === :frame || kind === :assembly
+_no_geometry(p) = _no_geometry(p.kind)
 
 """
 Size fields of each part kind: `(key, label, unit, default)`. The part's local axis is
@@ -262,6 +263,8 @@ is rotated by `rotation` about its axis, then tilted to polar angle `theta` and
 azimuth `phi` (VisRad's Polar/Azimuthal/Rotation order: the axis then points along
 `(θ, φ)`), then moved to `(x, y, z)`. `h` (mm) overrides the mesh element size (0:
 the target's; for a VisRad primitive, the VisRad grid, see [`part_size_unit`](@ref)).
+A user frame and an assembly have the placement fields only: `albedo`, `conversion` and
+`h` belong to a surface.
 """
 const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm", 0.0),
                      (:theta, "Axis polar θ", "°", 0.0), (:phi, "Axis azimuth φ", "°", 0.0),
@@ -276,6 +279,47 @@ part also has a frame named after the part, and a hohlraum part its pieces'
 ([`part_frames`](@ref)): a part placed in one moves and turns with it.
 """
 const FRAME_LABELS = Dict(:tcc => "Target chamber (TCC)")
+
+# The fields of `PART_FIELDS` that describe a surface, which a frame or assembly lacks.
+const _SURFACE_FIELDS = (:albedo, :conversion, :h)
+
+"""
+    PartGeometry(; two_sided = false, inward = false, aperture = false, file = "",
+                 foil = false, observed = false, wall = false, windows = [],
+                 sections = [], piece_roles = Dict())
+
+What a part with geometry has beyond its placement, the `geometry` of a
+[`PartSpec`](@ref): the flags of its surface, its file, its role flags and, for a
+hohlraum, its windows, sections and piece roles. The fields are described with
+[`PartSpec`](@ref), which also gives them as properties of the part.
+"""
+struct PartGeometry
+    two_sided::Bool
+    inward::Bool
+    aperture::Bool
+    file::String
+    foil::Bool
+    observed::Bool
+    wall::Bool
+    windows::Vector{WindowSpec}
+    sections::Vector{NTuple{2,Float64}}
+    piece_roles::Dict{Symbol,Symbol}
+end
+PartGeometry(; two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
+             file::AbstractString = "", foil::Bool = false, observed::Bool = false, wall::Bool = false,
+             windows = WindowSpec[], sections = NTuple{2,Float64}[], piece_roles = Dict{Symbol,Symbol}()) =
+    PartGeometry(two_sided, inward, aperture, String(file), foil, observed, wall, collect(WindowSpec, windows),
+                 NTuple{2,Float64}[(Float64(z), Float64(r)) for (z, r) in sections],
+                 Dict{Symbol,Symbol}(Symbol(k) => Symbol(r) for (k, r) in piece_roles))
+
+# What a frame or an assembly answers for a geometry property: no flag, file, window,
+# section or piece role.
+const _NO_GEOMETRY = PartGeometry()
+
+_with(g::PartGeometry; two_sided = g.two_sided, inward = g.inward, aperture = g.aperture, file = g.file,
+      foil = g.foil, observed = g.observed, wall = g.wall, windows = g.windows, sections = g.sections,
+      piece_roles = g.piece_roles) =
+    PartGeometry(two_sided, inward, aperture, file, foil, observed, wall, windows, sections, piece_roles)
 
 """
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
@@ -309,6 +353,14 @@ has no components. With `object` set it is a port frame ([`is_port_frame`](@ref)
 frame of the port named `object`, at TCC with `z` toward the port (`theta`, `phi` the
 port's angles, `rotation` its roll), placed in `:tcc` without steps.
 
+The struct holds what every node of the model tree has (`kind`, `name`, `values`,
+`frame`, `coords`, `object`, `steps`, `assembly`) and `geometry`, a
+[`PartGeometry`](@ref) with the flags, the file, the roles, the windows, the sections
+and the piece roles. A `:frame` or `:assembly` has no geometry (`geometry` is
+`nothing`), its `values` are the placement fields only, and the constructor refuses a
+geometry keyword for it. The geometry fields are also properties of the part
+(`p.observed`, `p.windows`, …); a frame or an assembly answers `false` or empty.
+
 `assembly` is the part's place in the model tree: the name of the assembly it is a member
 of (an `:assembly` part), or [`TOP_LEVEL`](@ref). Membership is separate from placement:
 a member is placed in its assembly's frame by default ([`add_assembly!`](@ref),
@@ -319,22 +371,27 @@ struct PartSpec
     kind::Symbol
     name::Symbol
     values::Dict{Symbol,Float64}
-    two_sided::Bool
-    inward::Bool
-    aperture::Bool
-    file::String
     frame::Symbol
     coords::Symbol
     object::String
     steps::Vector{PlacementStep}
-    foil::Bool
-    observed::Bool
-    wall::Bool
-    windows::Vector{WindowSpec}
     assembly::Symbol
-    sections::Vector{NTuple{2,Float64}}
-    piece_roles::Dict{Symbol,Symbol}
+    geometry::Union{Nothing,PartGeometry}
+    function PartSpec(kind::Symbol, name::Symbol, values::Dict{Symbol,Float64}, frame::Symbol, coords::Symbol,
+                      object::String, steps::Vector{PlacementStep}, assembly::Symbol,
+                      geometry::Union{Nothing,PartGeometry})
+        _no_geometry(kind) == (geometry === nothing) ||
+            throw(ArgumentError(geometry === nothing ? "a $kind part needs its geometry" : "a $kind has no geometry"))
+        return new(kind, name, values, frame, coords, object, steps, assembly, geometry)
+    end
 end
+
+function Base.getproperty(p::PartSpec, s::Symbol)
+    hasfield(PartSpec, s) && return getfield(p, s)
+    g = getfield(p, :geometry)
+    return getfield(g === nothing ? _NO_GEOMETRY : g, s)
+end
+Base.propertynames(::PartSpec) = (fieldnames(PartSpec)..., fieldnames(PartGeometry)...)
 
 """
 The top level of the model tree: the `assembly` ([`PartSpec`](@ref)) of a part or
@@ -387,7 +444,11 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     kind === :mesh && isempty(file) && throw(ArgumentError("a mesh part needs an STL file"))
     kind === :visrad && (isempty(file) || isempty(object)) &&
         throw(ArgumentError("a VisRad part needs a workspace file and an object name"))
-    v = Dict{Symbol,Float64}(k => d for (k, _, _, d) in (PART_FIELDS..., PART_SIZE_FIELDS[kind]...))
+    bare = _no_geometry(kind)
+    bare && (two_sided || inward || aperture || foil || observed || wall || !isempty(file)) &&
+        throw(ArgumentError("a $kind has no surface: it takes no flag, file or role"))
+    v = Dict{Symbol,Float64}(k => d for (k, _, _, d) in (PART_FIELDS..., PART_SIZE_FIELDS[kind]...)
+                             if !(bare && k in _SURFACE_FIELDS))
     for (k, d) in _kind_values(kind)
         v[k] = d
     end
@@ -403,11 +464,10 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     end
     any(st -> Symbol(name) in Briareus.GUIAPI.step_references(st), steps) &&
         throw(ArgumentError("a placement step cannot refer to the frame of its part"))
-    return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
-                                  coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
-                                  collect(WindowSpec, windows), assembly,
-                                  NTuple{2,Float64}[(Float64(z), Float64(r)) for (z, r) in sections],
-                                  Dict{Symbol,Symbol}(Symbol(k) => Symbol(r) for (k, r) in piece_roles)))
+    geometry = bare ? nothing :
+               PartGeometry(; two_sided, inward, aperture, file, foil, observed, wall, windows, sections, piece_roles)
+    return _port_checked(PartSpec(kind, Symbol(name), v, frame, coords, String(object),
+                                  collect(PlacementStep, steps), assembly, geometry))
 end
 
 # A port frame stays at TCC, in `:tcc`, without steps (`_with` checks every edit).
@@ -423,13 +483,17 @@ end
 # Whether `frame` is the frame of part `name` or one of its pieces' (`name.leh_top`, …).
 _own_frame_name(name::Symbol, frame::Symbol) = frame === name || startswith(String(frame), String(name) * ".")
 
-_with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
-      inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
-      coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
-      observed = p.observed, wall = p.wall, windows = p.windows, assembly = p.assembly,
-      sections = p.sections, piece_roles = p.piece_roles) =
-    _port_checked(PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
-                           foil, observed, wall, windows, assembly, sections, piece_roles))
+# Part `p` with some fields replaced. The other keywords are fields of its geometry
+# (`PartGeometry`), which a frame or an assembly lacks.
+function _with(p::PartSpec; name = p.name, values = p.values, frame = p.frame, coords = p.coords,
+               object = p.object, steps = p.steps, assembly = p.assembly, geometry...)
+    g = p.geometry
+    if !isempty(geometry)
+        g === nothing && throw(ArgumentError("a $(p.kind) has no $(join(keys(geometry), ", "))"))
+        g = _with(g; geometry...)
+    end
+    return _port_checked(PartSpec(p.kind, name, values, frame, coords, object, steps, assembly, g))
+end
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in, the frames
 # its placement steps refer to, and the assembly it is a member of.

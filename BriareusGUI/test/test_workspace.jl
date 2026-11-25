@@ -112,7 +112,7 @@ end
     @test s2.view.camera[] == pose && s2.drive.view[] === :image && s2.drive.image_request[] == req
     @test s2.time.chart[] === :energy && !can_undo(s2)
     st = session_state(s2)
-    @test st["version"] == Controllers.SESSION_VERSION == 13 && st == session_state(s)
+    @test st["version"] == Controllers.SESSION_VERSION == 14 && st == session_state(s)
     # an undo takes back the edit and leaves the window as it is
     edit_part!(s2.target, 1, :length, "10.6")
     record!(s2)

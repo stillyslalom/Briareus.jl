@@ -84,7 +84,7 @@ export TargetSetup, MeshSpec, MESH_PRESETS,
        set_resolution!, edit_mesh!, target_summary, component_names, surface_names,
        target_ready, await_target!, BACKGROUND_TRIANGLES, clear_caches!, LEH_CLOSURE_FIELDS, set_leh_closure!,
        is_lip, shown_component, with_lips
-export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
+export PartSpec, PartGeometry, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, remove_parts!, replaced_parts, remove_nodes!,
        edit_part!, set_part_flag!, part_index,
        FRAME_LABELS, part_frame_def, is_port_frame, user_frames, frame_users, add_frame!,

@@ -5,9 +5,11 @@
 
 using LinearAlgebra: norm
 
-# Parts equal field by field (a `PartSpec` holds a Dict: `==` would compare identities).
+# Parts equal field by field, the fields of the geometry included (a `PartSpec` holds a
+# Dict: `==` would compare identities).
 _same_parts(a, b) = length(a) == length(b) &&
-    all(isequal(getfield(p, f), getfield(q, f)) for (p, q) in zip(a, b) for f in fieldnames(PartSpec))
+    all(isequal(getproperty(p, f), getproperty(q, f)) for (p, q) in zip(a, b)
+        for f in propertynames(p) if f !== :geometry)
 
 # A design with a tilted disk at x = 3 mm, a plate placed in its frame and four beams
 # aimed in the disk's frame.

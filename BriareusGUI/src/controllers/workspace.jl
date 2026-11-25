@@ -5,7 +5,7 @@
 # clearance report, are not saved; they are computed again from the restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 13              # the one schema `restore!` accepts (`session_state` writes it)
+const SESSION_VERSION = 14              # the one schema `restore!` accepts (`session_state` writes it)
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -62,17 +62,7 @@ function session_state(sess::DesignSession)
         "mesh" => Dict{String,Any}("h" => ts.mesh[].h, "capsule_h" => ts.mesh[].capsule_h),
         "excluded" => sort(_strs(ts.excluded[])),
         "active_foil" => String(something(active_foil(ts), Symbol(""))),
-        "parts" => [Dict{String,Any}("kind" => String(p.kind), "name" => String(p.name),
-                                     "values" => _fdict(p.values), "two_sided" => p.two_sided,
-                                     "inward" => p.inward, "aperture" => p.aperture, "file" => p.file,
-                                     "frame" => String(p.frame), "coords" => String(p.coords),
-                                     "object" => p.object, "steps" => _step_state.(p.steps),
-                                     "foil" => p.foil, "observed" => p.observed, "wall" => p.wall,
-                                     "windows" => _window_state.(p.windows),
-                                     "sections" => [[z, r] for (z, r) in p.sections],
-                                     "piece_roles" => Dict{String,Any}(String(k) => String(r) for (k, r) in p.piece_roles),
-                                     "assembly" => String(p.assembly))
-                    for p in ts.parts[]])
+        "parts" => _part_state.(ts.parts[]))
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
                              "beam" => [_beam_state(b, e, c, r, p, u) for (b, e, c, r, p, u) in
@@ -329,18 +319,40 @@ function _restore_window!(sess::DesignSession, w::AbstractDict)
     return sess
 end
 
+# A part as saved: what every node of the model tree has and, for a part with geometry,
+# the table `geometry` (`PartGeometry`). A frame or an assembly has no such table.
+function _part_state(p::PartSpec)
+    d = Dict{String,Any}("kind" => String(p.kind), "name" => String(p.name), "values" => _fdict(p.values),
+                         "frame" => String(p.frame), "coords" => String(p.coords), "object" => p.object,
+                         "steps" => _step_state.(p.steps), "assembly" => String(p.assembly))
+    g = p.geometry
+    g === nothing ||
+        (d["geometry"] = Dict{String,Any}(
+            "two_sided" => g.two_sided, "inward" => g.inward, "aperture" => g.aperture, "file" => g.file,
+            "foil" => g.foil, "observed" => g.observed, "wall" => g.wall,
+            "windows" => _window_state.(g.windows), "sections" => [[z, r] for (z, r) in g.sections],
+            "piece_roles" => Dict{String,Any}(String(k) => String(r) for (k, r) in g.piece_roles)))
+    return d
+end
+
 # A saved part.
-_state_part(p) =
-    PartSpec(Symbol(p["kind"]); name = Symbol(p["name"]),
-             values = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"]),
-             two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
-             file = p["file"], frame = Symbol(p["frame"]), coords = Symbol(p["coords"]),
-             object = p["object"], steps = _state_step.(p["steps"]),
-             foil = p["foil"], observed = p["observed"], wall = p["wall"],
-             windows = WindowSpec[_state_window(w) for w in p["windows"]],
-             sections = NTuple{2,Float64}[(s[1], s[2]) for s in p["sections"]],
-             assembly = Symbol(p["assembly"]),
-             piece_roles = Dict{Symbol,Symbol}(Symbol(k) => Symbol(r) for (k, r) in p["piece_roles"]))
+function _state_part(p)
+    kind = Symbol(p["kind"])
+    bare = _no_geometry(kind)
+    bare == !haskey(p, "geometry") ||
+        throw(ArgumentError("part $(p["name"]): a $kind " * (bare ? "has no geometry" : "needs its geometry")))
+    g = get(p, "geometry", nothing)
+    geometry = g === nothing ? (;) :
+               (; two_sided = g["two_sided"], inward = g["inward"], aperture = g["aperture"], file = g["file"],
+                foil = g["foil"], observed = g["observed"], wall = g["wall"],
+                windows = WindowSpec[_state_window(w) for w in g["windows"]],
+                sections = NTuple{2,Float64}[(s[1], s[2]) for s in g["sections"]],
+                piece_roles = Dict{Symbol,Symbol}(Symbol(k) => Symbol(r) for (k, r) in g["piece_roles"]))
+    return PartSpec(kind; name = Symbol(p["name"]),
+                    values = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"]),
+                    frame = Symbol(p["frame"]), coords = Symbol(p["coords"]), object = p["object"],
+                    steps = _state_step.(p["steps"]), assembly = Symbol(p["assembly"]), geometry...)
+end
 
 _window_state(w::WindowSpec) =
     Dict{String,Any}("phi" => w.phi, "z" => w.z, "width" => w.width, "height" => w.height,
@@ -386,10 +398,11 @@ function _portable_state(sess::DesignSession; embed::Bool = true)
     end
     blobs = Dict{String,String}(h => f for (f, h) in hashes)
     for p in state["target"]["parts"]
-        f = p["file"]
-        isempty(f) && continue
-        haskey(hashes, f) && (p["sha256"] = hashes[f])
-        p["file"] = cad_source(sess, f)
+        g = get(p, "geometry", nothing)
+        (g === nothing || isempty(g["file"])) && continue
+        f = g["file"]
+        haskey(hashes, f) && (g["sha256"] = hashes[f])
+        g["file"] = cad_source(sess, f)
     end
     v = sess.visrad_source[]
     if !isempty(v)
@@ -582,9 +595,10 @@ function load_session!(sess::DesignSession, path::AbstractString)
     changed = String[]
     if haskey(state, "target") && haskey(state["target"], "parts")
         for p in state["target"]["parts"]
-            isempty(p["file"]) && continue
-            f, c = _resolve_cad!(sess, zr, p["file"], get(p, "sha256", nothing))
-            p["file"] = f
+            g = get(p, "geometry", nothing)
+            (g === nothing || isempty(g["file"])) && continue
+            f, c = _resolve_cad!(sess, zr, g["file"], get(g, "sha256", nothing))
+            g["file"] = f
             c && push!(changed, f)
         end
     end

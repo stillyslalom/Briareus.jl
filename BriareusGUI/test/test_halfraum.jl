@@ -540,7 +540,7 @@ end
     save_session(f, sess)
     saved = TOML.parsefile(f)
     hp = only(q for q in saved["target"]["parts"] if q["name"] == "hohlraum")
-    @test saved["version"] == Controllers.SESSION_VERSION && hp["piece_roles"] == Dict("cap_top" => "observed")
+    @test saved["version"] == Controllers.SESSION_VERSION && hp["geometry"]["piece_roles"] == Dict("cap_top" => "observed")
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test observed_name(s2.target) === cap && cavity_walls(s2.target) == [:hohlraum => walls]

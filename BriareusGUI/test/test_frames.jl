@@ -507,7 +507,7 @@ end
     @test Controllers._sweep_inputs(s).foil === :foil_b
     # the session round trip keeps the flags and the active foil; undo restores the first
     state = session_state(s)
-    @test state["target"]["active_foil"] == "foil_b" && count(p -> p["foil"], state["target"]["parts"]) == 2
+    @test state["target"]["active_foil"] == "foil_b" && count(p -> p["geometry"]["foil"], state["target"]["parts"]) == 2
     record!(s)
     @test undo!(s) && active_foil(ts) === :foil_a
     @test redo!(s) && active_foil(ts) === :foil_b
@@ -561,7 +561,7 @@ end
     @test s.time.history[].Tr == s6.time.history[].Tr && length(s.time.history[].Tr) > 1
     # The role is the part's flag: with the flag off the sphere is observed by nothing.
     st7 = session_state(s6)
-    st7["target"]["parts"][end]["observed"] = false
+    st7["target"]["parts"][end]["geometry"]["observed"] = false
     restore!(s6, st7)
     @test observed_name(s6.target) === nothing && s6.target.parts[][end].name === :ball &&
           drive_stale(s6)
@@ -610,5 +610,5 @@ end
     @test !set_part_role!(ts, part_index(ts, :hole), :wall) && occursin("aperture", ts.error[])
     @test set_part_role!(ts, part_index(ts, :shield), :none) && wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]
     @test :shield in s.review.hardware[] && :shield in s.talis.hardware[]
-    @test session_state(s)["target"]["parts"][end-1]["wall"] == false
+    @test session_state(s)["target"]["parts"][end-1]["geometry"]["wall"] == false
 end

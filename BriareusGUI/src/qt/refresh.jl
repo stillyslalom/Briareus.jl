@@ -539,7 +539,7 @@ function _refresh_part_props!(sh::BriareusShell, key)
                for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
               [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
                for (k, label, unit, _) in PART_FIELDS
-               if !(k in (:x, :y, :z)) && !(Controllers._no_geometry(p) && k in (:albedo, :conversion, :h))]]
+               if !(k in (:x, :y, :z)) && haskey(p.values, k)]]
     # a hohlraum's ends and closing entrance holes
     hoh = p.kind === :hohlraum
     _set!(sh, "partTopEnd", hoh ? Int(p.values[:top_end]) : 1)
