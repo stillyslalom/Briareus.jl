@@ -8,7 +8,7 @@
 const _DIAGNOSTIC_COLORS = ("#D55E00", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000")
 _diagnostic_color(j) = _DIAGNOSTIC_COLORS[mod1(j, length(_DIAGNOSTIC_COLORS))]
 
-_builtin_file(f) = startswith(normpath(f), normpath(Briareus._BUILTIN_DIAGNOSTICS))
+_builtin_file(f) = startswith(normpath(f), normpath(Briareus.GUIAPI.BUILTIN_DIAGNOSTICS))
 
 """
     refresh_diagnostics!(sess::DesignSession) -> Vector{NamedTuple}
@@ -31,14 +31,14 @@ first, then by id.
 function refresh_diagnostics!(sess::DesignSession)
     tm = sess.time
     issues = check_diagnostics()
-    raws = Briareus._read_all(diagnostic_paths(), DiagnosticIssue[])
-    found = Briareus._checked(raws, DiagnosticIssue[])
+    raws = Briareus.GUIAPI.read_definitions(diagnostic_paths(), DiagnosticIssue[])
+    found = Briareus.GUIAPI.checked_definitions(raws, DiagnosticIssue[])
     problem(d) = join([i.message * (isempty(i.key) ? "" : " [" * i.key * "]") for i in issues
                        if i.file == d.file && i.level !== :warning], "; ")
     # Definitions that lack values (not public) but have no error are listed too.
     for id in setdiff(keys(raws), keys(found))
         any(i -> i.file == raws[id].file && i.level === :error, issues) && continue
-        d = Briareus._resolve(id, raws, DiagnosticIssue[])
+        d = Briareus.GUIAPI.resolve_definition(id, raws, DiagnosticIssue[])
         d === nothing || (found[id] = d)
     end
     rows = NamedTuple[]
@@ -182,7 +182,7 @@ function _definition(sess::DesignSession, id::AbstractString)
     r === nothing && return nothing
     row = diagnostic_catalog(sess)[r]
     # (`nothing` too for one that does not build: it lacks values, e.g. ones that are not public)
-    return row.origin === :session ? nothing : get(Briareus._definitions(diagnostic_paths(), DiagnosticIssue[]), id, nothing)
+    return row.origin === :session ? nothing : get(Briareus.GUIAPI.definitions(diagnostic_paths(), DiagnosticIssue[]), id, nothing)
 end
 
 """
@@ -327,7 +327,7 @@ function _recorded(v, j, h, t::Target)
     rows = [r.diag[j] for r in h.record]
     if v.view isa XrayImager
         L = reduce(hcat, [r.L for r in rows])
-        P = Briareus._imager_pixels(v.view, t)
+        P = Briareus.GUIAPI.imager_pixels(v.view, t)
         a = (v.view.camera.width / v.view.camera.nx)^2
         intensity = [a * sum((p > 0 ? Float64(L[p, k]) : 0.0 for p in P); init = 0.0) for k in axes(L, 2)]
         frames = imager_record(v.view, t, h.time, Float64.(L))
@@ -565,7 +565,7 @@ The folders on the diagnostic search path besides the built-ins, `(; path, saved
 false for those of `BRIAREUS_DIAGNOSTICS` or added for this Julia session only.
 """
 function diagnostic_folders()
-    saved = Set(normpath.(Briareus._saved_paths()))
+    saved = Set(normpath.(Briareus.GUIAPI.saved_paths()))
     return [(; path, saved = normpath(path) in saved) for path in diagnostic_paths(; builtin = false)]
 end
 

@@ -212,7 +212,7 @@ function ungroup_assembly!(ts::TargetSetup, name::Symbol)
         k = part_index(ts, name)
         (k !== nothing && is_assembly(ps[k])) || throw(ArgumentError("no assembly named $name"))
         a = ps[k]
-        refs = [q.name for q in ps if any(st -> name in Briareus._step_refs(st), q.steps)]
+        refs = [q.name for q in ps if any(st -> name in Briareus.GUIAPI.step_references(st), q.steps)]
         isempty(refs) || throw(ArgumentError("a placement step of $(join(String.(refs), ", ")) refers to $name"))
         fr, into = part_frames(ts), assembly_frame(a.assembly)
         out = PartSpec[]

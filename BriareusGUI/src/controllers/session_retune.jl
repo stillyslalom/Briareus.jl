@@ -5,7 +5,7 @@
 # The key a pulse table's columns are: the beams' groups, quads or names.
 function _pulse_key(beams, pulses)
     for by in (:group, :quad, :beam)
-        key = Briareus._beam_key(by)
+        key = Briareus.GUIAPI.beam_key(by)
         all(b -> haskey(pulses, key(b)), beams) && return by
     end
     throw(ArgumentError("the pulse table's columns are not the beams' groups, quads or names"))
@@ -84,7 +84,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     any(enabled) || throw(ArgumentError("every beam is disabled"))
     unit in PULSE_UNITS || throw(ArgumentError("a pulse table's unit is one of $PULSE_UNITS"))
     ref_by = _pulse_key(beams, pulses)
-    refkey, key = Briareus._beam_key(ref_by), Briareus._beam_key(by)
+    refkey, key = Briareus.GUIAPI.beam_key(ref_by), Briareus.GUIAPI.beam_key(by)
     # each beam's share of its column, in the reference table and in the retuned one
     # (`_pulse_shares`); a retuned key gives one power to its beams, so they must share
     # alike: a cone whose quads are held some as one beam and some as four cannot
@@ -229,11 +229,11 @@ end
 # `_UnconvertedLight` per call: its unit-power patterns serve every time).
 function _absorbed_light(op, at, times, kw, by)
     isempty(kw) && return [deposit(op, at(τ)) for τ in times]
-    ul = Briareus._UnconvertedLight(kw.unconverted, get(kw, :prepulse, nothing), get(kw, :by, by), kw.colors, (;))
+    ul = Briareus.GUIAPI.UnconvertedLight(kw.unconverted, get(kw, :prepulse, nothing), get(kw, :by, by), kw.colors, (;))
     return map(times) do τ
         bs = at(τ)
         E = copy(deposit(op, bs).element)
-        u = Briareus._unconverted_at!(ul, op.target, bs, τ)
+        u = Briareus.GUIAPI.unconverted_at!(ul, op.target, bs, τ)
         for c in ul.colors
             E .+= u[c.name].element
         end
@@ -330,7 +330,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
                               before = v.before, after = v.after, reference = v.reference)
         # the beams fire the new pulses (the table's beams unchanged while the worker ran)
         loaded = load && length(bt.beams[]) == length(beams) &&
-                 all(b -> haskey(v.pulses, Briareus._beam_key(by)(b)), bt.beams[])
+                 all(b -> haskey(v.pulses, Briareus.GUIAPI.beam_key(by)(b)), bt.beams[])
         loaded && _set_pulses!(sess, _table_pulses(v.pulses, by, basename(out); unit))
         set_chart!(sess.time, :retune)
         n = length(v.retune.keys)

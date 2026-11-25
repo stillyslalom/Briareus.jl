@@ -651,7 +651,7 @@ const _STEP_AXES = ("x", "y", "z")
 function _step_note(r, k, st)
     t, q = r.fixed[k]
     plural(n, w) = "$n $w" * (n == 1 ? "" : "s")
-    note = Briareus._relative(st) ? "relative move" :
+    note = Briareus.GUIAPI.is_relative_step(st) ? "relative move" :
            k in r.redundant ? "redundant: fixes nothing new" :
            "fixes " * join(filter(!isempty, [t > 0 ? plural(t, "translation") : "",
                                             q > 0 ? plural(q, "rotation") : ""]), ", ")
@@ -696,7 +696,7 @@ function _step_rows(sess, i)
             end
         end
         if hasfield(typeof(st), :axis) && !(st isa Roll && st.ref === nothing)
-            j = findfirst(a -> st.axis == Briareus._step_axis(Symbol(a)), _STEP_AXES)
+            j = findfirst(a -> st.axis == Briareus.GUIAPI.step_axis(Symbol(a)), _STEP_AXES)
             choices = j === nothing ? [_STEP_AXES...; "(" * join(_num.(st.axis), ", ") * ")"] : [_STEP_AXES...]
             label = st isa Rotate ? "About its axis" : st isa Roll ? "Reference axis" : "Axis of the frame"
             push!(rows, StepRow(k, "choice", "axis", label, "", "", join(choices, "|"),

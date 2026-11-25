@@ -24,7 +24,7 @@ a removed frame keep their aims, held in `:tcc`.
 function frame_users(ts::TargetSetup, name::Symbol)
     own(f) = _own_frame_name(name, f)
     return Symbol[q.name for q in ts.parts[] if q.name !== name &&
-                  (own(q.frame) || any(st -> any(own, Briareus._step_refs(st)), q.steps))]
+                  (own(q.frame) || any(st -> any(own, Briareus.GUIAPI.step_references(st)), q.steps))]
 end
 
 """
@@ -184,7 +184,7 @@ function _step_default(kind::Symbol, ref::Symbol, F::Frame, fr)
     kind === :parallel && return Parallel(ref; flip = dot(z, R.R[:, 3]) < 0)
     if kind === :roll
         for a in (:x, :y)
-            r = to_chamber(R, Briareus._step_axis(a); direction = true)
+            r = to_chamber(R, Briareus.GUIAPI.step_axis(a); direction = true)
             e = r - dot(r, z) * z
             norm(e) > 1e-9 || continue
             e = normalize(e)
@@ -294,7 +294,7 @@ function edit_part_step!(ts::TargetSetup, i::Integer, k::Integer, key::Symbol, v
             d[String(key)] = _parse_number(value, String(key))
         elseif key === :axis
             haskey(d, "axis") || throw(ArgumentError("a $kind step has no axis"))
-            d["axis"] = collect(Briareus._step_axis(Symbol(value)))
+            d["axis"] = collect(Briareus.GUIAPI.step_axis(Symbol(value)))
         elseif key === :flip
             haskey(d, "flip") || throw(ArgumentError("a $kind step has no flip"))
             d["flip"] = Bool(value)
@@ -470,7 +470,7 @@ function turned_parts(parts::AbstractVector{PartSpec}, i::Integer, θ::Real;
     fr = part_frames(parts)
     haskey(fr, frame) || throw(ArgumentError("no frame named $frame"))
     e = to_chamber(fr[frame], _axis_vector3(axis); direction = true)
-    Q = Briareus._axis_rotation(Vec3(e), deg2rad(θ))
+    Q = Briareus.GUIAPI.axis_rotation(Vec3(e), deg2rad(θ))
     P = fr[p.frame]
     F0 = _own_frame(p, P)                          # before the steps
     O = fr[p.name].origin                          # the pivot is the part origin

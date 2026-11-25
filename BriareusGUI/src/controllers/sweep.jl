@@ -350,7 +350,7 @@ function _dependent_frames(parts, moved::Set{Symbol})
         grew = false
         for p in parts
             p.name in out && continue
-            (p.frame in out || any(st -> any(in(out), Briareus._step_refs(st)), p.steps)) || continue
+            (p.frame in out || any(st -> any(in(out), Briareus.GUIAPI.step_references(st)), p.steps)) || continue
             push!(out, p.name)
             grew = true
         end

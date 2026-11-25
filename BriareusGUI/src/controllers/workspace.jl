@@ -438,7 +438,7 @@ _csv_cache() = joinpath(tempdir(), "BriareusGUI-diagnostics")
 function _read_diagnostic_state(state, zr, bad::Vector{String})
     out = Dict{String,Any}()
     for (id, e) in get(state, "diagnostic_definitions", Dict())
-        table = Briareus._map_csv!(deepcopy(e["definition"]), function (v)
+        table = Briareus.GUIAPI.map_csv!(deepcopy(e["definition"]), function (v)
             (zr === nothing || !startswith(v, "diagnostics/")) && return v
             zip_findlast_entry(zr, v) === nothing && return v
             f = joinpath(_csv_cache(), basename(v))

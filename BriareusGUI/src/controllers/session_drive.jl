@@ -154,7 +154,7 @@ function _in_volume(v::_CavityVolume, x, tol)
     q = to_frame(v.frame, x)
     L = v.length
     abs(q[3]) <= L / 2 + tol || return false
-    r = v.profile === nothing ? v.radius : Briareus._profile_radius(v.profile, clamp(q[3], -L / 2, L / 2))
+    r = v.profile === nothing ? v.radius : Briareus.GUIAPI.profile_radius(v.profile, clamp(q[3], -L / 2, L / 2))
     return hypot(q[1], q[2]) <= (isfinite(r) ? r : v.radius) + tol
 end
 

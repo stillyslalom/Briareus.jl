@@ -119,10 +119,6 @@ end
 
 # ---------------------------------------------------------------- unconverted light
 
-# The lens distance (mm upstream of the 3ω focus) of `unconverted_deposition` and
-# `talis_check` (their default).
-const _LENS_DISTANCE = 7700.0
-
 """
     unconverted_footprint(harmonic) -> NamedTuple
 
@@ -136,12 +132,12 @@ best-focus plane: `edge` (mm from the 3ω axis to its near edge), `size` (side, 
 function unconverted_footprint(h::Integer)
     1 <= h <= 2 || throw(ArgumentError("unconverted light is harmonic 1 or 2"))
     uc = nif_unconverted()[h]
-    return (edge = uc.edge, size = uc.footprint, focus = uc.focal_shift, lens = _LENS_DISTANCE)
+    return (edge = uc.edge, size = uc.footprint, focus = uc.focal_shift, lens = Briareus.NIF_LENS_DISTANCE)
 end
 
 const _NIF_TABLE = Ref{Any}(nothing)
 function _nif_table()
-    _NIF_TABLE[] === nothing && (_NIF_TABLE[] = Briareus._nif_beam_table())
+    _NIF_TABLE[] === nothing && (_NIF_TABLE[] = Briareus.GUIAPI.nif_beam_table())
     return _NIF_TABLE[]
 end
 
@@ -151,7 +147,7 @@ end
 Whether beam `b` has an unconverted-light footprint to draw: a NIF beam or quad (by its
 quad name), as for `unconverted_deposition` and `talis_check`.s 1ω rules.
 """
-has_unconverted(b::Beam) = Briareus._is_nif(b)
+has_unconverted(b::Beam) = Briareus.GUIAPI.is_nif(b)
 
 """
     unconverted_beamlets(b::Beam) -> Vector
@@ -164,7 +160,7 @@ without a footprint, [`has_unconverted`](@ref)).
 """
 function unconverted_beamlets(b::Beam)
     has_unconverted(b) || return Tuple{Vec3,Vec3,Vec3}[]
-    bl = Briareus._omega1_beamlets(b, nothing, _nif_table())
+    bl = Briareus.GUIAPI.omega1_beamlets(b, nothing, _nif_table())
     return bl === nothing ? Tuple{Vec3,Vec3,Vec3}[] : Tuple{Vec3,Vec3,Vec3}[Tuple(Vec3.(x)) for x in bl]
 end
 

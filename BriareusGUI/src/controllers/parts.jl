@@ -108,18 +108,18 @@ function _without_parts(ts::TargetSetup, names)
     out, moved = PartSpec[], Symbol[]
     for p in all
         p.name in gone && continue
-        refs = any(st -> any(removed, Briareus._step_refs(st)), p.steps)
+        refs = any(st -> any(removed, Briareus.GUIAPI.step_references(st)), p.steps)
         if !removed(p.frame) && !refs
             push!(out, p.assembly in gone ? _with(p; assembly = TOP_LEVEL) : p)
             continue
         end
         push!(moved, p.name)
-        steps = PlacementStep[st for st in p.steps if !any(removed, Briareus._step_refs(st))]
+        steps = PlacementStep[st for st in p.steps if !any(removed, Briareus.GUIAPI.step_references(st))]
         frame = kept_frame(p.frame)
         # where it is now, as its placement fields in the frame it is placed in from here
         # on; relative steps that stay apply on top of the fields, which are then kept
         vals = copy(p.values)
-        if !is_port_frame(p) && !any(Briareus._relative, steps)
+        if !is_port_frame(p) && !any(Briareus.GUIAPI.is_relative_step, steps)
             F, P1 = fr[p.name], fr[frame]
             vals[:x], vals[:y], vals[:z] = to_frame(P1, F.origin)
             vals[:theta], vals[:phi], vals[:rotation] = _euler_angles(P1.R' * F.R)

@@ -181,7 +181,7 @@ end
     # the drawn square is the zero contour of the footprint distance at every axial
     # position (`talis_check`'s square with the nominal footprint)
     sq(bl, s) = unconverted_square(bl, 1, s)
-    dist(x, (k, f, ô)) = Briareus._omega1_square(x - f, k, ô, fp.edge + fp.size / 2, fp.size / 2,
+    dist(x, (k, f, ô)) = Briareus.GUIAPI.omega1_square(x - f, k, ô, fp.edge + fp.size / 2, fp.size / 2,
                                                  fp.focus, fp.lens)
     @test all(abs(dist(p, bl)) < 1e-9 for bl in bls for s in (-30.0, 0.0, 12.0) for p in sq(bl, s))
     # its near edge lies `edge` from the 3ω axis at the 3ω focus

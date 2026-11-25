@@ -233,7 +233,7 @@ end
 # pulse, one `PulseShape` per power, so that the beams on equal powers share a
 # deposition. The beams of one key must carry the same power.
 function _prepulse_schedules(pp, beams, by)
-    key = Briareus._beam_key(by)
+    key = Briareus.GUIAPI.beam_key(by)
     a, b = pp.window
     out = Dict{Symbol,Any}()
     for c in (:omega1, :omega2)
@@ -616,7 +616,7 @@ function _beam_pulses(src, beams, enabled)
     off = PulseShape([0.0], [0.0])
     scaled = Dict{Float64,PulseShape}()
     shared = Dict{Any,PulseShape}()
-    key = src.kind === :table ? Briareus._beam_key(src.by) : nothing
+    key = src.kind === :table ? Briareus.GUIAPI.beam_key(src.by) : nothing
     shares = src.kind === :table ? _pulse_shares(beams, src.by, src.unit) : nothing
     out = Dict{Symbol,Any}()
     for (i, (b, on)) in enumerate(zip(beams, enabled))
@@ -624,7 +624,7 @@ function _beam_pulses(src, beams, enabled)
             if !on
                 off
             elseif src.kind === :table
-                p = Briareus._beam_pulse(src.table, key, b)
+                p = Briareus.GUIAPI.beam_pulse(src.table, key, b)
                 shares[i] == 1 ? p : get!(() -> PulseShape(p.t, shares[i] .* p.p), shared, (key(b), shares[i]))
             else
                 get!(() -> PulseShape(src.shape.t, b.power .* src.shape.p), scaled, b.power)
@@ -659,7 +659,7 @@ function _irradiance_job(s::Scenario, beams, enabled, src, ratio, pp, foil; key 
     pulses = _beam_pulses(src, beams, enabled)
     h = unconverted_history(t, beams, pulses, times; ratio = something(ratio, (omega1 = 0.0, omega2 = 0.0)),
                             prepulse = pp === nothing ? (;) : _prepulse_schedules(pp, beams, :beam), by = :beam)
-    peak(hh, p) = vec(maximum(Briareus._part_series(hh, (p,), nothing)[1]; dims = 1, init = 0.0))
+    peak(hh, p) = vec(maximum(Briareus.GUIAPI.part_series(hh, (p,), nothing)[1]; dims = 1, init = 0.0))
     parts = unique!([c.part for c in t.components if c.kind === :surface])
     peaks = [(; part = p, values = peak(h, p)) for p in parts]
     f = foil !== nothing && any(c -> c.part === foil && c.kind === :surface, t.components) ? foil : nothing
@@ -958,7 +958,7 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                             τ -> _table_beams(r.beams, r.reference_pulses, τ; by = r.reference_by, shares = rsh);
                             total = false, style = :dash)
         new = _group_series(r.table, r.nodes,
-                            τ -> [on ? remake(b; power = s * r.pulses[Briareus._beam_key(r.by)(b)](τ)) : remake(b; power = 0.0)
+                            τ -> [on ? remake(b; power = s * r.pulses[Briareus.GUIAPI.beam_key(r.by)(b)](τ)) : remake(b; power = 0.0)
                                   for (b, on, s) in zip(r.beams, r.enabled, nsh)]; total = false)
         if r.kind === :capsule
             ε1(hh) = [100 * mode_amplitude(hh.ylm[:, j], 1) for j in eachindex(hh.time)]

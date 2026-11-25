@@ -742,7 +742,7 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = 
                          d.delivered + u.omega1.delivered + u.omega2.delivered)
         conv = Dict(c.name => c.conversion for c in colors)
         source = d.element .+ conv[:omega1] .* u.omega1.element .+ conv[:omega2] .* u.omega2.element
-        flux = Briareus._radiative(s) ? Briareus._observed_flux(s, source) : nothing
+        flux = Briareus.GUIAPI.has_radiation(s) ? Briareus.GUIAPI.observed_flux(s, source) : nothing
         ev = Evaluation(s, ev.beams, ev.effective, tot, Ref{Union{Nothing,Vector{Float64}}}(flux))
         share(x, h) = (; absorbed = sum(x.per_beam), delivered = x.delivered, conversion = conv[h])
         uc = (; omega1 = share(u.omega1, :omega1), omega2 = share(u.omega2, :omega2), u.skipped)

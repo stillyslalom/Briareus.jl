@@ -173,7 +173,7 @@ function _wall_radius_at(p, z)
         nothing                                 # a profile the geometry refuses
     end
     prof === nothing && return p.values[:radius]
-    r = Briareus._profile_radius(prof, z)
+    r = Briareus.GUIAPI.profile_radius(prof, z)
     return isfinite(r) ? r : p.values[:radius]
 end
 
@@ -401,7 +401,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
         haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
         v[k] = x
     end
-    any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
+    any(st -> Symbol(name) in Briareus.GUIAPI.step_references(st), steps) &&
         throw(ArgumentError("a placement step cannot refer to the frame of its part"))
     return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
                                   coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
@@ -440,7 +440,7 @@ _renamed(p::PartSpec, old::Symbol, new::Symbol) =
 
 function _rename_step(st::PlacementStep, old::Symbol, new::Symbol)
     T = typeof(st)
-    old in Briareus._step_refs(st) || return st
+    old in Briareus.GUIAPI.step_references(st) || return st
     return T((f === :ref ? new : getfield(st, f) for f in fieldnames(T))...)
 end
 

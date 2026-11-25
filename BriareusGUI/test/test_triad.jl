@@ -74,7 +74,7 @@ end
     F0 = part_frames(d.target)
     @test commit_triad!(d.target, j, (:turn, 3), -45.0)
     F1 = part_frames(d.target)
-    Q = Briareus._axis_rotation(F0[:shield].R[:, 3], deg2rad(-45))
+    Q = Briareus.GUIAPI.axis_rotation(F0[:shield].R[:, 3], deg2rad(-45))
     @test isapprox(F1[:plate].R, Q * F0[:plate].R; atol = 1e-12) && isapprox(F1[:plate].origin, F0[:plate].origin; atol = 1e-12)
     @test triad_frame(d.target, j).R == F1[:shield].R && triad_frame(d.target, j).origin == F1[:plate].origin
 
