@@ -211,6 +211,27 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         col = sensb.J[:, 3(bi-1)+k]
         @test maximum(abs, fd .- col) <= 1e-6 * max(maximum(abs, col), 1e-6)
     end
+    # With `through_lpi`, `sample_modes` perturbs the setup beams and applies the model to
+    # each sample. Each sample is then the shape of a full evaluation of the perturbed setup
+    # beams, drawn here from the same random sequence. The default perturbs the effective
+    # beams, so the bubble does not respond to the errors. Without a model the two agree.
+    errs = (pointing = 0.05, power = 0.03, n = 3, lmax)
+    pre = sample_modes(sb, quads; errs..., through_lpi = true, rng = MersenneTwister(11))
+    post = sample_modes(sb, quads; errs..., rng = MersenneTwister(11))
+    rng = MersenneTwister(11)
+    drawn = map(1:3) do _
+        bs = map(quads) do b
+            e1, e2 = spot_axes(b)
+            remake(b; aim = Vec3(b.aim) + 0.05 / sqrt(2) * (randn(rng) * e1 + randn(rng) * e2),
+                   power = b.power * (1 + 0.03 * randn(rng)))
+        end
+        c = flux_ylm(evaluate(sb, bs); lmax)
+        c ./ c[1]
+    end
+    @test pre ≈ reduce(hcat, drawn) rtol = 1e-12
+    @test maximum(abs, pre .- post) > 1e-5
+    @test sample_modes(s, quads; errs..., through_lpi = true, rng = MersenneTwister(11)) ==
+          sample_modes(s, quads; errs..., rng = MersenneTwister(11))
     Mb = influence_matrix(sb, effb; lmax)
     cb = Mb * [b.power for b in effb]
     @test cb ./ cb[1] ≈ shapeb(effb) rtol = 1e-10

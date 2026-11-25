@@ -23,8 +23,14 @@ power error. Returns `(; J, c, names)`:
 The deposition of each beam depends on its errors only, so the derivatives come from
 one forward-mode pass per beam with three dual partials: exact (within round-off), and
 about the cost of one gradient of an objective. The beams are the setup beams of the
-scenario. A laser–plasma model is applied before the errors, since the errors are in the
-delivered beams. Errors move the aim, and the beam direction, set by the port, is fixed.
+scenario. Errors move the aim, and the beam direction, set by the port, is fixed.
+
+The errors are those of the effective beams. A laser–plasma model of the scenario is
+applied to the nominal setup beams first, and the errors then perturb the effective
+beams after it, with the model held at its nominal state. The response of the model to
+the errors is excluded: the transfer of a CBET model and the clipping of a bubble do not
+change with the perturbed aims and powers. `sample_modes(...; through_lpi = true)`
+measures that response.
 """
 function mode_sensitivity(s::Scenario, beams::AbstractVector{<:Beam}; lmax::Integer = 4)
     _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
@@ -269,7 +275,8 @@ end
 """
     sample_modes(scenario, beams; pointing = 0.05, power = 0.0, n = 100,
                  rng = Random.default_rng(), lmax = 4, group_pointing = 0.0,
-                 group_power = 0.0, groups = :quad, positioning = 0.0) -> Matrix
+                 group_power = 0.0, groups = :quad, positioning = 0.0,
+                 through_lpi = false) -> Matrix
 
 Runs a Monte Carlo of the drive shape under the errors of `mode_uncertainty`, with the
 same keywords. Returns `n` samples of `c_lm/c_00` as columns. Each sample comes from a
@@ -278,15 +285,26 @@ independent errors of every beam. The aim of each beam is displaced along its sp
 by normal errors of rms `pointing/√2` each, and its power is scaled by a normal fraction
 of rms `power`. The samples check the linear propagation independently. They also give
 the answer when the errors are large enough for the drive to respond nonlinearly.
+
+`through_lpi` selects the beams that carry the errors when the scenario has a
+laser–plasma model. By default the errors perturb the effective beams after the model,
+as in `mode_sensitivity`, and the samples check the linear propagation. With
+`through_lpi = true` the errors perturb the setup beams, which are the beams that the
+laser delivers, and the model is applied to every sample. The spread then includes the
+response of the model to the errors, such as the transfer of a CBET model and the
+clipping of a bubble at the perturbed aims and powers. The two settings draw the same
+random errors, so the difference of their samples is that response. Without a model
+they are identical.
 """
 function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real = 0.05,
                       power::Real = 0.0, n::Integer = 100, rng = Random.default_rng(),
                       lmax::Integer = 4, group_pointing::Real = 0.0, group_power::Real = 0.0,
-                      groups = :quad, positioning = 0.0)
+                      groups = :quad, positioning = 0.0, through_lpi::Bool = false)
     _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
     σpos = _positioning_rms(positioning)
     nm = (lmax + 1)^2
-    eff = apply_lpi(s.lpi, beams, s.time)
+    # the beams that carry the errors: the setup beams, or the effective beams
+    eff = through_lpi ? beams : apply_lpi(s.lpi, beams, s.time)
     keys = [_group_key(b, groups) for b in eff]
     gs = unique(keys)
     basis = Dict(g => group_pointing > 0 ? _group_basis(eff, findall(==(g), keys), g) : (zero(Vec3), zero(Vec3))
@@ -307,6 +325,7 @@ function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real
                             gd[keys[i]] + D,
                    power = b.power * (1 + power * randn(rng)) * (1 + gp[keys[i]]))
         end
+        through_lpi && (perturbed = apply_lpi(s.lpi, perturbed, s.time))
         c = _ylm_product(s.ylm_response, lpi_deposit(s.lpi, s.deposition, perturbed, s.time).element, nm)
         out[:, k] = c ./ c[1]
     end
