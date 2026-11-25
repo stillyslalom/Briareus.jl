@@ -35,7 +35,9 @@ reflected ray, the open port it threatens and the projected area that reflects t
 ([`Omega1Reflection`](@ref)). [`omega1_disposition`](@ref) gives the same rules as a field
 over the hardware, one verdict per mesh triangle over all beams: clear, tight, curved
 enough to scatter, clear by its reflection, to review, or failing
-([`Omega1Disposition`](@ref)).
+([`Omega1Disposition`](@ref)). [`omega1_slice`](@ref) gives the plane across the beamlet
+through the hardware point of an approach as 2-D geometry, and
+[`write_omega1_slice_svg`](@ref) draws it as a vector file without a graphics context.
 [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency
@@ -43,6 +45,6 @@ fitted to published foil data ([`kshell_ce`](@ref)) to the photons at the detect
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl", "src/design_rules.jl"]
+Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl", "src/omega1_slice.jl", "src/design_rules.jl"]
 Private = false
 ```

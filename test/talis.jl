@@ -621,3 +621,58 @@ end
     # beams without a 1ω footprint leave everything clear
     @test Set(omega1_disposition(t, [Beam("b"; theta = 30, phi = 0)]).status) == Set([:clear])
 end
+
+@testset "1ω slice" begin
+    bl = first(nif_beams())
+    k = direction(bl)
+    pq = Briareus._nif_quad_port(bl.quad)
+    ô = Briareus._own_side(bl.port, pq)
+    q̂ = cross(k, ô)
+    # the square of the analytic case, in the focal plane, and a plate along the beam that
+    # crosses the slice plane in a segment at q = 0.8
+    own = Component(:own, transform(rectangle_mesh(0.1, 0.1; nu = 2, nv = 2), hcat(ô, q̂, k), 3.9 * ô), gold();
+                    two_sided = true)
+    fin = Component(:fin, transform(rectangle_mesh(1.0, 6.0; nu = 2, nv = 3), hcat(ô, k, cross(ô, k)),
+                                    3.0 * ô + 0.8 * q̂), gold(); two_sided = true)
+    t = Target(own, fin)
+    a = omega1_closest_approach(t, [bl], bl.name => :own; rtol = 0)
+    sl = omega1_slice(t, a)
+    c10 = omega1_contour()
+    taper = c10.c0 / 7700 + c10.h0 / 460
+    # at s = -1 the near edge has moved toward the 3ω axis by the taper
+    @test a.s_star ≈ -1 atol = 1e-12
+    @test sl.nominal.center[1] - sl.nominal.half ≈ 4.45 - taper atol = 1e-12
+    @test sl.nominal.center[2] == 0 && sl.worst.center == sl.nominal.center
+    b = a.budget
+    @test sl.worst.half - sl.nominal.half ≈ b.pointing + b.target_offset + b.rotation_tol + b.required atol = 1e-12
+    hw, xb = sl.caliper
+    @test hypot(hw[1] - xb[1], hw[2] - xb[2]) ≈ abs(a.distance) atol = 1e-12
+    @test xb[1] ≈ 4.45 - taper atol = 1e-12
+    @test hw[1] ≈ 3.95 atol = 1e-12
+    @test sl.distance == a.distance && sl.margin == a.margin && sl.beam == bl.name && sl.component === :own
+    @test sl.window[2] - sl.window[1] ≈ 4 && (sl.window[1] + sl.window[2]) / 2 ≈ (hw[1] + xb[1]) / 2
+    # the own square lies in the plane (its edges); the fin crosses it from p = 2.5 to 3.5
+    cut = [s for s in sl.hardware if all(u -> abs(u[2] - 0.8) < 1e-9, s)]
+    flat = [s for s in sl.hardware if all(u -> abs(u[2]) <= 0.05 + 1e-9, s)]
+    @test length(cut) + length(flat) == length(sl.hardware) && !isempty(flat)
+    @test minimum(minimum(u[1] for u in s) for s in cut) ≈ 2.5 atol = 1e-9
+    @test maximum(maximum(u[1] for u in s) for s in cut) ≈ 3.5 atol = 1e-9
+    @test sum(abs(s[1][1] - s[2][1]) for s in cut) ≈ 1.0 atol = 1e-9
+    @test all(3.85 - 1e-9 <= u[1] <= 3.95 + 1e-9 for s in flat for u in s)
+    @test maximum(u[1] for s in flat for u in s) ≈ 3.95 && minimum(u[1] for s in flat for u in s) ≈ 3.85
+    # a narrow window leaves the fin out
+    @test all(s -> all(u -> abs(u[2]) < 0.1, s), omega1_slice(t, a; window = 0.3).hardware)
+    @test_throws ArgumentError omega1_slice(t, a; window = 0.0)
+    # the drawing: the same text for the same slice, with every part in it
+    svg = omega1_slice_svg(sl)
+    @test svg == omega1_slice_svg(omega1_slice(t, a)) && startswith(svg, "<svg ") && endswith(svg, "</svg>\n")
+    @test count("<rect", svg) == 3 && count("<circle", svg) == 2 && count("<line", svg) == length(sl.hardware) + 2
+    @test occursin(Briareus.Printf.@sprintf("%.3f mm</text>", a.distance), svg) && occursin("1 mm</text>", svg)
+    @test occursin("stroke-dasharray", svg) && occursin(bl.name * " / own", svg)
+    # the near edge of the contour is drawn at its place: x = (p - pmin) · size / width
+    xe = (4.45 - taper - sl.window[1]) * 480 / 4
+    @test occursin(Briareus.Printf.@sprintf("<rect x=\"%.3f\"", xe), svg)
+    path = write_omega1_slice_svg(joinpath(mktempdir(), "slice.svg"), t, a; size = 300)
+    @test read(path, String) == omega1_slice_svg(sl; size = 300)
+    @test_throws ArgumentError omega1_slice_svg(sl; size = 50)
+end

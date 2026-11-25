@@ -18,10 +18,11 @@ Marks: **done**, **partial** (with what remains), **open**.
 | A.5 STEP B-rep import | open | optional |
 | B.1 disposition coloring | partial | the two color modes, the tight threshold and the curved-safe filter are in the 3D view; `disposition_info` gives the text of a facet, and no hover or pick shows it yet |
 | B.2 closest-approach faces, calipers, cones | partial | a click on a TaLIS row draws the nearest side, the clearance plane, the caliper and the reflection cone; the margin terms show on hover. Left: the pinch mode over several beamlets, the port highlight on a chamber indicator, and a view toggle for the 1ω contour modes |
-| B.3 daylight and grazing views, slice | partial | the Daylight and Grazing buttons turn the camera to the row under inspection; the 2-D slice at the station is not built |
+| B.3 daylight and grazing views, slice | partial | the Daylight and Grazing buttons turn the camera to the row under inspection; the 2-D slice is in core as data and SVG (`omega1_slice`, `write_omega1_slice_svg`) and is not yet shown as an inset in the window |
 | B.4 to B.6 | open | |
 | C.1 to C.3 | open | |
-| D.1 to D.4 | open | |
+| D.3 handoff loop | partial | the SVG slice of a 1ω approach is written from core without a graphics context; no script export, no `--tab` |
+| D.1, D.2, D.4 | open | |
 | E.1, E.2 | open | |
 
 ## The plan as handed over
