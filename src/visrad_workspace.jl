@@ -483,6 +483,18 @@ end
 # Public API
 # ---------------------------------------------------------------------------------------
 
+# Whether `path` is a JSON workspace: its first non-blank character is `{`.
+function _vrw_is_json(path::AbstractString)
+    open(path) do io
+        while !eof(io)
+            c = read(io, Char)
+            c in ('﻿', ' ', '\t', '\r', '\n') && continue
+            return c == '{'
+        end
+        return false
+    end
+end
+
 """
     read_visrad_workspace(path; template = nothing, absent = :off, spot_definition = :auto,
                           rotation_sense = :beam, angle_tol = 0.05) -> VisRadWorkspace

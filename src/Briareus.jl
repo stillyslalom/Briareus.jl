@@ -129,6 +129,7 @@ export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, Diag
 
 include("geometry.jl")
 include("utils.jl")
+include("csv.jl")
 include("meshops.jl")
 include("bvh.jl")
 include("albedo.jl")
@@ -160,6 +161,7 @@ include("constraints.jl")
 include("al_solver.jl")
 include("frame_pointing.jl")
 include("parameterizations.jl")
+include("unconverted.jl")
 include("history.jl")
 include("spectral.jl")
 include("xray_optics.jl")
@@ -193,7 +195,6 @@ include("visrad_workspace.jl")
 include("visrad_json.jl")
 include("visrad_results.jl")
 include("cbet.jl")
-include("unconverted.jl")
 
 # Precompile workload for the time to first design. A coarse NIF hohlraum goes through
 # setup, evaluation, a short optimization with keep-outs, clearance, the radiation solve

@@ -9,6 +9,6 @@ Legendre and ``Y_{lm}`` modes of the capsule as CSV for postprocessing. VisRad f
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/io.jl"]
+Pages = ["src/csv.jl", "src/io.jl"]
 Private = false
 ```

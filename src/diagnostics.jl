@@ -949,6 +949,38 @@ function _builtin_definition(id)
     return _resolve(id, raws, issues)
 end
 
+"""
+    dante1(; kwargs...)
+
+Returns NIF Dante 1, at port P143-274: θ 143.25°, φ 274°, 36.75° from the hohlraum axis
+(NIF User Guide 2024-09, Table 5-1; [`NIF_DIAGNOSTIC_PORTS`](@ref)). The papers round the
+angle to 37° (Rubery et al., RSI 2023; Rubery et al., PRL 132, 065104, 2024). The whole
+target is viewed over the collimated field of 60 mm at TCC, which was ±30 mm in the 2004
+design (Dewald et al., RSI 75, 3759, 2004). Tr is taken over the initial area of the
+lower entrance hole, and the channels are those of [`dante1_responses`](@ref). The view
+comes from the built-in definition `nif_dante1`, and `field_of_view = nothing` gives only
+the view through the hole. Definitions on the search path do not change it;
+`diagnostic("nif_dante1")` takes them ([`diagnostic`](@ref)). `kwargs` replace the
+values of the definition with keywords of [`DanteView`](@ref).
+"""
+dante1(; kwargs...) = _builtin_diagnostic("nif_dante1"; kwargs...)
+
+"""
+    dante2(; kwargs...)
+
+Returns NIF Dante 2, at port P64-350: θ 64°, φ 350° (NIF User Guide 2024-09, Table 5-1;
+Rubery et al., RSI 2023). It is a shallow view through the upper entrance hole, from the
+built-in definition `nif_dante2`. The channels and fields of view of Dante 2 are not
+public, so the definition has none. The view therefore looks through the hole with the
+channels of Dante 1 as an *assumption* ([`dante1_channels`](@ref)), without their
+per-channel fields. `kwargs` replace these defaults with keywords of
+[`DanteView`](@ref), such as the `channels` of a group. `diagnostic("nif_dante2")` takes
+definitions from the search path, where the channels can be given in a file that
+extends `nif_dante2`.
+"""
+dante2(; kwargs...) =
+    _builtin_diagnostic("nif_dante2"; merge((; channels = _with_field.(dante1_channels(), nothing)), values(kwargs))...)
+
 # ---- kind "xray_imager": pinhole x-ray imagers (SXI, G-LEH, GXD) -----------------------
 
 const _XRAY_IMAGER_SPEC = Dict(

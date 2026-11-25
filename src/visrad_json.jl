@@ -5,18 +5,6 @@
 # `visrad_power_sources` take either format. The layout was taken from VisRad 21.0.0
 # files (research notes, "VisRad JSON workspaces").
 
-# Whether `path` is a JSON workspace: its first non-blank character is `{`.
-function _vrw_is_json(path::AbstractString)
-    open(path) do io
-        while !eof(io)
-            c = read(io, Char)
-            c in ('﻿', ' ', '\t', '\r', '\n') && continue
-            return c == '{'
-        end
-        return false
-    end
-end
-
 function _vrj_parse(path::AbstractString)
     d = JSON.parsefile(path)
     get(d, "Workspace Format ID", nothing) isa Integer ||
