@@ -153,6 +153,7 @@ export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, TALIS_
        talis_role
 export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance,
        has_unconverted, unconverted_footprint, unconverted_beamlets, unconverted_square,
+       closest_approach_surface, reflection_cone, daylight_view, grazing_view,
        unconverted_light
 export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_colors,
        default_cut, set_cut!, is_cut, CUT_KINDS, set_cut_plane!, cut_offset, CutRegion,

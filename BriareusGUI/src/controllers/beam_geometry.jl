@@ -222,3 +222,118 @@ function unconverted_light(b::Beam, h::Integer; length::Real)
     end
     return (; vertices = verts, faces, outlines, axes)
 end
+
+# ---------------------------------------------------------------- 1ω closest approach
+
+"""
+    closest_approach_surface(approach::Omega1Approach; span = 6.0)
+        -> (; outline, vertices, faces, caliper, budget)
+
+What the 3D view draws of a 1ω closest approach (`Briareus.omega1_closest_approach`): the
+side or sides of the 1ω beamlet nearest the hardware point, and nothing else of the beam.
+
+- `outline` — segments around those sides of the 10% contour at the focal plane of the
+  approach, cut to `span` mm either side of the station of the hardware point
+- `vertices`, `faces` — the same sides moved out by the transverse errors, the rule
+  tolerance at the hardware point and the required clearance: the plane that hardware
+  must stay outside in the worst case (index triples)
+- `caliper` — the segment from the hardware point to the closest point of the contour,
+  in the plane across the beamlet in which the rule measures
+- `budget` — lines of text from the nominal distance to the margin, one per term
+"""
+function closest_approach_surface(a::Omega1Approach; span::Real = 6.0)
+    span > 0 || throw(ArgumentError("the span must be positive"))
+    k, f, ô = a.beamlet
+    q̂ = cross(k, ô)
+    f = f + a.focus_shift * k
+    c = a.contour
+    b = a.budget
+    grow = b.pointing + b.target_offset + b.hardware_tolerance + b.rotation_tol + b.required
+    # each side as its outward direction and the direction along it
+    sides = ((0x01, -ô, q̂), (0x02, ô, q̂), (0x04, -q̂, ô), (0x08, q̂, ô))
+    corner(s, out, along, sgn, g) = begin
+        h = c.h0 * abs(1 - s / c.focal_shift)
+        f + s * k + c.c0 * (1 + s / c.lens_distance) * ô + (h + g) * out + sgn * (h + g) * along
+    end
+    outline, verts, faces = NTuple{2,Vec3}[], Vec3[], NTuple{3,Int}[]
+    s0, s1 = a.s_star - span, a.s_star + span
+    for (bit, out, along) in sides
+        a.face_mask & bit == 0 && continue
+        p = (corner(s0, out, along, -1, 0.0), corner(s0, out, along, 1, 0.0),
+             corner(s1, out, along, 1, 0.0), corner(s1, out, along, -1, 0.0))
+        for i in 1:4
+            push!(outline, (p[i], p[mod1(i + 1, 4)]))
+        end
+        o = length(verts)
+        push!(verts, corner(s0, out, along, -1, grow), corner(s0, out, along, 1, grow),
+              corner(s1, out, along, 1, grow), corner(s1, out, along, -1, grow))
+        push!(faces, (o + 1, o + 2, o + 3), (o + 1, o + 3, o + 4))
+    end
+    line(label, v) = @sprintf("%-22s %+8.3f mm", label, v)
+    budget = [line("nominal", a.nominal), line("focus ($(a.focus_shift) mm)", -b.focus_delta),
+              line("pointing", -b.pointing), line("target position", -b.target_offset),
+              line("hardware tolerance", -b.hardware_tolerance), line("rule tolerance", -b.rotation_tol),
+              line("required clearance", -b.required), line("margin", a.margin)]
+    return (; outline, vertices = verts, faces, caliper = (a.x_hw, a.x_beam), budget)
+end
+
+"""
+    reflection_cone(x::Omega1Reflection; length = 10.0, required = 20.0, tolerance = 0.5, n = 32)
+        -> (; incident, reflected, port, vertices, faces, half_angle)
+
+What the 3D view draws of the specular 1ω reflection behind a management row
+(`Briareus.omega1_reflection`): the `incident` ray into the reflecting point, the
+`reflected` axis and the direction to the threatened open `port` (segments of `length`
+mm), and the cone about the reflected axis that an open port must stay outside
+(`vertices`, `faces`), of half-angle `required` plus twice the rule `tolerance` plus the
+normal spread of the facet.
+"""
+function reflection_cone(x::Omega1Reflection; length::Real = 10.0, required::Real = 20.0,
+                         tolerance::Real = 0.5, n::Integer = 32)
+    (length > 0 && n >= 3) || throw(ArgumentError("need a positive length and n ≥ 3"))
+    half = required + 2 * tolerance + x.spread
+    0 < half < 90 || throw(ArgumentError("the cone half-angle must lie between 0 and 90 degrees"))
+    p = x.point
+    r = x.reflected
+    u = normalize(cross(r, abs(r[3]) < 0.9 ? Vec3(0, 0, 1) : Vec3(1, 0, 0)))
+    v = cross(r, u)
+    verts = Vec3[p]
+    for i in 0:n-1
+        φ = 2π * i / n
+        push!(verts, p + length * (cosd(half) * r + sind(half) * (cos(φ) * u + sin(φ) * v)))
+    end
+    faces = [(1, 1 + i, 1 + mod1(i + 1, n)) for i in 1:n]
+    return (; incident = (p - length * x.incident, p), reflected = (p, p + length * r),
+            port = (p, p + length * x.port), vertices = verts, faces, half_angle = half)
+end
+
+"""
+    daylight_view(approach::Omega1Approach; zoom = 4.0) -> (; center, direction, up, width)
+
+The orthographic view down the beamlet of a 1ω closest approach: the camera looks along
+the beamlet, so the 1ω square is seen edge-on in the plane in which the rule measures, and
+the gap seen between hardware and the contour is the transverse distance. `center` is
+midway along the caliper, `up` the direction across the nearest side, and `width` the
+extent of the view (mm), `zoom` times the length of the caliper and at least 1 mm.
+"""
+function daylight_view(a::Omega1Approach; zoom::Real = 4.0)
+    k, _, ô = a.beamlet
+    up = a.face_mask & 0x03 != 0 ? cross(k, ô) : ô
+    return (; center = (a.x_hw + a.x_beam) / 2, direction = k, up,
+            width = max(zoom * norm(a.x_hw - a.x_beam), 1.0))
+end
+
+"""
+    grazing_view(approach::Omega1Approach; zoom = 4.0) -> (; center, direction, up, width)
+
+The orthographic view along the nearest side of the 1ω beamlet of a closest approach and
+across the beam: the side is seen edge-on with the beam running up the view, so the
+profile of the hardware is seen against the contour along the beam. `direction` lies in
+the side, at right angles to the caliper and to the beamlet.
+"""
+function grazing_view(a::Omega1Approach; zoom::Real = 4.0)
+    k, _, ô = a.beamlet
+    along = a.face_mask & 0x03 != 0 ? cross(k, ô) : ô
+    return (; center = (a.x_hw + a.x_beam) / 2, direction = along, up = k,
+            width = max(zoom * norm(a.x_hw - a.x_beam), 1.0))
+end

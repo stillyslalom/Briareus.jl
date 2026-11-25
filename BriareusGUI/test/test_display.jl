@@ -2,7 +2,7 @@
 # the calculations and drawn), component display modes, the exact clipping of the cutaway,
 # their session state, and the unconverted-light drive (no GL).
 
-using LinearAlgebra: norm, cross, dot
+using LinearAlgebra: norm, cross, dot, normalize
 
 _area(a, b, c) = norm(cross(b - a, c - a)) / 2
 _tris_area(ts) = sum((_area(t...) for t in ts); init = 0.0)
@@ -196,6 +196,50 @@ end
     @test minimum(dot(p - f, ô) for p in sq(bls[1], 0.0)) ≈ fp.edge rtol = 1e-12
     u = unconverted_light(b, 1; length = 10.0)
     @test length(u.vertices) == 32 && length(u.faces) == 32 && length(u.outlines) == 16
+end
+
+@testset "1ω closest-approach geometry (no GL)" begin
+    # a point 0.5 mm outside the near side of the 10% contour of one beamlet
+    bl = first(nif_beams())
+    k = direction(bl)
+    a = omega1_closest_approach(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 1.0, n = 2)), [bl],
+                                1 => Tuple(unconverted_beamlets(bl)[1][3] * 3.95))
+    ô = a.beamlet[3]
+    @test a.face_mask == 0x01 && a.focus_shift == 1.0
+    g = closest_approach_surface(a; span = 6.0)
+    # the outline is the near side of the contour at the worst focal plane, 12 mm long
+    c10 = Briareus.omega1_contour()
+    dist(x) = Briareus.GUIAPI.omega1_square(x - (a.beamlet[2] + a.focus_shift * k), k, ô, c10.c0, c10.h0,
+                                           c10.focal_shift, a.contour.lens_distance)
+    @test length(g.outline) == 4 && all(abs(dist(p)) < 1e-9 for s in g.outline for p in s)
+    ss = [dot(p - a.beamlet[2] - a.focus_shift * k, k) for s in g.outline for p in s]
+    @test minimum(ss) ≈ a.s_star - 6 && maximum(ss) ≈ a.s_star + 6
+    # the clearance plane lies outside the contour by the errors, the tolerance and the
+    # required clearance, and the hardware point is `margin` beyond it
+    grow = a.budget.pointing + a.budget.target_offset + a.budget.rotation_tol + a.budget.required
+    @test length(g.vertices) == 4 && g.faces == [(1, 2, 3), (1, 3, 4)]
+    @test isapprox(dist((g.vertices[1] + g.vertices[2]) / 2), grow; atol = 1e-9) &&
+          isapprox(dist((g.vertices[3] + g.vertices[4]) / 2), grow; atol = 1e-9)
+    @test a.distance - grow ≈ a.margin atol = 1e-12
+    @test g.caliper == (a.x_hw, a.x_beam) && length(g.budget) == 8
+    @test startswith(g.budget[1], "nominal") && startswith(g.budget[end], "margin") && endswith(g.budget[end], "mm")
+    # a corner shows two sides
+    ac = omega1_closest_approach(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 1.0, n = 2)), [bl],
+                                 1 => Tuple(3.9 * ô - 12.0 * cross(k, ô)))
+    @test count_ones(ac.face_mask) == 2 && length(closest_approach_surface(ac).faces) == 4
+    # the daylight view looks down the beamlet at the middle of the caliper; the grazing
+    # view looks along the near side with the beam up the view
+    dv, gv = daylight_view(a), grazing_view(a)
+    @test dv.direction == k && dv.center ≈ (a.x_hw + a.x_beam) / 2 && abs(dot(dv.up, k)) < 1e-12
+    @test dv.width ≈ max(4 * abs(a.distance), 1.0) && abs(dot(dv.up, a.x_hw - a.x_beam)) < 1e-9
+    @test gv.up == k && abs(dot(gv.direction, k)) < 1e-12 && abs(dot(gv.direction, a.x_hw - a.x_beam)) < 1e-9
+    # the cone of a reflection: its axis, its half-angle and its rim
+    x = Omega1Reflection("b", :c, 1, k, Briareus.Vec3(1, 2, 3), -k, -k, bl.port, 1, 4.0, 3.0, 0.0, -20.0, 16.0, 16.0)
+    rc = reflection_cone(x; length = 10.0, n = 16)
+    @test rc.half_angle == 20 + 1 + 3 && rc.incident == (x.point - 10 * k, x.point) && rc.reflected[2] ≈ x.point - 10 * k
+    @test length(rc.vertices) == 17 && length(rc.faces) == 16 && rc.port == (x.point, x.point + 10 * bl.port)
+    @test all(v -> isapprox(acosd(dot(normalize(v - x.point), -k)), 24; atol = 1e-9) && norm(v - x.point) ≈ 10,
+              rc.vertices[2:end])
 end
 
 @testset "participation sets the drive and visibility does not (no GL)" begin
