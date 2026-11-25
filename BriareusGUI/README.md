@@ -96,8 +96,8 @@ framework-free `Controllers` submodule (Briareus and Observables, testable witho
 context). The Makie canvases (`src/canvas/`) create every plot up front and only update
 their inputs. The 3D view sets its camera matrices from a `CadCamera`, which takes its
 gestures from the mouse and keyboard events of the scene and picks by ray casting into the
-BVH of the target. `src/qt/shell.jl` bridges controllers to the QML pages (`src/qml/`)
-through one property map, item models and `br_*` callbacks. Background jobs run on worker
+BVH of the target. The files of `src/qt/` bridge controllers to the QML pages (`src/qml/`)
+through one property map, item models and `br_*` callbacks (`refresh.jl` and `callbacks.jl`). Background jobs run on worker
 threads and hand their observable updates to a queue that the 16 ms tick of the window
 applies on the GUI thread. Long core calls report progress and cancel through callbacks that
 run on the task of the job: `optimize_pointing` calls one per objective evaluation, and

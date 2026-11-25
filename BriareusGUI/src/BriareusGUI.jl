@@ -188,7 +188,11 @@ include("canvas/scene_canvas.jl")
 include("canvas/placement_triad.jl")   # the placement triad on the selected part
 include("canvas/map_canvas.jl")
 include("canvas/time_canvas.jl")
-include("qt/shell.jl")
+include("qt/platform.jl")               # Qt and GLFW guards, glyph and canvas warm-up, the window icon
+include("qt/models.jl")                 # the rows of the item models
+include("qt/refresh.jl")                # the shell, and what QML shows of the session
+include("qt/callbacks.jl")              # the tick and the functions QML calls
+include("qt/window.jl")                 # `briareus`
 include("app/app.jl")                  # the `briareus` command and its shortcuts
 
 using PrecompileTools: @setup_workload, @compile_workload
