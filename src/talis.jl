@@ -153,7 +153,11 @@ listed under the part name.
   of curvature is < `cylinder_radius` (2 mm, cylindrical) or < `sphere_radius` (5 mm,
   spherical); otherwise the specular 1ω reflection from every uncleared facet must stay >
   `reflection_angle` (20°) from every open quad (`open_ports`), less twice the tolerance
-  angle (a tilt by α turns a reflection by 2α). Both limits are on the unsigned radius: a
+  angle (a tilt by α turns a reflection by 2α). On a curved surface the angle of each
+  sub-triangle is also reduced by twice the spread of the surface normal over it (the
+  largest angle between the normals at its centroid and at its vertices), so a coarse mesh
+  does not clear a port that lies between the reflections of its sampled normals. Both
+  limits are on the unsigned radius: a
   concave surface diverges its reflection in the far field as a convex one does. Curvature
   comes from `curvature[name]` when given, and otherwise from the `CylinderSurface`,
   `SphereSurface`, `ConeSurface` or `TorusSurface` of the component or a planar mesh. On a
@@ -513,7 +517,7 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     varying = kind === :cone || kind === :torus
     scat = (Inf, NaN, NaN, aim)                  # (limit − radius, radius, limit, point), the least
     gentle = 0.0
-    for (leaf, n) in zip(g.leaves, g.normals)
+    for (leaf, n, spread) in zip(g.leaves, g.normals, g.spreads)
         tri = (leaf[1], leaf[2], leaf[3])
         _talis_reaches(fw, tri, cx.lip1 + cx.tol.tanα, cx.omega1_margin, cx.ε) || continue
         if varying
@@ -529,7 +533,8 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
         hitn = _talis_reaches(fn, tri, cx.lip1, 0.0, cx.ε)
         for (kb, _, _) in bl
             r = kb - 2 * dot(kb, n) * n
-            α = minimum(acosd(clamp(dot(r, p), -1.0, 1.0)) for p in cx.ports)
+            # a normal turned by the spread turns the reflection by twice that
+            α = minimum(acosd(clamp(dot(r, p), -1.0, 1.0)) for p in cx.ports) - 2 * spread
             α < αw && ((αw, wp) = (α, leaf[4]))
             hitn && (αn = min(αn, α))
         end
@@ -861,11 +866,15 @@ function _talis_stay_in(t::Target, beams, surf, limit, htol)
 end
 
 # Mesh triangles, sub-triangles (a, b, c, centroid) and their normals (exact on sphere,
-# cylinder and cone surfaces) of a component.
+# cylinder, cone and torus surfaces) of a component. `spreads` holds, per sub-triangle of
+# a curved surface, the largest angle (degrees) between the surface normal at its centroid
+# and at its vertices, which bounds the normals of the surface over it; it is 0 on a flat
+# mesh.
 function _talis_samples(t::Target, ci, level)
     c = t.components[ci]
     curved = c.surface isa Union{SphereSurface,CylinderSurface,ConeSurface,TorusSurface}
     tris, leaves, normals, buf = NTuple{3,Vec3}[], NTuple{4,Vec3}[], Vec3[], Vec3[]
+    spreads = Float64[]
     for k in eachindex(t.tri_area)
         (t.tri_comp[k] == ci && t.tri_area[k] > 0) || continue
         v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
@@ -876,10 +885,18 @@ function _talis_samples(t::Target, ci, level)
             a, bb, d = buf[j], buf[j+1], buf[j+2]
             m = (a + bb + d) / 3
             push!(leaves, (a, bb, d, m))
-            push!(normals, curved ? last(surface_point(c.surface, m)) : t.tri_normal[k])
+            if curved
+                n = last(surface_point(c.surface, m))
+                push!(normals, n)
+                push!(spreads, maximum(x -> acosd(clamp(dot(n, last(surface_point(c.surface, x))), -1.0, 1.0)),
+                                       (a, bb, d)))
+            else
+                push!(normals, t.tri_normal[k])
+                push!(spreads, 0.0)
+            end
         end
     end
-    return (; tris, leaves, normals)
+    return (; tris, leaves, normals, spreads)
 end
 
 # The mesh triangles of the components `cis`.
@@ -901,7 +918,8 @@ end
 # The samples of several components (the pieces of a part) as one.
 _merge_samples(gs) = (; tris = reduce(vcat, (g.tris for g in gs)),
                       leaves = reduce(vcat, (g.leaves for g in gs)),
-                      normals = reduce(vcat, (g.normals for g in gs)))
+                      normals = reduce(vcat, (g.normals for g in gs)),
+                      spreads = reduce(vcat, (g.spreads for g in gs)))
 
 # The free edges (one opaque triangle) of the given components, as segments; vertices
 # are merged by position across components.

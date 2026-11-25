@@ -166,6 +166,22 @@
     m4 = trow(rb4, :management_1w, :ball)
     @test m4.status === :pass && m4.unit === :mm
     @test m4.margin ≈ 1.0
+    # A coarse mesh of that sphere and a port on the reflection from one of its vertices:
+    # the reflections of the sampled normals all miss the port by more than 21°, and the
+    # spread of the normal over each facet brings the port within reach.
+    cb = 12.0 * ô
+    coarse = Component(:ball, translate(sphere_mesh(6.0; ntheta = 4, nphi = 8), cb), gold();
+                       surface = SphereSurface(6.0; center = cb))
+    tcb = Target(coarse)
+    vs = unique(v for j in eachindex(tcb.tri_area) for v in (tcb.tri_v0[j], tcb.tri_v0[j] + tcb.tri_e1[j]))
+    v = vs[argmax([dot(normalize(x - cb), -k) for x in vs])]
+    nvx = normalize(v - cb)
+    port = k - 2 * dot(k, nvx) * nvx
+    sampled = [(n = normalize(tcb.tri_v0[j] + (tcb.tri_e1[j] + tcb.tri_e2[j]) / 3 - cb); k - 2 * dot(k, n) * n)
+               for j in eachindex(tcb.tri_area)]
+    @test minimum(acosd(clamp(dot(r, port), -1, 1)) for r in sampled) > 21
+    mcb = trow(talis_check(tcb, [bl]; capture = (), open_ports = [port], level = 0), :management_1w, :ball)
+    @test mcb.status === :fail && mcb.worst <= -1 + 1e-9
     cyl(rad) = Component(:stalk, transform(cylinder_mesh(rad, -3.0, 3.0; nz = 6, nphi = 24, inward = false),
                                            hcat(ô, k, cross(ô, k)), 9.0 * ô), gold();
                          surface = CylinderSurface(rad; origin = 9.0 * ô, axis = cross(ô, k)))
