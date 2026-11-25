@@ -317,14 +317,28 @@ function _sah_bvh(b::BVH; leaf::Integer = 4, nbins::Integer = 16)
     cen = [(lo[k] + hi[k]) / 2 for k in 1:n]
     bins = (zeros(Int, nbins), Vector{Vec3}(undef, nbins), Vector{Vec3}(undef, nbins),
             zeros(nbins))
-    _sah_build!(nodes, items, lo, hi, cen, 1, n, leaf, bins)
+    _sah_build!(nodes, items, lo, hi, cen, 1, n, leaf, bins, 0)
     return BVH(nodes, items, b.v0, b.e1, b.e2, b.ids)
 end
 
 _box_area(lo, hi) = (e = hi - lo; 2 * (e[1] * e[2] + e[2] * e[3] + e[3] * e[1]))
 _bin(c, ax, clo, chi, nb) = clamp(floor(Int, (c[ax] - clo[ax]) / (chi[ax] - clo[ax]) * nb) + 1, 1, nb)
 
-function _sah_build!(nodes, items, lo, hi, cen, first, last, leaf, bins)
+# The traversals keep their node stack in a fixed `MVector{64}`, which holds a tree of
+# depth 63. The median split halves the count, so its depth is at most 31. A surface-area
+# split can peel off a few triangles at a time (sizes in geometric progression), so below
+# `_SAH_MAX_DEPTH` the build switches to the median split, and the depth stays within
+# 32 + 31.
+const _SAH_MAX_DEPTH = 32
+
+# Returns the depth of the deepest node of a tree (0 for a single leaf or no nodes).
+function _bvh_depth(b::BVH, ni::Integer = 1)
+    isempty(b.nodes) && return 0
+    node = b.nodes[ni]
+    return node.b < 0 ? 0 : 1 + max(_bvh_depth(b, node.a), _bvh_depth(b, node.b))
+end
+
+function _sah_build!(nodes, items, lo, hi, cen, first, last, leaf, bins, depth)
     blo, bhi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
     clo, chi = blo, bhi
     for k in first:last
@@ -344,6 +358,7 @@ function _sah_build!(nodes, items, lo, hi, cen, first, last, leaf, bins)
     nb = length(bc)
     best, bax, bs = Inf, 0, 0
     for ax in 1:3
+        depth < _SAH_MAX_DEPTH || break
         chi[ax] > clo[ax] || continue
         fill!(bc, 0); fill!(bl, Vec3(Inf, Inf, Inf)); fill!(bh, Vec3(-Inf, -Inf, -Inf))
         for k in first:last
@@ -376,8 +391,8 @@ function _sah_build!(nodes, items, lo, hi, cen, first, last, leaf, bins)
         end
         mid = first + m - 1
     end
-    l = _sah_build!(nodes, items, lo, hi, cen, first, mid, leaf, bins)
-    r = _sah_build!(nodes, items, lo, hi, cen, mid + 1, last, leaf, bins)
+    l = _sah_build!(nodes, items, lo, hi, cen, first, mid, leaf, bins, depth + 1)
+    r = _sah_build!(nodes, items, lo, hi, cen, mid + 1, last, leaf, bins, depth + 1)
     nodes[idx] = BVHNode(blo, bhi, Int32(l), Int32(r))
     return idx
 end

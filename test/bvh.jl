@@ -103,3 +103,20 @@ end
     end
     @test agree
 end
+
+@testset "BVH depth within the traversal stack" begin
+    # Triangles whose sizes and spacings grow geometrically: the surface-area split peels
+    # one triangle off at each level, so an unbounded build has a depth near the count.
+    # The build switches to the median split below `_SAH_MAX_DEPTH`, the depth stays
+    # within the 64-entry stack of the traversals, and the hits match brute force.
+    n = 400
+    v0 = [Vec3(1.5^k, 0.0, 0.0) for k in 1:n]
+    e1 = [Vec3(0.0, 0.1 * 1.5^k, 0.0) for k in 1:n]
+    e2 = [Vec3(0.0, 0.0, 0.1 * 1.5^k) for k in 1:n]
+    ids = Int32.(1:n)
+    b = Briareus._sah_bvh(Briareus.BVH(v0, e1, e2, ids))
+    @test Briareus._SAH_MAX_DEPTH < Briareus._bvh_depth(b) <= 63
+    rays = [(Vec3(0.0, 0.02 * 1.5^k, 0.02 * 1.5^k), Vec3(1.0, 0.0, 0.0)) for k in 1:n]
+    @test all(r -> closest_hit(b, r[1], r[2])[2] == _brute_closest(r[1], r[2], v0, e1, e2, ids)[2], rays)
+    @test all(r -> any_hit(b, r[1], r[2]), rays)
+end

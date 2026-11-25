@@ -232,7 +232,7 @@ operators are kept. A history advances forward in time, so each keyframe is buil
 struct Keyframes{B}
     build::B
     time::Vector{Float64}
-    beams::Vector{Beam}
+    beams::Vector{Beam{Float64}}
     closed::Union{Nothing,Vector{Vector{Int}}}     # the cavities balanced (`_cavities`)
     keep::Int
     deposition_kw::Any
@@ -241,8 +241,8 @@ struct Keyframes{B}
     models::Dict{Int,RadiationModel}
     used::Vector{Int}                              # keyframes, most recently used first
     ops::Dict{Int,DepositionOperator}
-    between::Base.RefValue{Any}                    # (τ, model) last interpolated
-    between_op::Base.RefValue{Any}                 # (τ, operator) last built between keyframes
+    between::Base.RefValue{Union{Nothing,Tuple{Float64,RadiationModel}}}          # (τ, model) last interpolated
+    between_op::Base.RefValue{Union{Nothing,Tuple{Float64,DepositionOperator}}}   # (τ, operator) last built between keyframes
     lock::ReentrantLock
 end
 
@@ -253,9 +253,10 @@ function Keyframes(build, times, beams::AbstractVector{<:Beam}; closed = nothing
     issorted(ts) && allunique(ts) || throw(ArgumentError("keyframe times must increase"))
     keep >= 2 || throw(ArgumentError("keep at least two keyframes"))
     ref = build(ts[1])
-    return Keyframes(build, ts, collect(Beam, beams), _cavities(ref, something(closed, ref.closed)), Int(keep),
+    return Keyframes(build, ts, collect(Beam{Float64}, beams), _cavities(ref, something(closed, ref.closed)), Int(keep),
                      deposition_kw, viewfactor_kw, ref, Dict{Int,RadiationModel}(), Int[],
-                     Dict{Int,DepositionOperator}(), Ref{Any}(nothing), Ref{Any}(nothing),
+                     Dict{Int,DepositionOperator}(), Ref{Union{Nothing,Tuple{Float64,RadiationModel}}}(nothing),
+                     Ref{Union{Nothing,Tuple{Float64,DepositionOperator}}}(nothing),
                      ReentrantLock())
 end
 
@@ -359,7 +360,7 @@ function deposition_at(kf::Keyframes, τ::Real)
         b = kf.between_op[]
         b !== nothing && b[1] == τ && return b[2]
         op = DepositionOperator(model_at(kf, τ).target, kf.beams; kf.deposition_kw...)
-        kf.between_op[] = (τ, op)
+        kf.between_op[] = (Float64(τ), op)
         return op
     end
 end
