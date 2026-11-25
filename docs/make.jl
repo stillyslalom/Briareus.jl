@@ -65,6 +65,11 @@ end
 
 tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
 
+# The logo of the documentation is the icon of the desktop application (written by
+# `make_icons.jl`), copied into the assets (gitignored) so that one file is kept.
+cp(joinpath(@__DIR__, "..", "BriareusGUI", "src", "qml", "icons", "briareus.svg"),
+   joinpath(@__DIR__, "src", "assets", "logo.svg"); force = true)
+
 @phase "makedocs" makedocs(;
     sitename = "Briareus.jl",
     modules = [Briareus],

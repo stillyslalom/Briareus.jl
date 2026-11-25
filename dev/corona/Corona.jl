@@ -5,7 +5,10 @@
 # research notes, "Corona model prototype" and "Corona absorption operator"). This is
 # research code outside the package API. Model (b) of the prototype moved into
 # src/corona.jl, and a spherical-exponential copy of this tracer guards it in
-# test/corona_raytrace.jl. p2.jl runs the P2 study.
+# test/corona_raytrace.jl. p2.jl runs the P2 study. The three copies stay separate on
+# purpose: the test reference shares no ray code with the operator that it checks, and the
+# table interpolation of this file (`_hermite` on a uniform grid, with the slope) is not
+# that of the package (`src/utils.jl`, a non-uniform grid).
 #
 #   `trace_ray` / `trace_beams`: RK4 integration of the ray equations in 3-D through
 #   any n_e(x) (spherical, tabulated, planar, or P2-perturbed), rays launched on a

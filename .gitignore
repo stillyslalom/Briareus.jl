@@ -1,4 +1,5 @@
 Manifest.toml
 /docs/build/
 /docs/src/tutorials/
+/docs/src/assets/logo.svg
 *.log

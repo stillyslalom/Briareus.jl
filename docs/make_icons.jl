@@ -79,7 +79,8 @@ mktempdir() do tmp
     end
     for d in dirs
         mkpath(d)
-        write(joinpath(d, d == dirs[1] ? "logo.svg" : "briareus.svg"), drawing(; detail = true))
+        # docs/make.jl copies the logo of the documentation from the application icon
+        d == dirs[2] && write(joinpath(d, "briareus.svg"), drawing(; detail = true))
         write_ico(joinpath(d, d == dirs[1] ? "favicon.ico" : "briareus.ico"), filter(p -> p.first <= 256, pngs))
     end
     write(joinpath(dirs[2], "briareus.png"), Dict(pngs)[256])
