@@ -45,7 +45,15 @@ using SHA: sha256
 using ZipArchives: ZipWriter, ZipReader, zip_newfile, zip_commitfile, zip_findlast_entry, zip_readentry
 
 include("controllers/shared.jl")
-include("controllers/target_setup.jl")
+include("controllers/mesh_spec.jl")           # element sizes
+include("controllers/part_spec.jl")           # windows and parts as specifications, their components
+include("controllers/cad_cache.jl")           # part meshes, CAD files, targets and their caches
+include("controllers/target_setup.jl")        # the setup, its build and summary
+include("controllers/windows.jl")             # window edits
+include("controllers/parts.jl")               # part edits, hohlraum sections
+include("controllers/part_frames.jl")         # user frames, placement steps, moves and turns
+include("controllers/roles.jl")               # part and piece roles, the capsule fit
+include("controllers/starters.jl")            # starters
 include("controllers/assemblies.jl")          # assemblies and membership in the model tree
 include("controllers/beam_table.jl")
 include("controllers/user_frames.jl")         # port frames' ports, the coordinate transform
