@@ -251,6 +251,14 @@ end
         im = diagnostic_image(sess, "nif_sxi_lower").values
         @test im == shown(imager_image(d.view, t, L[:, kc]; transmission = T[:, kc]))
         @test sum(im) < (1 - 1e-3) * sum(shown(imager_image(d.view, t, L[:, kc])))
+        # The intensity series is the total of that image before the blur: each pixel's
+        # radiance times the open fraction of the lip on its line of sight.
+        P, Q = Briareus.GUIAPI.imager_view(d.view, t)
+        px = (d.view.camera.width / d.view.camera.nx)^2
+        total(k, attenuated) = px * sum(P[i] > 0 ? L[P[i], k] * (attenuated && Q[i] > 0 ? T[Q[i], k] : 1.0) : 0.0
+                                        for i in eachindex(P))
+        @test d.intensity[kc] ≈ total(kc, true) rtol = 1e-12
+        @test d.intensity[kc] < (1 - 1e-3) * total(kc, false) && d.intensity[ko] ≈ total(ko, false) rtol = 1e-12
         # The x-ray image of the drive takes the open fractions of its solution. The
         # static drive has no time, so its lips are open and the image is the plain one.
         xray_image!(sess; direction = (0.3, 0, 1), up = (0, 1, 0), width = 8.0, nx = 96)

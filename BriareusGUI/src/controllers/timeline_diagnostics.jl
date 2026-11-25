@@ -328,17 +328,19 @@ _closing_lips(t::Target) =
 # intensity, note, view, L, transmission, frames)`. For an imager, `L` the detected
 # radiance per element and step, `transmission` the open fraction per element and step
 # where the target has closing lips (`nothing` without them), `intensity` the detected
-# intensity toward the pinhole (TW/sr: the total of the unattenuated image over the
-# object plane) and `frames` its recording (`imager_record`: one integrated image, or a
+# intensity toward the pinhole (TW/sr: the total of the image over the object plane, the
+# lines of sight through a lip weighted by its open fraction) and `frames` its recording (`imager_record`: one integrated image, or a
 # frame per gate, the lines of sight through a lip weighted by its open fraction).
 function _recorded(v, j, h, t::Target)
     rows = [r.diag[j] for r in h.record]
     if v.view isa XrayImager
         L = reduce(hcat, [r.L for r in rows])
         transmission = first(h.record).open === nothing ? nothing : reduce(hcat, [r.open for r in h.record])
-        P = Briareus.GUIAPI.imager_pixels(v.view, t)
+        P, Q = Briareus.GUIAPI.imager_view(v.view, t)      # the element and the lip element of each pixel
         a = (v.view.camera.width / v.view.camera.nx)^2
-        intensity = [a * sum((p > 0 ? Float64(L[p, k]) : 0.0 for p in P); init = 0.0) for k in axes(L, 2)]
+        seen(i, k) = transmission === nothing || Q[i] == 0 ? 1.0 : Float64(transmission[Q[i], k])
+        intensity = [a * sum((P[i] > 0 ? Float64(L[P[i], k]) * seen(i, k) : 0.0 for i in eachindex(P)); init = 0.0)
+                     for k in axes(L, 2)]
         frames = imager_record(v.view, t, h.time, Float64.(L);
                                transmission = transmission === nothing ? nothing : Float64.(transmission))
         return (; v.id, v.name, kind = :xray_imager, Tr = fill(NaN, length(rows)), intensity,

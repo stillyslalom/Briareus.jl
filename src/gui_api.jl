@@ -16,7 +16,7 @@ exported and can change with any release.
   `unconverted_at!`, `part_series`.
 - Diagnostics and files: `BUILTIN_DIAGNOSTICS`, `read_definitions`,
   `checked_definitions`, `definitions`, `resolve_definition`, `saved_paths`,
-  `imager_pixels`, `map_csv!`.
+  `imager_view`, `map_csv!`.
 """
 module GUIAPI
 
@@ -30,6 +30,6 @@ using ..Briareus: _step_refs as step_references, _step_axis as step_axis, _relat
                   _part_series as part_series,
                   _BUILTIN_DIAGNOSTICS as BUILTIN_DIAGNOSTICS, _read_all as read_definitions,
                   _checked as checked_definitions, _definitions as definitions, _resolve as resolve_definition,
-                  _saved_paths as saved_paths, _imager_pixels as imager_pixels, _map_csv! as map_csv!
+                  _saved_paths as saved_paths, _imager_view as imager_view, _map_csv! as map_csv!
 
 end # module GUIAPI
