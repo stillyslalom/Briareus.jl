@@ -46,7 +46,7 @@ const LITERATE = joinpath(ROOT, "docs", "literate")
 const MAKE = joinpath(ROOT, "docs", "make.jl")
 
 # The modules whose docstrings the build documents (`makedocs(; modules)`).
-const MODULES = (Briareus, Briareus.Benchmarks)
+const MODULES = (Briareus, Briareus.Benchmarks, Briareus.GUIAPI)
 
 # The identifier a `@docs` entry or a code reference names: the last component of a
 # possibly qualified name, with any call signature dropped.
@@ -180,8 +180,14 @@ struct Doc
     sig::Any
     text::String
     path::String
+    home::Module      # the module whose docs hold it: `mod`, or for a module's docstring the module itself
 end
 key(d::Doc) = (d.mod, d.name, d.sig)
+
+# Whether `d` is the docstring of the module that holds it. Julia files it under the
+# parent's binding (`Binding(Briareus, :Benchmarks)` in the docs of `Benchmarks`), and
+# Documenter renders it with the module, as a public name of it.
+ismoduledoc(d::Doc) = d.home !== d.mod && nameof(d.home) === Symbol(d.name) && parentmodule(d.home) === d.mod
 
 # Every docstring of the documented modules. The docstring of a module itself is held by
 # `Binding(M, nameof(M))`.
@@ -192,7 +198,7 @@ function docstrings(mods = MODULES)
         for (sig, docstr) in multidoc.docs
             parts = String[String(t) for t in docstr.text if t isa AbstractString]
             push!(out, Doc(binding.mod, String(binding.var), sig, join(parts, "\n"),
-                           normpath(string(get(docstr.data, :path, "")))))
+                           normpath(string(get(docstr.data, :path, ""))), mod))
         end
     end
     return out
@@ -232,8 +238,8 @@ function autodocs_select(fields, docs)
     filt = get(fields, :Filter, x -> true)
     sel = Doc[]
     for d in docs
-        d.mod in mods || continue
-        p = ispublic_name(d.mod, d.name)
+        (d.mod in mods && d.home === d.mod) || (ismoduledoc(d) && d.home in mods) || continue
+        p = ismoduledoc(d) || ispublic_name(d.mod, d.name)
         (p && public) || (!p && private) || continue
         category(d.mod, d.name) in order || continue
         isempty(pagelist) || any(pg -> endswith(d.path, pg), pagelist) || continue
@@ -247,7 +253,13 @@ end
 function public_names(mods = MODULES)
     out = Tuple{Module,String}[]
     for mod in mods, n in names(mod)
-        n === nameof(mod) && continue
+        if n === nameof(mod)
+            # The name of a module counts when the module has a docstring, which
+            # Documenter then wants rendered. The docstring is filed under the parent.
+            haskey(Base.Docs.meta(mod), Base.Docs.Binding(parentmodule(mod), n)) &&
+                push!(out, (parentmodule(mod), String(n)))
+            continue
+        end
         isdefined(mod, n) && Base.which(mod, n) === mod || continue
         push!(out, (mod, String(n)))
     end

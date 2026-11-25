@@ -789,3 +789,13 @@ record!(sess); undo!(sess)                       # undo/redo steps (a window rec
 
 The screenshots on this page are produced by `dev/gui_screenshots.jl` in the
 repository, which drives the real window through the same callbacks as its menus.
+
+## The boundary with Briareus
+
+The application calls the exported functions of Briareus, and a short list of internals
+that it reaches through one submodule. A test of the application fails when its source
+refers to any other private name of the core.
+
+```@docs
+Briareus.GUIAPI
+```
