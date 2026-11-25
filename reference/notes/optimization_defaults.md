@@ -1648,3 +1648,47 @@ the exact signed distance d (mm).
 - Confidence **H** for the table (geometry only). The script is not kept; the numbers
   follow from `_sampson_distance` and `_ellipse_closest` on the grid above.
 
+
+## Beam rules of engagement (2026-11-25) *engineering default*
+
+`roe_scan` scores the loss of each beam, each quad and pairs of them against criteria,
+each a function of an `Evaluation` with a green and an amber threshold.
+
+- No public facility document gives numeric drop criteria per beam or quad. The default
+  thresholds of the built-in criteria are choices of this package, to be replaced by the
+  limits of the campaign, and are not facility criteria. Confidence **L** as limits.
+
+| Criterion | Score | Green ≤ | Amber ≤ |
+|---|---|---|---|
+| `roe_drive`, `roe_face_flux` | fractional loss of the mean flux | 0.02 | 0.05 |
+| `roe_mode(l)` | change of `aₗ/a₀` | 0.01 | 0.03 |
+| `roe_hotspot_velocity` | speed, km/s | 10 | 30 |
+| `roe_yield` | fractional loss of the piston-model yield | 0.02 | 0.10 |
+| `roe_face_nonuniformity` | rise of the RMS over the mean | 0.005 | 0.02 |
+| `roe_temperature` | change, eV | 2 | 5 |
+| `roe_flux_balance` | change of `(a − b)/(a + b)` | 0.02 | 0.05 |
+| `roe_foil_irradiance` | fractional loss | 0.05 | 0.15 |
+| `roe_foil_nonuniformity` | rise of the RMS over the mean | 0.05 | 0.15 |
+| `roe_foil_centroid` | shift, mm | 0.02 | 0.05 |
+| `roe_backlighter_signal` | fractional loss of He-α photons | 0.10 | 0.25 |
+| `roe_illumination_rms`, `roe_corona_rms` | RMS over the mean | 0.02 | 0.05 |
+
+- The tier rules are also choices of this package. A unit has the tier of its single
+  outage, a green unit whose pair with another green unit is red is raised to amber, and
+  the budget of a role allows two green units together only when every scanned pair of
+  them stays green or the exceptions are listed. Three or more outages are not scanned.
+- Without a laser–plasma model the deposition is linear in the beam powers, and an outage
+  is the nominal deposition less the deposition of the dropped beams alone. Checked
+  against a fresh deposition, a radiosity solve and moments of the solved flux with the
+  beams at zero power: the scores agree to 9e-12 relative on a hohlraum with a capsule
+  (the 48 single quads and 23 of the pairs), and within the 1e-8 of the tests on a
+  package face in a halfraum, on a foil and on a bare sphere under the 60 OMEGA beams.
+  A scan with every outage evaluated in full agrees to 4e-15 relative. Confidence **H**.
+- Symmetric cases: four beams 90° apart on a foil lose a quarter of the irradiance each,
+  to 1e-15, and an opposed pair leaves the centroid of the absorbed power in place. On a
+  NIF hohlraum, the quad nearest the antipode of a dropped quad cancels 69% to 93% of the
+  hot-spot velocity of the single drop, while the quad nearest the mirror image through
+  the equator cancels the axial part only and changes the speed by 0.74 to 1.6 times.
+- Measured on four threads, 192 NIF beams on a hohlraum of 1,428 elements with five
+  capsule criteria: the tables and the 240 single outages of beams and quads take 0.19 s,
+  and the 1,128 quad pairs add 0.05 s. The 48 quads evaluated in full take 2.2 s.

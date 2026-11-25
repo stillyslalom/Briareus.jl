@@ -191,6 +191,7 @@ Optimizer internals, defaults and cost.
 - [A ladder study's hand-written pieces as API (2026-11-20) *derived*](notes/optimization_defaults.md#a-ladder-studys-hand-written-pieces-as-api-2026-11-20-derived)
 - [Least violation, capped inner runs and phase 1's budget (2026-11-20) *measured*](notes/optimization_defaults.md#least-violation-capped-inner-runs-and-phase-1s-budget-2026-11-20-measured)
 - [The ellipse distance of the keep-outs (2026-11-25) *measured*](notes/optimization_defaults.md#the-ellipse-distance-of-the-keep-outs-2026-11-25-measured)
+- [Beam rules of engagement (2026-11-25) *engineering default*](notes/optimization_defaults.md#beam-rules-of-engagement-2026-11-25-engineering-default)
 
 ## Contents
 
