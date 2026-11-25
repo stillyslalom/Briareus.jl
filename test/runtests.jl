@@ -35,6 +35,7 @@ shard_include(file) = in_shard(file) && include(file)
 include("docrefs.jl")
 
 shard_include("basics.jl")
+shard_include("gui_api.jl")
 shard_include("bvh.jl")
 shard_include("facilities.jl")
 shard_include("quads_beams.jl")

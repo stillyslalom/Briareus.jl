@@ -193,6 +193,7 @@ include("visrad_json.jl")
 include("visrad_results.jl")
 include("cbet.jl")
 include("benchmarks.jl")
+include("gui_api.jl")
 
 # Precompile workload for the time to first design. A coarse NIF hohlraum goes through
 # setup, evaluation, a short optimization with keep-outs, clearance, the radiation solve
