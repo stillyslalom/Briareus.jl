@@ -110,8 +110,10 @@ notes describe them generically. Check them before listing a run as missing.
    more than 5 minutes on 16 threads; the comparison there used `:centroid` visibility.
 8. **VisRad import and export: what is skipped.** Each case is warned about or refused;
    most need a sample workspace that uses the feature.
-   - Beams: unconverted light (read VisRad's green/red powers into the ratios of
-     `unconverted_deposition`; the import still takes 3ω only); time-dependent powers
+   - Beams: the green and red powers under the absolute and blue-relative models and
+     the color multipliers are read (`visrad_unconverted`) but unchecked against a computed
+     workspace, and the application holds one ratio per color, so differing fractions
+     become their power-weighted mean; time-dependent powers
      (power mode ≠ 0; VisRad's time unit is seconds), energy-normalized beams, named
      pulse shapes; DPR beams; pointing method 1 and target-mount or diagnostic-port
      frames; objects placed by a key point other than the centroid; quad beams pointed

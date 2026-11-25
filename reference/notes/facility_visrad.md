@@ -694,6 +694,13 @@ test fixture rebuilds the layout from rows copied from these files.
   includes or displays, so a drive tuned in total power keeps its 3ω power when the
   unconverted cones are hidden or switched off.
   **H** for model 2 (measured), **M** for the numbering of the others
+  `visrad_unconverted` (2026-11-25) gives the red (1ω) and green (2ω) cone powers of
+  each beam: the color column as TW under model 1, times the power column under model 2
+  (fraction of the total) and model 3 (fraction of the blue cone, the power column then
+  being the blue power), 0 for a cone that is off. The multiplier of each color and the
+  random multiplier are applied as to the blue cone. Models 1 and 3 and the multipliers
+  follow VisRad's dialog text and are not checked against a computed workspace. **L**
+  (model 2 with the cones off, measured: **H**)
 - **Deposition check (foil workspace, 2026-10-17).** The `[Power Source Data]` section
   lists, per object, one row per element: index, direct laser power source (TW/cm²),
   uniform source, albedo, x-ray conversion efficiency, laser reflectivity, pre-reflection

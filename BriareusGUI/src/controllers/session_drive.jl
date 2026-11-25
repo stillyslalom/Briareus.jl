@@ -478,7 +478,13 @@ whose parts are the workspace's objects (`:visrad` parts: each keeps its place, 
 and conversion; CAD windings are repaired and surfaces remeshed to the target's element
 size), in one assembly named after the file (its frame at TCC, the objects placed in it,
 so moving the assembly moves them all: [`add_assembly!`](@ref)), and the workspace's
-beams, in their clusters as groups, switched on where VisRad delivers power. Objects for which `include` is false (by default those VisRad
+beams, in their clusters as groups, switched on where VisRad delivers power. The beams
+whose red (1ω) or green (2ω) cone is on in VisRad take part with that light
+([`set_participation!`](@ref)), and the unconverted ratios of the drive
+([`set_unconverted_ratio!`](@ref)) are set to the fractions of the workspace
+(`visrad_unconverted`), so the 1ω checks and the unconverted deposition run on the beams
+VisRad lights. Where the fractions differ between beams the drive takes their mean
+weighted by the 3ω power, and `status` gives the range. Objects for which `include` is false (by default those VisRad
 leaves out of both its laser and radiosity calculations) are imported but left out of
 the calculations, drawn as ghosts. The workspace becomes the template of
 [`export_visrad_workspace`](@ref), and the drive deposits with VisRad's beam model and
@@ -561,8 +567,13 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         # the workspace's assembly is shown open in the model tree
         _assign!(sess.view.expanded, union(sess.view.expanded[], ("assembly:" * String(parts[end].name),)))
         bs = ws.beams
+        # VisRad's red (1ω) and green (2ω) cones: the beams that carry them take part, at
+        # the workspace's fraction of the 3ω power
+        uc = visrad_unconverted(ws)
         set_beams!(sess.beams, bs; preset = :custom, enabled = [b.power > 0 for b in bs],
-                   cluster = Symbol[b.group for b in bs])
+                   cluster = Symbol[b.group for b in bs],
+                   unconverted = [(a > 0, b > 0) for (a, b) in zip(uc.ratio.omega1, uc.ratio.omega2)])
+        ucnote = _set_visrad_ratio!(sess.drive, uc, bs)
         sess.beams.path[] = path
         sess.visrad_source[] = path
         # a CAD assembly's drive runs on its cavity around TCC (outer faces and mounting
@@ -580,7 +591,7 @@ Base.@nospecializeinfer function import_visrad_workspace!(
                         (isempty(far) ? "" :
                          "; drawn only, far from the target (Include in calculations puts one back " *
                          "for the laser, clearance and drive): " * join(far, ", ")) *
-                        _radiation_note(sess)
+                        ucnote * _radiation_note(sess)
         done()
     end
     if spawn
@@ -589,6 +600,28 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         commit(_try_job(job))
     end
     return sess
+end
+
+# Set the unconverted ratios of the drive from those of a workspace (`visrad_unconverted`).
+# The drive holds one ratio per color for all beams, so beams whose ratios differ get the
+# mean weighted by their 3ω power, which keeps the unconverted power of the color; the
+# returned note for the status line says so. A color no beam carries keeps its ratio.
+function _set_visrad_ratio!(dr::DriveState, uc, beams)
+    r = collect(dr.unconverted_ratio[])
+    note = ""
+    for (j, (label, v)) in enumerate((("1ω", uc.ratio.omega1), ("2ω", uc.ratio.omega2)))
+        on = findall(>(0), v)
+        isempty(on) && continue
+        lo, hi = extrema(v[on])
+        P = [beams[i].power for i in on]
+        r[j] = hi - lo <= 1e-9 * hi ? hi : sum(v[on] .* P) / sum(P)
+        note *= "; $label light on $(length(on)) beams at " *
+                (hi - lo <= 1e-9 * hi ? string(round(r[j]; sigdigits = 4)) :
+                 "$(round(lo; sigdigits = 3)) to $(round(hi; sigdigits = 3)) (the drive uses the power-weighted mean $(round(r[j]; sigdigits = 4)))") *
+                " of the 3ω power"
+    end
+    set_unconverted_ratio!(dr, r[1], r[2])
+    return note
 end
 
 """

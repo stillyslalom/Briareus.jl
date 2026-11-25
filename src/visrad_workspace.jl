@@ -453,6 +453,57 @@ end
 # beams with f_G = f_R = 0.05 (green off) deposit 3.60 TW.
 _vrw_blue_fraction(r) = round(Int, r.rg_model) == 2 ? 1 - r.power_green - r.power_red : 1.0
 
+# The power (TW) in the green (2ω) and red (1ω) cones of a raw beam row, 0 for a cone that
+# is off. Under model 1 the color column is the power, under model 2 a fraction of the
+# power column (the total) and under model 3 a fraction of the blue-cone power, which is
+# then the power column. The multiplier of the color and the random multiplier of the
+# beam apply as they do to the blue cone.
+function _vrw_unconverted_power(r)
+    model = round(Int, r.rg_model)
+    ref = model == 1 ? 1.0 : model in (2, 3) ? r.power_blue : 0.0
+    rnd = r.random_used ? r.random_mult : 1.0
+    green = r.on_green != 0 ? ref * r.power_green * (r.use_mult_green != 0 ? r.mult_green : 1.0) * rnd : 0.0
+    red = r.on_red != 0 ? ref * r.power_red * (r.use_mult_red != 0 ? r.mult_red : 1.0) * rnd : 0.0
+    return (; green, red)
+end
+
+"""
+    visrad_unconverted(workspace) -> (; power = (; omega1, omega2), ratio = (; omega1, omega2))
+
+The unconverted light of a VisRad workspace, per beam of `workspace.beams`: the `power`
+(TW) in the red (1ω) and green (2ω) cone of each beam, and its `ratio` to the 3ω power of
+the beam, which is what [`unconverted_deposition`](@ref) and
+[`unconverted_history`](@ref) take as `ratio`. A cone that is off in VisRad has power 0.
+A quad of a template collects the beams of the file that it stands for.
+
+VisRad gives the red and green powers under one of four models per beam: none, an
+absolute power (TW), a fraction of the total beam power (the rest is then in the 3ω
+cone, as `read_visrad_workspace` imports it) or a fraction of the blue-cone power. The
+power multiplier of each color and the random multiplier of the beam are applied as to
+the blue cone. The numbering of the models and the blue fraction of the third are
+measured on a workspace; the treatment of the multipliers is assumed (research notes,
+"VisRad workspace files"). A beam with unconverted light and no 3ω power has ratio 0 and a
+warning, since a ratio cannot carry its power.
+"""
+function visrad_unconverted(ws::VisRadWorkspace)
+    byname = Dict(_vr_key(r.name) => _vrw_unconverted_power(r) for r in ws.rows)
+    members = any(b -> _is_nif_quad(b.name), ws.beams) ? _nif_quad_members() : nothing
+    p1, p2 = zeros(length(ws.beams)), zeros(length(ws.beams))
+    for (i, b) in enumerate(ws.beams)
+        k = _vr_key(b.name)
+        ks = haskey(byname, k) ? [k] :
+             _is_nif_quad(b.name) ? [_vr_key(n) for n in members[b.name] if haskey(byname, _vr_key(n))] : String[]
+        p1[i] = sum((byname[x].red for x in ks); init = 0.0)
+        p2[i] = sum((byname[x].green for x in ks); init = 0.0)
+    end
+    P = [b.power for b in ws.beams]
+    dark = [b.name for (i, b) in enumerate(ws.beams) if P[i] <= 0 && (p1[i] > 0 || p2[i] > 0)]
+    isempty(dark) ||
+        @warn "unconverted light is on for beams without 3ω power; their ratio is 0" beams = dark
+    ratio(p) = [P[i] > 0 ? p[i] / P[i] : 0.0 for i in eachindex(p)]
+    return (; power = (; omega1 = p1, omega2 = p2), ratio = (; omega1 = ratio(p1), omega2 = ratio(p2)))
+end
+
 # Beam record (as `_vr_apply` takes it) from a raw row.
 function _vrw_record(r, frame_of)
     method = round(Int, r.method)
@@ -465,8 +516,6 @@ function _vrw_record(r, frame_of)
         throw(ArgumentError("beam $(r.name): pointing toward a diagnostic port (method $method) is not supported"))
     end
     on = r.on_blue != 0
-    (r.on_green != 0 || r.on_red != 0) &&
-        @warn "beam $(r.name): unconverted (2ω/1ω) light is on in VisRad; only the 3ω power is imported (see `nif_unconverted`)"
     r.mode_blue != 0 && @warn "beam $(r.name): time-dependent power is not imported; using the constant power column"
     r.energy_norm != 0 && @warn "beam $(r.name): power is normalized to an energy in VisRad; using the power column"
     r.dpr != 0 && @warn "DPR is on for beam $(r.name); Briareus does not model DPR"

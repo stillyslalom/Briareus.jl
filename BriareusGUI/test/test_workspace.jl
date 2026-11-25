@@ -641,6 +641,37 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     @test session_state(s2) == session_state(s)
 end
 
+@testset "VisRad red and green cones on import (no GL)" begin
+    # the red cone of the first beam and the green cone of the second, switched on in
+    # the rows of the synthetic workspace (red/green model 2: fractions of the total)
+    cols = (rg_model = 20, on_green = 22, on_red = 23, power_green = 31)      # of the beam row
+    ls = split(synthetic_workspace(), '\n')
+    rows = [i for (i, l) in enumerate(ls) if length(split(l)) in (52, 53) && tryparse(Float64, split(l)[2]) !== nothing]
+    for (j, e) in (1 => (:on_red => 1,), 2 => (:rg_model => 2, :on_green => 1, :power_green => 0.02))
+        f = collect(String, split(ls[rows[j]]))
+        for (n, v) in e
+            f[cols[n]] = string(v)
+        end
+        ls[rows[j]] = "    " * join(f, "     ")
+    end
+    src = joinpath(mktempdir(), "lit.vrw")
+    write(src, join(ls, '\n'))
+    s = DesignSession(resolution = :coarse)
+    import_visrad_workspace!(s, src)
+    @test s.beams.unconverted[] == [(true, false), (false, true), (false, false)]
+    @test participates(s.beams, 1, 1) && !participates(s.beams, 1, 2) && participates(s.beams, 2, 2)
+    r1, r2 = s.drive.unconverted_ratio[]
+    @test r1 ≈ 0.05 / 0.9 && r2 ≈ 0.02 / 0.93
+    u = unconverted_ratios(s)
+    @test u.omega1 ≈ [0.05 / 0.9, 0, 0] && u.omega2 ≈ [0, 0.02 / 0.93, 0]
+    @test occursin("1ω light on 1 beams", s.status[]) && occursin("2ω light on 1 beams", s.status[])
+    # beams whose fractions differ: the mean weighted by the 3ω power
+    uc = (; ratio = (; omega1 = [0.1, 0.2, 0.0], omega2 = [0.0, 0.0, 0.0]))
+    note = Controllers._set_visrad_ratio!(s.drive, uc, [(; power = 1.0), (; power = 3.0), (; power = 2.0)])
+    @test s.drive.unconverted_ratio[][1] ≈ (0.1 + 0.6) / 4 && s.drive.unconverted_ratio[][2] ≈ r2
+    @test occursin("0.1 to 0.2", note) && occursin("power-weighted mean", note)
+end
+
 @testset "VisRad workspaces in the window (no GL)" begin
     dir = mktempdir()
     src = joinpath(dir, "work.vrw")
@@ -648,6 +679,8 @@ end
     s = DesignSession(resolution = :coarse)
     @test_throws ArgumentError export_visrad_workspace(s, joinpath(dir, "out.vrw"))
     import_visrad_workspace!(s, src)
+    # no red or green cone is on in this file: no unconverted light takes part
+    @test !any(any, s.beams.unconverted[]) && unconverted_ratios(s) === nothing
     ts = s.target
     # the objects, in one assembly named after the file (its frame at TCC)
     objs = ts.parts[][1:end-1]

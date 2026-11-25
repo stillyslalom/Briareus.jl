@@ -379,6 +379,40 @@ end
     # with f_G = f_R = 0.05 and green off, so the blue cone carries 0.9 TW. Under "None"
     # the blue cone carries all of it.
     @test b1.power ≈ 0.9 && b2.power == 1.0 && b3.power == 0.0
+    # The red and green cones are off in this file. With them switched on in the rows,
+    # the unconverted powers follow the model of each beam: fractions of the total for
+    # B113, absolute powers (TW) for B111, fractions of the blue cone for B121, which has
+    # no 3ω power and so no ratio.
+    u0 = visrad_unconverted(ws)
+    @test all(iszero, u0.power.omega1) && all(iszero, u0.ratio.omega2) && length(u0.ratio.omega1) == 3
+    cols = collect(Briareus._VRW_BEAM_COLUMNS)
+    col(n) = findfirst(==(n), cols)
+    function lit(text, edits)
+        ls = split(text, '\n')
+        rows = [i for (i, l) in enumerate(ls) if length(split(l)) in (52, 53) && tryparse(Float64, split(l)[2]) !== nothing]
+        for (j, e) in edits
+            f = collect(String, split(ls[rows[j]]))
+            for (n, v) in e
+                f[col(n)] = string(v)
+            end
+            ls[rows[j]] = "    " * join(f, "     ")
+        end
+        join(ls, '\n')
+    end
+    @test length(split(lit(synthetic_workspace(), ()), '\n')) > 100
+    pu = vrfile("lit.vrw", lit(synthetic_workspace(),
+                               (1 => (:on_red => 1, :on_green => 1, :use_mult_red => 1, :mult_red => 2.0),
+                                2 => (:rg_model => 1, :on_red => 1, :power_red => 0.3, :power_green => 0.2),
+                                3 => (:rg_model => 3, :on_green => 1, :on_blue => 0))))
+    wu = @test_logs (:warn, r"without 3ω power") match_mode = :any read_visrad_workspace(pu) |> visrad_unconverted
+    wsu = read_visrad_workspace(pu)
+    @test [b.power for b in wsu.beams] ≈ [0.9, 1.0, 0.0]
+    @test wu.power.omega1 ≈ [2 * 0.05, 0.3, 0.0] && wu.power.omega2 ≈ [0.05, 0.0, 0.05 * wsu.rows[3].power_blue]
+    @test wu.ratio.omega1 ≈ [0.1 / 0.9, 0.3, 0.0] && wu.ratio.omega2 ≈ [0.05 / 0.9, 0.0, 0.0]
+    # a quad of a template collects its beams
+    wq = visrad_unconverted(read_visrad_workspace(pu; template = nif_quads()))
+    iq = findfirst(b -> b.name == "Q11T", nif_quads())
+    @test wq.power.omega1[iq] ≈ 0.1 + 0.3 && count(>(0), wq.power.omega1) == 1
     # Rev1-Outer-2w radii are HWHM, so the 1/e semi-axes are r/(ln 2)^(1/n). Rotation 0
     # puts the major axis along the φ̂ of the quad of the beam, found from its name
     # without a template.

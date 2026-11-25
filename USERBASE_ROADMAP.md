@@ -12,9 +12,9 @@ Marks: **done**, **partial** (with what remains), **open**.
 | Item | Status | Note |
 |---|---|---|
 | A.1 witness geometry, shared 1ω contour | done | `omega1_contour`, `Omega1Approach`, `omega1_closest_approach`; the application's `unconverted_footprint` takes the mode, the view toggle for it belongs to B.2 |
-| A.2 unsigned curvature, specular accuracy | open | |
+| A.2 unsigned curvature, specular accuracy | partial | cones and tori, the normal spread, the reflection record with port and areas are in; the free-form mesh estimate is next; no reflected-flux estimate |
 | A.3 hardware disposition field | open | |
-| A.4 VisRad 1ω/2ω beam import | open | |
+| A.4 VisRad 1ω/2ω beam import | done | `visrad_unconverted`; the import sets the participation flags and the drive ratios. Only the fraction-of-total model is measured on a workspace |
 | A.5 STEP B-rep import | open | optional |
 | B.1 to B.6 | open | |
 | C.1 to C.3 | open | |
