@@ -1207,7 +1207,6 @@ _mode_gate_of(reference::AbstractVector, g, shift) =
 
 _gate_values(gates::AbstractVector{<:Real}) = gates
 _gate_values(u::NamedTuple) = _mode_floor(u.rms_mode)
-_gate_lmax(gates) = max(length(_gate_values(gates)), 1)
 
 # Return the gates per degree from the arguments of `mode_gate`. They are the gates
 # themselves, `fraction` of a floor, or the larger of physical gates and `fraction` of a

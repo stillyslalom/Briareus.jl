@@ -453,13 +453,6 @@ function _inside(s::ConeSurface, p)
     return ρ * cα - z * sα <= 1e-12 * norm(p - s.apex)
 end
 
-# Returns the one-point rule of a curved element: the projected centroid, its normal and
-# the area.
-function _one_point(t::Target, e)
-    p, n = surface_point(t.components[t.elem_comp[e]].surface, t.elem_centroid[e])
-    return [p], [t.elem_area[e]], [t.elem_curved[e] * n]
-end
-
 # The receiving polygon of a planar element, with its triangles. For a polar sector it
 # also holds the boundary loop of those triangles (same vertices, same orientation), with
 # the loop in 2-D coordinates of its plane for `_closer_than`. These are origin o, unit

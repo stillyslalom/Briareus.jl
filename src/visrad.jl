@@ -1053,12 +1053,6 @@ function read_visrad_table(path::AbstractString; header = nothing)
     return (; header = names, labels, data = M)
 end
 
-function _vr_col(tbl, re::Regex; required = true)
-    j = findfirst(h -> occursin(re, h), tbl.header)
-    j === nothing && required && throw(ArgumentError("no column matching $re in $(tbl.header)"))
-    return j === nothing ? nothing : tbl.data[:, j]
-end
-
 # Flux unit scale to TW/cm² from a header.
 _vr_flux_scale(h) = occursin(r"mm\s*\^?2|mm²"i, h) ? 100.0 : occursin(r"w/cm"i, h) && !occursin(r"tw"i, h) ? 1e-12 : 1.0
 
