@@ -131,7 +131,7 @@ end
     # the mock HYBRID-E pointing per cone: z, r and split = -s
     hyb = hybride_mock_pointing(beams)
     pc = GroupPointing(beams; fields = (:z, :r, :split))
-    xc = parameters(pc; (c => (z = v.z, r = v.r, split = -v.s) for (c, v) in Briareus.HYBRIDE_MOCK_POINTING)...)
+    xc = parameters(pc; (c => (z = v.z, r = v.r, split = -v.s) for (c, v) in Briareus.Benchmarks.HYBRIDE_MOCK_POINTING)...)
     @test maximum(norm(a.aim - b.aim) for (a, b) in zip(apply(pc, xc), hyb)) < 1e-12
     ph = GroupPointing(hyb; fields = (:z, :r, :split))
     @test maximum(abs.(initial_parameters(ph) .- xc)) < 1e-12

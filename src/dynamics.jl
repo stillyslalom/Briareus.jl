@@ -19,13 +19,13 @@ The radius stands for that of the LLNL dynamic view-factor model (Young et al., 
 082702, 2020), which is the average of the laser-absorption and x-ray-emission surfaces
 of a 2D HYDRA simulation, as one cylinder. The defaults are *fitted* to the hohlraum
 radius of that model for N170827 (Young Fig. 3a, digitized as
-[`young2020_radii`](@ref)). The wall starts moving at the end of the picket, 0.8 ns
+[`young2020_radii`](@ref Briareus.Benchmarks.young2020_radii)). The wall starts moving at the end of the picket, 0.8 ns
 after the turn-on (fit 0.78, range 0.68–0.85). It moves in at 0.185 mm/ns
 (0.175–0.195) and stops 0.45 mm in (0.445–0.455, ±0.03 reading), where it stays through
 the peak. `start` is therefore the turn-on of the outer cones plus 0.8 ns, and the
 default assumes a turn-on at 0. For HYBRID-E (N221204) the HYDRA laser-absorption edge
 of the wall at the waist is 0.38 ± 0.04 mm in at 6 ns (PRE 109, 025204 Fig. 1a, digitized
-as [`pre109_fig1a_wall`](@ref)). The emission surface lies outside it, so this value is
+as [`pre109_fig1a_wall`](@ref Briareus.Benchmarks.pre109_fig1a_wall)). The emission surface lies outside it, so this value is
 an upper bound on the `saturation` of that platform. Chen et al. 2020 (G-LEH) observed
 the emitting wall 0.5 mm in by 5.5 ns at 0.3 mg/cc and 0.4 mm in at 0.45 mg/cc. See the
 research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)".
@@ -50,109 +50,6 @@ wall_displacement(w::WallMotion, t) =
 
 "Wall radius (mm) at time `t` (ns) of a wall that starts at radius `R0`."
 wall_radius(w::WallMotion, R0, t) = R0 - wall_displacement(w, t)
-
-"""
-    young2020_radii() -> NamedTuple
-
-The radii of the LLNL dynamic view-factor model for N170827 against time, from Young et
-al., PoP 27, 082702 (2020), Fig. 3a, digitized (`data/young2020_fig3a.csv`, sources in
-its header). The columns are `t` (ns, 0–8 every 0.25), `wall` (the hohlraum radius, the
-average of the HYDRA laser-absorption and x-ray-emission surfaces), `leh` (from SXI, of
-which only the end value is measured) and `capsule` (ablation front), all in mm, and
-their reading errors `u_wall`, `u_leh`, `u_capsule` (0.03 mm, 0.05 where the static line
-hides the curve). The plotted initial wall radius is 3.0 mm, so displacements should be
-used. The table is the calibration target of the defaults of [`WallMotion`](@ref).
-"""
-young2020_radii() = _data_table("young2020_fig3a.csv")
-
-"""
-    young2020_albedos() -> NamedTuple
-
-The albedos of the LLNL dynamic view-factor model for N170827 against time, from Young
-et al., PoP 27, 082702 (2020), Fig. 3a top panel, digitized
-(`data/young2020_fig3a_albedo.csv`, sources in its header). The columns are `t` (ns,
-0–8 every 0.25, plus 0.55–0.65 on the drop of the wall), `wall` and `capsule`
-(quasi-1D HYDRA albedos of gold and the HDC ablator) and their reading errors `u_wall`,
-`u_capsule` (0.03; 0.05 where the static line hides the curve or on the drop). The
-static model uses 0.8 and 0.3. With [`young2020_radii`](@ref) the table defines the
-dynamic model of Young, which `TabulatedAlbedo` builds.
-"""
-young2020_albedos() = _data_table("young2020_fig3a_albedo.csv")
-
-"""
-    chen2020_leh() -> NamedTuple
-
-Measured effective LEH radius against time on five HDC basecamp shots (5.75 × 10.13 mm Au
-hohlraum, 3.37 mm LEHs, r₀ = 1.685 mm, about 400 TW from about 4.2 to 6 ns), from
-H. Chen et al., Phys. Plasmas 27, 022702 (2020), Fig. 27. The values were taken from the
-vector graphics of the accepted manuscript (`data/chen2020_fig27.csv`, sources in its
-header). The columns are:
-- `shot`: N171010, N171212, N180102, N180103, N180117;
-- `kind`: `"gleh"` for the edge from the gated LEH imager, with an analysis error of
-  10–20 µm; `"lasnex_f003_regional"`, `"lasnex_f003_global"` and `"lasnex_f015_global"`
-  for LASNEX images analyzed the same way; `"laser"` for the total delivered power;
-- `t` (ns) and `value` (radius in mm, power in TW).
-
-The table is the calibration data of [`LipClosure`](@ref).
-"""
-chen2020_leh() = _data_table("chen2020_fig27.csv")
-
-"""
-    pre109_fig1a_wall() -> NamedTuple
-
-The inner edge of the wall material at 6 ns in the HYDRA simulations of N210808 and
-N221204 drawn in PRE 109, 025204 (2024) Fig. 1a, digitized (`data/pre109_fig1a_wall.csv`,
-sources in its header). Columns `z` (mm from the waist, every 0.1 mm), `n210808`,
-`n221204` (edge radius, mm; initial wall 3.2 mm) and `region` (`"waist"`, `"inner"`,
-`"collision"`, `"outer"`, `"bubble"`, `"lip"`). Laser rays are drawn over the plasma, so
-the edge is where they end (the laser-absorption surface) or, under crossing rays, an
-upper bound on the radius. The waist rows (z < 0.9 mm) give the usable number, which
-puts the wall 0.38 ± 0.04 mm in at 6 ns.
-"""
-pre109_fig1a_wall() = _data_table("pre109_fig1a_wall.csv")
-
-"""
-    kritcher2024_capsule() -> NamedTuple
-
-The scaled capsule radius R/R(0) from HYDRA against time on the 2.05 MJ drive of
-N221204, from Kritcher et al., PoP 31, 070502 (2024) Fig. 1, digitized
-(`data/kritcher2024_fig1.csv`, sources in its header). The columns are `t` (ns, 0–9.5
-every 0.25), `n221204` (the as-shot, thicker capsule), `n210808` (the thinner N210808
-capsule on the same drive, NaN after its minimum at 9.18 ns) and `u` (reading error of
-`n221204`). The paper does not state which radius is plotted. The radius stays constant
-until about 3.6 ns, near the breakout of the first shock from the ablator into the fuel
-(3.86–3.91 ns in keyhole N230110, the N221204 design). That is about 2 ns before the
-ice–gas surface can move. The curve therefore follows the ablator–fuel interface
-(1.050 mm initially) or the center of mass of the fuel, and the ablation front is ruled
-out. It reaches its minimum at bang time (9.53 ns). It is the only published radius
-history of the N221204 capsule. See the research notes, "Capsule radius schedules:
-published histories and the API (2026-10-26)"; [`kritcher2024_radius`](@ref) gives it
-as a schedule.
-"""
-kritcher2024_capsule() = _data_table("kritcher2024_fig1.csv")
-
-"""
-    kritcher2024_radius(capsule = :n221204) -> TabulatedRadius
-
-[`kritcher2024_capsule`](@ref) as a [`RadiusSchedule`](@ref). `:n221204` gives the
-R/R(0) of the as-shot capsule on the drive of N221204 (0–9.5 ns). `:n210808` gives the
-thinner N210808 capsule on the same drive, digitized to 9.0 ns and closed at its
-minimum, 0.055 at 9.18 ns; the curve after the minimum is not digitized. These are
-published HYDRA histories (Kritcher et al., PoP 31, 070502 (2024) Fig. 1, digitized).
-Applied to the outer radius of the capsule, they are the upper bound on the ablation
-front, for a shell of constant relative thickness. For another shot,
-[`ScaledRadius`](@ref) moves the minimum to its bang time (derived).
-"""
-function kritcher2024_radius(capsule::Symbol = :n221204)
-    k = kritcher2024_capsule()
-    capsule === :n221204 &&
-        return TabulatedRadius(k.t, k.n221204;
-                               source = "Kritcher et al., PoP 31, 070502 (2024) Fig. 1, N221204 (HYDRA, published)")
-    capsule === :n210808 || throw(ArgumentError("capsule must be :n221204 or :n210808, not :$capsule"))
-    ok = findall(isfinite, k.n210808)
-    return TabulatedRadius([k.t[ok]; 9.18], [k.n210808[ok]; 0.055];
-                           source = "Kritcher et al., PoP 31, 070502 (2024) Fig. 1, N210808 capsule on N221204's drive (HYDRA, published)")
-end
 
 """
     moving_hohlraum(motion::WallMotion; radius = 2.875, kwargs...) -> (τ -> Target)

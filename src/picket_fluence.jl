@@ -161,7 +161,7 @@ sizes) and the picket energy.
 fitted at E = 1, on the HDC basecamp of Izumi et al., PoP 28, 022706 (2021). That
 platform is a 5.75 mm Au hohlraum with unsplit outer quads (research notes, "Hohlraum
 dynamics calibrated to published data (2026-10-24)"). With
-`reference =` [`basecamp_picket_fluence`](@ref)`()` and `at = 1`, E is relative to that
+`reference =` [`basecamp_picket_fluence`](@ref Briareus.Benchmarks.basecamp_picket_fluence)`()` and `at = 1`, E is relative to that
 calibration. Its pointing is a proxy, since the facility pointing is unpublished, and
 its picket energy was read from a figure by eye. The absolute E is therefore uncertain
 by more than its changes between designs. A re-pointing study is better referred to a
@@ -179,44 +179,6 @@ test is the split-quad shot of Izumi 2021 (research notes).
 """
 picket_ratio(design::PicketFluence, reference::PicketFluence; at::Real = 1.0) =
     at * (design.mean / reference.mean)     # `at` itself, exactly, at the reference
-
-# The HDC SymCap basecamp of Izumi 2021, from the header of `data/izumi2021_fig8.csv`.
-# The fields are:
-# - the length and LEH radius (mm), with the wall and capsule radii of `_BASECAMP`;
-# - the outer picket energy (kJ, all outer beams, first ns after the outer turn-on), read
-#   by eye from Izumi 2021 Fig. 3a (research notes, "The P2 swing: capsule radius,
-#   backscatter and the collision");
-# - the outer aims (mm on the axis, upper hemisphere), the proxy pointing of the package
-#   for a 5.75 mm hohlraum.
-const _BASECAMP_PICKET = (length = 10.13, leh_radius = 1.685, energy = 26.0,
-                          aim = (outer44 = 5.20, outer50 = 5.01))
-
-"""
-    basecamp_picket_fluence(; energy = 26.0, h = 0.2, capsule_h = 0.4) -> PicketFluence
-
-The outer picket fluence of the calibration platform of [`BubbleAbsorption`](@ref),
-where the `picket_ratio` is E = 1. The platform is the HDC SymCap basecamp of Izumi et
-al., PoP 28, 022706 (2021), a 5.75 × 10.13 mm Au hohlraum with 3.37 mm entrance holes and
-a 0.908 mm capsule. The mesh size is `h` (mm), and `capsule_h` is that of the capsule.
-The 128 outer beams ([`nif_beams`](@ref), with the NIF outer phase-plate spots) carry
-equal shares of `energy`, the outer picket energy in kJ over all outer beams. The value
-is about 26 kJ in the first ns after the outer turn-on, read by eye from Izumi 2021
-Fig. 3a (*L*). The quads are unsplit and aimed on the axis at z = ±5.20 mm (44.5°) and
-±5.01 mm (50°). This is the proxy pointing of the package for this hohlraum, the one
-with which the bubble opacity was calibrated; the basecamp pointing of the facility is
-unpublished (*L*). The result is the reference of [`picket_ratio`](@ref) for an absolute
-E, and the map of the design should be computed on the same `h`.
-"""
-function basecamp_picket_fluence(; energy::Real = _BASECAMP_PICKET.energy, h::Real = 0.2,
-                                 capsule_h::Real = 0.4)
-    t = hohlraum(; length = _BASECAMP_PICKET.length, radius = _BASECAMP.radius,
-                 leh_radius = _BASECAMP_PICKET.leh_radius, capsule_radius = _BASECAMP.capsule,
-                 h, capsule_h)
-    outer = [b for b in nif_beams() if b.group in (:outer44, :outer50)]
-    beams = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * getfield(_BASECAMP_PICKET.aim, b.group)),
-                    power = energy / length(outer)) for b in outer]
-    return picket_fluence(DepositionOperator(t, beams), beams)
-end
 
 # ---------------------------------------------------------------------------------------
 # Picket powers per beam

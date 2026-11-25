@@ -91,7 +91,7 @@ end
 # Here the inner quads give 1.3–1.6 times the velocity of the outer quads, against Young's
 # 2. The difference comes from this hohlraum and not from the model. Young's setup is the
 # static model of N170827: an 11.3 × 5.27 mm hohlraum with radii at 85%, albedo 0.8, the
-# requested pulses and the digitized Green's function [`young2020_kernel`](@ref). On it
+# requested pulses and the digitized Green's function [`young2020_kernel`](@ref Briareus.Benchmarks.young2020_kernel). On it
 # Briareus gives 336, 349, 161 and 152 km/s for the four cones against Young's 317, 337,
 # 170 and 146, a ratio of 2.2 against 2.07 (test suite; research notes, "Young 2020
 # validation"). The same paper gives the sensitivity to a whole-target offset from chamber

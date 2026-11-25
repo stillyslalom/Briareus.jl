@@ -79,6 +79,7 @@
 # notes, "Per-cone M-band in the drive history (2026-10-27)").
 
 using Briareus, Printf, DelimitedFiles
+using Briareus.Benchmarks
 
 pos = filter(a -> !occursin('=', a), ARGS)
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))

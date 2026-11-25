@@ -96,13 +96,7 @@ read from `data/kshell_ce.csv`, with the sources in its header. The columns are
 - one OMEGA Ti foil (Girard et al. 2005, as recalibrated in the 2016 review), held out
   with `fit = 0` as a check below the fitted lines.
 """
-function kshell_ce_data()
-    h, rows = read_csv(joinpath(@__DIR__, "..", "data", "kshell_ce.csv"))
-    num = ("Z", "hnu", "irradiance", "pulse", "ce", "u", "fit")
-    col(i) = h[i] in num ? [isempty(r[i]) ? NaN : parse(Float64, r[i]) for r in rows] :
-             String[r[i] for r in rows]
-    return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
-end
+kshell_ce_data() = _data_table("kshell_ce.csv")
 
 const _KSHELL_MODEL = Ref{Union{Nothing,KShellCEModel}}(nothing)
 const _KSHELL_LOCK = ReentrantLock()

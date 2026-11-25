@@ -40,7 +40,7 @@ export foil_material, FOIL_ELEMENTS
 export hohlraum, hohlraum_counts, capsule_counts, foil, HohlraumProfile, frustraum_profile
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,
-       beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, NIF_DIAGNOSTIC_PORTS, nif_port, nif_bundle, nif_bundles, hybride_mock_pointing, omega_ports, omega_beams, omega_spot
+       beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, NIF_DIAGNOSTIC_PORTS, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, CoronaProfile, CoronaOperator, ablation_pressure_proxy, shell_displacement_proxy, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
 export Enclosure, enclosure, cad_target
@@ -61,13 +61,11 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary, BubbleAbsorption, bubble_speed, bubble_depth,
-       bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit,
-       izumi2021_bubble, izumi2021_absorption, young2020_radii, young2020_albedos, pre109_fig1a_wall,
-       kritcher2024_capsule, kritcher2024_radius, chen2020_leh, kemp2026_sbs
-export PicketFluence, picket_fluence, picket_ratio, basecamp_picket_fluence
+       bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit
+export PicketFluence, picket_fluence, picket_ratio
 export picket_irradiance, picket_ceiling, PicketLinkedBubble, linked_bubble, bubble_prediction
 export picket_hot_elements
-export CBET, TwoZoneCBET, n221204_cbet, hybride_cbet, hybride_cbet_iraum, pulse_rise, cbet_clamp_schedule, cbet_null, n221204_fig9, n220919_fig9, n210808_fig1, pre109_fig1, hybride_shots, n221204_fig10, n221204_pulse, zylstra2022_fig2, n221204_fig9_beams, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
+export CBET, TwoZoneCBET, pulse_rise, cbet_clamp_schedule, cbet_null, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check,
        unconverted_deposition, IrradianceHistory, unconverted_history, irradiance_history,
        threshold_crossing, specular_check, preplasma_check
@@ -112,8 +110,7 @@ export clearance_floor, light_fraction, light_ceiling, light_floor
 export Relaxation, drive_floor
 export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
-       shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,
-       implosion_metrics, mode1_tolerance, swing_metrics,
+       shape_amplification, implosion_metrics, mode1_tolerance, swing_metrics,
        velocity_uncertainty, ntof_covariance, infer_velocity_errors, VelocityPenalty
 export CapsuleDrive, capsule_drive
 export PointingSummary, pointing_summary, shift_objective
@@ -195,6 +192,7 @@ include("visrad_workspace.jl")
 include("visrad_json.jl")
 include("visrad_results.jl")
 include("cbet.jl")
+include("benchmarks.jl")
 
 # Precompile workload for the time to first design. A coarse NIF hohlraum goes through
 # setup, evaluation, a short optimization with keep-outs, clearance, the radiation solve

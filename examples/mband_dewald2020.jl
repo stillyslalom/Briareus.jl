@@ -37,6 +37,7 @@
 # "Laser-spot spectrum (2026-10-24)".
 
 using Briareus, Printf
+using Briareus.Benchmarks
 
 pos = filter(a -> !occursin('=', a), ARGS)
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
@@ -55,7 +56,7 @@ zw = [t.elem_centroid[e][3] for e in wall]
 # shifted by dz.
 function pointing(dz)
     table = Dict(k => (z = v.z * L / 11.24 + (k in (:outer44, :outer50) ? dz : 0.0),
-                       r = v.r * 2.875 / 3.2, s = v.s) for (k, v) in Briareus.HYBRIDE_MOCK_POINTING)
+                       r = v.r * 2.875 / 3.2, s = v.s) for (k, v) in Briareus.Benchmarks.HYBRIDE_MOCK_POINTING)
     return hybride_mock_pointing(nif_beams(); table)
 end
 function ring(beams)

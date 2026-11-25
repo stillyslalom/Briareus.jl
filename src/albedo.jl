@@ -784,7 +784,7 @@ abstract type RadiusSchedule end
 A [`RadiusSchedule`](@ref) from a table: `r` = R/R₀ at the times `t` (ns, strictly
 increasing), linear between them and held at the ends. `source` records where the table
 comes from (paper and figure, and whether it is published or derived).
-[`kritcher2024_radius`](@ref) gives the published N221204 and N210808 tables.
+[`kritcher2024_radius`](@ref Briareus.Benchmarks.kritcher2024_radius) gives the published N221204 and N210808 tables.
 """
 struct TabulatedRadius <: RadiusSchedule
     t::Vector{Float64}

@@ -28,6 +28,7 @@
 # the fall; nothing in this study is fitted to it.
 
 using Briareus, Printf, LinearAlgebra
+using Briareus.Benchmarks
 
 const σ1 = SIGMA_SB * 1e8 * 1e2 * 1e-3       # σ (1 heV)^4: TW/mm² → MJ/(ns cm²)
 const r_eos = 0.25

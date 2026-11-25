@@ -94,8 +94,8 @@ const PULSE_SHAPE_LABELS = Dict(:n221204 => "N221204 (Pak et al. 2024)",
 
 # The published total power of pulse shape `key` against time: `(t, power)`.
 function _published_pulse(key::Symbol)
-    key === :n221204 && return (p = n221204_pulse(); (p.t, p.power))
-    key in (:n191118, :n210601) && return (z = zylstra2022_fig2(); (z.t, getproperty(z, Symbol(:power_, key))))
+    key === :n221204 && return (p = Briareus.Benchmarks.n221204_pulse(); (p.t, p.power))
+    key in (:n191118, :n210601) && return (z = Briareus.Benchmarks.zylstra2022_fig2(); (z.t, getproperty(z, Symbol(:power_, key))))
     throw(ArgumentError("a pulse shape is one of $PULSE_SHAPES"))
 end
 

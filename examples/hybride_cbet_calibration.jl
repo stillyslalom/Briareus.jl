@@ -27,6 +27,7 @@
 # with the null pinned at 0.5–2.0 Å). Writes `hybride_cbet_<variant>.txt`.
 
 using Briareus, Printf, ForwardDiff, LinearAlgebra
+using Briareus.Benchmarks
 
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
 variants = [a for a in ARGS if !occursin('=', a)]
@@ -107,10 +108,10 @@ function start(variant)
         clamp = cbet_clamp_schedule((ref.tab.t, (ref.tab.p44_in .+ ref.tab.p50_in) ./ (1 .- ref.tab.cf_in));
                                     foot = 1e-3, peak = 3e-4)
         Tc = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0], min.([1975.0, 2370.0, 2739.0, 3946.0, 4158.0, 4215.0, 5500.0], 0.95temax))
-        return TwoZoneCBET(leh_z = Briareus._HYBRIDE_LEH_Z, outside = (mach = 1.5, multiplier = 0.1, Te = Tc, clamp, saturation = :min),
+        return TwoZoneCBET(leh_z = Briareus.Benchmarks._HYBRIDE_LEH_Z, outside = (mach = 1.5, multiplier = 0.1, Te = Tc, clamp, saturation = :min),
                            inside = (multiplier = 1.5, Te = Tc, clamp, saturation = :min))
     end
-    return TwoZoneCBET(leh_z = Briareus._HYBRIDE_LEH_Z, outside = (mach = 1.23, multiplier = 0.30, Te, clamp = deck_clamp),
+    return TwoZoneCBET(leh_z = Briareus.Benchmarks._HYBRIDE_LEH_Z, outside = (mach = 1.23, multiplier = 0.30, Te, clamp = deck_clamp),
                        inside = (multiplier = 1.23, Te, clamp = deck_clamp))
 end
 fitspec(variant) = variant in ("clamp", "clampfree", "iraum") ?

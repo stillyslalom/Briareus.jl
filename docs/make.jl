@@ -72,7 +72,7 @@ cp(joinpath(@__DIR__, "..", "BriareusGUI", "src", "qml", "icons", "briareus.svg"
 
 @phase "makedocs" makedocs(;
     sitename = "Briareus.jl",
-    modules = [Briareus],
+    modules = [Briareus, Briareus.Benchmarks],
     authors = "Alex Ames",
     repo = Remotes.GitHub("stillyslalom", "Briareus.jl"),
     format = Documenter.HTML(; prettyurls = get(ENV, "CI", "false") == "true", edit_link = "main",
@@ -115,6 +115,7 @@ cp(joinpath(@__DIR__, "..", "BriareusGUI", "src", "qml", "icons", "briareus.svg"
             "Diagnostic definitions" => "reference/diagnostics.md",
             "Input and output" => "reference/io.md",
             "VisRad interchange" => "reference/visrad.md",
+            "Published data" => "reference/benchmarks.md",
         ],
     ],
     checkdocs = :exports,

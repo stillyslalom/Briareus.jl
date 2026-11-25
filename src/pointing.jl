@@ -45,7 +45,7 @@ Maps a parameter vector to beams. Beams are grouped by `by`: `:group` (e.g. a co
   quad φ̂. Each beam aim moves by `±split`, with the sign of the beam port azimuth
   measured from the mean port of the quad; beams counterclockwise of it take `+split`.
   A positive split therefore opens the aims of a quad in the sense of its ports, and a
-  negative one crosses them. The `s` of [`hybride_mock_pointing`](@ref) is
+  negative one crosses them. The `s` of [`hybride_mock_pointing`](@ref Briareus.Benchmarks.hybride_mock_pointing) is
   `split = -s`. The field sets the tangential offset of each beam from the mean
   template aim of its quad, or shifts that offset with `relative`. A quad held as one
   beam is not split. The field needs `unit = :quad` and `quad` names.

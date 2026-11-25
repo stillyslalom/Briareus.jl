@@ -6,6 +6,7 @@
 #
 #     julia --project=. -t auto examples/izumi2018_trends.jl     # ~5 min on 4 threads
 using Briareus, LinearAlgebra, Printf
+using Briareus.Benchmarks
 example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
 p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
 quads = apply(p, reduce(vcat, [[example[k]...] for k in p.keys]))

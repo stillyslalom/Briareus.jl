@@ -6,6 +6,7 @@
 #
 #     julia --project=. -t auto examples/young2020_dynamic.jl     # ~10 min on 4 threads
 using Briareus, LinearAlgebra, Printf, Random
+using Briareus.Benchmarks
 using Briareus: _interp, _hohlraum_grid
 const H = parse(Float64, get(ENV, "H", "0.5"))
 example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))

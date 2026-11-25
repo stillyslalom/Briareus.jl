@@ -104,7 +104,7 @@ first, and the bubble then takes its share of the power in the inner beams.
   angles per f-cone direction, over `ncone` (13) directions.
 
 Defaults (research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)";
-the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
+the data are [`izumi2021_bubble`](@ref Briareus.Benchmarks.izumi2021_bubble) and [`izumi2021_absorption`](@ref Briareus.Benchmarks.izumi2021_absorption)):
 - `speed` 0.36 mm/ns at 0.3 mg/cc and the basecamp picket, ∝ E^0.2 ρ₀^-0.2, and
   `delay` 0.25 ns after the outer turn-on are *fitted* to the 28 measured tip positions
   of Izumi et al., PoP 28, 022706 (2021) Fig. 8a. The data cover seven HDC SymCap shots
@@ -247,32 +247,6 @@ function Base.show(io::IO, m::BubbleAbsorption)
             ForwardDiff.value(m.stagnation), ForwardDiff.value(m.collision),
             join(m.inner, "/"), join(m.footprint, "/"))
 end
-
-"""
-    izumi2021_bubble() -> NamedTuple
-
-Au bubble tip displacement from the initial wall against time on the HDC SymCap series of
-Izumi et al., PoP 28, 022706 (2021), Fig. 8 (5.75 mm Au hohlraum, outer turn-on 0.3 ns),
-extracted from the vector graphics of the figure (`data/izumi2021_fig8.csv`, sources in
-its header). The columns are `shot`, `source` (`"data"` for measured values, Fig. 8a,
-error bars ±40 µm; `"hydra"` for 2D HYDRA, Fig. 8b), `energy` (outer picket fluence over
-that of the basecamp), `fill` (mg/cc), `capsule` (radius over that of the basecamp),
-`t` (ns), `x_bub` (mm) and `u` (mm). The table is the calibration target of the `speed`
-and `delay` of [`BubbleAbsorption`](@ref).
-"""
-izumi2021_bubble() = _data_table("izumi2021_fig8.csv")
-
-"""
-    izumi2021_absorption() -> NamedTuple
-
-The fraction of the inner-cone power absorbed in the bubble against time for the
-0.3 mg/cc basecamp of Izumi et al., PoP 28, 022706 (2021), Fig. 10a, from the vector
-graphics of the figure (`data/izumi2021_fig10a.csv`). The columns are `source`, which is
-`"hydra"` for the 2D simulation (0, 0.02, 0.23, 0.55 at 3, 4, 5, 6 ns) or `"model"` for
-Eq. 6 of the paper (every 0.1 ns), `t` (ns), `absorbed` and `u`. The table is the
-calibration target of the `opacity` of [`BubbleAbsorption`](@ref).
-"""
-izumi2021_absorption() = _data_table("izumi2021_fig10a.csv")
 
 "Bubble tip speed (mm/ns): `speed · picket_ratio^0.2 · (fill/0.3)^-0.2`."
 bubble_speed(m::BubbleAbsorption) = m.speed * m.picket_ratio^0.2 * (m.fill / 0.3)^-0.2

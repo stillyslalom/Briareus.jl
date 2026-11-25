@@ -22,12 +22,13 @@ function read_csv(path::AbstractString; comment = '#')
     return header, rows
 end
 
-# Reads a digitized table in data/, with numeric columns as Float64 vectors and others
-# as strings.
+# Reads a table in data/ as a NamedTuple of columns. A column is Float64, with blank cells
+# NaN, when every cell is a number or blank, and strings otherwise.
 function _data_table(file)
     h, rows = read_csv(joinpath(@__DIR__, "..", "data", file))
-    col(i) = (v = [r[i] for r in rows];
-              all(x -> tryparse(Float64, x) !== nothing, v) ? parse.(Float64, v) : String.(v))
+    num(s) = isempty(strip(s)) || tryparse(Float64, s) !== nothing
+    val(s) = isempty(strip(s)) ? NaN : parse(Float64, s)
+    col(i) = all(r -> num(r[i]), rows) ? [val(r[i]) for r in rows] : [String(strip(r[i])) for r in rows]
     return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
 end
 

@@ -340,57 +340,6 @@ function _nif_beam_table()
              phi = parse(Float64, r[6])) for r in rows]
 end
 
-# Mock HYBRID-E pointing per cone, with aim z (mm, upper hemisphere), aim radius r (mm,
-# along the port azimuth of the quad, negative across the axis) and tangential split s
-# (mm). It is an illustrative stand-in and does not reproduce a facility pointing.
-const HYBRIDE_MOCK_POINTING = Dict(
-    :inner23 => (z = 3.3, r = -1.3, s = 0.0),
-    :inner30 => (z = 4.2, r = -0.8, s = 0.0),
-    :outer44 => (z = 5.7, r = 0.0, s = 0.5),
-    :outer50 => (z = 5.8, r = 0.0, s = 0.5),
-)
-
-"""
-    hybride_mock_pointing(beams = nif_beams(); table = HYBRIDE_MOCK_POINTING) -> Vector{Beam}
-
-A mock of the HYBRID-E (N221204/N230729-class) NIF pointing. `beams` (NIF beams or
-quads, with `group` the cone) are re-aimed by cone with defocus 0, and power, spot and
-`dlambda` are kept. The quads of each cone share one rule in the frame of each quad,
-mirrored top to bottom. The aim lies at `±z` (mm, the bottom hemisphere at `-z`), at
-`r` along the port azimuth of the quad (negative across the axis, toward the opposite
-wall) and, for the outer cones, at `±s` along φ̂ of the quad. Each beam aims to the side
-opposite its port (`-sign(φ_beam − φ_quad) s`), so the beams of the quad cross. The quad
-azimuth is that of the mean port of its beams in `beams`, so a quad given as one beam
-(`nif_quads()`) is not split.
-
-| cone | z | r | s |
-|---|---|---|---|
-| 23.5° | 3.3 | −1.3 | 0 |
-| 30° | 4.2 | −0.8 | 0 |
-| 44.5° | 5.7 | 0 | 0.5 |
-| 50° | 5.8 | 0 | 0.5 |
-
-*Derived*; the rule is an illustrative HYBRID-E-like rule on a 0.1 mm grid, for the
-11.24 × 6.4 mm hohlraum with 3.1 mm LEHs, and does not reproduce a facility pointing.
-"""
-function hybride_mock_pointing(beams::AbstractVector{<:Beam} = nif_beams();
-                               table = HYBRIDE_MOCK_POINTING)
-    sums = Dict{String,Vec3}()
-    for b in beams
-        sums[b.quad] = get(sums, b.quad, zero(Vec3)) + Vec3(b.port...)
-    end
-    return map(beams) do b
-        p = table[b.group]
-        q = sums[b.quad]
-        φq = atan(q[2], q[1])
-        δ = mod(atan(b.port[2], b.port[1]) - φq + π, 2π) - π
-        side = abs(δ) < 1e-9 ? 0.0 : sign(δ)
-        er, eφ = Vec3(cos(φq), sin(φq), 0), Vec3(-sin(φq), cos(φq), 0)
-        aim = p.r * er - side * p.s * eφ + Vec3(0, 0, sign(b.port[3]) * p.z)
-        remake(b; aim, defocus = zero(b.defocus))
-    end
-end
-
 # ---------------------------------------------------------------------------------------
 # OMEGA
 # ---------------------------------------------------------------------------------------

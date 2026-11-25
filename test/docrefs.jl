@@ -46,7 +46,7 @@ const LITERATE = joinpath(ROOT, "docs", "literate")
 const MAKE = joinpath(ROOT, "docs", "make.jl")
 
 # The modules whose docstrings the build documents (`makedocs(; modules)`).
-const MODULES = (Briareus,)
+const MODULES = (Briareus, Briareus.Benchmarks)
 
 # The identifier a `@docs` entry or a code reference names: the last component of a
 # possibly qualified name, with any call signature dropped.

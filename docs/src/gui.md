@@ -546,8 +546,8 @@ The bottom panel has the following tabs.
   pulse table ([`read_pulse_table`](@ref)) of power against time per cone group, quad or
   beam, in which disabled beams stay off, or from a published shape
   (`Controllers.PULSE_SHAPES`). The published shapes are the delivered total power of
-  N221204 ([`n221204_pulse`](@ref)) and of N191118 and N210601
-  ([`zylstra2022_fig2`](@ref)), with each beam reaching its set power at the peak. A
+  N221204 ([`n221204_pulse`](@ref Briareus.Benchmarks.n221204_pulse)) and of N191118 and N210601
+  ([`zylstra2022_fig2`](@ref Briareus.Benchmarks.zylstra2022_fig2)), with each beam reaching its set power at the peak. A
   table column for a cone or a quad is the power per quad, shared by the beams of that
   quad in the table, so the pulses fire the same total whether quads are split or not.
   The box beside *Pulses ▾* switches the columns to the power per beam

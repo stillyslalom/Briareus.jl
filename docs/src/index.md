@@ -161,4 +161,4 @@ correlated with the part of the spot they block.
 Facility data and physics defaults are sourced in `reference/research-notes.md` in the
 repository, with a confidence level for each number and the data each calibration was
 fitted to. The HYBRID-E pointing in the examples is an illustrative mock-up
-([`hybride_mock_pointing`](@ref)); it is not a facility pointing.
+([`hybride_mock_pointing`](@ref Briareus.Benchmarks.hybride_mock_pointing)); it is not a facility pointing.

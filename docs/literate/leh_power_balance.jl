@@ -26,6 +26,7 @@
 # the sweep isolates the radiation power balance from beam clipping and pointing.
 
 using Briareus
+using Briareus.Benchmarks
 using CairoMakie
 using LinearAlgebra
 using Printf

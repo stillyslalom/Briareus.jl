@@ -9,7 +9,7 @@
     @test all(b -> b.defocus == 0, bs)
     @test [b.power for b in bs] == [b.power for b in nb]
     @test [b.port for b in bs] == [b.port for b in nb]
-    tab = Briareus.HYBRIDE_MOCK_POINTING
+    tab = Briareus.Benchmarks.HYBRIDE_MOCK_POINTING
     quads = unique(b.quad for b in bs)
     @test length(quads) == 48
     φq = Dict(q => (s = sum(Vec3(b.port...) for b in bs if b.quad == q); atan(s[2], s[1])) for q in quads)

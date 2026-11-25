@@ -1,4 +1,5 @@
 using Briareus
+using Briareus.Benchmarks
 using Briareus: closest_hit, any_hit, _point_polygon_vf
 using LinearAlgebra
 using ForwardDiff
