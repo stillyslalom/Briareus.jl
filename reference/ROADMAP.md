@@ -893,32 +893,14 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       `_init_history_state`, `_solve_history_step!`, `_record_history_step!` and
       `_assemble_history_output` waits for a state struct. `test/inference.jl` (one
       compiled instance for every closure, JET `report_call`) must stay green through it.
-    - **Type parameters that need compile-time measurements first.** `Scenario.model`
-      and `Evaluation.scenario` are abstract. `Scenario{P,M}` and `Evaluation{T,B,E,S}`
-      would compile the optimizer once per model storage, and the gain is unmeasured.
-      `CBET` has eight `Any` fields read through `_tvalue`; a small concrete schedule
-      type would type them without a type parameter per closure. `VisRadWorkspace.beams`
-      is `Vector{Beam}`. `Scenario.lpi` stays untyped (declined 2026-11-25): a type
-      parameter for the model recompiles the optimizer and the history march for every
-      model and every schedule closure, which "Compile latency (2026-10-25)" measured
-      at 52 s of inference in the suite before the march was despecialized, and the
-      constraint check that wanted the type takes it from `_ReferenceModel{L}` instead.
-    - **Keep-out distance.** `ApertureKeepOut` and `SphereKeepOut` use the first-order
-      (Sampson) ellipse distance, and `clearance`, `talis_check` and the design rules the
-      exact one. The frames are shared (`_BeamConeFrame`); moving the keep-outs to the
-      exact distance changes optimization results and needs the smoothness checks of
-      "Defaults changed (2026-11-19)" repeated. `clearance_floor` ignores
-      `keepout.weight`; the weight could leave the keep-out types for the `keepout`
-      keyword of the objectives.
     - **Include order.** `src/Briareus.jl` still has forward references between files
       (functions only; types and constants are defined before use). The workspace and
       JSON readers of VisRad call each other. The VisRad and diagnostics names are
       candidates for submodules like `Briareus.Benchmarks`.
     - **Lines of sight through closing lips.** The Dante footprint scans the lip
-      triangles linearly per ray. The image and Dante tabs of the application do not pass
-      the lip transmission history to `imager_record` (`keep_albedo` histories have it).
-    - **Declined, with the reasons** (2026-11-25; the two items of the cleanup plan that
-      are closed without the change).
+      triangles linearly per ray; a small BVH over them would remove the scan.
+    - **Declined, with the reasons** (2026-11-25; the items of the cleanup plan that are
+      closed without the change).
       - *A type parameter for `Scenario.lpi`.* The plan wanted `Scenario{P,M,L}` so that
         the reference-model check of a constraint could be inferred. `_ReferenceModel{L}`
         gives the check the type on the constraint side, and it passes JET `report_opt`
@@ -926,6 +908,18 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         gradient drivers once per model type, and every `remake(s; lpi)` and every CBET
         schedule given as a closure is a new type. "Compile latency (2026-10-25)"
         measured that cost on the history march, 52 s of inference in the suite.
+      - *Type parameters for `Scenario.model` and `Evaluation.scenario`.* The fields
+        that an objective takes through `ev.scenario` (the target, the contracted
+        responses) are concretely typed, so they are inferred through the abstract
+        field. JET `report_opt` finds no dispatch in `asymmetry_objective` on Float64 or
+        duals, and one call of `symmetry_objective` on a cached evaluation takes 0.17 µs
+        and 112 bytes. The model is used only when the full flux is built, once per
+        scenario. The parameters would compile every objective once per scenario type
+        for no measurable gain.
+      - *The exact ellipse distance in `ApertureKeepOut` and `SphereKeepOut`.* Measured:
+        the first-order distance never overstates a clearance and falls short by at
+        most 6 µm for clearances up to 0.2 mm and 29 µm up to 0.5 mm ("The ellipse
+        distance of the keep-outs (2026-11-25)").
       - *Merging the line parser of the VisRad readers into `read_csv`.* `read_csv`
         scans the whole file by character, since a quoted field may hold line breaks,
         takes the first line that is not a comment as the header and keeps quoted text
