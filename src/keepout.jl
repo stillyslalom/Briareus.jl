@@ -170,8 +170,7 @@ end
 # triangle just beyond it, as at a T-junction or a crack between rings. Each rim edge is
 # a straight piece or an arc (see `ApertureKeepOut`), sampled with about `nrim` points.
 function _hole_rim(t::Target, comps, n, nrim)
-    e1 = normalize(abs(n[1]) < 0.9 ? cross(n, Vec3(1, 0, 0)) : cross(n, Vec3(0, 1, 0)))
-    e2 = cross(n, e1)
+    e1, e2 = _ortho_basis(n)
     tris = Tuple{Vec3,Vec3,Vec3,Int}[]
     for ci in comps, k in findall(==(ci), t.tri_comp)
         push!(tris, (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k], ci))

@@ -523,8 +523,6 @@ function _origin_tri_distance(A, B, C)
     return inside ? 0.0 : d
 end
 
-_hbasis(n) = (u = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0))); (u, cross(n, u)))
-
 # Returns the certificate of component facets `ks` if they are planar, or else nothing.
 function _hplanar(t::Target, ks, surface)
     n = t.tri_normal[ks[1]]
@@ -534,7 +532,7 @@ function _hplanar(t::Target, ks, surface)
     R = maximum(norm(v - c) for k in ks for v in tri(k))
     tp = maximum(abs(dot(n, v - c)) for k in ks for v in tri(k))
     tp <= 1e-10 * (R + norm(c)) || return nothing
-    u, v = _hbasis(n)
+    u, v = _ortho_basis(n)
     P(x) = SVector(dot(u, x - c), dot(v, x - c))
     nf = length(ks)
     edges = Vector{NTuple{9,Float64}}(undef, nf)
@@ -579,7 +577,7 @@ end
 
 # Returns the axisymmetric bounds of component facets `ks` about the axis (c, a).
 function _hhull(t::Target, ks, c, a)
-    u, v = _hbasis(a)
+    u, v = _ortho_basis(a)
     z0, z1, rlo, rhi = Inf, -Inf, Inf, 0.0
     for k in ks
         ps = (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])

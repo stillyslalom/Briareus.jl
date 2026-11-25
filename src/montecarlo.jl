@@ -109,9 +109,7 @@ function _mc_point(t, cum, e, rng)
 end
 
 function _cosine_direction(n::Vec3, rng)
-    a = abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)
-    t1 = normalize(cross(n, a))
-    t2 = cross(n, t1)
+    t1, t2 = _ortho_basis(n)
     u, φ = rand(rng), 2π * rand(rng)
     ρ = sqrt(u)
     return ρ * cos(φ) * t1 + ρ * sin(φ) * t2 + sqrt(1 - u) * n

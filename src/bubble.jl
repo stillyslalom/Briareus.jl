@@ -289,12 +289,6 @@ function bubble_depth(m::BubbleAbsorption, t)
     return _stagnate(x, m.stagnation, m.stagnation_width)
 end
 
-function _stagnate(x, xmax, w)
-    isinf(xmax) && return x + zero(xmax)
-    k = xmax - w
-    return x <= k ? x + zero(k) : xmax - w * exp(-(x - k) / w)
-end
-
 """
     ridge_fraction(m::BubbleAbsorption, t) -> g
 

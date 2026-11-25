@@ -170,13 +170,6 @@ end
     return s, (z >> 11) * 0x1.0p-53
 end
 
-# Orthonormal vectors perpendicular to the unit vector n.
-@inline function _tangents(n::Vec3)
-    a = abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)
-    b1 = normalize(cross(n, a))
-    return b1, cross(n, b1)
-end
-
 # Returns the parameter at which the ray o + s d (|d| = 1) leaves the sphere of radius R
 # about p, with 0 when it starts outside and moves away, and Inf for an unbounded region.
 @inline function _sphere_exit(o, d, p, R)
@@ -240,7 +233,7 @@ function _cast_element!(hits, E0, t::Target, e::Int, p::Vec3, R::Float64, ε::Fl
         w = (r - 1 + u3) / k
         st, ct = sqrt(w), sqrt(1 - w)
         φ = 2π * u4
-        b1, b2 = _tangents(n)
+        b1, b2 = _ortho_basis(n)
         d = ct * n + st * (cos(φ) * b1 + sin(φ) * b2)
         o = x + ε * n
         th, id = closest_hit(t.bvh, o, d, _sphere_exit(o, d, p, R))

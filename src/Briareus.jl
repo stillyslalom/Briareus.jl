@@ -128,6 +128,7 @@ export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, Diag
        diagnostic_diff, diagnostic_instrument
 
 include("geometry.jl")
+include("utils.jl")
 include("meshops.jl")
 include("bvh.jl")
 include("target.jl")

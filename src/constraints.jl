@@ -459,55 +459,6 @@ end
 _append_all!(out, ::Tuple{}) = out
 _append_all!(out, gs::Tuple) = _append_all!(append!(out, first(gs)), Base.tail(gs))
 
-# Solve the nonnegative least-squares problem argmin ‖A z - b‖ over z ≥ 0 by the
-# active-set method of Lawson and Hanson, "Solving Least Squares Problems",
-# Prentice-Hall 1974, ch. 23. Rank-deficient passive sets are solved by pivoted QR, which
-# gives a basic solution.
-function _nnls(A::Matrix{Float64}, b::Vector{Float64})
-    m, n = size(A)
-    z = zeros(n)
-    n == 0 && return z
-    P = falses(n)
-    tol = 10 * eps() * max(m, n) * max(opnorm(A, 1), 1e-300) * max(norm(b, Inf), 1e-300)
-    w = A' * b
-    # Columns whose entry left the solution unchanged are skipped until the solution
-    # moves. For such a column the least-squares entry came out nonpositive at once, a
-    # gain at the rounding level.
-    blocked = falses(n)
-    for _ in 1:3n
-        j = 0
-        for i in 1:n
-            !P[i] && !blocked[i] && w[i] > tol && (j == 0 || w[i] > w[j]) && (j = i)
-        end
-        j == 0 && break
-        P[j] = true
-        entered = true
-        while true
-            idx = findall(P)
-            t = zeros(n)
-            t[idx] .= A[:, idx] \ b
-            if all(>(0), view(t, idx))
-                z = t
-                break
-            end
-            if entered && t[j] <= 0
-                P[j] = false
-                blocked[j] = true
-                break
-            end
-            entered = false
-            α = minimum(z[i] / (z[i] - t[i]) for i in idx if t[i] <= 0)
-            z .+= α .* (t .- z)
-            for i in idx
-                z[i] <= tol && (P[i] = false; z[i] = 0.0)
-            end
-        end
-        blocked[j] || (blocked .= false)
-        w = A' * (b - A * z)
-    end
-    return z
-end
-
 # Phase 1 of a constrained run minimizes the infeasibility ψ = ½ Σᵢ max(0, gᵢ)² over the
 # box, with gᵢ the normalized violation of each component. ψ is the limit of the augmented
 # Lagrangian as μ → ∞, and it is zero exactly on the feasible set. Phase 1 leaves out the

@@ -205,7 +205,7 @@ end
     ax = normalize(Vec3(0.2, -0.1, 1.0))
     ctr = Vec3(0.1, -0.2, 0.3)
     s = TorusSurface(R, r; center = ctr, axis = ax)
-    e1, e2 = Briareus._perp_basis(ax)
+    e1, e2 = Briareus._ortho_basis(ax)
     on(φ, ψ) = ctr + (R + r * cos(ψ)) * (cos(φ) * e1 + sin(φ) * e2) + r * sin(ψ) * ax
     grid = [on(φ, ψ) for φ in range(0, 2π; length = 721)[1:end-1], ψ in range(-π, π; length = 361)[1:end-1]]
     for ρ in (0.3, 1.0, 1.7, 1.9, 2.4, 3.0), z in (-0.7, 0.0, 0.2, 0.4), φ in (0.3, 2.0)

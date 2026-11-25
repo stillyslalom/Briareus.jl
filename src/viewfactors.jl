@@ -328,8 +328,7 @@ end
 
 function _visibility_samples(t::Target, e, g)
     C, n = t.elem_centroid[e], t.elem_normal[e]
-    e1 = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
-    e2 = cross(n, e1)
+    e1, e2 = _ortho_basis(n)
     pts, ws = Vec3[], Float64[]
     # sub-triangles of under about half a grid cell
     L = ceil(Int, log2(g)) + 1
@@ -804,8 +803,7 @@ function _cell_emitter(t::Target, e, depth)
     for tri in tris, v in tri
         r = max(r, norm(v - C))
     end
-    e1 = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
-    e2 = cross(n, e1)
+    e1, e2 = _ortho_basis(n)
     hq = r / 2^depth                                     # √2 r / (2^depth √2)
     em = _CellEmitter(S, sgn, C, n, e1, e2, Int(depth), hq, _Cell[])
     acc = Dict{NTuple{2,Int},Tuple{Float64,Vec3,Vector{NTuple{3,Vec3}}}}()
@@ -1360,8 +1358,8 @@ function _axis_frame(a::Vec3, c::Vec3)
     k = argmax(abs.(a))
     a = a[k] < 0 ? -a : a
     o = c - dot(c, a) * a
-    e1 = normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
-    return a, o, e1, cross(a, e1)
+    e1, e2 = _ortho_basis(a)
+    return a, o, e1, e2
 end
 
 _arc_outline(t::Target, e, size) = _arc_outline(t, e, t.components[t.elem_comp[e]].surface, size)

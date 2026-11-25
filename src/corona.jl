@@ -103,29 +103,6 @@ function Base.show(io::IO, p::CoronaProfile)
             p.r[1], p.r[end], exp(p.lne[1]), exp(p.lne[end]))
 end
 
-# Three-point slopes on a non-uniform grid (exact for quadratics), one-sided at the ends.
-function _hermite_slopes(r, y)
-    n = length(r)
-    d = similar(y)
-    d[1] = (y[2] - y[1]) / (r[2] - r[1])
-    d[n] = (y[n] - y[n-1]) / (r[n] - r[n-1])
-    for k in 2:n-1
-        h0, h1 = r[k] - r[k-1], r[k+1] - r[k]
-        d[k] = (h0^2 * (y[k+1] - y[k]) + h1^2 * (y[k] - y[k-1])) / (h0 * h1 * (h0 + h1))
-    end
-    return d
-end
-
-@inline function _hermite(r, y, dy, x)
-    i = clamp(searchsortedlast(r, x), 1, length(r) - 1)
-    h = r[i+1] - r[i]
-    t = (x - r[i]) / h
-    t2 = t * t
-    t3 = t2 * t
-    return (2t3 - 3t2 + 1) * y[i] + (t3 - 2t2 + t) * h * dy[i] + (3t2 - 2t3) * y[i+1] +
-           (t3 - t2) * h * dy[i+1]
-end
-
 # n_e/n_c and the absorption rate (ν_ei/c)(n_e/n_c) (mm⁻¹) at radius x; both are zero
 # outside the table.
 _corona_ne(p::CoronaProfile, x) = x > p.r[end] ? 0.0 : exp(_hermite(p.r, p.lne, p.dlne, x))
@@ -256,27 +233,6 @@ function _ray_kernel!(κ, Y, P, L, α, f)
         end
     end
     return κ
-end
-
-# Gauss–Legendre nodes and weights on [-1, 1] (Newton on the three-term recurrence).
-function _gauss_legendre(n)
-    x, w = zeros(n), zeros(n)
-    for i in 1:n
-        z = cos(π * (i - 0.25) / (n + 0.5))
-        dp = 0.0
-        for _ in 1:100
-            p0, p1 = 1.0, z
-            for k in 2:n
-                p0, p1 = p1, ((2k - 1) * z * p1 - (k - 1) * p0) / k
-            end
-            dp = n * (z * p1 - p0) / (z^2 - 1)
-            δ = p1 / dp
-            z -= δ
-            abs(δ) < 1e-15 && break
-        end
-        x[i], w[i] = z, 2 / ((1 - z^2) * dp^2)
-    end
-    return x, w
 end
 
 # Blocks D_l of the rotation Q acting on real-harmonic coefficients. A field g in frame

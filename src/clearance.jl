@@ -829,30 +829,6 @@ function _simplex_bound!(heap, f, inside, lip, sx, ub, xb, ok::Bool)
     return ub, xb
 end
 
-function _heap_push!(h, x)
-    push!(h, x)
-    i = length(h)
-    while i > 1 && h[i>>1][1] > h[i][1]
-        h[i>>1], h[i] = h[i], h[i>>1]
-        i >>= 1
-    end
-    return h
-end
-
-function _heap_pop!(h)
-    top, last = h[1], pop!(h)
-    isempty(h) && return top
-    h[1] = last
-    i, n = 1, length(h)
-    while 2i <= n
-        c = 2i < n && h[2i+1][1] < h[2i][1] ? 2i + 1 : 2i
-        h[i][1] <= h[c][1] && break
-        h[i], h[c] = h[c], h[i]
-        i = c
-    end
-    return top
-end
-
 _simplex_split(s::NTuple{2,Vec3}) = (m = (s[1] + s[2]) / 2; ((s[1], m), (m, s[2])))
 function _simplex_split(s::NTuple{3,Vec3})
     a, b, c = s

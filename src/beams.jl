@@ -577,7 +577,7 @@ end
 function _vr_ntab_build(a, b, n, F, env, taper)
     sp = _SGComponent(a^2, b^2, n / 2, 0.0, 1 / _sg_norm(n))
     c = _VRComponent(sp, F, env, taper, false)
-    xg, wg = _gauss_legendre(16)                     # corona.jl
+    xg, wg = _gauss_legendre(16)
     zs = 0:_VR_NTAB_H:_VR_NTAB_ZMAX
     t = zeros(length(zs))
     Threads.@threads for i in eachindex(zs)

@@ -176,7 +176,7 @@ function _fit_cylinder(X, N, W, m, ext)
         S += w * (n * n')
     end
     a = Vec3(eigen(Symmetric(Matrix(S))).vectors[:, 1])
-    e1, e2 = _perp_basis(a)
+    e1, e2 = _ortho_basis(a)
     M = zeros(SMatrix{3,3,Float64})
     g = zeros(SVector{3,Float64})
     for x in X
@@ -192,7 +192,7 @@ function _fit_cylinder(X, N, W, m, ext)
     R = sqrt(max(s[3] + s[1]^2 + s[2]^2, 0.0))
     for _ in 1:20
         (isfinite(R) && 0 < R < 1e3ext) || return nothing
-        e1, e2 = _perp_basis(a)
+        e1, e2 = _ortho_basis(a)
         M5 = zeros(SMatrix{5,5,Float64})
         g5 = zeros(SVector{5,Float64})
         for x in X
@@ -259,7 +259,7 @@ function _fit_cone(X, N, W, m, ext)
 end
 
 function _cone_guess(X, m, a, quadratic::Bool)
-    e1, e2 = _perp_basis(a)
+    e1, e2 = _ortho_basis(a)
     M = zeros(SMatrix{5,5,Float64})
     g = zeros(SVector{5,Float64})
     for x in X
@@ -292,7 +292,7 @@ function _cone_refine(X, m, ext, a, o, R, k)
     cost = _cone_cost(X, m, a, o, R, k)
     for _ in 1:30
         (isfinite(R) && isfinite(k) && R > 0) || return nothing
-        e1, e2 = _perp_basis(a)
+        e1, e2 = _ortho_basis(a)
         S = sqrt(1 + k^2)
         M6 = zeros(SMatrix{6,6,Float64})
         g6 = zeros(SVector{6,Float64})
@@ -425,7 +425,7 @@ function _torus_osculating!(starts, X, N, W, Cn, m, ext)
     (wt > 0 && norm(n0) > 0) || return starts
     x0 /= wt
     n0 = normalize(n0)
-    t1, t2 = _perp_basis(n0)
+    t1, t2 = _ortho_basis(n0)
     M = zeros(SMatrix{3,3,Float64})
     g = zeros(SVector{3,Float64})
     for (x, n, w) in zip(Cn, N, W)
@@ -496,7 +496,7 @@ function _torus_refine(X, m, ext, a, o, z0, R, r)
     λ = 1e-6
     for _ in 1:60
         (isfinite(R) && isfinite(r) && isfinite(z0) && R > 0 && r > 0) || return nothing
-        e1, e2 = _perp_basis(a)
+        e1, e2 = _ortho_basis(a)
         M7 = zeros(SMatrix{7,7,Float64})
         g7 = zeros(SVector{7,Float64})
         for x in X
@@ -546,11 +546,6 @@ function _torus_refine(X, m, ext, a, o, z0, R, r)
     (isfinite(R) && isfinite(r) && R > 0 && r > 0) || return nothing
     (R < 1e3ext && r < 1e3ext) || return nothing
     return _SurfaceModel(:torus, m + o + z0 * a, a, R, r), cost
-end
-
-function _perp_basis(a)
-    e1 = normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
-    return e1, cross(a, e1)
 end
 
 function _solve_small(M, g)
@@ -692,7 +687,7 @@ function _push_neighbors!(H, D, p, avail, mark, queued, vgrow, gid, c0)
         for q in D.vp[v]
             (avail[q] && mark[q] != gid && queued[q] != gid) || continue
             queued[q] = gid
-            _heap_push!(H, norm(D.cen[q] - c0), q, 0)
+            _heap_push!(H, (norm(D.cen[q] - c0), q, 0))
         end
     end
 end
@@ -705,7 +700,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     for p in members
         mark[p] = gid
     end
-    empty!(H.key); empty!(H.tri); empty!(H.seed)
+    empty!(H)
     c0 = D.cen[seed]
     for p in members
         _push_neighbors!(H, D, p, avail, mark, queued, W.vgrow, gid, c0)
@@ -729,7 +724,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     empty!(traj)
     check = W.check
     while true
-        while !isempty(H.key)
+        while !isempty(H)
             _, p, _ = _heap_pop!(H)
             mark[p] == gid && continue
             W.work[] += 1
@@ -769,7 +764,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
             end
             nfit = length(members)
             for q in rejected
-                _heap_push!(H, norm(D.cen[q] - c0), q, 0)
+                _heap_push!(H, (norm(D.cen[q] - c0), q, 0))
             end
             empty!(rejected)
         end
@@ -780,7 +775,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
         mdl === nothing || (model = mdl; tol = _fit_tol(model, norm(hi - lo), rtol, atol))
         nfit = length(members)
         for q in rejected
-            _heap_push!(H, norm(D.cen[q] - c0), q, 0)
+            _heap_push!(H, (norm(D.cen[q] - c0), q, 0))
         end
         empty!(rejected)
     end
@@ -1039,7 +1034,7 @@ function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin 
     np == 0 && return SurfaceRegion[], (; growths = 0, work = 0, givenup = 0, covers = 0, pairs = 0)
     D = _fit_data(m, tol)
     nv = length(D.P)
-    W = (; mark = zeros(Int, np), queued = zeros(Int, np), gid = Ref(0), heap = _GrowHeap(),
+    W = (; mark = zeros(Int, np), queued = zeros(Int, np), gid = Ref(0), heap = _grow_heap(),
          scratch = falses(nv), vgrow = zeros(Int, nv), pring = zeros(Int, np), vring = zeros(Int, nv),
          stamp = Ref(0), growths = Ref(0), work = Ref(0), givenup = Ref(0), traj = Float64[], check,
          degen = Ref{Union{Nothing,Vector{Int}}}(nothing))

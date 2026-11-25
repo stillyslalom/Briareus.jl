@@ -226,7 +226,7 @@ function _cone_coordinates(s::ConeSurface, p)
         return z, ρ, q / ρ
     end
     a = s.axis
-    return z, ρ, normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+    return z, ρ, first(_ortho_basis(a))
 end
 
 function surface_point(s::ConeSurface, p)
@@ -243,7 +243,7 @@ function _torus_coordinates(s::TorusSurface, p)
     q = d - z * s.axis
     ρ = norm(q)
     a = s.axis
-    ρ̂ = ρ > 0 ? q / ρ : normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+    ρ̂ = ρ > 0 ? q / ρ : first(_ortho_basis(a))
     c = s.center + s.major_radius * ρ̂
     return p - c, c, ρ̂
 end
@@ -291,10 +291,7 @@ _transform_surface(s::TorusSurface, R, t) =
 
 surface_point(s::DiskSurface, p) = (p - dot(p - s.center, s.normal) * s.normal, s.normal)
 
-function _disk_basis(s::DiskSurface)
-    e1 = normalize(abs(s.normal[1]) < 0.9 ? cross(s.normal, Vec3(1, 0, 0)) : cross(s.normal, Vec3(0, 1, 0)))
-    return e1, cross(s.normal, e1)
-end
+_disk_basis(s::DiskSurface) = _ortho_basis(s.normal)
 
 """
     _sector(s::DiskSurface, vertices) -> (r0, r1, φa, φb)

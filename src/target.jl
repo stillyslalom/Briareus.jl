@@ -881,11 +881,6 @@ function TrajectoryRadius(; start::Real, peak_time::Real, peak_radius::Real, vel
     return TrajectoryRadius(Float64(start), Float64(peak_time), Float64(rv), Float64(v),
                             Float64(bang), Float64(minimum), String(source))
 end
-function _hermite(t, t0, r0, d0, t1, r1, d1)
-    L = t1 - t0
-    s = (t - t0) / L
-    return (2s^3 - 3s^2 + 1) * r0 + (s^3 - 2s^2 + s) * L * d0 + (3s^2 - 2s^3) * r1 + (s^3 - s^2) * L * d1
-end
 function radius_fraction(s::TrajectoryRadius, t)
     t <= s.start && return one(t) * 1.0
     t >= s.bang && return one(t) * s.minimum
@@ -1708,8 +1703,7 @@ function _lumped_quadrature(t::Target, e::Integer, level::Integer, s::CurvedSurf
         r = max(r, norm(v - C))
     end
     hq = r / 2^level                                   # √2 r / (2^level √2)
-    e1 = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
-    e2 = cross(n, e1)
+    e1, e2 = _ortho_basis(n)
     cells = Dict{Tuple{Int,Int},Tuple{Float64,Vec3}}()
     for k in t.elem_tris[e]
         a = t.tri_v0[k]

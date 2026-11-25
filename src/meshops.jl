@@ -854,44 +854,6 @@ end
 # join only the elements of the same band, or elements seeded off the bands.
 _zone_ok(zt, zs) = zt == 0 || zs == 0 || zt == zs
 
-# Binary min-heap of (key, triangle, seed) for growing elements nearest first.
-struct _GrowHeap
-    key::Vector{Float64}
-    tri::Vector{Int}
-    seed::Vector{Int}
-end
-_GrowHeap() = _GrowHeap(Float64[], Int[], Int[])
-
-function _heap_swap!(H::_GrowHeap, i, j)
-    H.key[i], H.key[j] = H.key[j], H.key[i]
-    H.tri[i], H.tri[j] = H.tri[j], H.tri[i]
-    H.seed[i], H.seed[j] = H.seed[j], H.seed[i]
-end
-
-function _heap_push!(H::_GrowHeap, k, t, s)
-    push!(H.key, k); push!(H.tri, t); push!(H.seed, s)
-    i = length(H.key)
-    while i > 1 && H.key[i>>1] > H.key[i]
-        _heap_swap!(H, i, i >> 1)
-        i >>= 1
-    end
-end
-
-function _heap_pop!(H::_GrowHeap)
-    k, t, s = H.key[1], H.tri[1], H.seed[1]
-    n = length(H.key)
-    _heap_swap!(H, 1, n)
-    pop!(H.key); pop!(H.tri); pop!(H.seed)
-    n -= 1
-    i = 1
-    while 2i <= n
-        c = 2i + 1 <= n && H.key[2i+1] < H.key[2i] ? 2i + 1 : 2i
-        H.key[i] <= H.key[c] && break
-        _heap_swap!(H, i, c)
-        i = c
-    end
-    return k, t, s
-end
 
 # Returns the neighbors of each triangle across edges shared by exactly two triangles
 # that traverse them in opposite directions (0 where there is none).
@@ -927,9 +889,9 @@ function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos
         k = norm(cen[t] - spos[s])
         k < best[t] || continue
         best[t] = k
-        _heap_push!(H, k, t, s)
+        _heap_push!(H, (k, t, s))
     end
-    while !isempty(H.key)
+    while !isempty(H)
         _, t, s = _heap_pop!(H)
         owner[t] == 0 || continue
         owner[t] = s
@@ -943,7 +905,7 @@ function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos
             k = norm(cen[q] - spos[s])
             k < best[q] || continue
             best[q] = k
-            _heap_push!(H, k, q, s)
+            _heap_push!(H, (k, q, s))
         end
     end
     return owner
@@ -1047,7 +1009,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     end
     owner = zeros(Int, N)
     best = fill(Inf, N)
-    H = _GrowHeap()
+    H = _grow_heap()
     reach = 2size                 # bound on the reach of a seed (halving enforces `rmax`)
     for it in 0:iterations
         fill!(owner, 0)
@@ -1179,10 +1141,10 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         end
         a == b && (b = ms[ms[1] == a ? 2 : 1])
         lab[ms] .= -1
-        empty!(H.key); empty!(H.tri); empty!(H.seed)
-        _heap_push!(H, 0.0, a, 1)
-        _heap_push!(H, 0.0, b, 2)
-        while !isempty(H.key)
+        empty!(H)
+        _heap_push!(H, (0.0, a, 1))
+        _heap_push!(H, (0.0, b, 2))
+        while !isempty(H)
             _, t, s = _heap_pop!(H)
             lab[t] == -1 || continue
             lab[t] = s
@@ -1190,7 +1152,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
             for q in view(nbr, :, t)
                 q == 0 && break
                 lab[q] == -1 || continue
-                _heap_push!(H, flat ? norm(cen[q] - cen[o]) : 1 - dot(nrm[q], nrm[o]), q, s)
+                _heap_push!(H, (flat ? norm(cen[q] - cen[o]) : 1 - dot(nrm[q], nrm[o]), q, s))
             end
         end
         for s in (1, 2, -1)                  # -1 marks unreached triangles (not edge-connected)
@@ -1402,8 +1364,7 @@ end
 function _earclip(P, poly, n)
     m = length(poly)
     m < 3 && return nothing
-    e1 = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
-    e2 = cross(n, e1)
+    e1, e2 = _ortho_basis(n)
     o = P[poly[1]]
     xy = [SVector(dot(P[v] - o, e1), dot(P[v] - o, e2)) for v in poly]
     scale = maximum(sum(abs2, q) for q in xy)
