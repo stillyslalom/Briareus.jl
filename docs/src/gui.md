@@ -67,6 +67,7 @@ workspace (`.vrw`), and each command writes files that open without Briareus:
 briareus talis design.vrw --out talis.csv --json       # the TaLIS checks; exit code 2 when a check fails
 briareus review-1w design.briar --out review/          # the 1ω review: HTML, CSV, one SVG slice per tight pair
 briareus roe design.briar --out roe/ --json            # the beam rules of engagement: HTML, CSV, Markdown, port map
+briareus diff reference.briar design.briar --out diff/ # what changed: parts, beams, TaLIS margins, physics
 briareus run script.jl args...                         # a script with Briareus and the controllers loaded
 ```
 
@@ -77,7 +78,10 @@ that calls those functions gets the same numbers. `roe` scans the drive scenario
 design against the criteria that `Briareus.roe_default_criteria` selects from the
 observed part and the foils, lists them in the sheet, and applies to a design without a
 hohlraum. These thresholds are engineering defaults, and a shot sheet needs the criteria
-of the experiment, passed to `roe_scan` from a script. The commands load the same
+of the experiment, passed to `roe_scan` from a script. `diff` compares a design with a
+reference through `Briareus.design_diff`: parts and beams are matched by name, each
+design is checked with the TaLIS settings saved in it, and the page lists the rows that
+newly fail first. The commands load the same
 package as the window, which takes most of their time.
 
 `pkg> app update BriareusGUI` updates the app, and `pkg> app rm BriareusGUI` removes it

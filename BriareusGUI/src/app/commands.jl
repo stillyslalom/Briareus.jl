@@ -1,7 +1,8 @@
 # The headless commands of `briareus`: a design file in, a report or a packet out, with
 # no window and no graphics context. Each command loads the design into a session as the
 # window does and calls one core function of Briareus on it, so a script gets the same
-# numbers from `Briareus.talis_check`, `Briareus.omega1_review` and `Briareus.roe_scan`.
+# numbers from `Briareus.talis_check`, `Briareus.omega1_review`, `Briareus.roe_scan` and
+# `Briareus.design_diff`.
 
 "The results tabs that `briareus design.briar --tab <name>` opens."
 const TABS = ("beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "talis")
@@ -15,6 +16,8 @@ usage:
   briareus review-1w <design> --out dir/ [--threshold 1.0] [--json]
                                               the 1ω review packet: HTML, CSV and one SVG slice per tight pair
   briareus roe <design> --out dir/ [--json]   the beam rules of engagement: HTML, CSV, Markdown and port map
+  briareus diff <reference> <design> --out dir/ [--json]
+                                              what changed between two designs: parts, beams, TaLIS margins, physics
   briareus --shortcut                         add Briareus to the desktop and the applications menu
 <design> is a saved session (.briar, .briar.toml) or a VisRad workspace (.vrw).
 """
@@ -22,15 +25,15 @@ usage:
 """
     parse_command(args) -> (; command, files, out, threshold, json, tab, rest)
 
-The arguments of the `briareus` command. `command` is `"run"`, `"talis"`, `"review-1w"`
-or `"roe"`, or `""` for the window. `files` are the arguments that are not options,
+The arguments of the `briareus` command. `command` is `"run"`, `"talis"`, `"review-1w"`,
+`"roe"` or `"diff"`, or `""` for the window. `files` are the arguments that are not options,
 `out`, `threshold` and `tab` the values of `--out`, `--threshold` and `--tab` (`nothing`
 when absent), `json` whether `--json` was given, and `rest` every argument after the
 script of `run`. An option without its value or a `--threshold` that is not a number
 throws an `ArgumentError`.
 """
 function parse_command(args::AbstractVector{<:AbstractString})
-    command = !isempty(args) && args[1] in ("run", "talis", "review-1w", "roe") ? String(args[1]) : ""
+    command = !isempty(args) && args[1] in ("run", "talis", "review-1w", "roe", "diff") ? String(args[1]) : ""
     as = command == "" ? collect(String, args) : collect(String, args[2:end])
     if command == "run"
         return (; command, files = first(as, 1), out = nothing, threshold = nothing, json = false, tab = nothing,
@@ -139,6 +142,40 @@ function roe_command(sess::DesignSession, out::AbstractString; json::Bool = fals
     return (; report, choice.criteria, choice.notes, paths)
 end
 
+"""
+    diff_command(a::DesignSession, b::DesignSession, out; names = ("reference", "current"), json = false,
+                 title = "Design diff") -> (; diff, paths)
+
+The `briareus diff` command on two sessions: `Briareus.design_diff` of the targets and
+enabled beams, written into the folder `out` (`Briareus.write_design_diff`). The TaLIS
+rows are compared when the rules apply to both designs, each checked with the settings
+saved in it, and the physics when the drive of both can be computed. A comparison that
+is left out is named in `notes` of the result.
+"""
+function diff_command(a::DesignSession, b::DesignSession, out::AbstractString; names = ("reference", "current"),
+                      json::Bool = false, title::AbstractString = "Design diff")
+    notes = String[]
+    ia, ib = _talis_inputs(a), _talis_inputs(b)
+    reports = nothing
+    if ia isa String || ib isa String
+        push!(notes, "TaLIS rows not compared: " * (ia isa String ? ia : ib))
+    else
+        reports = (talis_check(ia.target, ia.beams; ia.kw...), talis_check(ib.target, ib.beams; ib.kw...))
+    end
+    evs = map((a, b)) do s
+        s.spawn[] = false
+        build_scenario!(s)
+        sc = s.drive.scenario[]
+        sc === nothing ? nothing : evaluate(sc, display_beams(s.beams))
+    end
+    evaluations = any(isnothing, evs) ? nothing : evs
+    evaluations === nothing && push!(notes, "physics not compared: the drive of one design could not be computed")
+    foils = [f for f in foil_names(a.target) if f in foil_names(b.target)]
+    diff = design_diff(a.target.target[], active_beams(a.beams), b.target.target[], active_beams(b.beams);
+                       names, reports, evaluations, foils)
+    return (; diff, notes, paths = write_design_diff(out, diff; json, title))
+end
+
 # Run a script as `briareus run` does: in a fresh module with Briareus and the
 # controllers in scope, and its arguments in `ARGS`.
 function run_script(path::AbstractString, args::AbstractVector{<:AbstractString} = String[])
@@ -164,6 +201,17 @@ function _run_command(c, io::IO = stdout)
     if c.command == "run"
         isempty(c.files) && (println(stderr, "briareus run: give a script"); return 1)
         run_script(c.files[1], c.rest)
+        return 0
+    end
+    if c.command == "diff"
+        (length(c.files) == 2 && c.out !== nothing) ||
+            (println(stderr, "briareus diff: give two design files and --out\n", USAGE); return 1)
+        names = (basename(c.files[1]), basename(c.files[2]))
+        r = diff_command(load_design(c.files[1]), load_design(c.files[2]), c.out; names, c.json,
+                         title = "Design diff: " * names[1] * " against " * names[2])
+        foreach(x -> println(io, x), r.notes)
+        println(io, r.diff)
+        foreach(p -> println(io, "wrote ", p), r.paths)
         return 0
     end
     (length(c.files) == 1 && c.out !== nothing) ||

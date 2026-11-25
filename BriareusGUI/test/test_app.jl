@@ -285,6 +285,23 @@ end
             @test redirect_stdout(() -> A._main(["roe", src, "--out", joinpath(dir, "cliroe")]), devnull) == 0 &&
                   isfile(joinpath(dir, "cliroe", "roe.html"))
 
+            # two designs: the second with every aim moved 0.2 mm along z
+            s1 = DesignSession(resolution = :coarse)
+            moved = [remake(b; aim = b.aim + Briareus.Vec3(0.0, 0.0, 0.2)) for b in s1.beams.beams[]]
+            set_beams!(s1.beams, moved)
+            src1 = joinpath(dir, "moved.briar.toml")
+            save_session(src1, s1)
+            df = A.diff_command(A.load_design(src), A.load_design(src1), joinpath(dir, "diff"); json = true)
+            @test basename.(df.paths) == ["diff.html", "diff.json"] && all(isfile, df.paths)
+            @test all(x -> x.status === :same, df.diff.parts)
+            @test all(x -> x.changes == [:aim] && abs(x.aim_shift[3] - 0.2) < 1e-9 && abs(x.distance - 0.2) < 1e-9, df.diff.beams)
+            @test !isempty(df.diff.talis) && !isempty(df.diff.physics) && isempty(df.notes)
+            same = A.diff_command(A.load_design(src), A.load_design(src), joinpath(dir, "diff0"))
+            @test all(x -> x.change === :same, same.diff.talis) && all(x -> x.delta == 0, same.diff.physics)
+            @test redirect_stdout(() -> A._main(["diff", src, src1, "--out", joinpath(dir, "clidiff")]), devnull) == 0 &&
+                  isfile(joinpath(dir, "clidiff", "diff.html"))
+            @test A._main(["diff", src, "--out", joinpath(dir, "clidiff")]) == 1
+
             # a foil design with no hohlraum: criteria from the foil, on OMEGA beams, where
             # the TaLIS rules do not apply
             fsrc = joinpath(dir, "foil.briar.toml")
