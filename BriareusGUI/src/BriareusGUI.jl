@@ -58,7 +58,11 @@ include("controllers/view.jl")
 include("controllers/cutaway.jl")            # the cut regions and clipped triangles
 include("controllers/sweep.jl")               # placement sweeps
 include("controllers/session.jl")             # links the parts
+include("controllers/session_drive.jl")       # the scenario, cavities, VisRad workspaces, exports
+include("controllers/session_retune.jl")      # pulses retuned to a reference drive
+include("controllers/session_tasks.jl")       # optimization, checks, new targets
 include("controllers/timeline.jl")            # pulses, drive histories, the time cursor
+include("controllers/timeline_diagnostics.jl") # recorded diagnostics, the history export
 include("controllers/workspace.jl")           # session files, undo and redo
 include("controllers/placement_triad.jl")     # the 3D view's placement triad
 

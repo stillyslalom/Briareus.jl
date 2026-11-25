@@ -458,7 +458,7 @@ _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 # `RadiationModel(...; closed)` with one element set per cavity; research notes,
 # "Per-cavity balancing"): one per hohlraum part in the
 # calculations, its closed volume (its profile about its axis, ends included) placed by
-# its frame (`_cavity_volumes`, session.jl). Which elements a cavity holds is decided on
+# its frame (`_cavity_volumes`, session_drive.jl). Which elements a cavity holds is decided on
 # the drive's target (`_cavity_elements`), and whether it is closed by rays
 # (`_closed_cavities`).
 struct _CavityVolume
