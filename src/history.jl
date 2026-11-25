@@ -659,7 +659,7 @@ Base.@nospecializeinfer function _drive_history(
                     push!(mband_laser[c.name], sum(sm.mband[e] * tm.elem_area[e] for e in tm.comp_elems[ci]; init = 0.0))
                 end
             end
-            bal =energy_balance(sol; by = :component)
+            bal = energy_balance(sol; by = :component)
             loss = 0.0
             for n in apertures
                 push!(escaped[n], bal.escaped[n])
@@ -670,16 +670,18 @@ Base.@nospecializeinfer function _drive_history(
                 push!(transmitted[c.name], bal.transmitted[c.name])
                 loss += bal.transmitted[c.name]
             end
+            # the target of this step, whose element areas differ from those of `t` when
+            # the target moves
+            tg = sol.model.target
             for ci in foils
                 c = t.components[ci]
                 es = t.comp_elems[ci]
-                push!(front[c.name], sum(_front_mass(model(e).front, I[e]) / areal_mass(model(e)) * t.elem_area[e]
-                                         for e in es) / sum(t.elem_area[es]))
+                push!(front[c.name], sum(_front_mass(model(e).front, I[e]) / areal_mass(model(e)) * tg.elem_area[e]
+                                         for e in es) / sum(tg.elem_area[es]))
             end
             push!(window_loss, loss)
             push!(setup, uc === nothing ? P0 : P0 + udel)
             push!(lost, bal.lost)
-            tg = sol.model.target
             v = ForwardDiff.value
             # The re-emission of the wall is part of the source of the solution, so the
             # x-ray source is booked as converted laser (ηP) and the absorbed power net of

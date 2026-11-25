@@ -116,6 +116,33 @@
         @test sum(s0.elem_area[c0]) == sum(t0.elem_area[elements(t0, :capsule)]) || mesh === :latlong
     end
 
+    # The front of a thin foil is the mean over the element areas of the moved target. The
+    # lid of this can is a fixed disk and an annulus that shrinks with the wall, so its
+    # elements change area by different factors, and the mean over the initial areas
+    # differs. The reference integrates the recorded temperatures of the steps.
+    foil = BurnthroughAlbedo(thickness = 40.0)
+    function can(τ)
+        R = 2.0 - 0.1τ
+        lid = merge_meshes(disk_mesh(1.0, 2.0; nr = 2, nphi = 16, up = false),
+                           annulus_mesh(1.0, R, 2.0; nr = 2, nphi = 16, up = false))
+        Target([Component(:wall, cylinder_mesh(R, -2.0, 2.0; nz = 6, nphi = 16),
+                          Material(:Au; albedo = 0.9, conversion = 0.8)),
+                Component(:lid, lid, Material(:Au; albedo = foil, conversion = 0.8)),
+                aperture(:leh, disk_mesh(R, -2.0; nr = 2, nphi = 16, up = true))])
+    end
+    lower = filter(b -> b.port[3] < 0 && b.group in (:inner23, :inner30), nif_quads())[1:4]
+    tc = [0.5, 2.0, 4.0]
+    hc = drive_history(Keyframes(can, tc, lower), τ -> [remake(b; power = 1.0 + τ) for b in lower], tc;
+                       observe = :wall, record = sol -> (Float64.(sol.H), sol.model.target.elem_area))
+    c0 = can(0.0)
+    lid = elements(c0, :lid)
+    rate(k) = Briareus._front_rate.(Ref(foil.front), radiation_temperature.(hc.record[k][1][lid]))
+    fraction(k) = Briareus._front_mass.(Ref(foil.front), sum((tc[j] - tc[j-1]) .* (rate(j - 1) .+ rate(j)) ./ 2
+                                                             for j in 2:k)) ./ Briareus.areal_mass(foil)
+    mean_over(f, A) = sum(f .* A) / sum(A)
+    @test all(k -> hc.front[:lid][k] ≈ mean_over(fraction(k), hc.record[k][2][lid]), 2:3)
+    @test abs(mean_over(fraction(3), c0.elem_area[lid]) / hc.front[:lid][3] - 1) > 5e-3
+
     # every keyframe must have the same elements
     grow =τ -> hohlraum(; radius = 2.875, kw..., h = τ < 1 ? 0.8 : 0.6)
     @test_throws ArgumentError model_at(Keyframes(grow, [0.0, 2.0], quads), 1.0)
