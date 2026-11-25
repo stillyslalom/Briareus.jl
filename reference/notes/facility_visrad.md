@@ -286,6 +286,18 @@ figures. **H** Details beyond the summary above:
     A facet is taken as scattering only with a quarter added to its radii, a fit residual
     ≤ 0.1 and a normal spread ≤ 25°; the quarter covers the 20% seen on spheres. These
     three numbers are choices of this package and are not facility criteria.
+  - Keep-out map (*engineering default*, 2026-11-25; confidence medium). `corridor_map`
+    samples a sphere about a point, or a plane, with the distances and defaults of the
+    rules above: the 1% contour with 0.5 mm for 3ω light, the 10% square with 0.2 mm for 1ω
+    light, the same position errors and rotation tolerance. The volume of a line of sight
+    is a choice of this package: a cylinder of the collimated field of the definition
+    (60 mm for Dante 1), or for a pinhole imager the cone from the detector field at the
+    object (24.6 mm for the SXI) to the pinhole, with no clearance added. The TaLIS
+    document gives no keep-out volume for a line of sight. Checked against closed forms
+    (a cylinder, a cone with its apex at the center, the 1% contour of a super-Gaussian
+    spot with its f-cone, the near side of a 1ω square on the beamlet axis). Measured with
+    192 NIF beams at their default aims, Dante 1 and both SXIs: nothing open at 20 mm from
+    TCC, 33% of the solid angle at 50 mm, 60% at 150 mm.
   - The User Guide adds: dimple half-side to radius "cannot be smaller than 0.25"
     (printed "0.25 mm"); horizontal planar targets have conjugate beams in the same
     hemisphere. **H**

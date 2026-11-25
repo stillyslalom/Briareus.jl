@@ -17,9 +17,10 @@ Marks: **done**, **partial** (with what remains), **open**.
 | A.4 VisRad 1ω/2ω beam import | done | `visrad_unconverted`; the import sets the participation flags and the drive ratios. Only the fraction-of-total model is measured on a workspace |
 | A.5 STEP B-rep import | open | optional |
 | B.1 disposition coloring | partial | the two color modes, the tight threshold and the curved-safe filter are in the 3D view, and a click on a facet gives its verdict in the status line; there is no hover |
-| B.2 closest-approach faces, calipers, cones | partial | a click on a TaLIS row draws the nearest side, the clearance plane, the caliper and the reflection cone; the margin terms show on hover. the Pinch toggle adds every other beam within the tight threshold of the part. Left: the port highlight on a chamber indicator and a view toggle for the 1ω contour modes |
-| B.3 daylight and grazing views, slice | partial | the Daylight and Grazing buttons turn the camera to the row under inspection; the 2-D slice is in core as data and SVG (`omega1_slice`, `write_omega1_slice_svg`) and is not yet shown as an inset in the window |
-| B.4 to B.6 | open | |
+| B.2 closest-approach faces, calipers, cones | done | a click on a TaLIS row draws the nearest side, the clearance plane, the caliper and the reflection cone, with a ring about the threatened port; the margin terms and the port angles show on hover. The Pinch toggle adds every other beam within the tight threshold of the part. View ▸ Beams switches the drawn 1ω light between the nominal footprint, the 10% contour and the worst-case contour. The application has no chamber indicator, so the port is marked in the 3D view |
+| B.3 daylight and grazing views, slice | done | the Daylight and Grazing buttons turn the camera to the row under inspection, and the TaLIS tab draws the 2-D slice of a selected 1ω row (`omega1_slice`; `write_omega1_slice_svg` for a file) |
+| B.4 safe-corridor map | partial | `corridor_map` in core, on a sphere or a plane, over 3ω envelopes, 1ω footprints and lines of sight (`SightLine`, `sight_line`), with `corridor_margin` for one point and `write_corridor_map_svg`; 192 beams on 90 by 180 samples take about 0.2 s. The clearance page draws the sphere about TCC in the 3D view. Left: a plane slice and a 2-D polar panel in the window, hardware shadowing, and lines of sight for diagnostics whose definitions lack a direction or field |
+| B.5, B.6 | open | |
 | C.1 to C.3 | open | |
 | D.3 handoff loop | partial | the SVG slice of a 1ω approach is written from core without a graphics context; no script export, no `--tab` |
 | D.1, D.2, D.4 | open | |
