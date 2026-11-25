@@ -238,3 +238,109 @@ end
     @test names(cap) == [:drive, :P2, :P4, :hotspot_velocity, :wall_irradiance, :wall_irradiance_rms, :wall_centroid]
     @test occursin("close on themselves", cap.notes[1])
 end
+
+@testset "design diff" begin
+    # Hand-built pairs with known changes.
+    plate(name, c; w = 1.0, mat = gold()) = Component(name, translate(rectangle_mesh(w, w; nu = 2, nv = 2), c), mat)
+    ball(R) = Component(:ball, icosphere_mesh(R; n = 2), Material(:CH); surface = SphereSurface(R))
+    shift = Briareus.Vec3(0.3, 0.0, -0.2)
+    ta = Target([plate(:plate, (0.0, 0.0, 2.0)), ball(1.0), plate(:same, (5.0, 0.0, 0.0)), plate(:old, (0.0, 5.0, 0.0)),
+                 plate(:coated, (0.0, -5.0, 0.0))])
+    tb = Target([plate(:plate, Briareus.Vec3(0.0, 0.0, 2.0) + shift), ball(1.25), plate(:same, (5.0, 0.0, 0.0)),
+                 plate(:new, (0.0, 6.0, 0.0)), plate(:coated, (0.0, -5.0, 0.0); mat = Material(:CH))])
+    spot = SuperGaussianSpot(0.3)
+    ba = [Beam("a"; theta = 30.0, phi = 0.0, spot, power = 1.0), Beam("b"; theta = 150.0, phi = 90.0, spot, power = 2.0),
+          Beam("c"; theta = 90.0, phi = 10.0, spot), Beam("gone"; theta = 60.0, phi = 0.0, spot)]
+    bb = [remake(ba[1]; aim = (0.1, -0.2, 0.2)), remake(ba[2]; power = 2.5, defocus = 0.4), ba[3],
+          Beam("extra"; theta = 70.0, phi = 0.0, spot)]
+    d = design_diff(ta, ba, tb, bb; names = ("old", "new"))
+    part(n) = only(x for x in d.parts if x.part === n)
+    @test [x.part for x in d.parts] == [:plate, :ball, :same, :old, :coated, :new]
+    @test part(:plate).status === :moved && part(:plate).shift ≈ shift && part(:plate).distance ≈ norm(shift)
+    @test part(:plate).displacement ≈ norm(shift)
+    # a sphere that grows about its center: every vertex moves by 0.25 and the centroid stays
+    @test part(:ball).status === :changed && part(:ball).displacement ≈ 0.25 && part(:ball).distance < 1e-12
+    @test part(:same).status === :same && part(:same).distance == 0 && !part(:same).material
+    @test part(:old).status === :removed && part(:new).status === :added
+    @test part(:coated).status === :same && part(:coated).material
+    beam(n) = only(x for x in d.beams if x.beam == n)
+    @test beam("a").changes == [:aim] && beam("a").aim_shift ≈ [0.1, -0.2, 0.2] && beam("a").distance ≈ 0.3
+    @test beam("b").changes == [:power, :defocus] && beam("b").power == (2.0, 2.5) && beam("b").defocus == (0.0, 0.4)
+    @test beam("c").status === :same && beam("gone").status === :removed && beam("extra").status === :added
+    @test isempty(d.talis) && isempty(d.physics)
+
+    # Reports built by hand: one row of each kind of change.
+    row(beam, comp, status, margin; rule = :clearance_1w) =
+        Briareus.TaLISRow(beam, rule, comp, status, margin, :mm, margin, margin, 0.2, zero(Briareus.Vec3), "")
+    rep(rows) = Briareus.TaLISReport(rows, (;), String[], Briareus.Omega1Reflection[])
+    ra = rep([row("a", :p, :pass, 1.0), row("b", :p, :fail, -0.5), row("c", :p, :pass, 2.0), row("d", :p, :pass, 2.0),
+              row("e", :p, :pass, 3.0), row("f", :p, :pass, 1.0), row("g", :p, :fail, -1.0), row("h", :p, :pass, Inf)])
+    rb = rep([row("a", :p, :fail, -0.25), row("b", :p, :pass, 0.5), row("c", :p, :pass, 1.5), row("d", :p, :pass, 2.75),
+              row("e", :p, :pass, 3.0), row("g", :p, :fail, -2.0), row("h", :p, :pass, Inf), row("i", :p, :fail, -0.1),
+              row("j", :p, :review, 0.1)])
+    dt = design_diff(ta, ba, ta, ba; reports = (ra, rb))
+    ch = Dict(x.beam => x for x in dt.talis)
+    @test [ch[k].change for k in ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")] ==
+          [:newly_failing, :fixed, :worse, :improved, :same, :removed, :worse, :same, :newly_failing, :added]
+    @test ch["a"].delta ≈ -1.25 && ch["d"].delta ≈ 0.75 && ch["h"].delta == 0 && isnan(ch["f"].delta)
+    @test ch["a"].status == (:pass, :fail) && ch["i"].status == (:absent, :fail)
+    @test all(x -> x.status === :same, dt.parts) && all(x -> x.status === :same, dt.beams)
+
+    # The check run on both designs. A plate that moves 0.15 mm toward a 1ω square loses
+    # margin, and at most 0.15 mm of it since a distance is 1-Lipschitz in the position.
+    # Moved onto the axis of the quad, the plate newly fails the 3ω clearance.
+    nb = filter(b -> b.quad == nif_beams()[1].quad, nif_beams())
+    bl = nb[1]
+    k = direction(bl)
+    ô = Briareus._own_side(bl.port, Briareus._nif_quad_port(bl.quad))
+    Rm = hcat(ô, cross(k, ô), k)
+    c0 = Briareus.Vec3(bl.aim) - 12k
+    shield(off) = Component(:shield, transform(rectangle_mesh(1.0, 1.0; nu = 3, nv = 3), Rm, c0 + off * ô), gold(); two_sided = true)
+    wall = Component(:wall, transform(rectangle_mesh(6.0, 6.0; nu = 4, nv = 4), Rm, Briareus.Vec3(bl.aim)), gold(); two_sided = true)
+    kw = (; capture = (:wall,), hardware = (:shield,))
+    t0, t1, t2 = Target([wall, shield(6.0)]), Target([wall, shield(5.85)]), Target([wall, shield(0.0)])
+    d1 = design_diff(t0, nb, t1, nb; talis = kw)
+    r1 = only(x for x in d1.talis if x.rule === :clearance_1w && x.beam == nb[3].name && x.component === :shield)
+    @test r1.status == (:pass, :pass) && r1.margin[1] > 5 && -0.15 - 1e-9 <= r1.delta < -0.05 && r1.change === :worse
+    @test only(x for x in d1.parts if x.part === :shield).status === :moved
+    d2 = design_diff(t0, nb, t2, nb; talis = kw)
+    r2 = only(x for x in d2.talis if x.rule === :clearance_3w && x.beam == bl.name && x.component === :shield)
+    @test r2.status == (:pass, :fail) && r2.change === :newly_failing
+
+    # Physics: every power raised by 10% in a hohlraum with a capsule. The radiation is
+    # linear in the power at a constant albedo and conversion, so the powers and the flux
+    # rise by 10%, the temperature by 1.1^(1/4), and the mode ratios stay.
+    cav = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                   wall = gold(albedo = 0.85, conversion = 0.8), h = 0.9, capsule_h = 0.3)
+    hb = [remake(b; aim = (0.2, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.1)))
+          for b in nif_quads(power = 8.0)]
+    s = Scenario(cav, hb; observe = :capsule, viewfactor_kw = (; closed = true))
+    hb2 = [remake(b; power = 1.1 * b.power) for b in hb]
+    dp = design_diff(cav, hb, cav, hb2; evaluations = (evaluate(s, hb), evaluate(s, hb2)), foils = (:wall,))
+    q(role, name) = only(x for x in dp.physics if startswith(x.role, role) && x.quantity == name)
+    @test q("laser", "absorbed power").b ≈ 1.1 * q("laser", "absorbed power").a && q("laser", "absorbed power").a > 0
+    @test q("part wall", "absorbed power").delta ≈ 0.1 * q("part wall", "absorbed power").a
+    @test q("capsule", "mean flux").b ≈ 1.1 * q("capsule", "mean flux").a rtol = 1e-10
+    @test q("capsule", "Tr").b ≈ 1.1^0.25 * q("capsule", "Tr").a rtol = 1e-10
+    @test abs(q("capsule", "P2/P0").delta) < 1e-9 && abs(q("capsule", "mode 1").delta) < 1e-9
+    @test q("capsule", "hot-spot velocity x").a ≈ hotspot_velocity(evaluate(s, hb))[1] && abs(q("capsule", "hot-spot velocity x").a) > 1
+    @test q("foil wall", "absorbed intensity").b ≈ 1.1 * q("foil wall", "absorbed intensity").a
+    @test abs(q("foil wall", "intensity RMS over mean").delta) < 1e-9
+    @test all(x -> x.changes == [:power], dp.beams)
+
+    # The page and the JSON.
+    full = Briareus.DesignDiff(("old", "new <b>"), d.parts, d.beams, dt.talis, dp.physics)
+    page = design_diff_html(full; title = "A & B")
+    @test _well_formed(page) && occursin("A &amp; B", page) && occursin("new &lt;b&gt;", page)
+    @test occursin("newly failing", page) && occursin("id=\"physics\"", page) && !occursin("<td>e</td>", page)
+    @test occursin("<td>e</td>", design_diff_html(full; unchanged = true))
+    @test page == design_diff_html(full; title = "A & B")
+    mktempdir() do dir
+        ps = write_design_diff(dir, full; json = true)
+        @test basename.(ps) == ["diff.html", "diff.json"] && all(isfile, ps)
+        js = Briareus.JSON.parsefile(ps[2])
+        @test length(js["talis"]) == length(dt.talis) && js["parts"][1]["status"] == "moved"
+        @test js["names"] == ["old", "new <b>"]
+    end
+    @test occursin("2 newly failing", sprint(show, dt))
+end

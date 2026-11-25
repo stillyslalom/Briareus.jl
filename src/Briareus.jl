@@ -85,7 +85,8 @@ export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_
 export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad, compare_visrad_kit
 export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, visrad_target,
        write_visrad_workspace, VisRadProfile, visrad_profile, visrad_unconverted, visrad_envelope,
-       visrad_power_sources, visrad_deposition
+       visrad_power_sources, visrad_deposition, visrad_residuals,
+       DesignDiff, design_diff, design_diff_html, write_design_diff
 export VISRAD_NIF_PLATES
 export visrad_element_values
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
@@ -206,6 +207,7 @@ include("roe_export.jl")
 include("port_map.jl")
 include("html_report.jl")
 include("review_packets.jl")
+include("design_diff.jl")
 include("visrad_io.jl")
 include("visrad_kit.jl")
 include("visrad_workspace.jl")

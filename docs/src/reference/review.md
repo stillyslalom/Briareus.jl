@@ -87,8 +87,13 @@ optionally JSON. [`write_roe_packet`](@ref) writes the rules-of-engagement sheet
 same forms, with the chamber port map. The pages refer to no other file and to nothing
 on the network, and the same input gives the same text.
 
+[`design_diff`](@ref) compares two designs: the parts that moved, the beams that were
+repointed, the TaLIS rows that newly fail or were fixed, and the physics of every role
+that either design has. [`write_design_diff`](@ref) writes the page of the result.
+
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl", "src/port_map.jl", "src/review_packets.jl"]
+Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl", "src/port_map.jl", "src/review_packets.jl",
+         "src/design_diff.jl"]
 Private = false
 ```
