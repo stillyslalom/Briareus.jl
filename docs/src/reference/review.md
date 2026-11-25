@@ -53,3 +53,28 @@ Modules = [Briareus]
 Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl", "src/omega1_slice.jl", "src/corridor.jl", "src/design_rules.jl"]
 Private = false
 ```
+
+## Beam rules of engagement
+
+[`roe_scan`](@ref) plans which beams and quads a shot can lose before the shot day. An
+outage is a set of beams at zero power with every other beam as planned, and each outage
+is scored against a list of criteria ([`ROECriterion`](@ref)), each a function of an
+evaluation with a green and an amber threshold. The scan covers every beam, every quad,
+pairs of them and pre-planned companion drops, and sorts each unit into a tier: green
+units may drop without a request, amber ones need approval, and red ones hold the shot.
+The physics lies in the criteria, so the same scan applies to a capsule in a hohlraum
+(`roe_drive`, `roe_mode`, `roe_hotspot_velocity`, `roe_yield`), a package face or the
+wall of one cavity (`roe_face_flux`, `roe_face_nonuniformity`, `roe_temperature`,
+`roe_flux_balance`), a backlighter foil (`roe_foil_irradiance`, `roe_foil_nonuniformity`,
+`roe_foil_centroid`, `roe_backlighter_signal`) and direct drive (`roe_illumination_rms`,
+`roe_corona_rms`), and any other function of an evaluation enters as a criterion of the
+same kind. Several cases in one scan cover the epochs of a pulse and several observed
+faces. The default thresholds of the built-in criteria are engineering defaults.
+[`roe_table`](@ref), [`write_roe_csv`](@ref) and [`roe_markdown`](@ref) export the sheet
+by role and tier, with the scores behind each tier and the pairs that are worse together.
+
+```@autodocs
+Modules = [Briareus]
+Pages = ["src/roe.jl", "src/roe_criteria.jl", "src/roe_export.jl"]
+Private = false
+```

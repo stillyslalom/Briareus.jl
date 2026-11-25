@@ -57,6 +57,7 @@ shard_include("material_library.jl")
 
 shard_include("talis.jl")
 shard_include("corridor.jl")
+shard_include("roe.jl")
 shard_include("vrw_fixture.jl")
 shard_include("visrad.jl")
 shard_include("visrad_nif_spots.jl")

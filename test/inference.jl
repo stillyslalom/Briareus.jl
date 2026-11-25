@@ -241,6 +241,16 @@ end
         ru(FaceFlux(mw, :capsule), τ -> 1e-3 * τ)
         @test _inf_body_instances(retune_drive) == n
 
+        # For a rules-of-engagement scan, new criterion, role and companion functions
+        # reuse the body.
+        roe(f, roles, companions) = roe_scan(s, quads, [ROECriterion(:c, f; green = 1, amber = 2)];
+                                             pairs = :none, roles, companions)
+        roe(ev -> mean_flux(ev), :part, nothing)
+        n = _inf_body_instances(Briareus._roe_scan)
+        roe(ev -> 2 * mean_flux(ev), b -> b.group, name -> nothing)
+        roe(ev -> 3 * mean_flux(ev), b -> :drive, :opposite)
+        @test _inf_body_instances(Briareus._roe_scan) == n
+
         optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2)
         n = _inf_body_instances(optimize_pointing)
         # a new objective type and a callback

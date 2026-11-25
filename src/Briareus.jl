@@ -73,7 +73,12 @@ export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_
        Omega1Approach, omega1_closest_approach, Omega1Reflection, omega1_reflection,
        Omega1Disposition, omega1_disposition, omega1_slice, omega1_slice_svg, write_omega1_slice_svg,
        SightLine, sight_line, sight_distance, CorridorMap, corridor_map, corridor_margin, corridor_classes,
-       corridor_fills, angular_margin, corridor_open_fraction, corridor_map_svg, write_corridor_map_svg
+       corridor_fills, angular_margin, corridor_open_fraction, corridor_map_svg, write_corridor_map_svg,
+       ROECriterion, ROEUnit, ROEOutage, ROEBudget, ROEReport, roe_scan, roe_drive, roe_mode,
+       roe_hotspot_velocity, roe_yield, roe_face_flux, roe_face_nonuniformity, roe_temperature,
+       roe_flux_balance, roe_foil_irradiance, roe_foil_nonuniformity, roe_foil_centroid,
+       roe_backlighter_signal, roe_illumination_rms, roe_corona_rms, roe_table, write_roe_csv,
+       roe_markdown, write_roe_markdown
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments, read_stl, read_stl_solids, write_stl, write_results
 export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad, compare_visrad_kit
 export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, visrad_target,
@@ -195,6 +200,7 @@ include("diagnostics.jl")
 include("corridor.jl")
 include("roe.jl")
 include("roe_criteria.jl")
+include("roe_export.jl")
 include("visrad_io.jl")
 include("visrad_kit.jl")
 include("visrad_workspace.jl")
