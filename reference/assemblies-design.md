@@ -21,7 +21,7 @@ leftovers are in the roadmap ("Assemblies: phase E and leftovers"). Phase E is o
 
 ## Today (before phase E)
 
-- **Parts only.** A target is its parts (`PartSpec`, `controllers/target_setup.jl`).
+- **Parts only.** A target is its parts (`PartSpec`, `controllers/part_spec.jl`).
   Starters (`starter_parts`, `insert_starter!`) insert parts in a frame: *Hohlraum with
   capsule*, *Backlighter foil*, *Halfraum pair with shock tube*, *Opacity halfraum* and
   the frustraum (`STARTERS`). Starter geometry is illustrative (mock-ups, public

@@ -173,12 +173,9 @@ window](@ref).
    since the save is offered in its place, and the properties of a part can relink its
    file or read it from the source again.
 
-   Sessions saved before frames (version 2 and older) are converted on load. A part
-   placed in the old foil frame, with z along the back normal of the foil, is
-   re-expressed in the frame of the backlighter foil at the same place. Beams that
-   followed a component aim are given aims in the frame of that component, with their
-   saved aims unchanged. In sessions before version 5 the part with the foil role was
-   named `backlighter`; it loads as the active foil under the same name.
+   A session file is loaded in the current format only. A file of another format
+   version is refused with an error that names the version found and the version
+   supported, and earlier formats are not converted.
 
    A session also contains the definition of each diagnostic it records (see
    *Diagnostics* below), CSV files included, and its histories use those definitions
@@ -199,9 +196,7 @@ window](@ref).
 
    A session also saves the window as it was left, so it reopens the same way. The saved
    state includes the camera pose and projection, whether the drive shows the 3D view,
-   the map or the x-ray image (with the image camera), and the chart of the Time tab. A
-   session from before version 13 opens on the default camera, the 3D view and the
-   Pulses chart.
+   the map or the x-ray image (with the image camera), and the chart of the Time tab.
 
 Two further steps use the view factors of the drive without computing them again: an
 x-ray image of the target (Compute ▸ X-ray image along the view) and the drive through a
@@ -288,8 +283,7 @@ bindings. Help ▸ Documentation opens this page.
   halfraums face each other across a cylinder package whose end faces close them, and
   the top face is observed; the opacity halfraum has an observed sample foil in its open
   end. The OMEGA starter is *Backlighter foil*, and *Empty* has no parts at all. The
-  dimensions are illustrative mock-ups, and a session saved with the earlier hohlraum or
-  foil template loads as these parts. The Insert menu (and the target properties) adds
+  dimensions are illustrative mock-ups. The Insert menu (and the target properties) adds
   spheres, disks, washers, rectangles, cylinders, cones, bare hohlraum parts and STL
   meshes, placed at TCC. It also adds diagnostic windows in the wall of the selected
   hohlraum part, assemblies of the selected parts and frames. (`insert_starter!` still
