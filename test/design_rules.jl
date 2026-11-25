@@ -18,12 +18,15 @@
     @test direct_fraction(ev, (:capsule,)) == d == power_fraction(ev, :capsule)
     @test_throws ArgumentError direct_fraction(ev, (:Capsule,))
 
-    ka = ApertureKeepOut(t; minimum = 0.3, weight = 2.0)
-    ks = SphereKeepOut(t; minimum = 0.3, weight = 5.0)
-    @test keepout_clearance(ka, ev) == aperture_clearance(ka, ev.beams)
-    @test keepout_clearance(ks, ev) == sphere_clearance(ks, ev.beams)
+    # the weight belongs to the penalty: a pair `keepout => weight`, or the default 100
+    kg, ksg = ApertureKeepOut(t; minimum = 0.3), SphereKeepOut(t; minimum = 0.3)
+    ka, ks = kg => 2.0, ksg => 5.0
+    @test keepout_clearance(kg, ev) == aperture_clearance(kg, ev.beams)
+    @test keepout_clearance(ksg, ev) == sphere_clearance(ksg, ev.beams)
     pa = keepout_penalty(ka, ev)
-    @test pa == 2 * sum(max(0, 0.3 - ci)^2 for ci in aperture_clearance(ka, ev.beams) if isfinite(ci))
+    @test pa == 2 * sum(max(0, 0.3 - ci)^2 for ci in aperture_clearance(kg, ev.beams) if isfinite(ci))
+    @test pa == keepout_penalty(kg, ev; weight = 2.0) && keepout_penalty(kg, ev) == 50 * pa
+    @test_throws MethodError ApertureKeepOut(t; minimum = 0.3, weight = 2.0)
     @test pa > 0 && keepout_penalty(ks, ev) > 0
     @test keepout_penalty((ka, ks), ev) == keepout_penalty([ka, ks], ev) ==
           pa + keepout_penalty(ks, ev)
@@ -61,7 +64,6 @@ const DR_X = [3.09, -1.09, 3.63, -0.6, 5.2, 0.0, 5.01, 0.0]
 
 # A keep-out whose clearance is NaN for every beam (a broken quantity, refused).
 struct _NaNKeepOut
-    weight::Float64
     minimum::Float64
 end
 Briareus.keepout_clearance(::_NaNKeepOut, beams::AbstractVector{<:Beam}) = fill(NaN, length(beams))
@@ -135,10 +137,10 @@ end
 
     # The penalty of the keep-out is checked by itself and beside another keep-out, with its
     # quantity on an evaluation.
-    kp = HardwareKeepOut(t, (:shield, :stalk); targets = (:wall, :capsule), minimum = 0.2, weight = 3.0)
+    kp = HardwareKeepOut(t, (:shield, :stalk); targets = (:wall, :capsule), minimum = 0.2)
     cp = hardware_clearance(kp, beams)
     @test all(isapprox.(cp, min.(c[1], c[2]); atol = 1e-12))
-    @test keepout_penalty(kp, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
+    @test keepout_penalty(kp => 3.0, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
     ka = ApertureKeepOut(t)
     @test keepout_penalty((kp, ka), beams) ≈ keepout_penalty(kp, beams) + keepout_penalty(ka, beams) rtol = 1e-12
     ev = evaluate(Scenario(t, GroupPointing(nif_quads(); fields = (:z, :r))), DR_X)
@@ -244,10 +246,10 @@ end
     @test err < 1e-6
     # the rule's penalty
     kp = HardwareKeepOut(t, (:shield, :stalk); targets = (:wall, :capsule), tolerance = 0.5, miss = :all,
-                         minimum = 0.5, weight = 2.0)
+                         minimum = 0.5)
     cp = hardware_clearance(kp, beams)
     @test all(isapprox.(cp, min.(c[1], c[2]); atol = 1e-12))
-    @test keepout_penalty(kp, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
+    @test keepout_penalty(kp => 2.0, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
 end
 
 @testset "design rules: TaLIS 3ω capture as a quantity" begin
@@ -282,7 +284,7 @@ end
     @test_throws ArgumentError check_constraints(evm, clearance_floor(kball))
     @test clearance_floor(kball).f(evaluate(Scenario(tball, [b0]), [b0])) == [Inf]
     # NaN is refused alike
-    @test_throws ArgumentError keepout_penalty(_NaNKeepOut(1.0, 0.0), [b0])
+    @test_throws ArgumentError keepout_penalty(_NaNKeepOut(0.0), [b0])
 
     # against talis_check's :capture_3w rows: a 5 × 4 mm one-sided foil at TCC tilted 20°,
     # the 24 upper NIF quads aimed on a grid across and past its edges
@@ -294,7 +296,7 @@ end
     beams = [remake(b; aim = Tuple(b.aim - (dot(b.aim, n) / dot(direction(b), n)) * direction(b))) for b in beams]
     rep = talis_check(t, beams; capture = (:foil,), hardware = (), omega1 = false, resolution = 1e-7, rtol = 0)
     w = [only(r.worst for r in rep.rows if r.beam == b.name && r.rule === :capture_3w) for b in beams]
-    kc = CaptureKeepIn(t, :foil; minimum = 0.5, weight = 2.0)
+    kc = CaptureKeepIn(t, :foil; minimum = 0.5)
     c = capture_margin(kc, beams)
     landed = isfinite.(w)
     @test count(landed) >= 10 && count(!, landed) >= 8 && count(>(0.5), c) >= 1
@@ -302,7 +304,7 @@ end
     @test all(0 .<= c[landed] .- w[landed] .<= 2e-7)
     # where it misses (the report's −Inf), finite and negative
     @test all(isfinite, c) && all(<(0), c[.!landed])
-    @test keepout_penalty(kc, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
+    @test keepout_penalty(kc => 2.0, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
     # For continuity across the edge, the aim of a beam is moved along the long axis of the
     # foil through its end. The margin does not step where the axis leaves the foil, since
     # it is 3-Lipschitz in the aim, and it falls beyond the end.
@@ -395,10 +397,10 @@ end
         # the report's lower bound, the quantity a found value: within the 1e-7 mm resolution
         @test all(0 .<= c .- w .<= 1.1e-7)
     end
-    ko = Omega1KeepOut(t, :stalk; resolution = 1e-11, minimum = 0.2, weight = 3.0)
+    ko = Omega1KeepOut(t, :stalk; resolution = 1e-11, minimum = 0.2)
     c = omega1_clearance(ko, beams)
     @test any(<(0.2), c) && any(>(0.2), c)
-    @test keepout_penalty(ko, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in c) rtol = 1e-12
+    @test keepout_penalty(ko => 3.0, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in c) rtol = 1e-12
     # An aim scan shows no step beyond the Lipschitz bound.
     b = beams[argmin(c)]
     ys = -0.5:0.01:0.5

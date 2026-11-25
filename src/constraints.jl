@@ -399,9 +399,9 @@ of the evaluation, labeled by the beam name. The keep-out is any
 [`SphereKeepOut`](@ref) or a [`HardwareKeepOut`](@ref). A beam the keep-out does not
 apply to (clearance `Inf`) gives a component that is always met; a clearance of `-Inf` or
 `NaN` throws an `ArgumentError` naming the keep-out and the beam, as in
-[`keepout_penalty`](@ref). The `weight` of the keep-out is not used: the constraint
-replaces its penalty ([`keepout_penalty`](@ref)), so pass the keep-out to the `keepout`
-keyword of the objective or as a constraint, not both.
+[`keepout_penalty`](@ref). The constraint replaces the penalty of the keep-out, so pass
+the keep-out to the `keepout` keyword of the objective or as a constraint, and to one of
+the two only.
 
 `scale` (mm) is the unit of the violation: with the default 1 mm and `feasibility =
 1e-3`, a clearance within 1 µm of `minimum` is `:active` (an engineering default, finer

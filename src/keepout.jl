@@ -54,7 +54,7 @@ end
     ApertureKeepOut(target; apertures = planar aperture components, peak_fraction = 0.01,
                     intensity = nothing, pointing = 0.05, target_offset = 0.025,
                     hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
-                    minimum = 0.0, weight = 100.0, nrim = 96, softness = 1e-4)
+                    minimum = 0.0, nrim = 96, softness = 1e-4)
 
 Keep-out constraint for beams entering through planar apertures of any shape, such as
 laser entrance holes and slots. `aperture_clearance(keepout, beams)` gives the
@@ -107,7 +107,7 @@ The distance to the envelope ellipse is first order (Sampson). It is exact on th
 envelope and for round spots, and smooth in aim, defocus and spot size. A design should
 be confirmed with `clearance`, which also accounts for wings and power on hardware. The
 keep-out is passed as `keepout` to `symmetry_objective` or `asymmetry_objective`, which
-then add `weight × Σᵢ max(0, minimum − cᵢ)²`.
+then add the penalty `weight × Σᵢ max(0, minimum − cᵢ)²` ([`keepout_penalty`](@ref)).
 """
 struct ApertureKeepOut <: AbstractKeepOut
     names::Vector{Symbol}
@@ -120,14 +120,13 @@ struct ApertureKeepOut <: AbstractKeepOut
     focus::Float64
     margin::Float64
     minimum::Float64
-    weight::Float64
     softness::Float64      # length (mm) of the smooth minimum over the rim (0 for the exact one)
 end
 
 function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing,
                          intensity = nothing, pointing = 0.05, target_offset = 0.025,
                          hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
-                         minimum = 0.0, weight = 100.0, nrim::Integer = 96, softness::Real = 1e-4)
+                         minimum = 0.0, nrim::Integer = 96, softness::Real = 1e-4)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     nrim >= 3 || throw(ArgumentError("nrim must be at least 3"))
     softness >= 0 || throw(ArgumentError("softness must be non-negative"))
@@ -161,7 +160,7 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
     end
     return ApertureKeepOut(names, centers, rims, _RimSamples.(rims), peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
-                           minimum, weight, Float64(softness))
+                           minimum, Float64(softness))
 end
 
 # Returns the rim of the hole made of the coplanar components `comps` (normal `n`). The
@@ -679,8 +678,7 @@ end
 """
     SphereKeepOut(target; spheres = parts on a `SphereSurface`, peak_fraction = 0.01,
                   intensity = nothing, pointing = 0.05, target_offset = 0.025,
-                  hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0,
-                  weight = 100.0)
+                  hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0)
 
 Keep-out constraint for spherical obstacles inside a target, such as the capsule of a
 hohlraum. `sphere_clearance(keepout, beams)` gives the worst-case clearance (mm) of each
@@ -703,7 +701,8 @@ landing surfaces.
 A sphere counts only when its center lies upstream of the point where the beam axis
 first meets another opaque component, such as the wall on which a hohlraum beam lands.
 That point is found on the nominal beam, and a sphere behind that surface is shadowed
-and ignored. The penalty added by the objectives is `weight × Σᵢ max(0, minimum − cᵢ)²`.
+and ignored. The penalty added by the objectives is `weight × Σᵢ max(0, minimum − cᵢ)²`
+([`keepout_penalty`](@ref)).
 The deposition penalty `direct` (the squared fraction of power on the capsule) vanishes
 as the spot edge starts to clip, so it cannot hold a margin. This keep-out serves when
 the capsule must stay clear, and a design is confirmed with `clearance` on the capsule.
@@ -720,13 +719,11 @@ struct SphereKeepOut <: AbstractKeepOut
     focus::Float64
     margin::Float64
     minimum::Float64
-    weight::Float64
 end
 
 function SphereKeepOut(t::Target; spheres = nothing, peak_fraction = nothing,
                        intensity = nothing, pointing = 0.05, target_offset = 0.025,
-                       hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0,
-                       weight = 100.0)
+                       hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     area(ci) = sum(t.elem_area[e] for e in t.comp_elems[ci] if t.elem_side[e] == 1; init = 0.0)
     # the largest sphere among the components `cis` (nothing if there is none)
@@ -762,7 +759,7 @@ function SphereKeepOut(t::Target; spheres = nothing, peak_fraction = nothing,
     others = Set(i for (i, c) in enumerate(t.components) if c.kind === :surface && !(i in idx))
     return SphereKeepOut(names, centers, radii, t, others, peak_fraction, intensity,
                          pointing + target_offset + hardware_tolerance, focus, margin,
-                         minimum, weight)
+                         minimum)
 end
 
 """
@@ -814,18 +811,22 @@ keepout_clearance(k::SphereKeepOut, beams::AbstractVector{<:Beam}) = sphere_clea
 keepout_clearance(k, ev::Evaluation) = keepout_clearance(k, ev.beams)
 
 """
-    keepout_penalty(keepout, beams) -> Real
-    keepout_penalty(keepout, ev::Evaluation) -> Real
+    keepout_penalty(keepout, beams; weight = 100.0) -> Real
+    keepout_penalty(keepout => weight, beams) -> Real
+    keepout_penalty(keepout, ev::Evaluation; weight = 100.0) -> Real
 
 The penalty that a keep-out adds to an objective, `weight × Σᵢ max(0, minimum − cᵢ)²`
-over the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the `weight` and
-`minimum` of the keep-out. For a tuple or vector of keep-outs it is the sum of their
-penalties, and for `nothing` it is 0. The `keepout` keyword of
-[`symmetry_objective`](@ref), [`asymmetry_objective`](@ref) and
-[`face_flux_objective`](@ref) adds this penalty, so a hand-written objective adds
-`keepout_penalty(keepout, ev)` to the same effect. In the number type of the beams
-(ForwardDiff duals) and thread-safe. A keep-out of another type takes part through a
-`keepout_clearance` method and `weight` and `minimum` fields.
+over the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the `minimum` of the
+keep-out. The weight belongs to the penalty and is not a property of the keep-out, whose
+geometry also serves as a constraint without one ([`clearance_floor`](@ref)). A pair
+`keepout => weight` sets the weight of that keep-out, and a keep-out given without one
+takes 100, an *engineering default*. For a tuple or vector of keep-outs and
+pairs the penalty is the sum of their penalties, and for `nothing` it is 0. The
+`keepout` keyword of [`symmetry_objective`](@ref), [`asymmetry_objective`](@ref) and
+[`face_flux_objective`](@ref) takes the same forms and adds this penalty, so a
+hand-written objective adds `keepout_penalty(keepout, ev)` to the same effect. In the
+number type of the beams (ForwardDiff duals) and thread-safe. A keep-out of another type
+takes part through a `keepout_clearance` method and a `minimum` field.
 
 A clearance of `+Inf`, for a beam to which the keep-out does not apply, adds nothing. A
 clearance of `-Inf` or `NaN` throws an `ArgumentError` naming the keep-out and the beam.
@@ -835,7 +836,8 @@ Either value would give the optimizer a non-finite objective, and a large finite
 penalty in its place would hide the cause.
 """
 keepout_penalty(::Nothing, beams::AbstractVector{<:Beam}) = 0.0
-keepout_penalty(k, ev::Evaluation) = keepout_penalty(k, ev.beams)
+keepout_penalty(k, ev::Evaluation; kwargs...) = keepout_penalty(k, ev.beams; kwargs...)
+keepout_penalty(p::Pair, beams::AbstractVector{<:Beam}) = keepout_penalty(first(p), beams; weight = last(p))
 
 # The penalties of several keep-outs (a tuple or vector) are added. A tuple is unrolled
 # with `map`, since a generator over a heterogeneous tuple made inference in Julia 1.13
@@ -851,12 +853,15 @@ function keepout_penalty(ks::AbstractVector, beams::AbstractVector{<:Beam})
     return J
 end
 
-function keepout_penalty(k, beams::AbstractVector{<:Beam})
+# The weight of the penalty of a keep-out given without one (an engineering default).
+const _KEEPOUT_WEIGHT = 100.0
+
+function keepout_penalty(k, beams::AbstractVector{<:Beam}; weight::Real = _KEEPOUT_WEIGHT)
     c = keepout_clearance(k, beams)
     _check_clearances(k, beams, c)
     # The penalty is in the number type of the beams also when no clearance is finite. A
     # Float64 0.0 beside dual penalties made the sum over keep-outs a runtime dispatch.
-    J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if ci != Inf; init = 0.0)
+    J = weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if ci != Inf; init = 0.0)
     return convert(eltype(c), J)
 end
 

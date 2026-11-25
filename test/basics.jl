@@ -889,7 +889,7 @@ end
     g = ForwardDiff.gradient(x -> sum(aperture_clearance(ko, apply(p, x))), initial_parameters(p))
     @test all(isfinite, g) && norm(g) > 0
     @test keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
-    @test keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
+    @test keepout_penalty(ApertureKeepOut(th; minimum = 1.0) => 2.0, qs) ≈
           2 * sum((1 .- aperture_clearance(ApertureKeepOut(th), qs)) .^ 2)
     # With every piece in one part, as for a GUI hohlraum part, there is one hole per
     # plane, with the same rims and clearances as the hohlraum whose holes are separate

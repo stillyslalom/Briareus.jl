@@ -618,16 +618,17 @@ review_line("re-pointed", cap_review(first_try.beams))
 #
 # The optimizer has to see the same worst case. An [`ApertureKeepOut`](@ref) computes
 # the worst-case clearance of each beam from the rim of its entrance hole with the same
-# envelope and error set, smoothly enough to differentiate, and adds a penalty when it
-# falls below a minimum, here 10 µm. On the original pointing it agrees with
+# envelope and error set, smoothly enough to differentiate. The objective adds a penalty
+# when the clearance falls below a minimum, here 10 µm, with the weight given beside the
+# keep-out, here 10³. On the original pointing the keep-out agrees with
 # [`clearance`](@ref):
 
-keepout = ApertureKeepOut(target; peak_fraction = 0.01, minimum = 0.01, weight = 1e3)
+keepout = ApertureKeepOut(target; peak_fraction = 0.01, minimum = 0.01)
 from_keepout = aperture_clearance(keepout, quads)
 @printf("worst-case clearance from the keep-out %.3f mm, from clearance %.3f mm\n",
         minimum(from_keepout), review_48.worst)
 
-second_try = optimize_pointing(repoint, asymmetry_objective(; goals..., keepout); x0,
+second_try = optimize_pointing(repoint, asymmetry_objective(; goals..., keepout = keepout => 1e3); x0,
                                lower, upper, iterations = 20)
 repointed = evaluate(repoint, second_try.x)
 c_repointed = flux_ylm(repointed; lmax = 4)

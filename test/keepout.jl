@@ -47,9 +47,9 @@
     tb = Target(cap, foil(:f, (0, 0, 2), (0, 0, 1); width = 8.0, n = 4))
     @test sphere_clearance(SphereKeepOut(tb), [sbeam(1.4)]) == [Inf]
     # The penalty is weight × Σ max(0, minimum − c)².
-    kp = SphereKeepOut(ts; minimum = 0.5, weight = 3.0)
+    kp = SphereKeepOut(ts; minimum = 0.5)
     c = sphere_clearance(kp, sbeam.(h))
-    @test keepout_penalty(kp, sbeam.(h)) ≈ 3 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
+    @test keepout_penalty(kp => 3.0, sbeam.(h)) ≈ 3 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
 end
 
 # The aperture keep-out on holes of any shape, against direct geometric computations:

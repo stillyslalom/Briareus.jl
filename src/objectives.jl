@@ -7,9 +7,10 @@
 Supertype of the smooth geometric rules on the beams that an optimization holds:
 [`ApertureKeepOut`](@ref), [`SphereKeepOut`](@ref), [`HardwareKeepOut`](@ref),
 [`CaptureKeepIn`](@ref), [`IncidenceRule`](@ref) and [`Omega1KeepOut`](@ref). A subtype
-has a [`keepout_clearance`](@ref) method, the clearance per beam, and the fields
-`minimum`, the clearance to keep, and `weight`, the weight of its penalty
-([`keepout_penalty`](@ref)). [`clearance_floor`](@ref) makes a constraint of any of them.
+has a [`keepout_clearance`](@ref) method, the clearance per beam, and a field `minimum`,
+the clearance to keep. A keep-out is geometry only. An objective adds its penalty with a
+weight ([`keepout_penalty`](@ref)), and [`clearance_floor`](@ref) makes a constraint of
+it.
 """
 abstract type AbstractKeepOut end
 
@@ -75,9 +76,10 @@ Objective for indirect-drive symmetry. The objective is the sum of these terms:
 - with `drive` (TW/mm²) given, `drive_weight × (a₀/drive - 1)²`, with `a₀` the
   [`mean_flux`](@ref). With `drive = mean_flux(evaluate(scenario, x0))`, the objective holds
   the drive of the design `x0`;
-- with a `keepout`, its penalty on the worst-case clearance of the beams. A keep-out is
-  an `ApertureKeepOut` for the entrance-hole rims, a `SphereKeepOut` for the capsule, or
-  a tuple of them.
+- with a `keepout`, its penalty on the worst-case clearance of the beams
+  ([`keepout_penalty`](@ref)). A keep-out is an `ApertureKeepOut` for the entrance-hole
+  rims, a `SphereKeepOut` for the capsule, another [`AbstractKeepOut`](@ref), a pair
+  `keepout => weight` for a penalty weight other than the default, or a tuple of them.
 
 The `direct` penalty counts only power already on the capsule, so keep a margin with a
 `SphereKeepOut`.

@@ -58,7 +58,7 @@ end
                     peak_fraction = 0.01, intensity = nothing, pointing = 0.05,
                     target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
                     margin = 0.0, tolerance = 0.0, pivot = :tcc, miss = :aim,
-                    minimum = 0.0, weight = 100.0)
+                    minimum = 0.0)
 
 Keep-out constraint for named hardware such as shields, stalks, diagnostic snouts and closed
 windows. [`hardware_clearance`](@ref)`(keepout, beams)` gives the worst-case clearance (mm)
@@ -152,13 +152,12 @@ struct HardwareKeepOut <: AbstractKeepOut
     tolerance::_TaLISTol                 # the rule tolerance r·tan α
     through::Bool                        # an unlanded beam judged along its whole length
     minimum::Float64
-    weight::Float64
 end
 
 function HardwareKeepOut(t::Target, parts; targets = nothing, peak_fraction = nothing,
                          intensity = nothing, pointing = 0.05, target_offset = 0.025,
                          hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, tolerance = 0.0,
-                         pivot = :tcc, miss::Symbol = :aim, minimum = 0.0, weight = 100.0)
+                         pivot = :tcc, miss::Symbol = :aim, minimum = 0.0)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     miss in (:aim, :all) || throw(ArgumentError("miss must be :aim or :all"))
     names = _part_names(parts)
@@ -170,7 +169,7 @@ function HardwareKeepOut(t::Target, parts; targets = nothing, peak_fraction = no
     isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
     return HardwareKeepOut(names, t, idx, others, _clusters(tris), peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
-                           _talis_tol(tolerance, pivot), miss === :all, minimum, weight)
+                           _talis_tol(tolerance, pivot), miss === :all, minimum)
 end
 
 function _part_names(parts)
@@ -561,8 +560,7 @@ _ellipse_signed(u, v, A, B, A0::Float64, B0::Float64, X0, X1, n1, n2) =
 """
     CaptureKeepIn(target, parts; peak_fraction = 0.1, intensity = nothing, pointing = 0.05,
                   target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
-                  margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5,
-                  weight = 100.0)
+                  margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5)
 
 Capture constraint for the parts meant to be struck by beams, such as backlighter foils
 and capture plates. [`capture_margin`](@ref)`(keepin, beams)` gives the worst-case margin
@@ -610,13 +608,11 @@ struct CaptureKeepIn <: AbstractKeepOut
     margin::Float64
     tolerance::_TaLISTol
     minimum::Float64
-    weight::Float64
 end
 
 function CaptureKeepIn(t::Target, parts; peak_fraction = nothing, intensity = nothing,
                        pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
-                       focus = 1.0, margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5,
-                       weight = 100.0)
+                       focus = 1.0, margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.1)
     names = _part_names(parts)
     pieces = [part_pieces(t, n) for n in names]
@@ -625,7 +621,7 @@ function CaptureKeepIn(t::Target, parts; peak_fraction = nothing, intensity = no
     clusters = [_clusters(reduce(vcat, (fe[ci] for ci in ps); init = NTuple{2,Vec3}[])) for ps in pieces]
     return CaptureKeepIn(names, t, Set(keys(part_of)), part_of, clusters, peak_fraction, intensity,
                          pointing + target_offset + hardware_tolerance, focus, margin,
-                         _talis_tol(tolerance, pivot), minimum, weight)
+                         _talis_tol(tolerance, pivot), minimum)
 end
 
 """
@@ -669,8 +665,7 @@ end
 """
     IncidenceRule(target, parts; peak_fraction = 0.1, intensity = nothing, pointing = 0.05,
                   target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
-                  max_incidence = 70.0, sharpness = 100.0, level = 2, minimum = 0.0,
-                  weight = 100.0)
+                  max_incidence = 70.0, sharpness = 100.0, level = 2, minimum = 0.0)
 
 Incidence limit on the parts struck by beams. [`incidence_angle`](@ref)`(rule, beams)`
 gives the worst-case incidence (degrees) of each beam on the struck part, the first of
@@ -722,13 +717,12 @@ struct IncidenceRule <: AbstractKeepOut
     max_incidence::Float64
     sharpness::Float64
     minimum::Float64
-    weight::Float64
 end
 
 function IncidenceRule(t::Target, parts; peak_fraction = nothing, intensity = nothing,
                        pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
                        focus = 1.0, margin = 0.0, max_incidence = 70.0, sharpness = 100.0,
-                       level::Integer = 2, minimum = 0.0, weight = 100.0)
+                       level::Integer = 2, minimum = 0.0)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.1)
     sharpness > 0 || throw(ArgumentError("sharpness must be > 0"))
     names = _part_names(parts)
@@ -744,7 +738,7 @@ function IncidenceRule(t::Target, parts; peak_fraction = nothing, intensity = no
     end
     return IncidenceRule(names, t, Set(keys(part_of)), part_of, leaves, normals, peak_fraction,
                          intensity, pointing + target_offset + hardware_tolerance, focus, margin,
-                         _NO_TOLERANCE, max_incidence, sharpness, minimum, weight)
+                         _NO_TOLERANCE, max_incidence, sharpness, minimum)
 end
 
 """
@@ -813,7 +807,7 @@ end
                   hardware_tolerance = 0.0, focus = 1.0, tolerance = 0.5, pivot = :tcc,
                   omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
                   lens_distance = NIF_LENS_DISTANCE, offsets = nothing, resolution = 1e-9,
-                  minimum = 0.2, weight = 100.0)
+                  minimum = 0.2)
 
 Keep-out of named parts from the 1ω footprints of the beams.
 [`omega1_clearance`](@ref)`(keepout, beams)` gives the worst-case clearance (mm) of `parts`
@@ -855,14 +849,12 @@ struct Omega1KeepOut{O,B} <: AbstractKeepOut
     table::B                         # the NIF beam table, for the beamlets
     resolution::Float64
     minimum::Float64
-    weight::Float64
 end
 
 function Omega1KeepOut(t::Target, parts; pointing = 0.05, target_offset = 0.025,
                        hardware_tolerance = 0.0, focus = 1.0, tolerance = 0.5, pivot = :tcc,
                        omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
-                       lens_distance = NIF_LENS_DISTANCE, offsets = nothing, resolution = 1e-9, minimum = 0.2,
-                       weight = 100.0)
+                       lens_distance = NIF_LENS_DISTANCE, offsets = nothing, resolution = 1e-9, minimum = 0.2)
     resolution > 0 || throw(ArgumentError("resolution must be > 0"))
     names = _part_names(parts)
     idx = Set(ci for n in names for ci in part_pieces(t, n))
@@ -872,7 +864,7 @@ function Omega1KeepOut(t::Target, parts; pointing = 0.05, target_offset = 0.025,
     L = Float64(lens_distance)
     return Omega1KeepOut(names, t, tris, pointing + target_offset + hardware_tolerance, focus,
                          _talis_tol(tolerance, pivot), c0, h0, f1, L, _omega1_lipschitz(c0, h0, f1, L),
-                         offsets, _nif_beam_table(), resolution, minimum, weight)
+                         offsets, _nif_beam_table(), resolution, minimum)
 end
 
 """
