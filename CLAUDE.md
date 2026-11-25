@@ -3,8 +3,8 @@
 Briareus.jl — view-factor radiation and laser-pointing design (a VisRad replacement/
 complement) for indirect-drive hohlraums and backlighter foils. [README.md](README.md):
 scope and facility-data sources. [reference/ROADMAP.md](reference/ROADMAP.md): open work.
-`reference/research-notes.md`: every physics default and measured constant, with its source
-and confidence; `reference/litreview/`: literature reviews by topic. Read the relevant
+`reference/notes/` (index of section titles: `reference/research-notes.md`): every physics
+default and measured constant, with its source and confidence; `reference/litreview/`: literature reviews by topic. Read the relevant
 notes section before changing a default or a calibrated number.
 
 ## Commands

@@ -159,8 +159,8 @@ thresholds and wing models are engineering defaults; no facility criterion sets 
 | VisRad formats and beam profile | VisRad manual (v21.1.1); VisRad 21 runs on NIF hohlraums and a beam-profile probe | |
 | Published shot and simulation data | The cited papers, digitized or tabulated in `data/*.csv` with source headers | The research notes record which data each calibration was fitted to and which are checks only. |
 
-`reference/research-notes.md` records the source and confidence of every default and
-calibrated constant. The HYBRID-E pointing in the examples is an illustrative mock-up
+The research notes in `reference/notes/` record the source and confidence of every default
+and calibrated constant; `reference/research-notes.md` lists every section by file. The HYBRID-E pointing in the examples is an illustrative mock-up
 (`hybride_mock_pointing`); it is not a facility pointing.
 
 ## Tests, citing, license

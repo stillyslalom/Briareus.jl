@@ -82,7 +82,7 @@ const PERSON = Set(["we", "us", "our", "ours", "ourselves", "you", "your", "your
 
 # (file, substring): lines never flagged
 const ALLOW = [
-    ("reference/research-notes.md", "moves the lens towards the target"),  # a quotation
+    ("reference/notes/facility_visrad.md", "moves the lens towards the target"),  # a quotation
 ]
 const EXTS = (".jl", ".md", ".toml", ".txt", ".csv")
 const REGISTER = r"^(README\.md|docs/src/.*\.md|docs/literate/.*\.jl|src/.*\.jl)$"
