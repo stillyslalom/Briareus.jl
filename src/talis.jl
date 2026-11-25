@@ -153,9 +153,16 @@ listed under the part name.
   of curvature is < `cylinder_radius` (2 mm, cylindrical) or < `sphere_radius` (5 mm,
   spherical); otherwise the specular 1ω reflection from every uncleared facet must stay >
   `reflection_angle` (20°) from every open quad (`open_ports`), less twice the tolerance
-  angle (a tilt by α turns a reflection by 2α). Curvature comes from `curvature[name]`
-  when given, and otherwise from the `CylinderSurface`/`SphereSurface` of the component or
-  a planar mesh. The entry is `(:cylinder, r)`, `(:sphere, r)`, `:flat`, or
+  angle (a tilt by α turns a reflection by 2α). Both limits are on the unsigned radius: a
+  concave surface diverges its reflection in the far field as a convex one does. Curvature
+  comes from `curvature[name]` when given, and otherwise from the `CylinderSurface`,
+  `SphereSurface`, `ConeSurface` or `TorusSurface` of the component or a planar mesh. On a
+  cone and a torus the radii vary over the surface, and each sub-triangle in the footprint
+  is judged separately on its largest radii: it scatters if its smaller principal radius is
+  < `cylinder_radius` or its larger < `sphere_radius`, and it is given the reflection check
+  otherwise. The radius of a cone is its distance from the axis over the cosine of the
+  half-angle, so a tapered stalk may scatter near its tip and reflect near its base. The
+  radii of a torus are its minor radius and `|R/cos ψ + r|` at the tube angle ψ. The entry is `(:cylinder, r)`, `(:sphere, r)`, `:flat`, or
   `(:dimpled, r)` / `(:dimpled, r, half_side)` for a surface covered with spherical
   dimples of radius of curvature `r`, e.g. the dimpled 1ω "sombrero" shield around the LEH
   of an ignition hohlraum, modeled as a flat `annulus_mesh`. A dimpled surface is judged
@@ -501,9 +508,24 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     αw, αn, wp = Inf, Inf, aim
     fw = x -> _omega1_distance(x, bl, cx)[2] - cx.R - cx.tol(x, aim)
     fn = x -> _omega1_distance(x, bl, cx)[1]
+    # On a cone or a torus the radii of curvature vary over the surface, and each
+    # sub-triangle in the footprint is judged on the largest radii over it.
+    varying = kind === :cone || kind === :torus
+    scat = (Inf, NaN, NaN, aim)                  # (limit − radius, radius, limit, point), the least
+    gentle = 0.0
     for (leaf, n) in zip(g.leaves, g.normals)
         tri = (leaf[1], leaf[2], leaf[3])
         _talis_reaches(fw, tri, cx.lip1 + cx.tol.tanα, cx.omega1_margin, cx.ε) || continue
+        if varying
+            R1, R2 = _surface_radii(c.surface, tri)
+            if R1 < cx.cylinder_radius || R2 < cx.sphere_radius
+                v = R1 < cx.cylinder_radius ? (cx.cylinder_radius - R1, R1, cx.cylinder_radius, leaf[4]) :
+                    (cx.sphere_radius - R2, R2, cx.sphere_radius, leaf[4])
+                v[1] < scat[1] && (scat = v)
+                continue
+            end
+            gentle = max(gentle, R1)
+        end
         hitn = _talis_reaches(fn, tri, cx.lip1, 0.0, cx.ε)
         for (kb, _, _) in bl
             r = kb - 2 * dot(kb, n) * n
@@ -512,10 +534,18 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
             hitn && (αn = min(αn, α))
         end
     end
+    if varying && !isfinite(αw) && isfinite(scat[1])
+        note = @sprintf("%s radius of curvature ≤ %.3g mm < %.3g mm over the surface in the footprint scatters 1ω",
+                        kind, scat[2], scat[3])
+        return TaLISRow(b.name, :management_1w, c.name, :pass, scat[1], :mm, scat[2], scat[2], scat[3],
+                        scat[4], note)
+    end
     worst = αw - 2 * cx.tolerance
     m = worst - cx.reflection_angle
     desc = kind === :unknown ? "curvature unknown (give `curvature`)" :
-           kind === :flat ? "flat" : @sprintf("%s radius %.3g mm ≥ %.3g mm", kind, rc, lim)
+           kind === :flat ? "flat" :
+           varying ? @sprintf("%s radius up to %.3g mm ≥ %.3g mm in the footprint", kind, gentle, cx.cylinder_radius) :
+           @sprintf("%s radius %.3g mm ≥ %.3g mm", kind, rc, lim)
     status = m > 0 ? :pass : kind === :unknown ? :review : :fail
     note = m > 0 ? "$desc; specular 1ω reflection clears open quads" :
            "$desc; specular 1ω reflection within $(cx.reflection_angle)° of an open quad: TaLIS additional review, may not be allowed"
@@ -523,8 +553,30 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
                     cx.reflection_angle, wp, note)
 end
 
-# Returns (kind, radius, dimple half-side), with kind :cylinder, :sphere, :dimpled, :flat or
-# :unknown.
+# The unsigned principal radii of curvature (smaller, larger) of a cone or torus, each the
+# largest over the triangle `tri`. On a cone they are z sin α / cos² α, the distance from
+# the axis over cos α, at height z from the apex, and Inf along the ruling. On a torus
+# they are the minor radius and |R / cos ψ + r| at the tube angle ψ from the outer
+# equator. Both vary monotonically between the vertices, except that the second radius of
+# a torus is unbounded where the triangle crosses a pole of the tube.
+function _surface_radii(s::ConeSurface, tri)
+    sα, cα = sincosd(s.half_angle)
+    z = maximum(p -> dot(p - s.apex, s.axis), tri)
+    return max(z, 0.0) * sα / cα^2, Inf
+end
+
+function _surface_radii(s::TorusSurface, tri)
+    cs = map(tri) do p
+        n = last(surface_point(s, p))
+        dot(n, _torus_coordinates(s, p)[3])
+    end
+    lo, hi = extrema(cs)
+    R2 = (lo <= 0 <= hi) ? Inf : maximum(c -> abs(s.major_radius / c + s.minor_radius), cs)
+    return minmax(s.minor_radius, R2)
+end
+
+# Returns (kind, radius, dimple half-side), with kind :cylinder, :sphere, :dimpled, :flat,
+# :unknown, or :cone or :torus (radii from `_surface_radii`).
 function _talis_curvature(t::Target, ci, overrides)
     c = t.components[ci]
     if haskey(overrides, c.name) || haskey(overrides, c.part)
@@ -538,6 +590,8 @@ function _talis_curvature(t::Target, ci, overrides)
     c.surface isa SphereSurface && return (:sphere, c.surface.radius, NaN)
     c.surface isa CylinderSurface && return (:cylinder, c.surface.radius, NaN)
     c.surface isa DiskSurface && return (:flat, Inf, NaN)
+    c.surface isa ConeSurface && return (:cone, NaN, NaN)
+    c.surface isa TorusSurface && return (:torus, NaN, NaN)
     ns = [t.tri_normal[k] for k in eachindex(t.tri_area) if t.tri_comp[k] == ci && t.tri_area[k] > 0]
     all(n -> abs(dot(n, ns[1])) > 1 - 1e-9, ns) && return (:flat, Inf, NaN)
     return (:unknown, NaN, NaN)

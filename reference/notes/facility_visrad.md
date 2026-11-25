@@ -269,6 +269,13 @@ figures. **H** Details beyond the summary above:
   - The 4.45 mm 1ω 10% offset sits 0.35 mm inside the User Guide's 4.8 mm nominal edge.
   - The User Guide (§5.6.2, 2024 rev.) words the curvature rule as "not larger than"
     2 mm / 5 mm. TaLIS states "< 2 mm / < 5 mm"; Briareus uses the strict form.
+  - Cones and tori (*interpretation*, user's statement of the rule's purpose, 2026-11-25;
+    confidence medium). The concern is specular 1ω reaching another beamline in the far
+    field, so the limits apply to the unsigned radius, concave or convex. `talis_check`
+    judges each sub-triangle in the footprint on its largest principal radii: it scatters
+    in one dimension if the smaller is < 2 mm and in two if the larger is < 5 mm. A cone
+    has the radius ρ/cos α at distance ρ from its axis, a torus the minor radius r and
+    |R/cos ψ + r|. The document names only cylinders and spheres.
   - The User Guide adds: dimple half-side to radius "cannot be smaller than 0.25"
     (printed "0.25 mm"); horizontal planar targets have conjugate beams in the same
     hemisphere. **H**

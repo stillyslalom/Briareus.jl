@@ -172,6 +172,53 @@
     @test trow(talis_check(Target(cyl(1.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk).status === :pass
     ms = trow(talis_check(Target(cyl(2.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk)
     @test ms.unit === :deg && ms.status === :fail          # its rim line reflects straight back
+    # A tapered stalk across the footprint, its axis orthogonal to the beam: the radius of
+    # curvature of a cone is its distance from the axis over cos α. The ruling that faces
+    # the beam reflects 1ω at 2α from the port. A stalk that stays below 2 mm passes on
+    # curvature, on its largest radius, at the base. A wider one reflects into a port
+    # placed on that ray from the part of it at or above 2 mm.
+    ac = cross(ô, k)
+    function taper(r0, r1)
+        half = atand((r1 - r0) / 6)
+        Component(:stalk, transform(frustum_mesh(r0, -3.0, r1, 3.0; nz = 6, nphi = 24, inward = false),
+                                    hcat(ô, k, ac), 9.0 * ô), gold();
+                  surface = ConeSurface(half; apex = 9.0 * ô - (3 + r0 / tand(half)) * ac, axis = ac))
+    end
+    spec(half) = -cosd(2half) * k - sind(2half) * ac
+    hs, hw = atand(1 / 6), atand(2 / 6)
+    mc = trow(talis_check(Target(taper(0.5, 1.5)), [bl]; capture = (), open_ports = [spec(hs)]), :management_1w, :stalk)
+    @test mc.status === :pass && mc.unit === :mm && mc.required == 2
+    @test mc.worst ≈ 1.5 / cosd(hs) rtol = 1e-12
+    @test mc.margin ≈ 2 - 1.5 / cosd(hs) rtol = 1e-12
+    mw = trow(talis_check(Target(taper(1.0, 3.0)), [bl]; capture = (), open_ports = [spec(hw)]), :management_1w, :stalk)
+    @test mw.status === :fail && mw.unit === :deg && mw.nominal < 3
+    @test dot(mw.point - 9.0 * ô, ac) > -0.5              # found on the part with radius ≥ 2 mm
+    # A torus: the radii are the minor radius and |R/cos ψ + r|, the largest over a
+    # triangle, unbounded where it crosses a pole of the tube.
+    tor = TorusSurface(4.0, 3.0)
+    tp(ψ, φ) = Vec3((4 + 3cosd(ψ)) * cosd(φ), (4 + 3cosd(ψ)) * sind(φ), 3sind(ψ))
+    @test collect(Briareus._surface_radii(tor, (tp(0, 0), tp(20, 0), tp(20, 15)))) ≈ [3, 4 / cosd(20) + 3]
+    @test collect(Briareus._surface_radii(tor, (tp(180, 0), tp(150, 0), tp(150, 15)))) ≈ [4 / cosd(30) - 3, 3]
+    @test Briareus._surface_radii(tor, (tp(80, 0), tp(100, 0), tp(100, 15))) == (3.0, Inf)
+    @test collect(Briareus._surface_radii(ConeSurface(30.0), (Vec3(1, 0, 2), Vec3(0, 2, 4), Vec3(1, 1, 3)))) ≈
+          [4 * tand(30) / cosd(30), Inf]
+    function ring(Rj, rn)
+        m = Mesh()
+        P(ψ, φ) = Vec3((Rj + rn * cosd(ψ)) * cosd(φ), (Rj + rn * cosd(ψ)) * sind(φ), rn * sind(ψ))
+        for ψ in 0:30:330, φ in 0:15:345
+            a, b2, c2, d = P(ψ, φ), P(ψ, φ + 15), P(ψ + 30, φ + 15), P(ψ + 30, φ)
+            out = P(ψ + 15, φ + 7.5) - Vec3(Rj * cosd(φ + 7.5), Rj * sind(φ + 7.5), 0)
+            add_polygon!(m, [a, b2, c2]; facing = out)
+            add_polygon!(m, [a, c2, d]; facing = out)
+        end
+        Component(:ring, transform(m, Rm, 14.0 * ô), gold(); surface = TorusSurface(Rj, rn; center = 14.0 * ô, axis = k))
+    end
+    mr = trow(talis_check(Target(ring(6.0, 1.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :ring)
+    @test mr.status === :pass && mr.unit === :mm && mr.margin ≈ 0.5
+    # tube radius 3 mm: the outer half is gentle and its crown reflects straight back
+    mg3 = trow(talis_check(Target(ring(4.0, 3.0)), [bl]; capture = (), open_ports = [-k]), :management_1w, :ring)
+    @test mg3.status === :fail && mg3.unit === :deg
+
     # The curvature overrides cover dimpled meshes, too-fine dimples, dimples of unknown
     # spacing (User Guide §5.6.2 needs half-side/radius ≥ 0.25), and undetermined meshes.
     dimpled(c) = trow(talis_check(Target(pl), [bl]; capture = (), open_ports = [pq],
