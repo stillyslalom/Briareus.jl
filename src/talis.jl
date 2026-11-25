@@ -206,8 +206,8 @@ listed under the part name.
   sub-triangle is also reduced by twice the spread of the surface normal over it (the
   largest angle between the normals at its centroid and at its vertices), so a coarse mesh
   does not clear a port that lies between the reflections of its sampled normals. Both
-  limits are on the unsigned radius: a
-  concave surface diverges its reflection in the far field as a convex one does. Curvature
+  limits are on the unsigned radius: a concave surface diverges its reflection in the far
+  field as a convex one does. Curvature
   comes from `curvature[name]` when given, and otherwise from the `CylinderSurface`,
   `SphereSurface`, `ConeSurface` or `TorusSurface` of the component or a planar mesh. On a
   cone and a torus the radii vary over the surface, and each sub-triangle in the footprint
@@ -215,14 +215,21 @@ listed under the part name.
   < `cylinder_radius` or its larger < `sphere_radius`, and it is given the reflection check
   otherwise. The radius of a cone is its distance from the axis over the cosine of the
   half-angle, so a tapered stalk may scatter near its tip and reflect near its base. The
-  radii of a torus are its minor radius and `|R/cos ψ + r|` at the tube angle ψ. The entry is `(:cylinder, r)`, `(:sphere, r)`, `:flat`, or
-  `(:dimpled, r)` / `(:dimpled, r, half_side)` for a surface covered with spherical
+  radii of a torus are its minor radius and `|R/cos ψ + r|` at the tube angle ψ. For a
+  mesh with none of these, such as a CAD solid of a stalk and a flat flange, the
+  radii of each facet are estimated from the turn of the vertex normals along its edges,
+  where a vertex normal averages the facets around the vertex within 40° of the facet. A
+  facet scatters if its estimate with a quarter added is below a limit, the fit residual
+  is at most 0.1 and its normals spread by at most 25°; every other facet in the footprint
+  is given the reflection check, with the spread of its vertex normals as on a curved
+  surface, and a failing check is a `:review`. The estimate is exact on regular meshes of
+  cylinders and within about 20% on spheres (the research notes). A `curvature` entry is
+  `(:cylinder, r)`, `(:sphere, r)`, `:flat`, or `(:dimpled, r)` / `(:dimpled, r, half_side)` for a surface covered with spherical
   dimples of radius of curvature `r`, e.g. the dimpled 1ω "sombrero" shield around the LEH
   of an ignition hohlraum, modeled as a flat `annulus_mesh`. A dimpled surface is judged
   like a sphere against `sphere_radius`. The NIF User Guide (§5.6.2) also requires a
   dimple half-side/radius ≥ 0.25, so a dimpled surface passes only with `half_side` given
-  and that ratio met, and is a `:review` otherwise. For other meshes the curvature is
-  unknown and a failing reflection check is a `:review`. A flat component without a
+  and that ratio met, and is a `:review` otherwise. A flat component without a
   `curvature` entry is given the reflection check, which a horizontal plate usually fails
   (it mirrors each beam into the conjugate port of the same hemisphere).
 - `:diagnostic_1w` — the `diagnostics` components (diagnostic hardware modeled in the
@@ -363,7 +370,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           omega1_margin = Float64(omega1_margin), o1.c0, o1.h0, f1,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
-          curvature, ε = Float64(resolution), rtol = Float64(rtol),
+          curvature, curv = Dict{Int,Vector{NTuple{4,Float64}}}(), curv_lock = ReentrantLock(),
+          ε = Float64(resolution), rtol = Float64(rtol),
           lip1 = _omega1_lipschitz(o1.c0, o1.h0, f1, lens_distance))
     out = [TaLISRow[] for _ in vb]
     refl = [Omega1Reflection[] for _ in vb]
@@ -574,23 +582,35 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     # On a cone or a torus the radii of curvature vary over the surface, and each
     # sub-triangle in the footprint is judged on the largest radii over it.
     varying = kind === :cone || kind === :torus
+    # A mesh without a surface has its radii estimated from the turn of its normals. An
+    # estimate counts where the fit is good and the facets are fine enough, with a quarter
+    # added to the radius for its error.
+    mc = kind === :unknown ? _component_curvature(t, ci, cx) : nothing
+    nl = length(g.leaves) ÷ max(length(g.tris), 1)
     scat = (Inf, NaN, NaN, aim)                  # (limit − radius, radius, limit, point), the least
     gentle = 0.0
     kq = direction(b)
     exposed, offending = 0.0, 0.0
     wit = (0, kq, kq, kq, 0, NaN, 0.0)           # beamlet, k, normal, reflection, port, angle, spread
-    for (leaf, n, spread) in zip(g.leaves, g.normals, g.spreads)
+    for (i, (leaf, n, spread)) in enumerate(zip(g.leaves, g.normals, g.spreads))
         tri = (leaf[1], leaf[2], leaf[3])
         _talis_reaches(fw, tri, cx.lip1 + cx.tol.tanα, cx.omega1_margin, cx.ε) || continue
-        if varying
-            R1, R2 = _surface_radii(c.surface, tri)
-            if R1 < cx.cylinder_radius || R2 < cx.sphere_radius
+        if varying || mc !== nothing
+            trusted = true
+            if varying
+                R1, R2 = _surface_radii(c.surface, tri)
+            else
+                R1, R2, spread, res = mc[(i-1)÷nl+1]
+                R1, R2 = 1.25 * R1, 1.25 * R2
+                trusted = res <= _MESH_CURVATURE_RESIDUAL && spread <= _MESH_CURVATURE_SPREAD
+            end
+            if trusted && (R1 < cx.cylinder_radius || R2 < cx.sphere_radius)
                 v = R1 < cx.cylinder_radius ? (cx.cylinder_radius - R1, R1, cx.cylinder_radius, leaf[4]) :
                     (cx.sphere_radius - R2, R2, cx.sphere_radius, leaf[4])
                 v[1] < scat[1] && (scat = v)
                 continue
             end
-            gentle = max(gentle, R1)
+            varying && (gentle = max(gentle, R1))
         end
         hitn = _talis_reaches(fn, tri, cx.lip1, 0.0, cx.ε)
         αl = Inf
@@ -610,15 +630,15 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
         exposed += ap
         αl - 2 * cx.tolerance <= cx.reflection_angle && (offending += ap)
     end
-    if varying && !isfinite(αw) && isfinite(scat[1])
+    if !isfinite(αw) && isfinite(scat[1])
         note = @sprintf("%s radius of curvature ≤ %.3g mm < %.3g mm over the surface in the footprint scatters 1ω",
-                        kind, scat[2], scat[3])
+                        varying ? string(kind) : "mesh estimate (a quarter added) of the", scat[2], scat[3])
         return TaLISRow(b.name, :management_1w, c.name, :pass, scat[1], :mm, scat[2], scat[2], scat[3],
                         scat[4], note), nothing
     end
     worst = αw - 2 * cx.tolerance
     m = worst - cx.reflection_angle
-    desc = kind === :unknown ? "curvature unknown (give `curvature`)" :
+    desc = kind === :unknown ? "free-form mesh, the facets curved below the limits by the mesh estimate left out (give `curvature` to set it)" :
            kind === :flat ? "flat" :
            varying ? @sprintf("%s radius up to %.3g mm ≥ %.3g mm in the footprint", kind, gentle, cx.cylinder_radius) :
            @sprintf("%s radius %.3g mm ≥ %.3g mm", kind, rc, lim)
@@ -671,8 +691,89 @@ function _surface_radii(s::TorusSurface, tri)
     return minmax(s.minor_radius, R2)
 end
 
+# Unsigned principal radii of curvature of the triangles of a mesh without a `CurvedSurface`,
+# from the turn of the vertex normals along the edges of each triangle (the per-face
+# shape operator of Rusinkiewicz, 3DPVT 2004). The normal at a vertex of a triangle is the
+# angle-weighted mean of the facet normals around the vertex that lie within `crease`
+# degrees of the normal of that triangle, so a normal does not average across a sharp
+# edge. On a regular mesh of a cylinder or a sphere the vertex normals are the surface
+# normals and the chords of the normals and of the points have the ratio 1/R, so the radii
+# are exact.
+#
+# Returns, per triangle, (R1, R2, spread, quality): the radii (smaller, larger; Inf for no
+# curvature), the largest angle (degrees) between the facet normal and its vertex normals,
+# and the residual of the fit relative to the turn of the normals (0 for a flat triangle).
+function _mesh_curvature(tris::AbstractVector{NTuple{3,Vec3}}, normals::AbstractVector{Vec3};
+                         crease::Real = 40.0, scale::Real = 1.0)
+    q = 1e-7 * max(scale, 1.0)
+    key(v) = (round(Int, v[1] / q), round(Int, v[2] / q), round(Int, v[3] / q))
+    fan = Dict{NTuple{3,Int},Vector{Tuple{Int,Float64}}}()      # vertex → (triangle, corner angle)
+    for (k, tri) in enumerate(tris), i in 1:3
+        a, b, c = tri[i], tri[mod1(i + 1, 3)], tri[mod1(i + 2, 3)]
+        u, v = b - a, c - a
+        lu, lv = norm(u), norm(v)
+        (lu > 0 && lv > 0) || continue
+        push!(get!(() -> Tuple{Int,Float64}[], fan, key(a)), (k, acos(clamp(dot(u, v) / (lu * lv), -1.0, 1.0))))
+    end
+    cosc = cosd(crease)
+    out = Vector{NTuple{4,Float64}}(undef, length(tris))
+    for (k, tri) in enumerate(tris)
+        n = normals[k]
+        vn = map(tri) do p
+            m = zero(Vec3)
+            for (j, w) in get(fan, key(p), Tuple{Int,Float64}[])
+                dot(normals[j], n) >= cosc && (m += w * normals[j])
+            end
+            nm = norm(m)
+            nm > 0 ? m / nm : n
+        end
+        spread = maximum(v -> acosd(clamp(dot(v, n), -1.0, 1.0)), vn)
+        e1, e2 = _ortho_basis(n)
+        # Least squares for the symmetric S = [a b; b c] with Δn = S Δp over the three edges,
+        # both in the tangent plane of the facet.
+        A = zeros(6, 3)
+        r = zeros(6)
+        for (row, (i, j)) in enumerate(((1, 2), (2, 3), (3, 1)))
+            dp, dn = tri[j] - tri[i], vn[j] - vn[i]
+            x, y = dot(dp, e1), dot(dp, e2)
+            A[2row-1, :] .= (x, y, 0.0)
+            A[2row, :] .= (0.0, x, y)
+            r[2row-1], r[2row] = dot(dn, e1), dot(dn, e2)
+        end
+        turn = norm(r)
+        if turn < 1e-9
+            out[k] = (Inf, Inf, spread, 0.0)
+            continue
+        end
+        s = A \ r
+        res = norm(A * s - r) / turn
+        tr, det = s[1] + s[3], s[1] * s[3] - s[2]^2
+        disc = sqrt(max(tr^2 / 4 - det, 0.0))
+        κ1, κ2 = abs(tr / 2 + disc), abs(tr / 2 - disc)
+        R1, R2 = minmax(1 / κ1, 1 / κ2)
+        out[k] = (R1, R2, spread, res)
+    end
+    return out
+end
+
+# The mesh curvature of the triangles of component `ci` (in the order of `cx.geo[ci].tris`),
+# computed once per check.
+function _component_curvature(t::Target, ci, cx)
+    return lock(cx.curv_lock) do
+        get!(cx.curv, ci) do
+            ks = [k for k in eachindex(t.tri_area) if t.tri_comp[k] == ci && t.tri_area[k] > 0]
+            _mesh_curvature(cx.geo[ci].tris, t.tri_normal[ks]; scale = t.scale)
+        end
+    end
+end
+
+# Limits on the fit residual and on the spread of the normals (degrees) below which a
+# mesh estimate of the radii counts.
+const _MESH_CURVATURE_RESIDUAL = 0.1
+const _MESH_CURVATURE_SPREAD = 25.0
+
 # Returns (kind, radius, dimple half-side), with kind :cylinder, :sphere, :dimpled, :flat,
-# :unknown, or :cone or :torus (radii from `_surface_radii`).
+# :unknown (radii from `_mesh_curvature`), or :cone or :torus (radii from `_surface_radii`).
 function _talis_curvature(t::Target, ci, overrides)
     c = t.components[ci]
     if haskey(overrides, c.name) || haskey(overrides, c.part)

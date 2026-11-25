@@ -260,6 +260,35 @@
     @test du.status === :review && occursin("spacing unknown", du.note)
     ub = Component(:ball, translate(sphere_mesh(6.0; ntheta = 24, nphi = 48), 12.0 * ô), gold())   # no surface tag
     @test trow(talis_check(Target(ub), [bl]; capture = (), open_ports = [-k]), :management_1w, :ball).status === :review
+    # Meshes without a surface have their radii estimated from the mesh, exact on a
+    # regular cylinder. A bare 1.5 mm stalk scatters on its estimate with a quarter added;
+    # a bare 2.5 mm one is given the reflection check and reviewed.
+    bare(m) = Component(:stalk, transform(m, hcat(ô, k, cross(ô, k)), 9.0 * ô), gold())
+    rod(rad) = cylinder_mesh(rad, -3.0, 3.0; nz = 6, nphi = 24, inward = false)
+    mb = trow(talis_check(Target(bare(rod(1.5))), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk)
+    @test mb.status === :pass && mb.unit === :mm
+    @test mb.worst ≈ 1.25 * 1.5 rtol = 1e-9
+    @test mb.margin ≈ 2 - 1.25 * 1.5 rtol = 1e-9
+    @test trow(talis_check(Target(bare(rod(2.5))), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk).status === :review
+    # A stalk and a flat flange in one mesh: the stalk scatters, and the flange, edge-on
+    # to the beam, reflects it forward, far from the port behind. Judged as one unknown
+    # surface, the ruling of the stalk that faces the beam sent the item to review.
+    solid = bare(merge_meshes(rod(1.5), annulus_mesh(1.5, 4.0, -3.0; nr = 3, nphi = 24)))
+    rs = talis_check(Target(solid), [bl]; capture = (), open_ports = [-k])
+    msol = trow(rs, :management_1w, :stalk)
+    @test msol.status === :pass && msol.unit === :deg && msol.worst > 150
+    @test omega1_reflection(rs, msol).offending_area == 0
+    # the estimate itself: cylinders to rounding, spheres within a fifth, a plate flat
+    function estimate(m)
+        tm = Target(Component(:c, m, gold()))
+        tris = [(tm.tri_v0[j], tm.tri_v0[j] + tm.tri_e1[j], tm.tri_v0[j] + tm.tri_e2[j]) for j in eachindex(tm.tri_area)]
+        Briareus._mesh_curvature(tris, tm.tri_normal)
+    end
+    ec = estimate(cylinder_mesh(2.5, -3.0, 3.0; nz = 3, nphi = 12, inward = false))
+    @test all(abs(x[1] - 2.5) < 1e-9 && x[2] > 1e9 && x[3] ≈ 15 && x[4] < 1e-9 for x in ec)
+    es = estimate(icosphere_mesh(6.0; n = 4))
+    @test all(0.8 * 6 < x[1] <= x[2] < 1.2 * 6 && x[4] < 0.1 for x in es)
+    @test all(x -> x[1] == Inf && x[3] == 0, estimate(rectangle_mesh(4.0, 4.0; nu = 3, nv = 3)))
 
     # NIF ignition-style "sombrero": an annular 1ω shield in the LEH plane around a
     # hohlraum. Flat, it mirrors each quad into the conjugate FOA of its hemisphere and

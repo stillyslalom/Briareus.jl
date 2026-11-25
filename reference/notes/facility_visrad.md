@@ -276,6 +276,16 @@ figures. **H** Details beyond the summary above:
     in one dimension if the smaller is < 2 mm and in two if the larger is < 5 mm. A cone
     has the radius ρ/cos α at distance ρ from its axis, a torus the minor radius r and
     |R/cos ψ + r|. The document names only cylinders and spheres.
+  - Free-form meshes (*engineering default*, 2026-11-25; confidence medium). The radii
+    of a facet without a tagged surface come from the turn of its vertex normals along
+    its edges (the per-face shape operator of Rusinkiewicz, 3DPVT 2004), where a vertex
+    normal averages, by corner angle, the facets around the vertex within 40° of the
+    facet. Measured on Briareus meshes: cylinders of 12 and 24 facets exact to rounding; a
+    6 mm icosphere 5.77 to 6.29 mm; a 4 mm latitude–longitude sphere 3.15 to 4.57 mm, the
+    extremes at its poles; a flat plate and the flange of a stalk-on-flange solid flat.
+    A facet is taken as scattering only with a quarter added to its radii, a fit residual
+    ≤ 0.1 and a normal spread ≤ 25°; the quarter covers the 20% seen on spheres. These
+    three numbers are choices of this package and are not facility criteria.
   - The User Guide adds: dimple half-side to radius "cannot be smaller than 0.25"
     (printed "0.25 mm"); horizontal planar targets have conjugate beams in the same
     hemisphere. **H**
