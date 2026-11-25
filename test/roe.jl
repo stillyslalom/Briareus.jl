@@ -106,6 +106,28 @@ end
     @test all(isapprox(o.scores, reference(o.beams); rtol = 1e-8, atol = 1e-11) for o in r.singles[[1, 5, 12, 24]])
     @test r.baseline[3] ≈ d0.Tr rtol = 1e-10
     @test r.baseline[4] ≈ d0.wall rtol = 1e-10
+
+    # The drive balance between the sample and the end cap, against the area means of the
+    # flux of a direct solve.
+    sb = remake(s; observe = (:sample, :cap_top))
+    rb = roe_scan(sb, up, [roe_flux_balance(:sample, (:cap_top,))]; pairs = :none)
+    ea, eb = elements(t, :sample), elements(t, :cap_top)
+    function balance(drop)
+        H = solve(sb.model, deposit(sb.deposition, _roe_dropped(up, drop))).H
+        Ha = sum(t.elem_area[ea] .* H[ea]) / sum(t.elem_area[ea])
+        Hb = sum(t.elem_area[eb] .* H[eb]) / sum(t.elem_area[eb])
+        return (Ha - Hb) / (Ha + Hb)
+    end
+    b0 = balance(Int[])
+    @test rb.baseline[1] ≈ b0 rtol = 1e-10
+    @test abs(b0) > 0.01                                   # the two faces see different drives
+    @test all(isapprox(o.scores[1], abs(balance(o.beams) - b0); rtol = 1e-7, atol = 1e-11) for o in rb.singles[[1, 5, 12, 24]])
+    @test any(o -> o.scores[1] > 1e-5, rb.singles)
+    # exchanging the two sets changes the sign of the balance and leaves every score
+    rx = roe_scan(sb, up, [roe_flux_balance(:cap_top, :sample)]; pairs = :none)
+    @test rx.baseline[1] ≈ -b0 rtol = 1e-10
+    @test [o.scores[1] for o in rx.singles] ≈ [o.scores[1] for o in rb.singles] rtol = 1e-9
+    @test_throws ArgumentError roe_scan(s, up, [roe_flux_balance(:sample, :cap_top)]; pairs = :none)
 end
 
 @testset "ROE: foils, symmetric cases and tiers" begin
