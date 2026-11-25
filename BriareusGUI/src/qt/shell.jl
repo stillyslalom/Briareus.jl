@@ -671,7 +671,6 @@ end
 # round-off, ~10⁻¹³ TW).
 _power_text(p::Real) = abs(p) < 1e-3 ? "< 0.001" : @sprintf("%.4g", p)
 _power_pct(x::Real) = isfinite(x) && abs(x) < 5e-5 ? "< 0.01%" : _pct(x)
-_g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"
 
 function _refresh!(sh::BriareusShell)
     sess = sh.sess
@@ -1881,8 +1880,6 @@ function br_add_window()
 end
 # The hohlraum part of the window page (`_window_part_index`).
 _window_part(sh) = (i = _window_part_index(sh.sess); i === nothing ? nothing : sh.sess.target.parts[][i].name)
-br_remove_window(row) = _with_shell(sh -> (remove_window!(sh.sess.target, round(Int, row); part = _window_part(sh));
-                                           select!(sh.sess.view, "target")))
 function br_edit_window(row, key, text)
     _with_shell() do sh
         k = round(Int, row)
@@ -3063,13 +3060,13 @@ br_canvas_focus(on) = (sh = _SHELL[]; sh === nothing || Bool(on) || release_inpu
 
 function _register_qml_functions()
     @qmlfunction br_tick br_grab_started br_select br_select_add br_toggle_expand br_tree_on
-    @qmlfunction br_select_range br_node_flags br_node_quads br_node_menu br_node_show br_node_include
+    @qmlfunction br_select_range br_node_menu br_node_show br_node_include
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
     @qmlfunction br_set_cluster br_rename_cluster br_split_quads br_merge_quads br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_new_target br_set_resolution br_edit_mesh
-    @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
+    @qmlfunction br_add_window br_edit_window br_window_open
     @qmlfunction br_section_edit br_section_add br_section_remove
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_frame br_part_coords
     @qmlfunction br_move_frame br_move_axis br_move_step br_nudge_part br_sweep_part

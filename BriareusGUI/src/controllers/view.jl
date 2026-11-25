@@ -374,8 +374,6 @@ function select!(v::ViewState, id::AbstractString)
     return v
 end
 
-_is_beam_node(id) = first(selection_kind(id)) in (:group, :quad, :beam, :beams)
-
 # Nodes that can be selected together: beam nodes, or component nodes.
 function _family(id)
     k = first(selection_kind(id))
