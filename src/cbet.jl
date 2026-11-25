@@ -116,15 +116,28 @@ Base.@kwdef struct CBET <: LaserPlasmaModel
 end
 
 "Plasma parameters of `m` at time `t` as a NamedTuple (SI densities, eV, m/s flow)."
-function cbet_plasma(m::CBET, λ0_µm, t)
+cbet_plasma(m::CBET, λ0_µm, t) = _cbet_plasma(_cbet_state(m, t), λ0_µm)
+
+# Returns the state of the model at time `t`: the schedules of the plasma (`ne_nc`, `Te`,
+# `Ti`, the flow) and the `multiplier` evaluated once, with the sound speed, the flow
+# speed `u` (m/s) and the fields that the pair coefficients use. The schedules of a `CBET`
+# are untyped (numbers, functions, tables), so this evaluation dispatches at run time.
+# The result is a NamedTuple of concrete types, and the pair loop, which takes it through
+# a function barrier, is inferred for it.
+function _cbet_state(m::CBET, t)
     ne_nc, Te, Ti = _tvalue(m.ne_nc, t), _tvalue(m.Te, t), _tvalue(m.Ti, t)
     Z = sum(f * Z for (f, Z, _) in m.ions)
     A = sum(f * A for (f, _, A) in m.ions)
-    ω0 = 2π * _C_LIGHT / (λ0_µm * 1e-6)
-    nc = _EPS0 * _ME * ω0^2 / _QE^2
     cs = sqrt((Z * Te + 3Ti) * _QE / (A * _MP))
     u = m.flow === nothing ? _tvalue(m.mach, t) * cs : 1e3 * _tvalue(m.flow, t)
-    return (; ne = ne_nc * nc, nc, Te, Ti, ions = m.ions, u, cs)
+    return (; ne_nc, Te, Ti, ions = m.ions, u, cs, multiplier = _tvalue(m.multiplier, t),
+            polarization = m.polarization)
+end
+
+function _cbet_plasma(st::NamedTuple, λ0_µm)
+    ω0 = 2π * _C_LIGHT / (λ0_µm * 1e-6)
+    nc = _EPS0 * _ME * ω0^2 / _QE^2
+    return (; ne = st.ne_nc * nc, nc, st.Te, st.Ti, st.ions, st.u, st.cs)
 end
 
 """
@@ -140,8 +153,10 @@ cbet_gain(m::CBET, b::Beam, c::Beam, t = 0.0) = _cbet_pair(m, b, c, t)[1]
 # for intensities in TW/mm². The amplitude is δn/n = (k²c²/2ω_pe²) |Γ| |a_b||a_c| with
 # |a|² = 7.31e-19 I λ² for linear polarization, I in W/cm² and λ in µm. Polarization
 # smoothing reduces the rms beat amplitude by √pol.
-function _cbet_pair(m::CBET, b::Beam, c::Beam, t)
-    pl = cbet_plasma(m, b.wavelength, t)
+_cbet_pair(m::CBET, b::Beam, c::Beam, t) = _cbet_pair(_cbet_state(m, t), b, c)
+
+function _cbet_pair(st::NamedTuple, b::Beam, c::Beam)
+    pl = _cbet_plasma(st, b.wavelength)
     db, dc = direction(b), direction(c)
     cosθ = clamp(dot(db, dc), -1.0, 1.0)
     sin2h = (1 - cosθ) / 2                       # sin²(θ/2)
@@ -156,11 +171,11 @@ function _cbet_pair(m::CBET, b::Beam, c::Beam, t)
     # The outflow is along the hohlraum axis, away from the hohlraum at this LEH.
     uvec = Vec3(0, 0, b.port[3] > 0 ? 1.0 : -1.0) * pl.u
     Γ = cbet_coupling(ωb - ωc, kmag, dot(kvec, uvec); pl.ne, pl.Te, pl.Ti, pl.ions)
-    pol = m.polarization === :smoothed ? (1 + cosθ^2) / 4 :
-          m.polarization === :parallel ? 1.0 :
+    pol = st.polarization === :smoothed ? (1 + cosθ^2) / 4 :
+          st.polarization === :parallel ? 1.0 :
           throw(ArgumentError("polarization must be :smoothed or :parallel"))
     # 4.59e-18 µm⁻¹ per W/cm²  →  ×1e3 (per mm) ×1e14 (per TW/mm²)
-    g = -0.459 * b.wavelength * sin2h * imag(Γ) * pol * _tvalue(m.multiplier, t)
+    g = -0.459 * b.wavelength * sin2h * imag(Γ) * pol * st.multiplier
     ωpe2 = pl.ne * _QE^2 / (_EPS0 * _ME)
     D = kmag^2 * _C_LIGHT^2 / (2ωpe2) * abs(Γ) * 7.31e-19 * 1e14 * b.wavelength^2 * sqrt(pol)
     return (g, D)
@@ -216,7 +231,7 @@ function _apply_cbet(m::CBET, beams::AbstractVector{<:Beam}, time, threaded::Boo
     Ds = [zeros(Tk, length(idx), length(idx)) for idx in idxs]
     tasks = [(l, p, q) for l in eachindex(idxs) for p in eachindex(idxs[l])
              for q in p+1:length(idxs[l])]
-    _cbet_couplings!(Ks, Ds, m, beams, idxs, geos, tasks, time, threaded)
+    _cbet_couplings!(Ks, Ds, _cbet_state(m, time), m.length, beams, idxs, geos, tasks, threaded)
     Pls = [P[idx] for idx in idxs]
     Aeffs = [[g[2] for g in geo] for geo in geos]
     _cbet_exchanges!(Pls, Ks, Ds, Aeffs, sat, m.nsteps, threaded)
@@ -227,18 +242,19 @@ function _apply_cbet(m::CBET, beams::AbstractVector{<:Beam}, time, threaded::Boo
 end
 
 # This function is a barrier: the coefficient eltype is a type parameter of this method,
-# so the threaded closure does not box it.
-function _cbet_couplings!(Ks::Vector{Matrix{Tk}}, Ds::Vector{Matrix{Tk}}, m::CBET, beams,
-                          idxs, geos, tasks, time, threaded::Bool) where {Tk}
+# so the threaded closure does not box it, and the state `st` of the model at this time
+# (`_cbet_state`) is concretely typed in it.
+function _cbet_couplings!(Ks::Vector{Matrix{Tk}}, Ds::Vector{Matrix{Tk}}, st::NamedTuple, len::Float64, beams,
+                          idxs, geos, tasks, threaded::Bool) where {Tk}
     function pair!(j)
         l, p, q = tasks[j]
         idx, geo, K, D = idxs[l], geos[l], Ks[l], Ds[l]
         b, c = beams[idx[p]], beams[idx[q]]
         cosθ = clamp(dot(direction(b), direction(c)), -1.0, 1.0)
         sinθ = sqrt(max(1 - cosθ^2, 1e-12))
-        ℓ = min(m.length, (geo[p][1] + geo[q][1]) / 2 / sinθ)
+        ℓ = min(len, (geo[p][1] + geo[q][1]) / 2 / sinθ)
         Ā = sqrt(geo[p][2] * geo[q][2])
-        g, d = _cbet_pair(m, b, c, time)
+        g, d = _cbet_pair(st, b, c)
         kpq = g * ℓ / Ā
         K[p, q] = kpq
         K[q, p] = -kpq
