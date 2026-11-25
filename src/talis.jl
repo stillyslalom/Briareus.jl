@@ -596,15 +596,8 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
         tri = (leaf[1], leaf[2], leaf[3])
         _talis_reaches(fw, tri, cx.lip1 + cx.tol.tanα, cx.omega1_margin, cx.ε) || continue
         if varying || mc !== nothing
-            trusted = true
-            if varying
-                R1, R2 = _surface_radii(c.surface, tri)
-            else
-                R1, R2, spread, res = mc[(i-1)÷nl+1]
-                R1, R2 = 1.25 * R1, 1.25 * R2
-                trusted = res <= _MESH_CURVATURE_RESIDUAL && spread <= _MESH_CURVATURE_SPREAD
-            end
-            if trusted && (R1 < cx.cylinder_radius || R2 < cx.sphere_radius)
+            class, R1, R2, spread = _leaf_curvature(c.surface, kind, rc, half, mc, nl, i, tri, spread, cx)
+            if class === :scatter
                 v = R1 < cx.cylinder_radius ? (cx.cylinder_radius - R1, R1, cx.cylinder_radius, leaf[4]) :
                     (cx.sphere_radius - R2, R2, cx.sphere_radius, leaf[4])
                 v[1] < scat[1] && (scat = v)
@@ -765,6 +758,32 @@ function _component_curvature(t::Target, ci, cx)
             _mesh_curvature(cx.geo[ci].tris, t.tri_normal[ks]; scale = t.scale)
         end
     end
+end
+
+# How sub-triangle `i` of a component is judged for 1ω management: `:scatter` (a radius
+# below its limit), `:reflect` (the specular check) or `:review` (a dimpled surface whose
+# spacing is unknown or too fine), with the radii used and the spread of the normals. The
+# radii are those of the component for a sphere, cylinder or dimpled surface, the largest
+# over `tri` on a cone or torus, and the mesh estimate with a quarter added on a mesh
+# without a surface, where an estimate counts only if its fit is good and its facets fine.
+function _leaf_curvature(surface, kind, rc, half, mc, nl, i, tri, spread, cx)
+    if kind === :flat
+        return :reflect, Inf, Inf, spread
+    elseif kind === :cylinder
+        return (rc < cx.cylinder_radius ? :scatter : :reflect), rc, Inf, spread
+    elseif kind === :sphere
+        return (rc < cx.sphere_radius ? :scatter : :reflect), rc, rc, spread
+    elseif kind === :dimpled
+        rc < cx.sphere_radius || return :reflect, rc, rc, spread
+        return ((isfinite(half) && half / rc >= 0.25) ? :scatter : :review), rc, rc, spread
+    elseif kind === :cone || kind === :torus
+        R1, R2 = _surface_radii(surface, tri)
+        return ((R1 < cx.cylinder_radius || R2 < cx.sphere_radius) ? :scatter : :reflect), R1, R2, spread
+    end
+    R1, R2, sp, res = mc[(i-1)÷nl+1]
+    R1, R2 = 1.25 * R1, 1.25 * R2
+    trusted = res <= _MESH_CURVATURE_RESIDUAL && sp <= _MESH_CURVATURE_SPREAD
+    return ((trusted && (R1 < cx.cylinder_radius || R2 < cx.sphere_radius)) ? :scatter : :reflect), R1, R2, sp
 end
 
 # Limits on the fit residual and on the spread of the normals (degrees) below which a
@@ -1024,6 +1043,242 @@ function omega1_closest_approach(t::Target, beams::AbstractVector{<:Beam}, r::Ta
                                    s.target_offset, s.hardware_tolerance, s.focus, s.omega1_margin,
                                    s.omega1_edge, s.omega1_size, s.omega1_focus, s.lens_distance,
                                    offsets)
+end
+
+"""
+    Omega1Disposition
+
+The disposition of hardware toward the 1ω light of a set of beams, per mesh triangle of
+the target, as [`omega1_disposition`](@ref) returns it. Each vector has one entry per
+triangle of the target (`target.tri_comp` gives its component).
+
+- `status` — `:unchecked` (a triangle outside the checked components), or, from least to
+  most severe:
+  - `:clear` — the worst-case clearance exceeds the required one by more than the tight
+    threshold
+  - `:tight` — clears, by the tight threshold or less
+  - `:curved_safe` — inside the worst-case footprint, and scatters 1ω by its curvature
+  - `:specular_clear` — inside the footprint, flat or gently curved, and its specular
+    reflection stays the required angle from every open port
+  - `:review` — inside the footprint and not decidable: a reflection toward a port from a
+    mesh of unknown curvature, or a dimpled surface without a valid spacing
+  - `:fail` — inside the footprint with a reflection within the required angle of an open
+    port, or a diagnostic component closer to the 1ω light than its rule allows
+- `margin` — the smallest worst-case clearance margin (mm) over the beams, sampled at the
+  vertices of the triangle and the centroids of its sub-triangles; `Inf` beyond
+  `margin_range`
+- `beam`, `beamlet` — the beam (index into the beams) and its beamlet with that margin; 0
+  where the margin is `Inf`
+- `R1`, `R2` — the unsigned principal radii (mm) on which a triangle in the footprint was
+  judged (`Inf` for none); `NaN` outside the footprint
+- `port`, `port_angle` — for a triangle judged on reflection, the open port (index into
+  `ports`) nearest its reflection and the worst-case angle to it (degrees, less the
+  normal spread and twice the rule tolerance); 0 and `NaN` otherwise
+- `shadowed` — with `shadows = true`, whether other hardware lies upstream of the
+  centroid of a triangle in the footprint along the beam (the rules ignore shadowing; the
+  flag separates lit hardware from shadowed hardware in a review)
+
+The directions to the open ports are in `ports`, and the thresholds and error set used
+in `settings`.
+"""
+struct Omega1Disposition
+    status::Vector{Symbol}
+    margin::Vector{Float64}
+    beam::Vector{Int}
+    beamlet::Vector{Int}
+    R1::Vector{Float64}
+    R2::Vector{Float64}
+    port::Vector{Int}
+    port_angle::Vector{Float64}
+    shadowed::Vector{Bool}
+    ports::Vector{Vec3}
+    settings::NamedTuple
+end
+
+const _DISPOSITION_RANK = (clear = 0, tight = 1, curved_safe = 2, specular_clear = 3, review = 4, fail = 5)
+
+function Base.show(io::IO, d::Omega1Disposition)
+    print(io, "Omega1Disposition(", count(!=(:unchecked), d.status), " triangles checked")
+    for st in (:fail, :review, :specular_clear, :curved_safe, :tight)
+        n = count(==(st), d.status)
+        n > 0 && print(io, ", ", n, " ", st)
+    end
+    print(io, ")")
+end
+
+"""
+    omega1_disposition(target, beams; components = all surfaces, diagnostics = (),
+                       tight_threshold = 1.0, margin_range = 5.0, shadows = false,
+                       tolerance = 0.5, pivot = :tcc, pointing = 0.05, target_offset = 0.025,
+                       hardware_tolerance = 0.0, focus = 1.0, omega1_margin = 0.2,
+                       omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
+                       lens_distance = NIF_LENS_DISTANCE, offsets = nothing, open_ports = :nif,
+                       reflection_angle = 20.0, cylinder_radius = 2.0, sphere_radius = 5.0,
+                       curvature = Dict(), level = 2, resolution = 1e-4) -> Omega1Disposition
+
+The 1ω rules of [`talis_check`](@ref) as a field over the hardware: for every mesh
+triangle of `components` (parts or components; all surfaces by default), how it stands
+toward the 1ω footprints of all `beams` together (see [`Omega1Disposition`](@ref)). The
+footprint, the error set, the curvature limits and the reflection check, with their
+keywords, are those of `talis_check`, whose `:clearance_1w` and `:management_1w` rows
+give the same verdicts per beam and component. `diagnostics` names the components under
+the diagnostic rule (10 mm from 1ω light at TCC, growing to 25 mm at 1 m), which fail
+where they are closer.
+
+Whether a triangle clears, is tight (within `tight_threshold` mm of the required
+clearance) or lies in the footprint is decided on the whole triangle by the bound of
+`talis_check`, to `resolution`. A triangle in the footprint takes the most severe
+verdict of its `4^level` sub-triangles over the beams. `margin` is sampled and is
+followed up to `margin_range` mm. With `shadows = true` the triangles in the footprint
+are tested for hardware upstream. The cost grows with the number of sub-triangles in the
+footprints; `level = 0` suits CAD meshes whose facets are already fine.
+"""
+function omega1_disposition(t::Target, beams::AbstractVector{<:Beam}; components = nothing, diagnostics = (),
+                            tight_threshold = 1.0, margin_range = 5.0, shadows::Bool = false,
+                            tolerance = 0.5, pivot = :tcc, pointing = 0.05, target_offset = 0.025,
+                            hardware_tolerance = 0.0, focus = 1.0, omega1_margin = 0.2,
+                            omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
+                            lens_distance = NIF_LENS_DISTANCE, offsets = nothing, open_ports = :nif,
+                            reflection_angle = 20.0, cylinder_radius = 2.0, sphere_radius = 5.0,
+                            curvature = Dict{Symbol,Any}(), level::Integer = 2, resolution = 1e-4)
+    resolution > 0 || throw(ArgumentError("resolution must be > 0"))
+    (tight_threshold >= 0 && margin_range >= tight_threshold) ||
+        throw(ArgumentError("need 0 ≤ tight_threshold ≤ margin_range"))
+    vb = [_value_beam(b) for b in beams]
+    table = any(_is_nif, vb) ? _nif_beam_table() : nothing
+    bls = [_omega1_beamlets(b, offsets, table) for b in vb]
+    pieces(names) = Int[ci for n in names for ci in part_pieces(t, Symbol(n))]
+    dg = pieces(diagnostics)
+    cis = components === nothing ?
+          Int[ci for (ci, c) in enumerate(t.components) if c.kind === :surface] : pieces(components)
+    cis = unique(vcat(cis, dg))
+    geo = Dict(ci => _talis_samples(t, ci, level) for ci in cis)
+    tri_of = Dict(ci => [k for k in eachindex(t.tri_area) if t.tri_comp[k] == ci && t.tri_area[k] > 0] for ci in cis)
+    ports = _talis_open_ports(open_ports, vb)
+    cx = merge(_omega1_setup(tolerance, pivot, pointing, target_offset, hardware_tolerance, focus,
+                             omega1_edge, omega1_size, omega1_focus, lens_distance),
+               (; geo, ports, tolerance = Float64(tolerance), omega1_margin = Float64(omega1_margin),
+                reflection_angle = Float64(reflection_angle), cylinder_radius = Float64(cylinder_radius),
+                sphere_radius = Float64(sphere_radius), curvature,
+                curv = Dict{Int,Vector{NTuple{4,Float64}}}(), curv_lock = ReentrantLock(),
+                ε = Float64(resolution), tight = Float64(tight_threshold), range = Float64(margin_range),
+                shadows, diagnostics = Set(dg), tri_of))
+    nt = length(t.tri_area)
+    d = Omega1Disposition(fill(:unchecked, nt), fill(Inf, nt), zeros(Int, nt), zeros(Int, nt),
+                          fill(NaN, nt), fill(NaN, nt), zeros(Int, nt), fill(NaN, nt), fill(false, nt), ports,
+                          (; tolerance = Float64(tolerance), pivot = cx.tol.pivot, pivot_point = cx.tol.point,
+                           pointing = Float64(pointing), target_offset = Float64(target_offset),
+                           hardware_tolerance = Float64(hardware_tolerance), focus = Float64(focus),
+                           omega1_margin = Float64(omega1_margin), omega1_edge = Float64(omega1_edge),
+                           omega1_size = 2 * cx.h0, omega1_focus = cx.f1, lens_distance = cx.L,
+                           reflection_angle = Float64(reflection_angle),
+                           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
+                           tight_threshold = Float64(tight_threshold), margin_range = Float64(margin_range),
+                           level = Int(level), resolution = Float64(resolution)))
+    for ci in cis
+        d.status[tri_of[ci]] .= :clear
+    end
+    found = [Tuple{Int,Symbol,Float64,Int,Float64,Float64,Int,Float64,Bool}[] for _ in vb]
+    Threads.@threads for bi in eachindex(vb)
+        bls[bi] === nothing || _disposition_beam!(found[bi], t, vb[bi], bls[bi], cis, cx)
+    end
+    for (bi, fs) in enumerate(found), (k, st, m, jb, R1, R2, pj, α, sh) in fs
+        if m < d.margin[k]
+            d.margin[k], d.beam[k], d.beamlet[k] = m, bi, jb
+        end
+        r0, r1 = _DISPOSITION_RANK[d.status[k]], _DISPOSITION_RANK[st]
+        if r1 > r0 || (r1 == r0 && pj != 0 && !(α >= d.port_angle[k]))
+            d.status[k] = st
+            r1 >= 2 && ((d.R1[k], d.R2[k], d.shadowed[k]) = (R1, R2, sh))
+            d.port[k], d.port_angle[k] = pj, pj == 0 ? NaN : α
+        end
+    end
+    return d
+end
+
+# The triangles that one beam brings within `margin_range` of its 1ω footprint, each as
+# (triangle, status, margin, beamlet, R1, R2, port, port angle, shadowed).
+function _disposition_beam!(out, t::Target, b::Beam, bl, cis, cx)
+    aim = Vec3(b.aim)
+    kq = direction(b)
+    lip = cx.lip1 + cx.tol.tanα
+    fw = x -> _omega1_distance(x, bl, cx)[2] - cx.R - cx.tol(x, aim)
+    far = 4 * (t.scale + norm(aim)) + 1
+    εr = 1e3 * _ray_eps(t)
+    for ci in cis
+        g = cx.geo[ci]
+        isempty(g.tris) && continue
+        c = t.components[ci]
+        diag = ci in cx.diagnostics
+        # the requirement of a diagnostic grows with the distance from TCC
+        req = diag ? (x -> 10 + 0.015 * norm(x)) : (x -> cx.omega1_margin)
+        f = x -> fw(x) - req(x)
+        lf = lip + (diag ? 0.015 : 0.0)
+        nl = length(g.leaves) ÷ length(g.tris)
+        kind, rc, half = diag ? (:flat, Inf, NaN) : _talis_curvature(t, ci, cx.curvature)
+        mc = nothing
+        for (j, tri) in enumerate(g.tris)
+            m0 = (tri[1] + tri[2] + tri[3]) / 3
+            ρ = maximum(x -> norm(x - m0), tri)
+            f(m0) - lf * ρ > cx.range && continue
+            m = min(f(tri[1]), f(tri[2]), f(tri[3]))
+            ls = (j-1)*nl+1:j*nl
+            for i in ls
+                m = min(m, f(g.leaves[i][4]))
+            end
+            m > cx.range && !_talis_reaches(f, tri, lf, cx.tight, cx.ε) && continue
+            k = cx.tri_of[ci][j]
+            jb = _nearest_beamlet(m0, bl, cx)
+            if !_talis_reaches(f, tri, lf, 0.0, cx.ε)
+                st = _talis_reaches(f, tri, lf, cx.tight, cx.ε) ? :tight : :clear
+                push!(out, (k, st, max(m, 0.0), jb, NaN, NaN, 0, NaN, false))
+                continue
+            end
+            sh = cx.shadows && !visible(t, m0 - far * kq, m0 - εr * kq)
+            if diag
+                push!(out, (k, :fail, min(m, 0.0), jb, NaN, NaN, 0, NaN, sh))
+                continue
+            end
+            kind === :unknown && mc === nothing && (mc = _component_curvature(t, ci, cx))
+            st, R1, R2, pj, α = :clear, NaN, NaN, 0, NaN
+            for i in ls
+                leaf = g.leaves[i]
+                lt = (leaf[1], leaf[2], leaf[3])
+                _talis_reaches(f, lt, lf, 0.0, cx.ε) || continue
+                class, r1, r2, spread = _leaf_curvature(c.surface, kind, rc, half, mc, nl, i, lt, g.spreads[i], cx)
+                s1, p1, α1 = class === :scatter ? :curved_safe : :review, 0, NaN
+                if class === :reflect
+                    n = g.normals[i]
+                    α1 = Inf
+                    for (kb, _, _) in bl
+                        r = kb - 2 * dot(kb, n) * n
+                        raw, pp = findmin(p -> acosd(clamp(dot(r, p), -1.0, 1.0)), cx.ports)
+                        raw - 2 * spread < α1 && ((α1, p1) = (raw - 2 * spread, pp))
+                    end
+                    α1 -= 2 * cx.tolerance
+                    s1 = α1 > cx.reflection_angle ? :specular_clear : kind === :unknown ? :review : :fail
+                end
+                a, a1 = _DISPOSITION_RANK[st], _DISPOSITION_RANK[s1]
+                if a1 > a || (a1 == a && p1 != 0 && !(α1 >= α))
+                    st, R1, R2, pj, α = s1, r1, r2, p1, α1
+                end
+            end
+            # the bound may reach a triangle none of whose sub-triangles it reaches
+            st === :clear && (st = :tight)
+            push!(out, (k, st, min(m, st === :tight ? cx.tight : 0.0), jb, R1, R2, pj, α, sh))
+        end
+    end
+    return out
+end
+
+# The beamlet of `bl` whose worst-case 1ω footprint is nearest the point `x`.
+function _nearest_beamlet(x, bl, cx)
+    best, jb = Inf, 0
+    for (j, (kb, fb, ô)) in enumerate(bl), δ in (cx.focus > 0 ? (0.0, -cx.focus, cx.focus) : (0.0,))
+        v = _omega1_square(x - fb - δ * kb, kb, ô, cx.c0, cx.h0, cx.f1, cx.L)
+        v < best && ((best, jb) = (v, j))
+    end
+    return jb
 end
 
 function _talis_open_ports(spec, beams)

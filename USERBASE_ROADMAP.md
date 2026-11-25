@@ -13,7 +13,7 @@ Marks: **done**, **partial** (with what remains), **open**.
 |---|---|---|
 | A.1 witness geometry, shared 1ω contour | done | `omega1_contour`, `Omega1Approach`, `omega1_closest_approach`; the application's `unconverted_footprint` takes the mode, the view toggle for it belongs to B.2 |
 | A.2 unsigned curvature, specular accuracy | partial | cones and tori, the normal spread, the reflection record with port and areas, and the mesh estimate for free-form CAD are in. Left: a reflected-flux estimate from the 1ω power, and the estimate runs on every facet of an unknown component instead of the exposed ones only (0.25 s per 80,000 facets) |
-| A.3 hardware disposition field | open | |
+| A.3 hardware disposition field | done | `omega1_disposition`, per mesh triangle, with the shadow flag; 85,000 triangles under 48 quads take about 4 s at `level = 0` and 26 s at `level = 2` on four threads |
 | A.4 VisRad 1ω/2ω beam import | done | `visrad_unconverted`; the import sets the participation flags and the drive ratios. Only the fraction-of-total model is measured on a workspace |
 | A.5 STEP B-rep import | open | optional |
 | B.1 to B.6 | open | |

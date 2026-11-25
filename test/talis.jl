@@ -557,3 +557,67 @@ end
     @test_throws ArgumentError omega1_closest_approach(t1, [Beam("b"; theta = 30, phi = 0)], "b" => :own)
     @test_throws ArgumentError omega1_closest_approach(t1, [bl], "none" => :own)
 end
+
+@testset "1ω disposition of hardware" begin
+    bl = first(nif_beams())
+    k = direction(bl)
+    pq = Briareus._nif_quad_port(bl.quad)
+    ô = Briareus._own_side(bl.port, pq)
+    q̂ = cross(k, ô)
+    Rm = hcat(ô, q̂, k)
+    plate(name, w, R, c) = Component(name, transform(rectangle_mesh(w, w; nu = 2, nv = 2), R, c), gold(); two_sided = true)
+    Rt = Rm * [cosd(45) 0 sind(45); 0 1 0; -sind(45) 0 cosd(45)]
+    cb, cu = 16.0 * ô - 5.0 * q̂ + 30.0 * k, 20.0 * ô + 5.0 * q̂ - 30.0 * k
+    comps = [plate(:mirror, 4.0, Rm, 8.0 * ô),                         # faces the beamlet in the footprint
+             plate(:tilted, 3.0, Rt, 8.0 * ô + 7.0 * q̂),               # reflects sideways
+             plate(:near, 0.1, Rm, (4.45 - 0.5 - 0.05) * ô),           # 0.5 mm outside the near edge
+             plate(:far, 0.1, Rm, -3.9 * ô),                           # the dark side
+             Component(:ball, translate(sphere_mesh(4.0; ntheta = 12, nphi = 24), cb), gold();
+                       surface = SphereSurface(4.0; center = cb)),
+             Component(:lump, translate(sphere_mesh(6.0; ntheta = 12, nphi = 24), cu), gold())]
+    t = Target(comps...)
+    kw = (; open_ports = [pq, -k])
+    d = omega1_disposition(t, [bl]; kw...)
+    of(name) = [j for j in eachindex(t.tri_area) if t.components[t.tri_comp[j]].name === name && t.tri_area[j] > 0]
+    sts(name) = Set(d.status[of(name)])
+    @test length(d.status) == length(t.tri_area) && d.ports == [pq, -k]
+    @test sts(:mirror) == Set([:fail]) && sts(:tilted) == Set([:specular_clear])
+    @test sts(:near) == Set([:tight]) && sts(:far) == Set([:clear]) && sts(:ball) == Set([:curved_safe])
+    @test :review in sts(:lump) && !(:fail in sts(:lump))
+    @test all(d.beam[of(:mirror)] .== 1) && all(d.beamlet[of(:mirror)] .== 1) && all(d.margin[of(:far)] .== Inf)
+    @test all(d.port[of(:mirror)] .== 2) && all(d.port[of(:far)] .== 0) && all(isnan, d.port_angle[of(:near)])
+    @test all(d.R1[of(:ball)] .== 4) && all(d.R2[of(:ball)] .== 4) && all(isnan, d.R1[of(:near)])
+    @test all(isinf, d.R1[of(:mirror)]) && !any(d.shadowed)
+    @test occursin("fail", sprint(show, d))
+    # the rows of talis_check give the same verdicts, margins and angles
+    r = talis_check(t, [bl]; capture = (), rtol = 0, kw...)
+    row(rule, c) = only(x for x in r.rows if x.rule === rule && x.component === c)
+    @test row(:clearance_1w, :near).status === :pass && row(:clearance_1w, :far).status === :pass
+    @test row(:management_1w, :mirror).status === :fail && row(:management_1w, :tilted).status === :pass
+    @test row(:management_1w, :ball).status === :pass && row(:management_1w, :lump).status === :review
+    mn = row(:clearance_1w, :near).margin
+    @test mn - 1e-9 <= minimum(d.margin[of(:near)]) <= mn + 2e-4 && 0 < mn < 1
+    @test minimum(d.port_angle[of(:mirror)]) ≈ row(:management_1w, :mirror).worst atol = 1e-9
+    @test minimum(d.port_angle[of(:tilted)]) ≈ row(:management_1w, :tilted).worst atol = 1e-9
+    @test minimum(d.port_angle[of(:lump)][d.status[of(:lump)] .=== :review]) ≈ row(:management_1w, :lump).worst atol = 1e-9
+    # a smaller tight threshold clears the near plate; the diagnostic rule fails the far one,
+    # 8.35 mm from the footprint where 10 mm are required
+    @test Set(omega1_disposition(t, [bl]; tight_threshold = 0.1, kw...).status[of(:near)]) == Set([:clear])
+    dd = omega1_disposition(t, [bl]; components = (:far, :mirror), diagnostics = (:far,), kw...)
+    @test Set(dd.status[of(:far)]) == Set([:fail]) && Set(dd.status[of(:ball)]) == Set([:unchecked])
+    @test all(dd.margin[of(:far)] .< 0) && Set(dd.status[of(:mirror)]) == Set([:fail])
+    # a shield upstream of the mirror shadows it and nothing else in the footprint
+    ts = Target(comps..., plate(:shield, 5.0, Rm, 8.0 * ô - 3.0 * k))
+    ds = omega1_disposition(ts, [bl]; shadows = true, kw...)
+    ofs(name) = [j for j in eachindex(ts.tri_area) if ts.components[ts.tri_comp[j]].name === name && ts.tri_area[j] > 0]
+    @test all(ds.shadowed[ofs(:mirror)]) && !any(ds.shadowed[ofs(:shield)]) && !any(ds.shadowed[ofs(:tilted)])
+    @test Set(ds.status[ofs(:mirror)]) == Set([:fail])                  # shadowing does not change a verdict
+    # the whole quad: the verdict of a triangle is the most severe over its beamlets
+    quad = only(b for b in nif_quads() if b.quad == bl.quad)
+    dq = omega1_disposition(t, [quad, bl]; kw...)
+    rank = Briareus._DISPOSITION_RANK
+    @test all(rank[a] >= rank[b] for (a, b) in zip(dq.status, d.status)) && all(dq.margin .<= d.margin)
+    @test_throws ArgumentError omega1_disposition(t, [bl]; tight_threshold = 6.0)
+    # beams without a 1ω footprint leave everything clear
+    @test Set(omega1_disposition(t, [Beam("b"; theta = 30, phi = 0)]).status) == Set([:clear])
+end
