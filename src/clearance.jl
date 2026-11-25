@@ -882,17 +882,6 @@ function beam_component_power(op::DepositionOperator, beams::AbstractVector{<:Be
     return M
 end
 
-# Returns the Float64 value of a number, through nested duals.
-_fvalue(x::ForwardDiff.Dual) = _fvalue(ForwardDiff.value(x))
-_fvalue(x::Real) = x
-
-_value_spot(s::SuperGaussianSpot) = with_axes(s, _fvalue(s.a), _fvalue(s.b))
-
-# Returns a Float64 copy of a beam, with ForwardDiff duals stripped, nested ones included.
-_value_beam(b::Beam) =
-    remake(b; aim = _fvalue.(b.aim), power = _fvalue(b.power), defocus = _fvalue(b.defocus),
-           spot = _value_spot(b.spot), dlambda = _fvalue(b.dlambda))
-
 """
     violations(report; status = (:fail, :review), clearance = -Inf) -> Vector{ClearanceRow}
 

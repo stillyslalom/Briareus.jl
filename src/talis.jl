@@ -587,42 +587,6 @@ function _omega1_square(d, k, ô, c0, h0, f1, L)
     return (ox > 0 || oy > 0) ? hypot(max(ox, 0.0), max(oy, 0.0)) : max(ox, oy)
 end
 
-_is_nif(b::Beam) = b.quad in values(NIF_QUAD_NAMES)
-
-function _nif_quad_port(quad)
-    p = nif_port(quad)
-    for (n, θ, φ) in NIF_PORTS
-        n == p && return port_vector(θ, φ)
-    end
-end
-
-# 1ω beamlets of a beam as (k, 3ω focus, footprint direction ô), or `nothing`.
-function _omega1_beamlets(b::Beam, offsets, table)
-    aim = Vec3(b.aim)
-    mk(port, ô) = (-port, aim - b.defocus * port, ô)
-    if offsets !== nothing && haskey(offsets, b.name)
-        dir = offsets[b.name]
-        k = direction(b)
-        e1, e2 = port_basis(b.port)
-        ô = dir isa Real ? cosd(dir) * e1 + sind(dir) * e2 :
-            (v = Vec3(dir...); normalize(v - dot(v, k) * k))
-        return [mk(b.port, ô)]
-    end
-    _is_nif(b) || return nothing
-    pq = _nif_quad_port(b.quad)
-    pq === nothing && return nothing
-    ports = acosd(clamp(dot(b.port, pq), -1.0, 1.0)) < 0.1 ?
-            [port_vector(r.theta, r.phi) for r in table if "Q" * r.bundle * r.hemisphere == b.quad] :
-            [b.port]
-    return [mk(p, _own_side(p, pq)) for p in ports]
-end
-
-# φ̂ of the beamlet port, signed toward the side of the quad axis the port lies on.
-function _own_side(p, pq)
-    _, eφ = port_basis(p)
-    return dot(p - pq, eφ) >= 0 ? eφ : -eφ
-end
-
 function _talis_open_ports(spec, beams)
     spec === :nif && return [port_vector(θ, φ) for (_, θ, φ) in NIF_PORTS]
     spec === :beams && return unique([_is_nif(b) ? _nif_quad_port(b.quad) : b.port for b in beams])

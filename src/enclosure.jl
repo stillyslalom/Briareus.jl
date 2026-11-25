@@ -157,19 +157,6 @@ end
 enclosure(cs::AbstractVector{<:Component}, point = (0.0, 0.0, 0.0); kwargs...) =
     enclosure(Target(collect(Component, cs)), point; kwargs...)
 
-# splitmix64 gives a counter-based stream per element, so samples do not depend on threads.
-@inline function _splitmix(s::UInt64)
-    s += 0x9e3779b97f4a7c15
-    z = s
-    z = (z ⊻ (z >> 30)) * 0xbf58476d1ce4e5b9
-    z = (z ⊻ (z >> 27)) * 0x94d049bb133111eb
-    return s, z ⊻ (z >> 31)
-end
-@inline function _uniform(s::UInt64)
-    s, z = _splitmix(s)
-    return s, (z >> 11) * 0x1.0p-53
-end
-
 # Returns the parameter at which the ray o + s d (|d| = 1) leaves the sphere of radius R
 # about p, with 0 when it starts outside and moves away, and Inf for an unbounded region.
 @inline function _sphere_exit(o, d, p, R)

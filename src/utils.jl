@@ -151,3 +151,15 @@ function _nnls(A::Matrix{Float64}, b::Vector{Float64})
     return z
 end
 
+# splitmix64 gives a counter-based stream per element, so samples do not depend on threads.
+@inline function _splitmix(s::UInt64)
+    s += 0x9e3779b97f4a7c15
+    z = s
+    z = (z ⊻ (z >> 30)) * 0xbf58476d1ce4e5b9
+    z = (z ⊻ (z >> 27)) * 0x94d049bb133111eb
+    return s, z ⊻ (z >> 31)
+end
+@inline function _uniform(s::UInt64)
+    s, z = _splitmix(s)
+    return s, (z >> 11) * 0x1.0p-53
+end

@@ -750,3 +750,23 @@ function _disk_quadrature(n)
     scale = sqrt(0.5 / (sum(p[1]^2 for p in pts) / n))
     return [(scale * r, ϕ) for (r, ϕ) in pts]
 end
+
+# Returns the Float64 value of a number, through nested duals.
+_fvalue(x::ForwardDiff.Dual) = _fvalue(ForwardDiff.value(x))
+_fvalue(x::Real) = x
+
+_value_spot(s::SuperGaussianSpot) = with_axes(s, _fvalue(s.a), _fvalue(s.b))
+
+# Returns a Float64 copy of a beam, with ForwardDiff duals stripped, nested ones included.
+_value_beam(b::Beam) =
+    remake(b; aim = _fvalue.(b.aim), power = _fvalue(b.power), defocus = _fvalue(b.defocus),
+           spot = _value_spot(b.spot), dlambda = _fvalue(b.dlambda))
+
+# Converts a vector of beams of mixed number types to one type, the promotion of their
+# number types, which is abstract if one of them is.
+_number_type(::Beam{T}) where {T} = T
+function _common_type(beams)
+    T = mapreduce(_number_type, promote_type, beams)
+    return Beam{T}[Beam{T}(b.name, b.port, SVector{3,T}(b.aim), T(b.power), T(b.defocus), _retype(b.spot, T),
+                           b.fnumber, b.group, b.quad, b.wavelength, T(b.dlambda)) for b in beams]
+end
