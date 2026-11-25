@@ -65,7 +65,7 @@ the most probable errors behind a measured asymmetry.
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/optimize.jl", "src/constraints.jl", "src/uncertainty.jl", "src/parameterizations.jl"]
+Pages = ["src/pointing.jl", "src/scenario.jl", "src/objectives.jl", "src/optimizer.jl", "src/constraints.jl", "src/al_solver.jl", "src/uncertainty.jl", "src/parameterizations.jl"]
 Private = false
 ```
 

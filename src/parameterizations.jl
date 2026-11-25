@@ -321,7 +321,7 @@ end
 _named_values(p, kv) = isempty(kv) ? Pair{Int,Any}[] :
     throw(ArgumentError("named values need a GroupPointing or FramePointing inside, not a $(typeof(p))"))
 
-# Implements the default of `subset` for the wrappers (`subset` in optimize.jl). The
+# Implements the default of `subset` for the wrappers (`subset` in scenario.jl). The
 # subset of the inner parameterization, which keeps its groups, is wrapped again. The
 # kept parameters, matched by name, keep their values and stay held or free as they were.
 function _subset_param(h::HeldParameters, keep)

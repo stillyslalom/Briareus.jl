@@ -1,4 +1,4 @@
-# This file tests the VisRad interchange (src/visrad.jl) with round trips and with rows
+# This file tests the VisRad interchange (src/visrad_io.jl, src/visrad_kit.jl) with round trips and with rows
 # copied from the VisRad 21.1.1 manual, https://prism-cs.com/Manuals/VisRad/.
 
 using Briareus: _vr_key, _vr_rotation, _vr_reference_angle
