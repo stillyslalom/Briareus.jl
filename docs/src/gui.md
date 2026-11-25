@@ -670,6 +670,15 @@ The bottom panel has the following tabs.
   is marked out of date when the target, the beams or any setting it used changes. The
   report exports as CSV with [`write_talis_csv`](@ref), and the header of the file lists
   the settings, the checks not evaluated and the requirements out of scope.
+  With the 1ω rules on, the check also leaves the 1ω verdict of every facet of the checked
+  hardware ([`omega1_disposition`](@ref)), and *Color target by* shows it in two modes.
+  *1ω disposition* draws hardware that clears in gray, hardware in a footprint that
+  scatters by its curvature in bluish green, hardware that is tight, that clears only by
+  its reflection or that needs review in amber, and failing hardware in vermilion. *1ω
+  clearance margin* draws the worst-case margin on a scale of ±5 mm about zero. *Tight
+  below* sets the margin up to which clearing hardware counts as tight, and a check box
+  draws the curved hardware as clear, which leaves only tight, review and failing
+  hardware colored. Both change the drawing only.
 
 ### Files in and out
 

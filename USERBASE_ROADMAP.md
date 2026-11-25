@@ -16,7 +16,10 @@ Marks: **done**, **partial** (with what remains), **open**.
 | A.3 hardware disposition field | done | `omega1_disposition`, per mesh triangle, with the shadow flag; 85,000 triangles under 48 quads take about 4 s at `level = 0` and 26 s at `level = 2` on four threads |
 | A.4 VisRad 1ω/2ω beam import | done | `visrad_unconverted`; the import sets the participation flags and the drive ratios. Only the fraction-of-total model is measured on a workspace |
 | A.5 STEP B-rep import | open | optional |
-| B.1 to B.6 | open | |
+| B.1 disposition coloring | partial | the two color modes, the tight threshold and the curved-safe filter are in the 3D view; `disposition_info` gives the text of a facet, and no hover or pick shows it yet |
+| B.2 closest-approach faces, calipers, cones | partial | the geometry is built (`closest_approach_surface`, `reflection_cone`) and `unconverted_footprint` takes the mode; nothing draws them yet, and there is no pinch mode |
+| B.3 daylight and grazing views, slice | partial | the two poses are computed (`daylight_view`, `grazing_view`); no button, no 2-D slice |
+| B.4 to B.6 | open | |
 | C.1 to C.3 | open | |
 | D.1 to D.4 | open | |
 | E.1, E.2 | open | |

@@ -309,6 +309,9 @@ ApplicationWindow {
                 Action { text: "Absorbed laser"; checkable: true; checked: app.colorBy === "laser"; onTriggered: Julia.br_set_color("laser") }
                 Action { text: "X-ray radiosity"; checkable: true; checked: app.colorBy === "radiosity"; onTriggered: Julia.br_set_color("radiosity") }
                 Action { text: "Incident x-ray flux"; checkable: true; checked: app.colorBy === "incident"; onTriggered: Julia.br_set_color("incident") }
+                MenuSeparator {}
+                Action { text: "1ω disposition"; checkable: true; checked: app.colorBy === "omega1_disposition"; onTriggered: Julia.br_set_color("omega1_disposition") }
+                Action { text: "1ω clearance margin"; checkable: true; checked: app.colorBy === "omega1_margin"; onTriggered: Julia.br_set_color("omega1_margin") }
             }
             MenuSeparator {}
             Action {

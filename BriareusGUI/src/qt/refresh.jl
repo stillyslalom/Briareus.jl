@@ -176,7 +176,7 @@ function _dirty_sources(sess::DesignSession)
               rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
               rv.running, rv.status, rv.error, rv.report,
               tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
-              tl.running, tl.status, tl.error, tl.report,
+              tl.running, tl.status, tl.error, tl.report, tl.tight, tl.hide_curved,
               v.display, v.selection, v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted,
               v.triads, tm.pulses, tm.history, tm.retune, tm.diagnostics,
               tm.catalog, tm.issues, tm.running,
@@ -1007,6 +1007,8 @@ function _refresh_talis!(sh::BriareusShell)
     _set!(sh, "tlPivot", String(tl.pivot[]))
     _set!(sh, "tlPivotPoint", join((_num(v) for v in tl.pivot_point[]), ", "))
     _set!(sh, "tlOmega1", tl.omega1[])
+    _set!(sh, "tlTight", _num(tl.tight[]))
+    _set!(sh, "tlHideCurved", tl.hide_curved[])
     _set!(sh, "tlRunning", tl.running[])
     _set!(sh, "tlElapsed", tl.running[] ? Controllers._seconds(time() - tl.started[]) : "")
     _set!(sh, "tlStatus", tl.status[])

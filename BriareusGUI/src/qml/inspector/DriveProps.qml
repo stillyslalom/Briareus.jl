@@ -72,10 +72,12 @@ ColumnLayout {
             model: [{ text: "Components", value: "component" },
                     { text: "Absorbed laser intensity", value: "laser" },
                     { text: "X-ray radiosity", value: "radiosity" },
-                    { text: "Incident x-ray flux", value: "incident" }]
-            currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident"].indexOf(app.colorBy))
+                    { text: "Incident x-ray flux", value: "incident" },
+                    { text: "1ω disposition", value: "omega1_disposition" },
+                    { text: "1ω clearance margin", value: "omega1_margin" }]
+            currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident", "omega1_disposition", "omega1_margin"].indexOf(app.colorBy))
             onActivated: Julia.br_set_color(currentValue)
-            tip: "Color by component, or by a drive field (W/cm²)"
+            tip: "Color by component, by a drive field (W/cm²), or by the 1ω verdict or margin of the TaLIS check"
         }
     }
     Flow {

@@ -52,6 +52,21 @@ const B = BriareusGUI
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
     set_color!(sess, :component)
     @test !sc.colorbar.blockscene.visible[]
+    # The 1ω modes: not covered (light gray) before a TaLIS check, the verdict colors after
+    # it, and the margin on its scale.
+    set_color!(sess, :omega1_disposition)
+    @test occursin("TaLIS", sess.status[]) && !sc.colorbar.blockscene.visible[]
+    @test all(==(B._hexcolor(DISPOSITION_COLORS[:unchecked])), sc.body.color[])
+    start_talis!(sess; spawn = false)
+    @test disposition_of(sess.talis, sess.target.target[]) !== nothing
+    verdicts = Set(disposition_status(sess.talis, sess.target.target[]))
+    @test issubset(Set(sc.body.color[]), Set(B._hexcolor(DISPOSITION_COLORS[v]) for v in verdicts))
+    @test B._hexcolor(DISPOSITION_COLORS[:unchecked]) ∉ sc.body.color[] || :unchecked in verdicts
+    set_color!(sess, :omega1_margin)
+    @test sc.colorbar.blockscene.visible[] && sc.colorbar.limits[] == (-DISPOSITION_RANGE, DISPOSITION_RANGE)
+    @test occursin("1ω clearance margin", sc.colorbar.label[])
+    set_color!(sess, :component)
+    @test !sc.colorbar.blockscene.visible[]
 
     # beam edits move the drawn aim; disabled beams stay drawn, dimmed
     edit_beams!(sess.beams, 3, :z, "4.0")

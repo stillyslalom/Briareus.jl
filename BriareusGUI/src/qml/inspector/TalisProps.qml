@@ -59,6 +59,12 @@ ColumnLayout {
                   onEdited: (text) => Julia.br_tl_edit("pivot_point", text) }
         CheckLine { text: "1ω rules (NIF beams only)"; checked: app.tlOmega1; onToggled: Julia.br_tl_omega1(checked)
                     tip: "Also check the 1ω rules" }
+        PropRow { visible: app.tlOmega1; label: "Tight below"; value: app.tlTight; unit: "mm of 1ω margin (0 to 5)"
+                  tip: "With the target colored by 1ω disposition: hardware that clears the 1ω footprints by this margin or less is drawn amber"
+                  onEdited: (text) => Julia.br_tl_tight(text) }
+        CheckLine { visible: app.tlOmega1; text: "Draw curved-safe hardware as clear (|R| < 2 or 5 mm)"; checked: app.tlHideCurved
+                    onToggled: Julia.br_tl_hide_curved(checked)
+                    tip: "With the target colored by 1ω disposition: leaves only tight, review and failing hardware colored" }
     }
     ErrorText { text: app.tlError }
     RowLayout {

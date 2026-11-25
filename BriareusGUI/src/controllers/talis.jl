@@ -45,7 +45,11 @@ clearance and kept 10–25 mm from 1ω light, `talis_check`'s `diagnostics`),
 `pivot_point` (mm, for `:point`), and `omega1` (run the 1ω rules). The error stack and
 the hardware sampling come from the [`ReviewState`](@ref). Job: `running`, `started`,
 `status`, `error`, `report` (a core `TaLISReport`) and `inputs` (the target, beams and
-`talis_check` keywords it checked).
+`talis_check` keywords it checked). With the 1ω rules on, the check also leaves
+`disposition`, the 1ω verdict of every mesh triangle (a core `Omega1Disposition`), which
+the 3D view colors by ([`DISPOSITION_MODES`](@ref)); `tight` (mm) is the margin up to
+which hardware that clears is drawn as tight, and `hide_curved` draws hardware that
+scatters by its curvature as clear.
 """
 struct TaLISState
     capture::Observable{Vector{Symbol}}
@@ -60,6 +64,9 @@ struct TaLISState
     status::Observable{String}
     error::Observable{String}
     report::Observable{Union{Nothing,TaLISReport}}
+    disposition::Observable{Union{Nothing,Omega1Disposition}}
+    tight::Observable{Float64}
+    hide_curved::Observable{Bool}
     inputs::Base.RefValue{Any}
     known::Base.RefValue{Vector{Symbol}}
     generation::Base.RefValue{Int}
@@ -69,7 +76,9 @@ TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable
                           Observable(0.5),
                           Observable(:tcc), Observable((0.0, 0.0, 0.0)), Observable(true),
                           Observable(false), Observable(0.0), Observable(""), Observable(""),
-                          Observable{Union{Nothing,TaLISReport}}(nothing), Ref{Any}(nothing),
+                          Observable{Union{Nothing,TaLISReport}}(nothing),
+                          Observable{Union{Nothing,Omega1Disposition}}(nothing), Observable(1.0),
+                          Observable(false), Ref{Any}(nothing),
                           Ref(Symbol[]), Ref(0))
 
 """
@@ -215,7 +224,8 @@ function start_talis!(tl::TaLISState, rv::ReviewState, t::Target, beams::Abstrac
     tl.status[] = "checking…"
     tl.running[] = true
     job = function ()
-        out = _try_job(() -> talis_check(t, bs; kw...))
+        out = _try_job(() -> (talis_check(t, bs; kw...),
+                              kw.omega1 ? omega1_disposition(t, bs; disposition_kwargs(t, kw)...) : nothing))
         deliver(() -> _finish_talis!(tl, out, g))
     end
     _run_job(job, spawn)
@@ -225,13 +235,125 @@ end
 function _finish_talis!(tl::TaLISState, out, g::Integer)
     g == tl.generation[] || return tl                  # canceled or superseded
     if out.err === nothing
-        tl.report[] = out.value
+        tl.disposition[] = last(out.value)
+        tl.report[] = first(out.value)
         tl.status[] = @sprintf("done in %s: ", _seconds(time() - tl.started[])) * talis_brief(tl)
     else
         tl.status[] = "failed: " * _errmsg(out.err)
     end
     tl.running[] = false
     return tl
+end
+
+"""
+What the 3D view colors hardware by from the 1ω disposition of the TaLIS check:
+`:omega1_disposition` (its verdict, in the colors of [`DISPOSITION_COLORS`](@ref)) and
+`:omega1_margin` (its worst-case 1ω clearance margin, mm).
+"""
+const DISPOSITION_MODES = (:omega1_disposition, :omega1_margin)
+
+"""
+Colors (hex) of the 1ω verdicts: gray for hardware that clears, bluish green for hardware
+in the footprint that scatters by its curvature, amber for hardware that is tight, clears
+only by its reflection or needs review, vermilion for hardware that fails, and light gray
+for hardware the check did not cover.
+"""
+const DISPOSITION_COLORS = Dict(:unchecked => "#D9D9D9", :clear => "#9E9E9E", :tight => "#E69F00",
+                                :curved_safe => "#009E73", :specular_clear => "#E69F00",
+                                :review => "#E69F00", :fail => "#D55E00")
+
+"Largest margin (mm) that the disposition follows, and so the largest tight threshold."
+const DISPOSITION_RANGE = 5.0
+
+"""
+    disposition_kwargs(target, kw) -> NamedTuple
+
+The keyword arguments of the `omega1_disposition` call that goes with a `talis_check`
+call with the keywords `kw` ([`talis_kwargs`](@ref)): the same components, diagnostics,
+tolerance and error stack, margins followed to [`DISPOSITION_RANGE`](@ref), the shadow
+flag, and one verdict per facet of a target of more than 20,000 triangles (the facets
+of CAD are fine already).
+"""
+disposition_kwargs(t::Target, kw) =
+    (; components = kw.omega1_components, diagnostics = kw.diagnostics, tolerance = kw.tolerance,
+     pivot = kw.pivot, pointing = kw.pointing, target_offset = kw.target_offset,
+     hardware_tolerance = kw.hardware_tolerance, focus = kw.focus, margin_range = DISPOSITION_RANGE,
+     shadows = true, level = length(t.tri_area) > 20_000 ? 0 : kw.level)
+
+"""
+    set_disposition_filter!(tl::TaLISState; tight = tl.tight[], hide_curved = tl.hide_curved[]) -> tl
+
+Set the margin (mm, 0 to [`DISPOSITION_RANGE`](@ref)) up to which hardware that clears
+the 1ω footprints is drawn as tight, and whether hardware that scatters by its curvature
+is drawn as clear, so that a review shows only tight and failing hardware. Neither
+changes the check.
+"""
+function set_disposition_filter!(tl::TaLISState; tight::Real = tl.tight[], hide_curved::Bool = tl.hide_curved[])
+    0 <= tight <= DISPOSITION_RANGE ||
+        throw(ArgumentError("the tight threshold is between 0 and $DISPOSITION_RANGE mm"))
+    _assign!(tl.tight, Float64(tight))
+    _assign!(tl.hide_curved, hide_curved)
+    return tl
+end
+
+"""
+    disposition_of(tl::TaLISState, target) -> Union{Nothing,Omega1Disposition}
+
+The 1ω disposition of the last check if it was computed for `target`, else `nothing`
+(no check yet, the 1ω rules off, or the target changed since).
+"""
+function disposition_of(tl::TaLISState, t::Target)
+    d = tl.disposition[]
+    (d === nothing || tl.inputs[] === nothing || first(tl.inputs[]) !== t) && return nothing
+    return d
+end
+
+"""
+    disposition_status(tl::TaLISState, target) -> Union{Nothing,Vector{Symbol}}
+
+The 1ω verdict of each mesh triangle of `target` as the view draws it: the verdicts of
+the check with the tight threshold and the curved-safe filter of `tl` applied
+([`set_disposition_filter!`](@ref)); `nothing` without a disposition for `target`.
+"""
+function disposition_status(tl::TaLISState, t::Target)
+    d = disposition_of(tl, t)
+    d === nothing && return nothing
+    thr, hide = tl.tight[], tl.hide_curved[]
+    return map(d.status, d.margin) do st, m
+        st in (:clear, :tight) ? (m <= thr ? :tight : :clear) :
+        (st === :curved_safe && hide) ? :clear : st
+    end
+end
+
+"""
+    disposition_info(tl::TaLISState, target, beams, triangle) -> String
+
+What the 1ω check found at mesh triangle `triangle` of `target`: its verdict, the
+worst-case margin with the beam and beamlet that set it, the radii of curvature it was
+judged on, the open port its reflection comes nearest with the angle, and whether other
+hardware shadows it. Empty without a disposition for `target`.
+"""
+function disposition_info(tl::TaLISState, t::Target, beams::AbstractVector, k::Integer)
+    d = disposition_of(tl, t)
+    (d === nothing || !checkbounds(Bool, d.status, k)) && return ""
+    st = d.status[k]
+    st === :unchecked && return "not covered by the 1ω check"
+    io = IOBuffer()
+    print(io, replace(String(st), "_" => " "))
+    if isfinite(d.margin[k])
+        b = d.beam[k]
+        @printf(io, "; 1ω margin %+.3f mm (%s, beamlet %d)", d.margin[k],
+                checkbounds(Bool, beams, b) ? beams[b].name : "beam $b", d.beamlet[k])
+    else
+        @printf(io, "; 1ω margin above %g mm", d.settings.margin_range)
+    end
+    rad(r) = isfinite(r) ? @sprintf("%.3g mm", r) : "flat"
+    isnan(d.R1[k]) || print(io, "; radii of curvature ", rad(d.R1[k]), ", ", rad(d.R2[k]))
+    d.port[k] == 0 ||
+        @printf(io, "; reflection %.1f° from open port %d (%.0f° required)", d.port_angle[k], d.port[k],
+                d.settings.reflection_angle)
+    d.shadowed[k] && print(io, "; shadowed by hardware upstream")
+    return String(take!(io))
 end
 
 """

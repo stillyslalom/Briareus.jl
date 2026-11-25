@@ -422,12 +422,16 @@ end
 
 Color the 3D view by `mode` (one of [`COLOR_MODES`](@ref)). A drive field needs the
 drive: if it is missing or stale it is computed now (in the background in a window),
-as VisRad computes what a display asks for.
+as VisRad computes what a display asks for. The 1ω modes show the disposition of the
+last TaLIS check of this target, and uniform gray until that check has run.
 """
 function set_color!(sess::DesignSession, mode::Symbol)
     mode in COLOR_MODES || throw(ArgumentError("color mode must be one of $COLOR_MODES"))
     _assign!(sess.view.color, mode)
-    if mode !== :component
+    if mode in DISPOSITION_MODES
+        disposition_of(sess.talis, sess.target.target[]) === nothing &&
+            (sess.status[] = "run the TaLIS check (Review) to color the hardware by its 1ω disposition")
+    elseif mode !== :component
         set_field!(sess.drive, mode)
         _drive_current(sess) || sess.drive.building[] || build_scenario!(sess)
     end

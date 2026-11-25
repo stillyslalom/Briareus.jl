@@ -2,6 +2,8 @@
 # beam and a plate upstream (the analytic case of the core tests), then on the coarse
 # hohlraum with the NIF quads and a diagnostic window.
 
+using LinearAlgebra: dot, cross
+
 @testset "TaLIS checks: foil and one beam (no GL)" begin
     spot = SuperGaussianSpot(0.3; order = 4.0)
     b = Beam("b"; theta = 0, phi = 0, power = 1.0, spot, fnumber = 8.0)
@@ -122,6 +124,53 @@
     start_talis!(tl3, rv, t, [b]; deliver = f -> put!(q, f), spawn = true)
     drain_until(() -> !tl3.running[], q)
     @test tl3.report[] isa TaLISReport
+end
+
+@testset "1ω disposition of the TaLIS check (no GL)" begin
+    # one NIF beamlet, a plate that faces it in its 1ω footprint, a small plate just
+    # outside the near edge of the footprint and one on the dark side
+    bl = first(nif_beams())
+    k = direction(bl)
+    pq = Briareus.nif_quads()[findfirst(q -> q.quad == bl.quad, Briareus.nif_quads())].port
+    e1, e2 = Briareus.port_basis(bl.port)
+    ô = dot(bl.port - pq, e2) >= 0 ? e2 : -e2
+    Rm = hcat(ô, cross(k, ô), k)
+    plate(name, w, c) = Component(name, transform(rectangle_mesh(w, w; nu = 2, nv = 2), Rm, c), gold(); two_sided = true)
+    t = Target(plate(:mirror, 4.0, 8.0 * ô), plate(:near, 0.1, 3.9 * ô), plate(:far, 0.1, -3.9 * ô))
+    tl, rv = TaLISState(), ReviewState()
+    @test disposition_of(tl, t) === nothing && disposition_status(tl, t) === nothing
+    @test disposition_info(tl, t, [bl], 1) == ""
+    _assign = Controllers._assign!
+    _assign(tl.capture, [:mirror]); _assign(tl.hardware, [:near, :far])
+    start_talis!(tl, rv, t, [bl]; spawn = false)
+    d = disposition_of(tl, t)
+    kw = talis_kwargs(tl, rv)
+    @test d isa Omega1Disposition && d.status == omega1_disposition(t, [bl]; disposition_kwargs(t, kw)...).status
+    @test disposition_kwargs(t, kw).level == kw.level && disposition_kwargs(t, kw).margin_range == DISPOSITION_RANGE
+    of(name) = [j for j in eachindex(t.tri_area) if t.components[t.tri_comp[j]].name === name]
+    st = disposition_status(tl, t)
+    @test Set(st[of(:mirror)]) ⊆ Set([:fail, :specular_clear]) && Set(st[of(:near)]) == Set([:tight])
+    @test Set(st[of(:far)]) == Set([:clear])
+    # the tight threshold and the curved-safe filter change the drawing, not the check
+    set_disposition_filter!(tl; tight = 0.05)
+    @test Set(disposition_status(tl, t)[of(:near)]) == Set([:clear]) && tl.disposition[] === d
+    set_disposition_filter!(tl; tight = DISPOSITION_RANGE)
+    @test Set(disposition_status(tl, t)[of(:near)]) == Set([:tight])
+    @test_throws ArgumentError set_disposition_filter!(tl; tight = 6.0)
+    set_disposition_filter!(tl; tight = 1.0, hide_curved = true)
+    @test tl.hide_curved[] && !(:curved_safe in disposition_status(tl, t))
+    # what a facet reports
+    info = disposition_info(tl, t, [bl], first(of(:near)))
+    @test startswith(info, "tight; 1ω margin +") && occursin(bl.name, info) && occursin("beamlet 1", info)
+    im = disposition_info(tl, t, [bl], first(of(:mirror)))
+    @test occursin("radii of curvature flat, flat", im) && occursin("from open port", im)
+    @test occursin("above 5 mm", disposition_info(tl, t, [bl], first(of(:far))))
+    # another target has no disposition, and the 1ω rules off leave none
+    @test disposition_of(tl, Target(plate(:mirror, 4.0, 8.0 * ô))) === nothing
+    _assign(tl.omega1, false)
+    start_talis!(tl, rv, t, [bl]; spawn = false)
+    @test tl.disposition[] === nothing && tl.report[] isa TaLISReport
+    @test Set(DISPOSITION_MODES) ⊆ Set(COLOR_MODES) && all(m -> haskey(COLOR_LABELS, m), COLOR_MODES)
 end
 
 @testset "TaLIS checks: hohlraum with a window (no GL)" begin

@@ -173,6 +173,8 @@ function scene_canvas(sess::DesignSession)
     # A pose set by a loaded session; `nothing` gives the default view, fitted to the
     # target.
     on(p -> _apply_camera!(c, p), v.camera)
+    onany((_...) -> v.color[] in DISPOSITION_MODES && _draw_body!(c, sess), sess.talis.disposition,
+          sess.talis.tight, sess.talis.hide_curved)
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
           sess.time.cursor, sess.time.history, v.cutaway, v.display, v.cut_azimuth, v.cut_width,
           v.cut_components, v.cut_kind, v.cut_axis, v.cut_range, v.cut_point, v.cut_normal,
@@ -456,7 +458,7 @@ selection_center(sess::DesignSession) = (b = selection_bounds(sess); b === nothi
 # at the time cursor's step of the drive history when it shows one (`cursor_values`).
 function _body_coloring(sess::DesignSession)
     field = sess.view.color[]
-    field === :component && return nothing
+    (field === :component || field in DISPOSITION_MODES) && return nothing
     t = sess.target.target[]
     dr = sess.drive
     vals = cursor_values(sess, field)
@@ -579,7 +581,9 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
     cb = c.colorbar
     used = unique!(sort!(vcat(otri, ctri, wtri)))
     col = Dict{Int,RGBAf}()
-    if vals === nothing
+    if v.color[] in DISPOSITION_MODES
+        _disposition_colors!(col, c, sess, used)
+    elseif vals === nothing
         # Component colors are keyed in the model tree by its swatches; the canvas does
         # not show a key.
         pal = component_colors(t)
@@ -629,6 +633,41 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
     c.ntriangles[] = n
     c.dirty[] = true
     return c
+end
+
+# The colors of the 1ω disposition of the last TaLIS check: the verdict of each triangle,
+# or its clearance margin on a diverging scale about zero. Without a disposition for this
+# target every triangle is drawn as not covered.
+const MARGIN_COLORMAP = :RdBu
+
+function _disposition_colors!(col, c::SceneCanvas, sess::DesignSession, used)
+    t = sess.target.target[]
+    tl = sess.talis
+    d = disposition_of(tl, t)
+    cb = c.colorbar
+    if d === nothing || sess.view.color[] === :omega1_disposition
+        st = disposition_status(tl, t)
+        for k in used
+            col[k] = _hexcolor(DISPOSITION_COLORS[st === nothing ? :unchecked : st[k]])
+        end
+        isempty(used) || _show_colorbar!(c, false)
+        return col
+    end
+    cmap = Makie.to_colormap(MARGIN_COLORMAP)
+    lim = DISPOSITION_RANGE
+    for k in used
+        m = d.margin[k]
+        col[k] = d.status[k] === :unchecked ? _hexcolor(DISPOSITION_COLORS[:unchecked]) :
+                 _cmap_color(cmap, (clamp(m, -lim, lim) + lim) / 2lim)
+    end
+    if !isempty(used)
+        cb.colormap[] = MARGIN_COLORMAP
+        cb.limits[] = (-lim, lim)
+        cb.ticks[] = Makie.automatic
+        cb.label[] = "worst-case 1ω clearance margin (mm)"
+        _show_colorbar!(c, true)
+    end
+    return col
 end
 
 _cmap_color(cmap, f) = RGBAf(cmap[clamp(round(Int, f * (length(cmap) - 1)) + 1, 1, length(cmap))])

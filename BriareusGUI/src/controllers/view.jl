@@ -4,13 +4,16 @@
 # with its expanded nodes. This file uses no GL; the canvas reads this state.
 
 """
-What the 3D view colors the target by: `:component`, or a drive field (see
-[`DRIVE_FIELDS`](@ref): absorbed laser, x-ray radiosity, incident x-ray flux).
+What the 3D view colors the target by: `:component`, a drive field (see
+[`DRIVE_FIELDS`](@ref): absorbed laser, x-ray radiosity, incident x-ray flux), or the 1ω
+disposition of the TaLIS check (see [`DISPOSITION_MODES`](@ref): the verdict of each
+facet, or its 1ω clearance margin).
 """
-const COLOR_MODES = (:component, :laser, :radiosity, :incident)
+const COLOR_MODES = (:component, :laser, :radiosity, :incident, :omega1_disposition, :omega1_margin)
 
 const COLOR_LABELS = Dict(:component => "Components", :laser => "Absorbed laser",
-                          :radiosity => "X-ray radiosity", :incident => "Incident x-ray flux")
+                          :radiosity => "X-ray radiosity", :incident => "Incident x-ray flux",
+                          :omega1_disposition => "1ω disposition", :omega1_margin => "1ω clearance margin")
 
 "Beam colorings: by group (`:group`), or by worst status in the clearance or TaLIS report."
 const BEAM_COLORINGS = (:group, :clearance, :talis)
