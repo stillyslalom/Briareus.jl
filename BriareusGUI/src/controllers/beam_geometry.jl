@@ -120,17 +120,25 @@ end
 # ---------------------------------------------------------------- unconverted light
 
 """
-    unconverted_footprint(harmonic) -> NamedTuple
+    unconverted_footprint(harmonic; mode = :nominal) -> NamedTuple
 
 The unconverted-light footprint drawn for `harmonic` 1 (1ω) or 2 (2ω) at the 3ω
 best-focus plane: `edge` (mm from the 3ω axis to its near edge), `size` (side, mm),
 `focus` (its focus, mm beyond the 3ω focus) and `lens` (the lens distance, mm before the
-3ω focus). These are `nif_unconverted`'s nominal footprints (1ω: 22 mm at 4.8 mm; 2ω:
-12 mm at 2.9 mm), the geometry `unconverted_deposition` deposits with; `talis_check`'s
-1ω rule uses the same square grown to its 10% contour (near edge 4.45 mm).
+3ω focus). With `mode = :nominal` these are the footprints of `nif_unconverted` (1ω: 22 mm
+at 4.8 mm; 2ω: 12 mm at 2.9 mm), the geometry `unconverted_deposition` deposits with. For
+1ω, `mode = :talis_10pct` gives the 10% contour that `talis_check` measures to (near edge
+4.45 mm) and `mode = :talis_worst` that contour grown by the default error set and
+required clearance, both from `Briareus.omega1_contour`. The 2ω footprint has only the
+nominal mode.
 """
-function unconverted_footprint(h::Integer)
+function unconverted_footprint(h::Integer; mode::Symbol = :nominal)
     1 <= h <= 2 || throw(ArgumentError("unconverted light is harmonic 1 or 2"))
+    if h == 1
+        c = Briareus.omega1_contour(; mode)
+        return (edge = c.edge, size = c.size, focus = c.focal_shift, lens = Briareus.NIF_LENS_DISTANCE)
+    end
+    mode === :nominal || throw(ArgumentError("the 2ω footprint has only the :nominal mode"))
     uc = nif_unconverted()[h]
     return (edge = uc.edge, size = uc.footprint, focus = uc.focal_shift, lens = Briareus.NIF_LENS_DISTANCE)
 end
@@ -165,7 +173,7 @@ function unconverted_beamlets(b::Beam)
 end
 
 """
-    unconverted_square(beamlet, harmonic, s) -> NTuple{4,Vec3}
+    unconverted_square(beamlet, harmonic, s; mode = :nominal) -> NTuple{4,Vec3}
 
 Corners of a beamlet's ([`unconverted_beamlets`](@ref)) unconverted-light footprint of
 `harmonic` at axial position `s` (mm past its 3ω best focus): the square of
@@ -173,8 +181,8 @@ Corners of a beamlet's ([`unconverted_beamlets`](@ref)) unconverted-light footpr
 center and its side shrinking linearly to the unconverted focus, as
 `unconverted_deposition` models it.
 """
-function unconverted_square((k, f, ô), h::Integer, s::Real)
-    fp = unconverted_footprint(h)
+function unconverted_square((k, f, ô), h::Integer, s::Real; mode::Symbol = :nominal)
+    fp = unconverted_footprint(h; mode)
     c = (fp.edge + fp.size / 2) * (1 + s / fp.lens)
     a = fp.size / 2 * abs(1 - s / fp.focus)
     q̂ = cross(k, ô)

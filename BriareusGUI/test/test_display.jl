@@ -184,6 +184,13 @@ end
     dist(x, (k, f, ô)) = Briareus.GUIAPI.omega1_square(x - f, k, ô, fp.edge + fp.size / 2, fp.size / 2,
                                                  fp.focus, fp.lens)
     @test all(abs(dist(p, bl)) < 1e-9 for bl in bls for s in (-30.0, 0.0, 12.0) for p in sq(bl, s))
+    # the TaLIS modes are the contours `talis_check` measures to
+    f10, fw = unconverted_footprint(1; mode = :talis_10pct), unconverted_footprint(1; mode = :talis_worst)
+    @test f10.edge == 4.45 && f10.size ≈ 22.7 && fw.edge ≈ 4.175 && fw.size ≈ 23.25
+    c10 = Briareus.omega1_contour()
+    @test all(abs(Briareus.GUIAPI.omega1_square(p - bl[2], bl[1], bl[3], c10.c0, c10.h0, f10.focus, f10.lens)) < 1e-9
+              for bl in bls for s in (-30.0, 0.0, 12.0) for p in unconverted_square(bl, 1, s; mode = :talis_10pct))
+    @test_throws ArgumentError unconverted_footprint(2; mode = :talis_10pct)
     # its near edge lies `edge` from the 3ω axis at the 3ω focus
     k, f, ô = bls[1]
     @test minimum(dot(p - f, ô) for p in sq(bls[1], 0.0)) ≈ fp.edge rtol = 1e-12

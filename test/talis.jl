@@ -337,3 +337,116 @@ end
     shown = sprint(show, MIME("text/plain"), r)
     @test all(occursin(talis_requirement(x.rule, r.settings), shown) for x in r.rows)
 end
+
+@testset "1ω closest approach" begin
+    # the shared contour
+    n, c10, cw = omega1_contour(mode = :nominal), omega1_contour(), omega1_contour(mode = :talis_worst)
+    @test (n.edge, n.size, n.focal_shift, n.c0, n.h0) == (4.8, 22.0, 460.0, 15.8, 11.0)
+    @test c10.edge == 4.45 && c10.size ≈ 22.7 && c10.c0 ≈ 15.8 && c10.h0 ≈ 11.35
+    @test cw.edge ≈ 4.175 && cw.size ≈ 23.25 && cw.c0 == c10.c0 && cw.h0 ≈ c10.h0 + 0.275
+    @test omega1_contour(edge = 1.25, size = 6.0, focus = Inf) ==
+          (edge = 1.25, size = 6.0, focal_shift = Inf, c0 = 4.25, h0 = 3.0)
+    @test_throws ArgumentError omega1_contour(mode = :other)
+
+    # One beamlet and the 0.1 mm square of the analytic 1ω case above, its far edge δ
+    # inside the near edge of the footprint. The near edge moves toward the 3ω axis by
+    # `taper` per mm upstream of the focus, so the worst focal plane lies 1 mm downstream.
+    bl = first(nif_beams())
+    k = direction(bl)
+    pq = Briareus._nif_quad_port(bl.quad)
+    ô = Briareus._own_side(bl.port, pq)
+    q̂ = cross(k, ô)
+    Rm = hcat(ô, q̂, k)
+    δ, tan05, R = 0.5, tand(0.5), 0.075
+    sq(name, c) = Component(name, transform(rectangle_mesh(0.1, 0.1; nu = 2, nv = 2), Rm, c), gold();
+                            two_sided = true)
+    t1 = Target(sq(:own, (4.45 - δ - 0.05) * ô), sq(:other, -(4.45 - δ - 0.05) * ô))
+    r1 = talis_check(t1, [bl]; capture = (), open_ports = [pq], rtol = 0)
+    row = only(x for x in r1.rows if x.rule === :clearance_1w && x.component === :own)
+    a = omega1_closest_approach(t1, [bl], r1, row)
+    taper = c10.c0 / 7700 + c10.h0 / 460
+    rot = tan05 * hypot(4.45 - δ, 0.05)
+    @test a.beam == bl.name && a.component === :own && a.beamlet_index == 1 && a.x_hw == row.point
+    @test a.beamlet[1] ≈ k && a.beamlet[3] ≈ ô && norm(a.beamlet[2]) < 1e-12
+    @test a.focus_shift == 1.0 && a.face_mask == 0x01
+    @test a.s_star ≈ -1 atol = 1e-12
+    @test a.nominal ≈ δ atol = 1e-12
+    @test a.distance ≈ δ - taper atol = 1e-12
+    @test a.x_beam ≈ a.x_hw + (δ - taper) * ô atol = 1e-12
+    @test abs(dot(a.x_hw - a.x_beam, k)) < 1e-12 && abs(norm(a.x_hw - a.x_beam) - a.distance) < 1e-12
+    @test a.worst ≈ δ - taper - R - rot atol = 1e-12
+    @test row.worst - 1e-9 <= a.worst <= row.worst + 1e-4 && a.nominal >= row.nominal - 1e-9
+    b = a.budget
+    @test (b.pointing, b.target_offset, b.hardware_tolerance, b.required) == (0.05, 0.025, 0.0, 0.2)
+    @test b.rotation_tol ≈ rot atol = 1e-12
+    @test b.focus_delta ≈ taper atol = 1e-12
+    @test a.margin ≈ a.nominal - b.pointing - b.target_offset - b.hardware_tolerance - b.rotation_tol -
+                     b.focus_delta - b.required atol = 1e-12
+    @test a.margin == a.worst - a.required && a.contour.c0 == c10.c0 && a.contour.lens_distance == 7700
+    # the part form finds the same point; the row form without the report takes the defaults
+    ap = omega1_closest_approach(t1, [bl], bl.name => :own; rtol = 0)
+    @test ap.component === :own && abs(ap.worst - a.worst) < 1e-4
+    @test omega1_closest_approach(t1, [bl], row).worst == a.worst
+    @test omega1_closest_approach(t1, [bl], 1 => Tuple(row.point)).x_beam == a.x_beam
+    # another pivot and error set, through the settings of the report
+    r2 = talis_check(t1, [bl]; capture = (), open_ports = [pq], rtol = 0, pivot = (0, 0, 12.0),
+                     hardware_tolerance = 0.03, focus = 0.0)
+    row2 = only(x for x in r2.rows if x.rule === :clearance_1w && x.component === :own)
+    a2 = omega1_closest_approach(t1, [bl], r2, row2)
+    @test a2.focus_shift == 0 && a2.budget.focus_delta == 0 && a2.budget.hardware_tolerance == 0.03
+    @test a2.budget.rotation_tol ≈ tan05 * norm(row2.point - Vec3(0, 0, 12.0)) atol = 1e-12
+    @test row2.worst - 1e-9 <= a2.worst <= row2.worst + 1e-4
+    # a diagnostic row carries its required clearance
+    rdg = talis_check(t1, [bl]; capture = (), open_ports = [pq], diagnostics = (:other,))
+    rowd = only(x for x in rdg.rows if x.rule === :diagnostic_1w)
+    ad = omega1_closest_approach(t1, [bl], rdg, rowd)
+    @test ad.required == rowd.required && ad.component === :other
+    @test rowd.margin - 1e-9 <= ad.margin <= rowd.margin + 0.01 * abs(rowd.margin) + 1e-4
+
+    # Reference at points around a quad: the footprint square of each beamlet and focal
+    # plane as four segments, and the distance from the point to the nearest of them in
+    # the transverse plane.
+    quad = only(b for b in nif_quads() if b.quad == bl.quad)
+    qb = remake(quad; aim = (0.4, -0.3, 0.2), defocus = 1.5)
+    function reference(x)
+        best = (Inf, x, 0, 0.0)
+        for (j, (kb, fb, ob)) in enumerate(Briareus._omega1_beamlets(qb, nothing, Briareus._nif_beam_table())),
+            sh in (0.0, -1.0, 1.0)
+            f = fb + sh * kb
+            s = dot(x - f, kb)
+            c = f + s * kb + c10.c0 * (1 + s / 7700) * ob
+            h = c10.h0 * abs(1 - s / 460)
+            u, v = ob, cross(kb, ob)
+            cs = [c - h * u - h * v, c + h * u - h * v, c + h * u + h * v, c - h * u + h * v]
+            inside = abs(dot(x - c, u)) <= h && abs(dot(x - c, v)) <= h
+            ys = [(p = cs[i]; w = cs[mod1(i + 1, 4)] - p; p + clamp(dot(x - p, w) / dot(w, w), 0, 1) * w)
+                  for i in 1:4]
+            y = ys[argmin([norm(x - y) for y in ys])]
+            d = (inside ? -1 : 1) * norm(x - y)
+            d < best[1] && (best = (d, y, j, sh))
+        end
+        return best
+    end
+    rng = Random.MersenneTwister(7)
+    c = Vec3(qb.aim) + 12.0 * quad.port
+    pts = [c + Vec3(40 .* (rand(rng, 3) .- 0.5)...) for _ in 1:400]
+    as = [omega1_closest_approach(t1, [qb], 1 => p) for p in pts]
+    refs = reference.(pts)
+    @test all(isapprox(a.distance, r[1]; atol = 1e-10) for (a, r) in zip(as, refs))
+    @test all(norm(a.x_beam - r[2]) < 1e-9 && a.beamlet_index == r[3] && a.focus_shift == r[4]
+              for (a, r) in zip(as, refs) if a.distance > 1e-6)
+    @test all(abs(dot(a.x_hw - a.x_beam, a.beamlet[1])) < 1e-10 for a in as)
+    @test any(a.distance < 0 for a in as) && any(count_ones(a.face_mask) == 2 for a in as) &&
+          length(unique(a.beamlet_index for a in as)) == 4
+    # the mask names the sides: the closest point lies on each side it names
+    onside(a) = (kb = a.beamlet[1]; ob = a.beamlet[3]; f = a.beamlet[2] + a.focus_shift * kb;
+                 cc = a.contour.c0 * (1 + a.s_star / 7700); h = a.contour.h0 * abs(1 - a.s_star / 460);
+                 p = dot(a.x_beam - f, ob) - cc; q = dot(a.x_beam - f, cross(kb, ob));
+                 all(abs(v) < 1e-9 for (bit, v) in ((0x01, p + h), (0x02, p - h), (0x04, q + h), (0x08, q - h))
+                     if a.face_mask & bit != 0) && a.face_mask != 0)
+    @test all(onside, as)
+
+    @test_throws ArgumentError omega1_closest_approach(t1, [bl], first(x for x in r1.rows if x.rule === :tas_stay_in))
+    @test_throws ArgumentError omega1_closest_approach(t1, [Beam("b"; theta = 30, phi = 0)], "b" => :own)
+    @test_throws ArgumentError omega1_closest_approach(t1, [bl], "none" => :own)
+end

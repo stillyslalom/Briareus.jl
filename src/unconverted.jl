@@ -61,6 +61,41 @@ nif_unconverted() = [UnconvertedColor(:omega1; footprint = 22.0, edge = 4.8, foc
                                       absorption = 1.0, conversion = 0.9)]
 
 """
+    omega1_contour(; mode = :talis_10pct, edge = nothing, size = nothing, focus = nothing,
+                   inflation = 0.275) -> (; edge, size, focal_shift, c0, h0)
+
+The square 1ω footprint of a NIF beamlet at its 3ω best-focus plane, as every 1ω rule,
+keep-out and drawing takes it: the distance `edge` (mm) of its near edge from the 3ω axis,
+its side `size`, its focus `focal_shift` beyond the 3ω focus, and the same square as the
+offset `c0 = edge + size/2` of its center and its half-side `h0`.
+
+- `:nominal` is the footprint of [`nif_unconverted`](@ref) (22 mm at 4.8 mm), with which
+  [`unconverted_deposition`](@ref) deposits.
+- `:talis_10pct` is the 10% contour of the TaLIS rules, with which [`talis_check`](@ref)
+  and [`Omega1KeepOut`](@ref) measure: the near edge at 4.45 mm and each side of the
+  square moved out by the same 0.35 mm (22.7 mm).
+- `:talis_worst` is the 10% contour grown by `inflation` mm on every side. The default
+  0.275 mm is the transverse error set of `talis_check` (pointing 0.05 mm and target
+  offset 0.025 mm) plus the 0.2 mm required clearance. The rule tolerance `r·tan(0.5°)`
+  and the focus error vary along the beam and are left to the caller.
+
+`edge`, `size` and `focus` override the values of the mode (with `edge` alone, the far
+edge of the square stays where the mode has it). The center `c0` does not move with
+`inflation`.
+"""
+function omega1_contour(; mode::Symbol = :talis_10pct, edge = nothing, size = nothing, focus = nothing,
+                        inflation::Real = 0.275)
+    mode in (:nominal, :talis_10pct, :talis_worst) ||
+        throw(ArgumentError("mode must be :nominal, :talis_10pct or :talis_worst"))
+    uc = first(c for c in nif_unconverted() if c.name === :omega1)
+    e = edge === nothing ? (mode === :nominal ? uc.edge : 4.45) : Float64(edge)
+    W0 = size === nothing ? uc.footprint + 2 * (uc.edge - e) : Float64(size)
+    f1 = focus === nothing ? uc.focal_shift : Float64(focus)
+    g = mode === :talis_worst ? Float64(inflation) : 0.0
+    return (; edge = e - g, size = W0 + 2g, focal_shift = f1, c0 = e + W0 / 2, h0 = W0 / 2 + g)
+end
+
+"""
     UnconvertedRow
 
 One row of an unconverted-light check, with fields `beam`, `color`, `component`,

@@ -25,7 +25,12 @@ a margin are such quantities too, each checked against `talis_check`: the 3ω cl
 is a `HardwareKeepOut` with the rule tolerance, [`CaptureKeepIn`](@ref) gives the 3ω
 capture margin ([`capture_margin`](@ref)), [`IncidenceRule`](@ref) the 3ω incidence
 ([`incidence_angle`](@ref)) and [`Omega1KeepOut`](@ref) the 1ω clearance
-([`omega1_clearance`](@ref)). [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
+([`omega1_clearance`](@ref)). [`omega1_closest_approach`](@ref) gives the geometry behind
+a 1ω clearance: the hardware point, the closest point of the footprint square, the
+beamlet, focal plane and side of the square that hold it, and the terms between the
+nominal distance and the margin ([`Omega1Approach`](@ref)). The square itself comes
+from [`omega1_contour`](@ref) for the rules, the keep-out and the application alike.
+[`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency
 fitted to published foil data ([`kshell_ce`](@ref)) to the photons at the detector.

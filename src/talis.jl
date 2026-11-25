@@ -290,8 +290,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     edges = [vcat(NTuple{2,Vec3}[], (pe[ci] for ci in last(g))...) for g in cap_idx]
     cap_geo = [length(last(g)) == 1 ? geo[only(last(g))] : _merge_samples([geo[ci] for ci in last(g)])
                for g in cap_idx]
-    o1 = _omega1_params(omega1_edge, omega1_size, omega1_focus)
-    f1 = o1.f1
+    o1 = omega1_contour(; edge = omega1_edge, size = omega1_size, focus = omega1_focus)
+    f1 = o1.focal_shift
     vb = [_value_beam(b) for b in beams]
     table = any(_is_nif, vb) ? _nif_beam_table() : nothing
     bls = [omega1 ? _omega1_beamlets(b, offsets, table) : nothing for b in vb]
@@ -559,17 +559,6 @@ function _omega1_distance(x, bl, cx)
     return dn, dw
 end
 
-# Returns the 1ω footprint of a NIF beam for the rules: the offset `c0` of its center from
-# the chief ray and its half-side `h0` at the 3ω focus, and its focal shift `f1`, from the
-# edge distance, size and focus of the rule. The size and focus default to those of the
-# 1ω color of `nif_unconverted`.
-function _omega1_params(omega1_edge, omega1_size, omega1_focus)
-    uc = first(c for c in nif_unconverted() if c.name === :omega1)
-    W0 = omega1_size === nothing ? uc.footprint + 2 * (uc.edge - omega1_edge) : Float64(omega1_size)
-    f1 = omega1_focus === nothing ? uc.focal_shift : Float64(omega1_focus)
-    return (; c0 = omega1_edge + W0 / 2, h0 = W0 / 2, f1)
-end
-
 # The Lipschitz constant of the 1ω footprint distance, 1 plus the taper of the center
 # (c0/L) and half-side (h0/f1) of the footprint along the beam.
 _omega1_lipschitz(c0, h0, f1, L) = 1 + hypot(c0 / L + h0 / f1, h0 / f1)
@@ -585,6 +574,205 @@ function _omega1_square(d, k, ô, c0, h0, f1, L)
     q = dot(d, cross(k, ô))
     ox, oy = abs(p) - h, abs(q) - h
     return (ox > 0 || oy > 0) ? hypot(max(ox, 0.0), max(oy, 0.0)) : max(ox, oy)
+end
+
+# `_omega1_square` with its witness: the distance, the axial station s, the offset
+# (Δp, Δq) along ô and k × ô from the point to the closest point of the square boundary,
+# and the sides of the square that hold that point. The bits of the mask are 0x01 for the
+# side toward the 3ω axis (−ô), 0x02 for the far side (+ô), 0x04 for −k × ô and 0x08 for
+# +k × ô. A corner sets two bits, as does a point inside the square on a diagonal.
+function _omega1_witness(d, k, ô, c0, h0, f1, L)
+    s = dot(d, k)
+    c = c0 * (1 + s / L)
+    h = h0 * abs(1 - s / f1)
+    p = dot(d, ô) - c
+    q = dot(d, cross(k, ô))
+    ox, oy = abs(p) - h, abs(q) - h
+    bp = p >= 0 ? 0x02 : 0x01
+    bq = q >= 0 ? 0x08 : 0x04
+    if ox > 0 || oy > 0
+        dist = hypot(max(ox, 0.0), max(oy, 0.0))
+        mask = (ox >= 0 ? bp : 0x00) | (oy >= 0 ? bq : 0x00)
+        return dist, s, clamp(p, -h, h) - p, clamp(q, -h, h) - q, mask
+    end
+    mask = (ox >= oy ? bp : 0x00) | (oy >= ox ? bq : 0x00)
+    return ox >= oy ? (ox, s, copysign(h, p) - p, 0.0, mask) : (oy, s, 0.0, copysign(h, q) - q, mask)
+end
+
+"""
+    Omega1Approach
+
+The closest approach of the 1ω footprint of a beam to a hardware point, as
+[`omega1_closest_approach`](@ref) returns it: the geometry behind one number of the 1ω
+rules of [`talis_check`](@ref).
+
+- `beam`, `component` — the beam name and the part or component of the hardware point
+- `beamlet_index`, `beamlet` — the beamlet whose footprint is closest, as its number
+  among the beamlets of the beam and as `(k, f3w, ô)`: its direction, its nominal 3ω
+  best focus and the direction in which its footprint is displaced
+- `focus_shift` — the displacement (mm along `k`) of the focal plane, out of 0 and
+  `±focus`, at which the footprint is closest
+- `x_hw` — the hardware point
+- `x_beam` — the closest point of the boundary of the footprint square, in the plane
+  through `x_hw` orthogonal to `k` (the rules measure in that plane)
+- `s_star` — the axial station of that plane, in mm past the shifted 3ω focus
+- `face_mask` — the sides of the square pyramid that hold `x_beam`: bit `0x01` for the
+  side toward the 3ω axis, `0x02` for the far side (`+ô`), `0x04` for the side along
+  `-k × ô` and `0x08` for the side along `+k × ô`. A corner sets two bits.
+- `distance` — the signed transverse distance from `x_hw` to `x_beam` (mm, negative
+  inside the footprint) at `focus_shift`
+- `nominal` — the same distance from the footprint of that beamlet with the focal
+  plane at its nominal position
+- `worst` — `distance` less the transverse errors and the rule tolerance of `budget`
+- `required`, `margin` — the required clearance and `worst - required`
+- `budget` — the terms between `nominal` and `margin`, each in mm: `pointing`,
+  `target_offset`, `hardware_tolerance`, `rotation_tol` (the rule tolerance at `x_hw`),
+  `focus_delta` (`nominal - distance`) and `required`, so that
+  `margin = nominal - pointing - target_offset - hardware_tolerance - rotation_tol -
+  focus_delta - required`
+- `contour` — the footprint as `(; c0, h0, focal_shift, lens_distance)` (see
+  [`omega1_contour`](@ref)), from which the square at any station follows
+"""
+struct Omega1Approach
+    beam::String
+    component::Symbol
+    beamlet_index::Int
+    beamlet::NTuple{3,Vec3}
+    focus_shift::Float64
+    x_hw::Vec3
+    x_beam::Vec3
+    s_star::Float64
+    face_mask::UInt8
+    distance::Float64
+    nominal::Float64
+    worst::Float64
+    required::Float64
+    margin::Float64
+    budget::@NamedTuple{pointing::Float64, target_offset::Float64, hardware_tolerance::Float64,
+                        rotation_tol::Float64, focus_delta::Float64, required::Float64}
+    contour::@NamedTuple{c0::Float64, h0::Float64, focal_shift::Float64, lens_distance::Float64}
+end
+
+# The settings of the 1ω clearance that `omega1_closest_approach` shares with
+# `talis_check`.
+function _omega1_setup(tolerance, pivot, pointing, target_offset, hardware_tolerance, focus,
+                       omega1_edge, omega1_size, omega1_focus, lens_distance)
+    o = omega1_contour(; edge = omega1_edge, size = omega1_size, focus = omega1_focus)
+    L = Float64(lens_distance)
+    return (; tol = _talis_tol(tolerance, pivot), pointing = Float64(pointing),
+            target_offset = Float64(target_offset), hardware_tolerance = Float64(hardware_tolerance),
+            R = pointing + target_offset + hardware_tolerance, focus = Float64(focus),
+            o.c0, o.h0, f1 = o.focal_shift, L, lip1 = _omega1_lipschitz(o.c0, o.h0, o.focal_shift, L))
+end
+
+function _omega1_named_beam(beams, id)
+    i = id isa Integer ? Int(id) : findfirst(b -> b.name == String(id), beams)
+    (i === nothing || !checkbounds(Bool, beams, i)) && throw(ArgumentError("no beam $(repr(id))"))
+    return _value_beam(beams[i])
+end
+
+function _omega1_named_beamlets(b::Beam, offsets)
+    bl = _omega1_beamlets(b, offsets, _is_nif(b) ? _nif_beam_table() : nothing)
+    bl === nothing &&
+        throw(ArgumentError("beam $(b.name) has no 1ω footprint (no NIF quad name or `offsets` entry)"))
+    return bl
+end
+
+# The approach at the hardware point `x`, over the beamlets `bl` and the focus offsets.
+function _omega1_approach(b::Beam, bl, component::Symbol, x::Vec3, cx, required::Float64)
+    best, jb, δb = (Inf, 0.0, 0.0, 0.0, 0x00), 0, 0.0
+    for (j, (kb, fb, ô)) in enumerate(bl), δ in (cx.focus > 0 ? (0.0, -cx.focus, cx.focus) : (0.0,))
+        w = _omega1_witness(x - fb - δ * kb, kb, ô, cx.c0, cx.h0, cx.f1, cx.L)
+        w[1] < best[1] && ((best, jb, δb) = (w, j, δ))
+    end
+    kb, fb, ô = bl[jb]
+    dist, s, Δp, Δq, mask = best
+    nominal = _omega1_square(x - fb, kb, ô, cx.c0, cx.h0, cx.f1, cx.L)
+    rot = cx.tol(x, Vec3(b.aim))
+    worst = dist - cx.R - rot
+    budget = (; cx.pointing, cx.target_offset, cx.hardware_tolerance, rotation_tol = rot,
+              focus_delta = nominal - dist, required)
+    return Omega1Approach(b.name, component, jb, (kb, fb, ô), δb, x, x + Δp * ô + Δq * cross(kb, ô), s,
+                          mask, dist, nominal, worst, required, worst - required, budget,
+                          (; cx.c0, cx.h0, focal_shift = cx.f1, lens_distance = cx.L))
+end
+
+"""
+    omega1_closest_approach(target, beams, beam => part; tolerance = 0.5, pivot = :tcc,
+                            pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
+                            focus = 1.0, omega1_margin = 0.2, omega1_edge = 4.45,
+                            omega1_size = nothing, omega1_focus = nothing,
+                            lens_distance = NIF_LENS_DISTANCE, offsets = nothing,
+                            resolution = 1e-4, rtol = 0.01) -> Omega1Approach
+    omega1_closest_approach(target, beams, beam => point; ...)
+    omega1_closest_approach(target, beams, row::TaLISRow; ...)
+    omega1_closest_approach(target, beams, report::TaLISReport, row; offsets = nothing)
+
+The closest approach of the 1ω footprint of a beam to hardware, with its witness geometry
+(see [`Omega1Approach`](@ref)). `beam` is a beam name or an index into `beams`. The
+keywords and the footprint are those of the 1ω clearance of [`talis_check`](@ref).
+
+With a part or component name, the hardware point is the point of the part with the
+smallest worst-case clearance, found by the branch and bound of `talis_check` to the same
+`resolution` and `rtol`. With a point (three coordinates, mm), the approach is evaluated
+at that point, and its `component` is `:point`. With a `:clearance_1w`, `:management_1w`
+or `:diagnostic_1w` row of a report, the hardware point is the `point` of the row. The
+form that takes the report uses the settings of that report; `offsets` is not among them
+and is passed again.
+
+The approach is exact at its hardware point: `distance` is the transverse distance
+between `x_hw` and `x_beam`. The `worst` and `nominal` of a row are lower bounds of minima
+over the component, so the `worst` of the approach at the point of a row lies at or above
+the `worst` of the row and within its accuracy of it, and its `nominal` (one beamlet, at
+one point) lies at or above the `nominal` of the row.
+"""
+function omega1_closest_approach(t::Target, beams::AbstractVector{<:Beam}, pair::Pair;
+                                 tolerance = 0.5, pivot = :tcc, pointing = 0.05, target_offset = 0.025,
+                                 hardware_tolerance = 0.0, focus = 1.0, omega1_margin = 0.2,
+                                 omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
+                                 lens_distance = NIF_LENS_DISTANCE, offsets = nothing,
+                                 resolution = 1e-4, rtol = 0.01, required = nothing)
+    cx = _omega1_setup(tolerance, pivot, pointing, target_offset, hardware_tolerance, focus,
+                       omega1_edge, omega1_size, omega1_focus, lens_distance)
+    b = _omega1_named_beam(beams, first(pair))
+    bl = _omega1_named_beamlets(b, offsets)
+    req = Float64(required === nothing ? omega1_margin : required)
+    what = last(pair)
+    what isa Union{Symbol,AbstractString} ||
+        return _omega1_approach(b, bl, :point, Vec3(what...), cx, req)
+    name = Symbol(what)
+    tris = NTuple{3,Vec3}[]
+    for ci in part_pieces(t, name)
+        append!(tris, _talis_samples(t, ci, 0).tris)
+    end
+    isempty(tris) && throw(ArgumentError("part $(repr(name)) has no triangles"))
+    aim = Vec3(b.aim)
+    fw = x -> _omega1_distance(x, bl, cx)[2] - cx.R - cx.tol(x, aim)
+    _, x = _lipschitz_minimum(fw, tris, cx.lip1 + cx.tol.tanα,
+                              (Float64(resolution), Float64(rtol), req), aim)
+    return _omega1_approach(b, bl, name, x, cx, req)
+end
+
+function omega1_closest_approach(t::Target, beams::AbstractVector{<:Beam}, row::TaLISRow; kw...)
+    row.rule in (:clearance_1w, :management_1w, :diagnostic_1w) ||
+        throw(ArgumentError("rule $(repr(row.rule)) is not a 1ω rule"))
+    b = _omega1_named_beam(beams, row.beam)
+    a = row.rule === :diagnostic_1w ?
+        omega1_closest_approach(t, beams, b.name => row.point; kw..., required = row.required) :
+        omega1_closest_approach(t, beams, b.name => row.point; kw...)
+    return Omega1Approach(a.beam, row.component, a.beamlet_index, a.beamlet, a.focus_shift, a.x_hw,
+                          a.x_beam, a.s_star, a.face_mask, a.distance, a.nominal, a.worst, a.required,
+                          a.margin, a.budget, a.contour)
+end
+
+function omega1_closest_approach(t::Target, beams::AbstractVector{<:Beam}, r::TaLISReport, row::TaLISRow;
+                                 offsets = nothing)
+    s = r.settings
+    return omega1_closest_approach(t, beams, row; s.tolerance,
+                                   pivot = s.pivot === :point ? s.pivot_point : s.pivot, s.pointing,
+                                   s.target_offset, s.hardware_tolerance, s.focus, s.omega1_margin,
+                                   s.omega1_edge, s.omega1_size, s.omega1_focus, s.lens_distance,
+                                   offsets)
 end
 
 function _talis_open_ports(spec, beams)

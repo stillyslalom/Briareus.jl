@@ -11,7 +11,7 @@ Marks: **done**, **partial** (with what remains), **open**.
 
 | Item | Status | Note |
 |---|---|---|
-| A.1 witness geometry, shared 1ω contour | open | |
+| A.1 witness geometry, shared 1ω contour | done | `omega1_contour`, `Omega1Approach`, `omega1_closest_approach`; the application's `unconverted_footprint` takes the mode, the view toggle for it belongs to B.2 |
 | A.2 unsigned curvature, specular accuracy | open | |
 | A.3 hardware disposition field | open | |
 | A.4 VisRad 1ω/2ω beam import | open | |

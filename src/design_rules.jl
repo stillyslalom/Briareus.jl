@@ -860,7 +860,8 @@ function Omega1KeepOut(t::Target, parts; pointing = 0.05, target_offset = 0.025,
     idx = Set(ci for n in names for ci in part_pieces(t, n))
     tris = [tri for (k, tri) in zip(findall(in(idx), t.tri_comp), _part_triangles(t, idx)) if t.tri_area[k] > 0]
     isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
-    (; c0, h0, f1) = _omega1_params(omega1_edge, omega1_size, omega1_focus)
+    (; c0, h0, focal_shift) = omega1_contour(; edge = omega1_edge, size = omega1_size, focus = omega1_focus)
+    f1 = focal_shift
     L = Float64(lens_distance)
     return Omega1KeepOut(names, t, tris, pointing + target_offset + hardware_tolerance, focus,
                          _talis_tol(tolerance, pivot), c0, h0, f1, L, _omega1_lipschitz(c0, h0, f1, L),
