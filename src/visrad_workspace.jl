@@ -61,7 +61,7 @@ struct VisRadWorkspace
     path::String
     version::String
     objects::Vector{VisRadObject}
-    beams::Vector{Beam}
+    beams::Vector{Beam{Float64}}
     clusters::Vector{String}
     rows::Vector{NamedTuple}
 end
@@ -582,7 +582,7 @@ function read_visrad_workspace(path::AbstractString; template = nothing, absent:
     else
         _vr_apply(template, recs, absent; angle_tol, spot_definition, sense = rotation_sense)
     end
-    return VisRadWorkspace(String(path), version, objects, beams, clusters, rows)
+    return VisRadWorkspace(String(path), version, objects, collect(Beam{Float64}, beams), clusters, rows)
 end
 
 """
