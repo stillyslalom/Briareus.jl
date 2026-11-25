@@ -339,17 +339,17 @@ const VISRAD_NIF_PLATES = Dict(:inner23 => "Rev3-Inner-2w", :inner30 => "1.0 Rev
                                :outer44 => "Rev3-Outer-2w", :outer50 => "Rev1-Outer-2w")
 
 """
-    visrad_nif_spot(cone) -> SuperGaussianSpot
+    visrad_spot(cone::Symbol) -> SuperGaussianSpot
 
-The best-focus spot of the VisRad phase plate for a NIF cone (`VISRAD_NIF_PLATES`,
-[`visrad_spot`](@ref) at rotation 0), with the major axis along φ̂ of the port as for
+The best-focus spot of the VisRad phase plate for a NIF cone (`VISRAD_NIF_PLATES`, the
+plate at rotation 0), with the major axis along φ̂ of the port as for
 [`nif_spot`](@ref). VisRad measures the rotation of the spot of a NIF beam from the
 horizontal of its quad, so the spots of the VisRad beams are
-`nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)`. With
+`nif_beams(; spot = visrad_spot, spot_frame = :quad)`. With
 `deposition_kw = (; profile = VisRadProfile())`, the deposition follows the VisRad beam
 model (research notes, "VisRad deposition parity").
 """
-visrad_nif_spot(cone::Symbol) = visrad_spot(VISRAD_NIF_PLATES[cone])
+visrad_spot(cone::Symbol) = visrad_spot(VISRAD_NIF_PLATES[cone])
 
 # ---------------------------------------------------------------------------------------
 # Applying per-beam records to a template beam set

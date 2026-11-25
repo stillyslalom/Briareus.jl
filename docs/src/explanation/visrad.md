@@ -44,7 +44,7 @@ pulse-shape files; Briareus is in mm, TW/mm², ns and TW. The readers and writer
 | Workspace `.vrw` (keyed text, VisRad 20–21; JSON, VisRad 21) | [`read_visrad_workspace`](@ref), [`visrad_target`](@ref) | [`write_visrad_workspace`](@ref) | Components (CAD as generalized meshes; spheres, rectangles, cylindrical hohlraums) and beams, from either format. The writer copies a text template and rewrites the pointing, focus, power and on/off state of the beams; everything else stays VisRad's. A JSON template, or writing over a workspace that holds VisRad's results, is an error. |
 | Computed power sources in a `.vrw` | [`visrad_power_sources`](@ref), [`visrad_deposition`](@ref) | — | VisRad's per-element deposition, mapped onto a target built from the same workspace. VisRad 21 saves a computed workspace as JSON; both formats give the same tables. |
 | Surface Element Properties (`.sed`), Power Summary (`.psd`) | [`read_visrad_table`](@ref) | — | The file layout is not documented; the reader is tolerant. |
-| Benchmark kit | [`compare_visrad`](@ref) | [`write_visrad_kit`](@ref) | Pointing, beam summary, powers and target description for rebuilding a case in VisRad, with Briareus's results named as VisRad's Power Summary columns. |
+| Benchmark kit | [`compare_visrad_kit`](@ref) | [`write_visrad_kit`](@ref) | Pointing, beam summary, powers and target description for rebuilding a case in VisRad, with Briareus's results named as VisRad's Power Summary columns. |
 | NIF CMT XML, `.bti` intersection points, beam-energy files | — | — | Not implemented: the CMT schema is undocumented and no public sample was found. |
 
 ## How the results compare
@@ -61,7 +61,7 @@ table (3.6000 TW), elements above 20 TW/cm² agree within 1.4%, and the faint wi
 focus (2–30 TW/cm²) differ by 8–15% (research notes, "VisRad workspace files
 (2026-10-17)").
 
-[`write_visrad_kit`](@ref) and [`compare_visrad`](@ref) set up the same comparison for
+[`write_visrad_kit`](@ref) and [`compare_visrad_kit`](@ref) set up the same comparison for
 any case. The comparison covers deposition only: the VisRad
 radiosity, absolute drive levels and mode amplitudes have not yet been compared with
 Briareus's (ROADMAP, "Benchmark against VisRad").
@@ -289,7 +289,7 @@ summary exports are then compared quantity by quantity:
 ```julia
 kit = write_visrad_kit("kit", target, design; observe = :capsule)
 # ... build and run the case in VisRad from kit/README.txt, export its tables ...
-compare_visrad("kit"; elements = "capsule_elements.txt",
+compare_visrad_kit("kit"; elements = "capsule_elements.txt",
                power_summary = "power_summary.psd",
                names = Dict("hohlraum_barrel" => "wall"), io = stdout)
 ```

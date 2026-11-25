@@ -231,7 +231,7 @@ With `:beam` the frame is the port θ̂ and φ̂ of the beam. With `:quad` it is
 quad port, and the spot is turned about the beam axis by the angle between φ̂ of the
 quad port and φ̂ of the beam (1.6–5.3°, with a sign that varies by beam). This is how
 VisRad orients the phase-plate spot of a NIF beam. The VisRad beams are
-`nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)` ([`visrad_nif_spot`](@ref)).
+`nif_beams(; spot = visrad_spot, spot_frame = :quad)` ([`visrad_spot`](@ref)).
 Whether the facility spots follow the quad frame is not established.
 """
 function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, spot_frame::Symbol = :beam)

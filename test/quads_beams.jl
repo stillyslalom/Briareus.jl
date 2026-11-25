@@ -28,12 +28,12 @@ using Briareus, LinearAlgebra, Test
     @test all(i -> isapprox([back[i].defocus, back[i].dlambda], [quads[i].defocus, quads[i].dlambda];
                             rtol = 1e-14, atol = 1e-15), eachindex(quads))
     # Each beam gets the spot of its quad, in the quad frame and back.
-    vq = nif_quads(spot = visrad_nif_spot)
+    vq = nif_quads(spot = visrad_spot)
     turned = nif_beams(vq; spot_frame = :quad)
     @test all(i -> turned[i].spot.a == vq[cld(i, 4)].spot.a, eachindex(turned))
     @test all(i -> isapprox(nif_quads(turned; spot_frame = :quad)[i].spot.angle, vq[i].spot.angle;
                             atol = 1e-14), eachindex(vq))
-    @test byname(nif_beams(vq; spot_frame = :quad)) == byname(nif_beams(; spot = visrad_nif_spot, spot_frame = :quad, power = 2.0))
+    @test byname(nif_beams(vq; spot_frame = :quad)) == byname(nif_beams(; spot = visrad_spot, spot_frame = :quad, power = 2.0))
     @test nif_quads(nif_beams(); spot = nif_spot)[1].spot == nif_spot(nif_beams()[1].group)
 
     # a split quad's mean aim: the mock HYBRID-E rule's outer beams split ±0.5 mm along the

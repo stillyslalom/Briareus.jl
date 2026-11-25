@@ -71,11 +71,11 @@ export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unc
        threshold_crossing, specular_check, preplasma_check
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments, read_stl, read_stl_solids, write_stl, write_results
-export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad
+export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad, compare_visrad_kit
 export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, visrad_target,
        write_visrad_workspace, VisRadProfile, visrad_profile, visrad_envelope,
        visrad_power_sources, visrad_deposition
-export VISRAD_NIF_PLATES, visrad_nif_spot
+export VISRAD_NIF_PLATES
 export visrad_element_values
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, mode_rms, rms_nonuniformity

@@ -280,7 +280,7 @@ end
                      rotation_sense = :beam, notes = "") -> NamedTuple
 
 Write everything needed to rebuild a Briareus case in VisRad, together with the Briareus
-results for comparison (`compare_visrad`), into directory `dir`:
+results for comparison (`compare_visrad_kit`), into directory `dir`:
 
 - `pointing_sst.csv` — per-beam pointing in the NIF SST format (`write_visrad_sst`),
   imported with File | Import Laser Beam Data | Pointing Data, Custom CSV, units mm.
@@ -409,7 +409,7 @@ function _vr_readme(io, t, beams, sol, dep, pulses, time, observe, obs_ok, terms
     println(io, "grid size defines the OUTER wall and the inner wall lies inward by the Wall")
     println(io, "Thickness (VR/intro/revision_history.html, v21.0.0). Briareus dimensions above are")
     println(io, "the radiating surfaces: use zero wall thickness or add the thickness to the size.")
-    println(io, "Name VisRad objects after the Briareus components so compare_visrad can match them")
+    println(io, "Name VisRad objects after the Briareus components so compare_visrad_kit can match them")
     println(io, "(or pass `names`).")
     println(io)
     println(io, "Beams")
@@ -463,7 +463,7 @@ function _vr_readme(io, t, beams, sol, dep, pulses, time, observe, obs_ok, terms
     obs_ok && println(io, "   for `$observe` (incident flux \"Flux In\" with polar/azimuthal angles), and")
     println(io, "   the Power Summary table values. Note the Legendre fit (terms $(collect(terms)))")
     println(io, "   and spherical-harmonic table from Analysis | Statistics for comparison.")
-    println(io, "7. At home: compare_visrad(<this directory>; elements = <element file>,")
+    println(io, "7. At home: compare_visrad_kit(<this directory>; elements = <element file>,")
     println(io, "   power_summary = <file or Dict>) in Briareus.")
     println(io)
     println(io, "Expected differences")
@@ -487,7 +487,7 @@ function _vr_readme(io, t, beams, sol, dep, pulses, time, observe, obs_ok, terms
 end
 
 """
-    compare_visrad(kit_dir; elements = nothing, power_summary = nothing, observe = :capsule,
+    compare_visrad_kit(kit_dir; elements = nothing, power_summary = nothing, observe = :capsule,
                    names = Dict(), terms = (0, 2, 4), lmax = 4, io = nothing)
         -> Vector{NamedTuple}
 
@@ -508,7 +508,7 @@ Compare a kit written by `write_visrad_kit` with the VisRad results for the same
 Returns rows `(; quantity, unit, briareus, visrad, difference, relative)` and prints
 them to `io` when given.
 """
-function compare_visrad(kit_dir::AbstractString; elements = nothing, power_summary = nothing,
+function compare_visrad_kit(kit_dir::AbstractString; elements = nothing, power_summary = nothing,
                         observe = :capsule, names = Dict{String,String}(), terms = (0, 2, 4),
                         lmax::Integer = 4, io = nothing)
     hdr, rows = read_csv(joinpath(kit_dir, "briareus_results.csv"))

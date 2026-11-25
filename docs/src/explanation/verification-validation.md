@@ -80,7 +80,7 @@ VisRad's 0.092%.
 
 The numbers, the setup and what remains open (VisRad's per-beam renormalization, and its
 shadowing, which is not along the beam axis) are in
-`reference/research-notes.md`. [`write_visrad_kit`](@ref) and [`compare_visrad`](@ref)
+`reference/research-notes.md`. [`write_visrad_kit`](@ref) and [`compare_visrad_kit`](@ref)
 set up the same kind of comparison for any case.
 
 ## The N221204 benchmark

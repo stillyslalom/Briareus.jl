@@ -11,13 +11,13 @@ using Briareus, LinearAlgebra, Test
     @test_throws ArgumentError nif_beams(spot_frame = :cone)
     # the plates by cone, and their spots
     @test sort(collect(keys(VISRAD_NIF_PLATES))) == [:inner23, :inner30, :outer44, :outer50]
-    @test all(c -> visrad_nif_spot(c) == visrad_spot(VISRAD_NIF_PLATES[c]), keys(VISRAD_NIF_PLATES))
+    @test all(c -> visrad_spot(c) == visrad_spot(VISRAD_NIF_PLATES[c]), keys(VISRAD_NIF_PLATES))
     # VisRad's Rev3-Inner radii (HWHM 890 × 660 µm, n = 7.6) as 1/e semi-axes
-    s = visrad_nif_spot(:inner23)
+    s = visrad_spot(:inner23)
     @test (s.a, s.b, s.order) == (0.890 / log(2)^(1 / 7.6), 0.660 / log(2)^(1 / 7.6), 7.6)
 
-    beams = nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)
-    plain = nif_beams(; spot = visrad_nif_spot)
+    beams = nif_beams(; spot = visrad_spot, spot_frame = :quad)
+    plain = nif_beams(; spot = visrad_spot)
     @test all(i -> beams[i].spot.a == plain[i].spot.a && beams[i].spot.b == plain[i].spot.b, eachindex(beams))
     # the major (a) axis is the quad port's φ̂ projected normal to the beam
     qport = Dict(q.quad => q.port for q in nif_quads())

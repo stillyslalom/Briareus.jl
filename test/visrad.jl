@@ -281,7 +281,7 @@ end
     end
     pe = vrfile("kit_elems.txt", String(take!(io)))
     lp = kit.results["Laser Pwr Dep [wall]"]
-    rows = compare_visrad(kit.dir; elements = pe,
+    rows = compare_visrad_kit(kit.dir; elements = pe,
                           power_summary = Dict("hohlraum_barrel" => Dict("Laser Pwr Dep" => lp)),
                           names = Dict("hohlraum_barrel" => "wall"))
     @test length(rows) == 1 + 1 + 2 + 4 + 1
