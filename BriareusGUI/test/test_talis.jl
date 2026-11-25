@@ -175,12 +175,24 @@ end
     @test length(f.surface.outline) == 4 && f.surface.caliper == (f.approach.x_hw, f.approach.x_beam)
     @test f.reflection === nothing && f.cone === nothing
     @test length(split(talis_focus_text(tl), '\n')) == 8 && startswith(talis_focus_text(tl), "nominal")
+    # the slice of the row, as the tab draws it: the numbers of the core slice in order
+    sl = tl.focus[].slice
+    @test sl.distance == tl.focus[].approach.distance && sl.component === :near
+    js = slice_drawing(sl)
+    nums(key) = parse.(Float64, split(match(Regex("\"$key\":\\[([^\\]]*)\\]"), js).captures[1], ','; keepempty = false))
+    @test startswith(js, "{\"window\":[") && endswith(js, "}") && !occursin("NaN", js) && !occursin(" ", js)
+    @test maximum(abs.(nums("window") .- collect(sl.window))) < 1e-4
+    @test maximum(abs.(nums("nominal") .- [sl.nominal.center..., sl.nominal.half])) < 1e-4
+    @test maximum(abs.(nums("worst") .- [sl.worst.center..., sl.worst.half])) < 1e-4
+    @test length(nums("hardware")) == 4 * length(sl.hardware) && length(nums("caliper")) == 4
+    @test occursin("1ω margin", slice_text(sl)) && startswith(slice_text(sl), tl.focus[].approach.beam)
     im = findfirst(x -> x.rule === :management_1w && x.component === :mirror, rows)
     focus_talis_row!(tl, im)
     @test tl.focus[].index == im && tl.focus[].reflection.component === :mirror
     @test tl.focus[].cone.half_angle == 20 + 2 * 0.5 && occursin("reflection", talis_focus_text(tl))
     focus_talis_row!(tl, findfirst(x -> x.rule === :capture_3w, rows))
     @test tl.focus[].approach === nothing && tl.focus[].surface === nothing && talis_focus_text(tl) == ""
+    @test tl.focus[].slice === nothing
     focus_talis_row!(tl, length(rows) + 1)
     @test tl.focus[] === nothing
     # the pinch mode: every beam within the threshold of a part. The whole quad of the

@@ -366,11 +366,13 @@ end
     focus_talis_row!(tl::TaLISState, i) -> tl
 
 Put row `i` of [`talis_rows`](@ref) under inspection. `tl.focus[]` becomes `(; index, row,
-approach, reflection, surface, cone, pinch)`. For a 1ω row, `approach` is the closest approach
+approach, reflection, surface, cone, pinch, slice)`. For a 1ω row, `approach` is the closest approach
 of the 1ω footprint to the point of the row (`Briareus.omega1_closest_approach`) and
 `surface` what the 3D view draws of it ([`closest_approach_surface`](@ref)); for a
 management row decided on reflection, `reflection` and `cone` are the reflection and its
-drawing ([`reflection_cone`](@ref)). The others are `nothing`. With the pinch mode on
+drawing ([`reflection_cone`](@ref)), and `slice` the plane across the beamlet through the
+hardware point (`Briareus.omega1_slice`), which the TaLIS tab draws
+([`slice_drawing`](@ref)). The others are `nothing`. With the pinch mode on
 ([`set_talis_pinch!`](@ref)), `pinch` holds the approaches of the other beams that come
 within the tight threshold of the part of the row, each with its surface; it is empty
 otherwise. A row out of range clears the focus, as a new check does.
@@ -392,9 +394,37 @@ function focus_talis_row!(tl::TaLISState, i::Integer)
            [a for a in pinch_approaches(tl, row.component; threshold = tl.tight[]) if a.beam != approach.beam] :
            Omega1Approach[]
     pinch = [(; approach = a, surface = closest_approach_surface(a)) for a in near]
-    tl.focus[] = (; index = Int(i), row, approach, reflection, surface, cone, pinch)
+    slice = approach === nothing ? nothing : omega1_slice(t, approach)
+    tl.focus[] = (; index = Int(i), row, approach, reflection, surface, cone, pinch, slice)
     return tl
 end
+
+"""
+    slice_drawing(slice) -> String
+
+The plane across a 1ω beamlet through the hardware point (`Briareus.omega1_slice`) as the
+JSON text that the TaLIS tab draws: `window` (`p0, p1, q0, q1`, mm), the `nominal` and
+`worst` squares (center `p`, `q` and half side), the `hardware` cross-section (four numbers
+per segment), the `caliper` (its two ends) and its `distance`. Lengths are written to 0.1 µm.
+"""
+function slice_drawing(sl)
+    n(v) = @sprintf("%.4f", v)
+    list(vs) = "[" * join((n(v) for v in vs), ",") * "]"
+    sq(s) = list((s.center..., s.half))
+    hw = list(Iterators.flatten((u..., v...) for (u, v) in sl.hardware))
+    return "{\"window\":" * list(sl.window) * ",\"nominal\":" * sq(sl.nominal) * ",\"worst\":" * sq(sl.worst) *
+           ",\"hardware\":" * hw * ",\"caliper\":" * list((sl.caliper[1]..., sl.caliper[2]...)) *
+           ",\"distance\":" * n(sl.distance) * "}"
+end
+
+"""
+    slice_text(slice) -> String
+
+The caption of the slice of the TaLIS tab: the beam and part, the worst-case 1ω margin, the
+axial station of the plane and the focus offset at which the footprint is closest.
+"""
+slice_text(sl) = @sprintf("%s / %s: 1ω margin %+.3f mm, in the plane %.2f mm past the 3ω focus (focus %+g mm)",
+                          sl.beam, component_label(sl.component), sl.margin, sl.s_star, sl.focus_shift)
 
 """
     pinch_approaches(tl::TaLISState, part; threshold = 1.0) -> Vector{Omega1Approach}

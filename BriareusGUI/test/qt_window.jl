@@ -179,8 +179,18 @@ using BriareusGUI.Briareus
             !isempty(sh.rows[:talisModel]) && !isempty(sh.rows[:ruleModel]) &&
                 sh.rows[:noteModel][1].kind == "tolerance" && s.talis.report[].settings.tolerance == 0.4 &&
                 push!(seen, :talis)
+            # a 1ω row under inspection draws its slice in the tab; the keep-out map in the 3D view
+            i1 = findfirst(x -> x.rule === :clearance_1w, talis_rows(s.talis))
+            i1 === nothing || B.br_tl_focus(i1 - 1)
+            B.br_cm_radius("40")
+            B.br_cm_show(true)
+            B._refresh!(sh)
+            startswith(sh.app["tlSlice"], "{\"window\":[") && sh.app["tlSliceText"] != "" && sh.app["cmShown"] &&
+                startswith(sh.app["cmText"], "sphere of 40 mm") && push!(seen, :slice)
             B.request_grab(png("talis")); next!()
         elseif k == 13 && grabbed(png("talis"))
+            B.br_cm_show(false)
+            s.talis.focus[] === nothing || B.br_tl_focus(s.talis.focus[].index - 1)
             B.br_tl_export(talis_csv)
             isfile(talis_csv) && push!(seen, :talis_csv)
             B.br_select("group:outer44")
@@ -317,7 +327,7 @@ using BriareusGUI.Briareus
     @info "window session" seconds = round(time() - t0; digits = 1) shots
     @test stage[] == 28
     expected = [:target, :windows, :part, :mesh, :steps, :remove, :tree_beams, :visrad, :volumes, :zoom,
-                   :pick, :drive, :map, :optimize, :capsule, :applied, :clearance, :talis,
+                   :pick, :drive, :map, :optimize, :capsule, :applied, :clearance, :talis, :slice,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
                    :retune_started, :retune, :time_retune, :history_started, :history, :time_now, :custom, :stl]
     seen == expected || @info "window stages" missing = setdiff(expected, seen) extra = setdiff(seen, expected)

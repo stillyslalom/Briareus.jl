@@ -152,7 +152,7 @@ export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, TALIS_
        set_talis_pivot!, edit_talis!, talis_kwargs, start_talis!, cancel_talis!, talis_rows,
        DISPOSITION_MODES, DISPOSITION_COLORS, DISPOSITION_RANGE, disposition_kwargs, set_disposition_filter!,
        disposition_of, disposition_status, disposition_info, focus_talis_row!, clear_talis_focus!,
-       talis_focus_text, talis_view!, pinch_approaches, set_talis_pinch!, pick_disposition!,
+       talis_focus_text, talis_view!, pinch_approaches, set_talis_pinch!, pick_disposition!, slice_drawing, slice_text,
        talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale,
        talis_role
 export OMEGA1_CONTOURS, set_omega1_contour!
