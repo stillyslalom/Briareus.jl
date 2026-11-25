@@ -45,13 +45,12 @@ end
 const _XRD_SURFACE = (L = 33.64, wC = 0.2742, wO = 0.2504)     # nm, mass fractions
 const _XRD_FIT = Dict(:Cr => (K = 15.84e6, γ = -0.2442), :Al => (K = 35.12e6, γ = 0.1018),
                       :Ni => (K = 15.84e6, γ = -0.2442))
-const _XRD_BULK_DENSITY = Dict(:Al => 2.699, :Cr => 7.19, :Ni => 8.908, :Au => 19.32)
 
 function _xrd_model(bulk::Symbol, E::Real, K, γ; L = _XRD_SURFACE.L, wC = _XRD_SURFACE.wC,
                     wO = _XRD_SURFACE.wO)
     μ = (1 - wC - wO) * henke_mass_attenuation(bulk, E) + wC * henke_mass_attenuation(:C, E) +
         wO * henke_mass_attenuation(:O, E)
-    x = 1e-7 * L * _XRD_BULK_DENSITY[bulk] * μ
+    x = 1e-7 * L * _density(bulk) * μ
     return K * (E / 1000)^γ * x / (1 + x)
 end
 

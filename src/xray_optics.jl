@@ -38,6 +38,17 @@ const _COMPOUNDS = Dict{Symbol,Tuple{Vector{Pair{Symbol,Int}},Float64}}(
     :SiO2 => ([:Si => 1, :O => 2], 2.2),                        # fused silica
     :CaF2 => ([:Ca => 1, :F => 2], 3.18),
     :B4C => ([:B => 4, :C => 1], 2.52))                         # bulk; coating density not public
+# Densities of the elements (g/cm³), for filters, mirrors and the bulk of the XRD
+# cathodes. The last six are handbook values, with C as graphite (*assumed*).
+const _ELEMENT_DENSITY = Dict(:Be => 1.848, :Al => 2.699, :Ti => 4.54, :Fe => 7.874, :Cu => 8.96,
+                              :Mo => 10.22, :Ta => 16.65, :Mg => 1.738, :Si => 2.329, :V => 6.11,
+                              :Cr => 7.19, :Co => 8.90, :Ni => 8.908, :Zn => 7.134, :Ag => 10.49,
+                              :Au => 19.32, :B => 2.34, :Sc => 2.985, :Mn => 7.3, :Ge => 5.323,
+                              :Y => 4.472, :C => 2.2)
+
+# The density of a material (g/cm³): that of a compound of `_COMPOUNDS`, or of an element.
+# `NaN` for a material without a tabulated density.
+_density(mat::Symbol) = haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : get(_ELEMENT_DENSITY, mat, NaN)
 
 const _HENKE_CACHE = Dict{Symbol,NTuple{3,Vector{Float64}}}()
 const _HENKE_LOCK = ReentrantLock()
@@ -112,8 +123,8 @@ to the tabulated density of the material (`SiO2` 2.2).
 function mirror_reflectivity(mat::Symbol, angle::Real, E::Real; roughness::Real = 0.0,
                              density = nothing)
     comp = _composition(mat)
-    ρ = density === nothing ? (haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : _FILTER_DENSITY[mat]) :
-        Float64(density)
+    ρ = density === nothing ? _density(mat) : Float64(density)
+    isnan(ρ) && throw(ArgumentError("no tabulated density for :$mat; give `density`"))
     λ = _HC / E                                           # cm
     M = sum(n * _ATOMIC_WEIGHT[el] for (el, n) in comp)
     N = ρ * _N_A / M                                      # formula units per cm³

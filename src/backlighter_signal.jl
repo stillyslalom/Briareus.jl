@@ -339,16 +339,8 @@ const _MU_RHO = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}(
                [128.8, 54.66, 27.92, 16.08, 6.75, 3.481, 1.132, 0.5798, 0.3009, 0.2304]),
     :polyethylene => ([3, 4, 5, 6, 8, 10, 15, 20, 30, 40],
                       [77.43, 32.42, 16.43, 9.432, 3.975, 2.088, 0.7452, 0.4315, 0.2706, 0.2275]))
-# Filter densities (g/cm³). Under the NIST table, Kapton (polyimide) is given the μ/ρ of
-# Mylar, which is close in composition. The elements added with the Henke tables
-# (`xray_optics.jl`) have handbook densities, and the compounds have the densities in
-# `_COMPOUNDS`.
-const _FILTER_DENSITY = Dict(:Be => 1.848, :Al => 2.699, :Ti => 4.54, :Fe => 7.874, :Cu => 8.96,
-                             :Mo => 10.22, :Ta => 16.65, :mylar => 1.38, :kapton => 1.42,
-                             :polyethylene => 0.93, :Mg => 1.738, :Si => 2.329, :V => 6.11,
-                             :Cr => 7.19, :Co => 8.90, :Ni => 8.908, :Zn => 7.134, :Ag => 10.49,
-                             :Au => 19.32, :B => 2.34, :Sc => 2.985, :Mn => 7.3, :Ge => 5.323,
-                             :Y => 4.472, :C => 2.2)   # the last six: handbook values; C as graphite (assumed)
+# Under the NIST table, Kapton (polyimide) is given the μ/ρ of Mylar, which is close in
+# composition. The densities are those of `xray_optics.jl` (`_density`).
 
 """
     mass_attenuation(material, hν; table = :auto) -> cm²/g
@@ -387,7 +379,6 @@ function mass_attenuation(mat::Symbol, hν::Real; table::Symbol = :auto)
 end
 
 # Returns the density of a filter material (g/cm³), or NaN if none is known.
-_density(mat::Symbol) = get(_FILTER_DENSITY, mat, haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : NaN)
 
 """
     filter_transmission(filters, hν; table = :auto) -> Real
