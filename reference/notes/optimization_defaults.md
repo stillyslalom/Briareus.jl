@@ -1608,3 +1608,43 @@ within the limits. The tutorial's text now states so, and the tutorial asserts t
 again, at most 1% over the ceiling (its largest over the six starts 0.995). The
 start of the tutorial prints the former output to every digit (its last iterate met the
 limits).
+
+## The ellipse distance of the keep-outs (2026-11-25) *measured*
+
+`ApertureKeepOut` and `SphereKeepOut` take the distance from a point to the envelope
+ellipse to first order (Sampson, `_sampson_distance`); `clearance`, `talis_check` and the
+design rules take the exact distance (Eberly, `_ellipse_closest`). The cleanup of
+2026-11-25 asked whether the keep-outs should move to the exact distance. They stay on
+the first-order one (*decision*, on the measurement below).
+
+Measured on the 1% envelopes of the four NIF cones at 8 TW per quad (semi-axes A × B of
+1.145 × 0.848 mm on the 23.5° cone, 1.086 × 0.767 on 30°, 0.946 × 0.553 on 44.5° and
+0.941 × 0.550 on 50°), over a polar grid of 721 angles by 600 radii from 0.05 to 3 times
+the envelope. The table gives the largest difference |Sampson − exact| in µm by band of
+the exact signed distance d (mm).
+
+| Cone | A/B | \|d\| ≤ 0.05 | \|d\| ≤ 0.2 | 0.2 < d ≤ 0.5 | 0.5 < d ≤ 1.5 |
+|---|---|---|---|---|---|
+| 23.5° | 1.35 | 0.1 | 2.3 | 7.6 | 40 |
+| 30° | 1.42 | 0.2 | 3.5 | 10.7 | 55 |
+| 44.5° | 1.71 | 0.6 | 11.9 | 29.1 | 138 |
+| 50° | 1.71 | 0.6 | 12.0 | 29.1 | 138 |
+
+- The first-order distance is never above the exact one on this grid (the signed
+  difference is ≤ 0 in every band, on the 50° cone), so a clearance is never overstated.
+  Outside the envelope the shortfall is at most 6.3 µm for d ≤ 0.2 mm; the 12 µm of the
+  |d| ≤ 0.2 band is inside the envelope.
+- At the default `minimum = 0` the active clearances are at the envelope, where the two
+  agree within 0.6 µm, below the few micrometers by which the keep-out and `clearance`
+  differ for other reasons. With a `minimum` of 0.3–0.5 mm the keep-out holds a beam up to
+  29 µm farther out than asked, less than the 75 µm of pointing and positioning error
+  already in its error set.
+- The exact distance has no closed form. Its derivatives would come from the closest
+  point held fixed (Danskin), which is first order only, and the robust objectives
+  differentiate the keep-out on nested duals. Its closest point also jumps across the
+  medial axis inside the envelope, where the first-order distance is smooth. The smooth
+  minimum and its slope checks ("Defaults changed (2026-11-19)") would have to be
+  repeated.
+- Confidence **H** for the table (geometry only). The script is not kept; the numbers
+  follow from `_sampson_distance` and `_ellipse_closest` on the grid above.
+

@@ -104,8 +104,13 @@ exact one. Over 144 scans of the aim, the largest change of slope in a step fall
 (research notes, "Defaults changed (2026-11-19)").
 
 The distance to the envelope ellipse is first order (Sampson). It is exact on the
-envelope and for round spots, and smooth in aim, defocus and spot size. A design should
-be confirmed with `clearance`, which also accounts for wings and power on hardware. The
+envelope and for round spots, and smooth in aim, defocus and spot size. Elsewhere it lies
+below the exact distance, so a clearance is never overstated. On the 1% envelopes of the
+NIF cones the shortfall is at most 0.6 µm within 0.05 mm of the envelope, 6 µm for
+clearances up to 0.2 mm and 29 µm up to 0.5 mm, on the outer cones, whose envelopes are
+the most elongated (research notes, "The ellipse distance of the keep-outs (2026-11-25)").
+A `minimum` of a few tenths of a millimeter is therefore held with a margin of that
+size. A design should be confirmed with `clearance`, which also accounts for wings and power on hardware. The
 keep-out is passed as `keepout` to `symmetry_objective` or `asymmetry_objective`, which
 then add the penalty `weight × Σᵢ max(0, minimum − cᵢ)²` ([`keepout_penalty`](@ref)).
 """

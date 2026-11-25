@@ -190,6 +190,7 @@ Optimizer internals, defaults and cost.
 - [The dropped-bundle tutorial's long runs under rounding (2026-11-20) *measured*](notes/optimization_defaults.md#the-dropped-bundle-tutorials-long-runs-under-rounding-2026-11-20-measured)
 - [A ladder study's hand-written pieces as API (2026-11-20) *derived*](notes/optimization_defaults.md#a-ladder-studys-hand-written-pieces-as-api-2026-11-20-derived)
 - [Least violation, capped inner runs and phase 1's budget (2026-11-20) *measured*](notes/optimization_defaults.md#least-violation-capped-inner-runs-and-phase-1s-budget-2026-11-20-measured)
+- [The ellipse distance of the keep-outs (2026-11-25) *measured*](notes/optimization_defaults.md#the-ellipse-distance-of-the-keep-outs-2026-11-25-measured)
 
 ## Contents
 
