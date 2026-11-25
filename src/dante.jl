@@ -217,25 +217,8 @@ function _dante_footprint(t::Target, v::DanteView, fov = v.field_of_view)
     u = cross(r, d)
     far = 4 * (t.scale + norm(c)) + 1
     np = v.pixels
-    px = 2half / np
-    ray = -d
-    lips = _lip_triangles(t)      # of transmitting apertures, which are closing lips
-    acc = Dict{Tuple{Int,Int},Float64}()
-    for i in 1:np, j in 1:np
-        x, y = -half + (i - 0.5) * px, -half + (j - 0.5) * px
-        x^2 + y^2 > R2 && continue
-        if Rc2 < Inf
-            q = c + x * r + y * u - cf
-            sum(abs2, q - dot(q, d) * d) > Rc2 && continue
-        end
-        o = c + x * r + y * u + far * d
-        th, tri = closest_hit(t.bvh, o, ray)
-        tri == 0 && continue
-        e = Int(dot(ray, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri])
-        e > 0 || continue
-        l = _first_lip(t, lips, o, ray, th)
-        acc[(e, l)] = get(acc, (e, l), 0.0) + px^2
-    end
+    lips = _lip_bvh(t)      # of transmitting apertures, which are closing lips
+    acc = _footprint_rays(t, lips, c, cf, r, u, d, Float64(half), Float64(R2), Float64(Rc2), far, np)
     ks = collect(keys(acc))
     elems, area = first.(ks), [acc[k] for k in ks]
     if h === nothing
@@ -257,6 +240,32 @@ function _dante_footprint(t::Target, v::DanteView, fov = v.field_of_view)
     end
     return (; elems, lips = last.(ks), area, hole_area, cosv, open_area, lip_elems,
             lip_area = t.elem_area[lip_elems], ref_area = A, ref_cos = cref)
+end
+
+# Casts the np² rays of a footprint toward the detector and returns the area per pair of
+# first element and first lip element (0 for none). The loop is behind this barrier since
+# the center and the extents of the caller depend on the kind of view.
+function _footprint_rays(t::Target, lips::BVH, c::Vec3, cf::Vec3, r::Vec3, u::Vec3, d::Vec3,
+                         half::Float64, R2::Float64, Rc2::Float64, far::Float64, np::Int)
+    px = 2half / np
+    ray = -d
+    acc = Dict{Tuple{Int,Int},Float64}()
+    for i in 1:np, j in 1:np
+        x, y = -half + (i - 0.5) * px, -half + (j - 0.5) * px
+        x^2 + y^2 > R2 && continue
+        if Rc2 < Inf
+            q = c + x * r + y * u - cf
+            sum(abs2, q - dot(q, d) * d) > Rc2 && continue
+        end
+        o = c + x * r + y * u + far * d
+        th, tri = closest_hit(t.bvh, o, ray)
+        tri == 0 && continue
+        e = Int(dot(ray, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri])
+        e > 0 || continue
+        l = _first_lip(t, lips, o, ray, th)
+        acc[(e, l)] = get(acc, (e, l), 0.0) + px^2
+    end
+    return acc
 end
 
 # Returns the footprint over the field `fov`, the view field by default. Each footprint

@@ -899,8 +899,6 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       of `Briareus.Benchmarks` left. Submodules for the 29 VisRad names and the 33
       diagnostic names would leave about 450, so the plan's goal of under 250 needs a
       triage of the whole API, which is not a mechanical change.
-    - **Lines of sight through closing lips.** The Dante footprint scans the lip
-      triangles linearly per ray; a small BVH over them would remove the scan.
     - **Declined, with the reasons** (2026-11-25; the items of the cleanup plan that are
       closed without the change).
       - *A type parameter for `Scenario.lpi`.* The plan wanted `Scenario{P,M,L}` so that

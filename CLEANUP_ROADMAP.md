@@ -23,7 +23,7 @@ reason in `reference/ROADMAP.md` item 33).
 | 1.5 dead code | done | |
 | 2.1 UQ through LPI | done | `sample_modes(...; through_lpi = false)`, opt-in as decided |
 | 2.2 lip attenuation in imagers | done | `transmission` keyword through `render`, `imager_image`, `line_of_sight_power` |
-| 2.2 BVH over lip triangles | open | the Dante footprint still scans the lip triangles per ray |
+| 2.2 BVH over lip triangles | done | `_lip_bvh`; results identical |
 | 2.3 bubble frame | done | initial-wall frame kept and documented; awaits the owner's acceptance |
 | 2.3 double `linked_bubble` | done | `_resolve_lpi` |
 | 2.4 stale claims | done | |

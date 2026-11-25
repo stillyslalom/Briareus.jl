@@ -62,7 +62,7 @@ end
 function _first_elements(t::Target, cam::OrthoCamera, with_lips::Bool)
     elems, lips = zeros(Int32, cam.ny, cam.nx), zeros(Int32, cam.ny, cam.nx)
     far = 4 * (t.scale + norm(cam.center)) + 1
-    ltris = with_lips ? _lip_triangles(t) : Int[]
+    ltris = _lip_bvh(t, with_lips)
     Threads.@threads for j in 1:cam.nx
         x = (j - 0.5) / cam.nx * cam.width - cam.width / 2
         for i in 1:cam.ny
@@ -73,28 +73,31 @@ function _first_elements(t::Target, cam::OrthoCamera, with_lips::Bool)
             e = dot(cam.dir, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri]
             e > 0 || continue
             elems[i, j] = e
-            isempty(ltris) || (lips[i, j] = _first_lip(t, ltris, o, cam.dir, th))
+            isempty(ltris.ids) || (lips[i, j] = _first_lip(t, ltris, o, cam.dir, th))
         end
     end
     return elems, lips
 end
 
-# Returns the triangles of the transmitting apertures of a target, which are the closing
-# lips of its entrance holes.
-_lip_triangles(t::Target) =
-    [k for (ci, comp) in enumerate(t.components)
-     if comp.kind === :aperture && _transmits(comp.material.albedo)
-     for e in t.comp_elems[ci] for k in t.elem_tris[e]]
-
-# Returns the element of the lip triangle among `ltris` that the ray from `o` along `d`
-# crosses first within the distance `tmax`, or 0 when it crosses none.
-function _first_lip(t::Target, ltris::Vector{Int}, o::Vec3, d::Vec3, tmax)
-    l, tl = 0, tmax
-    for k in ltris
-        s = _intersect(o, d, t.tri_v0[k], t.tri_e1[k], t.tri_e2[k], tl)
-        s < tl && ((tl, l) = (s, Int(max(t.tri_front[k], t.tri_back[k]))))
+# Returns a BVH over the triangles of the transmitting apertures of a target, which are
+# the closing lips of its entrance holes. With `with_lips = false` the BVH is empty.
+function _lip_bvh(t::Target, with_lips::Bool = true)
+    ks = Int32[]
+    with_lips || return BVH(Vec3[], Vec3[], Vec3[], ks)
+    for (ci, comp) in enumerate(t.components)
+        comp.kind === :aperture && _transmits(comp.material.albedo) || continue
+        for e in t.comp_elems[ci]
+            append!(ks, t.elem_tris[e])
+        end
     end
-    return l
+    return BVH(t.tri_v0[ks], t.tri_e1[ks], t.tri_e2[ks], ks)
+end
+
+# Returns the element of the lip triangle of `lips` that the ray from `o` along `d`
+# crosses first within the distance `tmax`, or 0 when it crosses none.
+function _first_lip(t::Target, lips::BVH, o::Vec3, d::Vec3, tmax)
+    _, k = closest_hit(lips, o, d, tmax)
+    return k == 0 ? 0 : Int(max(t.tri_front[k], t.tri_back[k]))
 end
 
 """
@@ -131,7 +134,7 @@ function line_of_sight_power(t::Target, B::AbstractVector, direction;
                              transmission::Union{Nothing,AbstractVector} = nothing)
     nsub >= 1 && refine >= 1 || throw(ArgumentError("nsub and refine must be positive"))
     d = normalize(Vec3(direction))
-    ltris = transmission === nothing ? Int[] : _lip_triangles(t)
+    ltris = _lip_bvh(t, transmission !== nothing)
     s = zero(eltype(B))
     for e in elems
         c = dot(t.elem_normal[e], d)
@@ -145,14 +148,14 @@ end
 
 # Returns the area-weighted fraction of the centroids of the n² equal sub-triangles of
 # the triangles of element `e` from which a ray along `d` does not meet an opaque
-# surface. With lip triangles `ltris`, a point whose ray crosses a closing lip counts with
+# surface. With the lip triangles in `ltris`, a point whose ray crosses a closing lip counts with
 # the open fraction `τ` of the lip element crossed first.
-function _visible_fraction(t::Target, e::Integer, d::Vec3, n::Integer, ltris::Vector{Int} = Int[], τ = nothing)
+function _visible_fraction(t::Target, e::Integer, d::Vec3, n::Integer, ltris::BVH = _lip_bvh(t, false), τ = nothing)
     off = _ray_eps(t) * t.elem_normal[e]
     seen = total = 0.0
     function point(p)
         any_hit(t.bvh, p, d) && return 0.0
-        isempty(ltris) && return 1.0
+        isempty(ltris.ids) && return 1.0
         l = _first_lip(t, ltris, p, d, Inf)
         return l > 0 ? Float64(τ[l]) : 1.0
     end
