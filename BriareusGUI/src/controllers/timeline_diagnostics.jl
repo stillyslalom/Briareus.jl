@@ -318,24 +318,34 @@ function _record_diagnostic!(v, sol)
     end
 end
 
+# Whether target `t` has a closing entrance-hole lip: an aperture whose albedo is a
+# `GapClosure` or a `LipClosure`, the apertures whose open fraction the core images
+# weight a line of sight by (`render`, `imager_image`, `imager_record`).
+_closing_lips(t::Target) =
+    any(c -> c.kind === :aperture && c.material.albedo isa Union{GapClosure,LipClosure}, t.components)
+
 # What history `h` keeps of recorded diagnostic `j` (worker): `(; id, name, kind, Tr,
-# intensity, note, view, L, frames)`. For an imager, `L` the detected radiance per
-# element and step, `intensity` the detected intensity toward the pinhole (TW/sr: the
-# image's total over the object plane) and `frames` its recording
-# (`imager_record`: one integrated image, or a frame per gate).
+# intensity, note, view, L, transmission, frames)`. For an imager, `L` the detected
+# radiance per element and step, `transmission` the open fraction per element and step
+# where the target has closing lips (`nothing` without them), `intensity` the detected
+# intensity toward the pinhole (TW/sr: the total of the unattenuated image over the
+# object plane) and `frames` its recording (`imager_record`: one integrated image, or a
+# frame per gate, the lines of sight through a lip weighted by its open fraction).
 function _recorded(v, j, h, t::Target)
     rows = [r.diag[j] for r in h.record]
     if v.view isa XrayImager
         L = reduce(hcat, [r.L for r in rows])
+        transmission = first(h.record).open === nothing ? nothing : reduce(hcat, [r.open for r in h.record])
         P = Briareus.GUIAPI.imager_pixels(v.view, t)
         a = (v.view.camera.width / v.view.camera.nx)^2
         intensity = [a * sum((p > 0 ? Float64(L[p, k]) : 0.0 for p in P); init = 0.0) for k in axes(L, 2)]
-        frames = imager_record(v.view, t, h.time, Float64.(L))
+        frames = imager_record(v.view, t, h.time, Float64.(L);
+                               transmission = transmission === nothing ? nothing : Float64.(transmission))
         return (; v.id, v.name, kind = :xray_imager, Tr = fill(NaN, length(rows)), intensity,
-                note = v.note[], v.view, L, frames)
+                note = v.note[], v.view, L, transmission, frames)
     end
     return (; v.id, v.name, kind = :xray_power, Tr = [r.Tr for r in rows], intensity = [r.intensity for r in rows],
-            note = v.note[], v.view, L = nothing, frames = nothing)
+            note = v.note[], v.view, L = nothing, transmission = nothing, frames = nothing)
 end
 
 """
@@ -371,7 +381,9 @@ Show an image of recorded imager `id` of the latest drive history in the image v
 (as Compute ▸ X-ray image does, [`set_view!`](@ref) `:image`): `frame` 0 the image at
 the time cursor's step (detected radiance, W/cm²/sr; the last step without a cursor),
 else frame `frame` of its recording (detected fluence per steradian, J/cm²/sr: the
-integral over the shot or against a gate). The view opens on the region with signal
+integral over the shot or against a gate). Where the target has closing entrance-hole
+lips, a line of sight through a lip is weighted by the open fraction of the lip at each
+step (`Briareus.imager_image`, `Briareus.imager_record`). The view opens on the region with signal
 (`window`, or the whole field when that covers most of it); Ctrl + Shift + click on the
 image shows the whole field. The image stays until another is asked
 for: a drive edit does not replace it.
@@ -402,7 +414,8 @@ function diagnostic_image(sess::DesignSession, id::AbstractString, frame::Intege
     t = sess.drive.scenario[].target
     if frame == 0
         k = something(time_step(sess.time), length(h.time))
-        img = to_Wcm2.(imager_image(d.view, t, Float64.(view(d.L, :, k))))
+        transmission = d.transmission === nothing ? nothing : Float64.(view(d.transmission, :, k))
+        img = to_Wcm2.(imager_image(d.view, t, Float64.(view(d.L, :, k)); transmission))
         title, unit = @sprintf("%s at %.2f ns", d.name, h.time[k]), "W/cm²/sr (detected)"
     else
         f = d.frames

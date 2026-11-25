@@ -226,7 +226,10 @@ function _render_image(dr::DriveState)
     t = sol.model.target
     cam = OrthoCamera(req.direction; up = req.up, center = req.center, width = req.width,
                       nx = req.nx)
-    img = render(t, radiance(sol), cam)
+    # A line of sight through a closing entrance-hole lip is weighted by the open fraction
+    # of the lip in the solution (1 in the static drive, which has no time). A target
+    # without such a lip gives the same image with and without the open fractions.
+    img = render(t, radiance(sol), cam; sol.transmission)
     h = cam.width / 2
     x = range(-h, h; length = cam.nx)
     y = range(-h, h; length = cam.ny)

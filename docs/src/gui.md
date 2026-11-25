@@ -606,7 +606,9 @@ The bottom panel has the following tabs.
   *X-ray power* charts the Tᵣ of each recorded diagnostic, with the intensity toward it
   in TW/sr on the right axis. *X-ray imagers* shows the images of each imager in the
   history, one at a time, at the time cursor or for the recording (time-integrated, or a
-  frame per gate), and opens one in the main image view. Radiography definitions are
+  frame per gate), and opens one in the main image view. On a target with closing
+  entrance holes, a line of sight through a lip is weighted by the open fraction of the
+  lip at each step, so the images dim behind the lip as it closes. Radiography definitions are
   listed and do not record anything yet.
 
   ![The Diagnostics tab on its x-ray imagers after a drive history. The tab shows the categories with the number recorded in each, the recorded instrument as a chip, the history images of the lower SXI in a list, and the image chosen beside it.](assets/gui/diagnostics.png)

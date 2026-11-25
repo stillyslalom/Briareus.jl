@@ -417,6 +417,10 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
     aperture = [t.components[t.elem_comp[e]].kind === :aperture for e in 1:nelements(t)]
     steps = Ref(0)
     flat = _observed_flat(s)
+    # The open fraction of each step is kept only for an imager that views a target with
+    # closing entrance-hole lips (`_closing_lips`), where the images weight the lines of
+    # sight through a lip by it.
+    lips = _closing_lips(t) && any(v -> v.view isa XrayImager, views)
     record = function (sol)
         cancel[] && throw(_HistoryCanceled())
         laser = Float32.(to_Wcm2.(sol.laser ./ A))
@@ -427,7 +431,7 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         # the holes of a hohlraum into its walls.
         escaped = energy_balance(sol; by = :component).escaped
         rec = (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag,
-               escaped)
+               escaped, open = lips ? Float32.(sol.transmission) : nothing)
         # For a flat observed face, the record holds its statistics over the face, as the
         # drive does (`_face_stats`).
         return flat ? merge(rec, (; face = _face_stats(s, sol))) : rec

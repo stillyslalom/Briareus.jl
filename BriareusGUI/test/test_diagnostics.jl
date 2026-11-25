@@ -90,6 +90,7 @@ end
         # The integrated image of the imager is the time integral of the detected intensity;
         # the blur keeps the total of a target inside the field.
         @test sxi.kind === :xray_imager && isempty(sxi.note) && all(isnan, sxi.Tr) && maximum(sxi.intensity) > 0
+        @test sxi.transmission === nothing                         # no closing lip: no open fractions kept
         a = (sxi.view.camera.width / sxi.view.camera.nx)^2
         @test sum(sxi.frames.images[1]) * a ≈
               sum((h.time[k+1] - h.time[k]) * (sxi.intensity[k] + sxi.intensity[k+1]) / 2
@@ -208,5 +209,54 @@ end
         set_diagnostic!(sess, "dante_on_bead")
         @test occursin("the design has no part bead (dante_on_bead's center_part)", sess.status[])
         @test Controllers._missing_view_parts(sess) == [("dante_on_bead", "center_part", "bead")]
+    end
+end
+
+@testset "imager views through a closing entrance-hole lip (no GL)" begin
+    root = mktempdir()
+    withenv("BRIAREUS_CONFIG" => joinpath(root, "config.toml"), "BRIAREUS_DIAGNOSTICS" => nothing) do
+        sess = DesignSession(resolution = :coarse)
+        @test set_leh_closure!(sess.target, true)
+        set_diagnostic!(sess, "nif_sxi_lower")
+        use_pulse_shape!(sess; step = 1.0)
+        start_history!(sess)
+        h = sess.time.history[]
+        d = only(d for d in h.diagnostics if d.id == "nif_sxi_lower")
+        t = sess.drive.scenario[].target
+        @test Controllers._closing_lips(t) && !Controllers._closing_lips(DesignSession(resolution = :coarse).target.target[])
+        # The history keeps the open fraction of each step for the imager: on the lip
+        # elements it is 1 before the closure (`leh_closure_time` ± `leh_closure_width`)
+        # and 0 after it.
+        v = only(p for p in sess.target.parts[] if p.kind === :hohlraum).values
+        τ, w = v[:leh_closure_time], v[:leh_closure_width]
+        lip = [(c = t.components[t.elem_comp[e]]; c.kind === :aperture && c.material.albedo isa GapClosure)
+               for e in 1:nelements(t)]
+        open, closed = findall(<(τ - w), h.time), findall(>(τ + w), h.time)
+        @test any(lip) && size(d.transmission) == size(d.L) && !isempty(open) && !isempty(closed)
+        @test all(==(1), d.transmission[lip, open]) && all(==(0), d.transmission[lip, closed])
+        # The recording is the core record with the open fractions, dimmer than the
+        # record without them.
+        L, T = Float64.(d.L), Float64.(d.transmission)
+        plain = imager_record(d.view, t, h.time, L).images[1]
+        @test d.frames.images[1] == imager_record(d.view, t, h.time, L; transmission = T).images[1]
+        @test sum(d.frames.images[1]) < (1 - 1e-3) * sum(plain)
+        # The image at the cursor is the core image with the open fractions of its step:
+        # the plain image while the lips are open, a dimmer one once they have closed.
+        shown(img) = permutedims(to_Wcm2.(img)[end:-1:1, :])
+        ko = last(open)
+        set_time_step!(sess, ko)
+        @test diagnostic_image(sess, "nif_sxi_lower").values == shown(imager_image(d.view, t, L[:, ko]))
+        kc = closed[argmax(d.intensity[closed])]
+        set_time_step!(sess, kc)
+        im = diagnostic_image(sess, "nif_sxi_lower").values
+        @test im == shown(imager_image(d.view, t, L[:, kc]; transmission = T[:, kc]))
+        @test sum(im) < (1 - 1e-3) * sum(shown(imager_image(d.view, t, L[:, kc])))
+        # The x-ray image of the drive takes the open fractions of its solution. The
+        # static drive has no time, so its lips are open and the image is the plain one.
+        xray_image!(sess; direction = (0.3, 0, 1), up = (0, 1, 0), width = 8.0, nx = 96)
+        sol = sess.drive.result[].solution
+        cam = OrthoCamera(sess.drive.image_request[].direction; up = (0, 1, 0), width = 8.0, nx = 96)
+        ref = render(sol.model.target, radiance(sol), cam; transmission = sol.transmission)
+        @test isequal(sess.drive.image[].values, shown(ref)) && all(==(1), sol.transmission[lip])
     end
 end
