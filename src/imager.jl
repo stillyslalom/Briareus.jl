@@ -112,18 +112,26 @@ detector pixel of side `p` records `L × (p/M)² × Ω` of an image of detected 
 """
 pinhole_solid_angle(im::XrayImager) = π * im.pinhole^2 / 4 / im.distance^2
 
-# Returns the first element along the ray of each pixel (0 for none) on target `t`,
-# cached per target.
-function _imager_pixels(im::XrayImager, t::Target)
+# Returns the first element along the ray of each pixel (0 for none) on target `t`, and
+# the closing-lip element that the ray crosses before it (0 for none), cached per target.
+function _imager_view(im::XrayImager, t::Target)
     lock(im.lock) do
         get!(im.cache, t) do
             c = im.center isa Symbol ? part_centroid(t, im.center) : im.center
             k = im.camera
             cam = OrthoCamera(k.dir; up = k.up, center = c, width = k.width, nx = k.nx)
-            img = render(t, Float64.(1:nelements(t)), cam; background = 0.0)
-            Int32.(img)
+            _first_elements(t, cam, true)
         end
-    end
+    end::Tuple{Matrix{Int32},Matrix{Int32}}
+end
+_imager_pixels(im::XrayImager, t::Target) = first(_imager_view(im, t))
+
+# Returns the object-plane image of the detected radiance `L` per element before the
+# blur. With `τ`, pixels seen through a closing lip are weighted by its open fraction.
+function _imager_raw(im::XrayImager, t::Target, L::AbstractVector, τ)
+    P, Q = _imager_view(im, t)
+    return [P[k] > 0 ? Float64(L[P[k]]) * (τ === nothing || Q[k] == 0 ? 1.0 : Float64(τ[Q[k]])) : 0.0
+            for k in CartesianIndices(P)]
 end
 
 # Returns the Planck-weighted means of R over [lo, hi) eV at temperatures `T` (eV).
@@ -250,20 +258,25 @@ function _blur(k::AbstractMatrix, img::AbstractMatrix)
 end
 
 """
-    imager_image(im::XrayImager, t::Target, L::AbstractVector) -> Matrix{Float64}
+    imager_image(im::XrayImager, t::Target, L::AbstractVector; transmission = nothing) -> Matrix{Float64}
     imager_image(im::XrayImager, sol) -> Matrix{Float64}
 
 The image on the object plane (row 1 at the top, `up`) of the per-element detected
 radiance `L` ([`detected_radiance`](@ref)), blurred by the resolution of the imager, in
 TW mm⁻² sr⁻¹ of detected x-ray energy. For a solution, the target of the solution and
 `detected_radiance(im, sol)` are used.
+
+`transmission` is a per-element open fraction. With it, a pixel seen through the closing
+lip of an entrance hole is weighted by the open fraction of the lip element on its line
+of sight, as in [`DanteView`](@ref). A solution passes its `transmission`.
 """
-function imager_image(im::XrayImager, t::Target, L::AbstractVector)
-    P = _imager_pixels(im, t)
-    return _blur(im, [p > 0 ? Float64(L[p]) : 0.0 for p in P])
-end
-imager_image(im::XrayImager, sol::RadiationSolution) = imager_image(im, sol.model.target, detected_radiance(im, sol))
-imager_image(im::XrayImager, s::SpectralSolution) = imager_image(im, s.gray.model.target, detected_radiance(im, s))
+imager_image(im::XrayImager, t::Target, L::AbstractVector;
+             transmission::Union{Nothing,AbstractVector} = nothing) =
+    _blur(im, _imager_raw(im, t, L, transmission))
+imager_image(im::XrayImager, sol::RadiationSolution) =
+    imager_image(im, sol.model.target, detected_radiance(im, sol); sol.transmission)
+imager_image(im::XrayImager, s::SpectralSolution) =
+    imager_image(im, s.gray.model.target, detected_radiance(im, s); s.gray.transmission)
 
 # Returns the weight of each history step in the integral of the piecewise-linear signal
 # against gate `g`, which are the weights of the trapezoid rule for g ≡ 1.
@@ -288,7 +301,7 @@ _gate(shape, t0, fwhm) = shape === :square ? (τ -> abs(τ - t0) <= fwhm / 2 ? 1
                          (τ -> exp(-4log(2) * (τ - t0)^2 / fwhm^2))
 
 """
-    imager_record(im::XrayImager, t::Target, time, L::AbstractMatrix) -> NamedTuple
+    imager_record(im::XrayImager, t::Target, time, L::AbstractMatrix; transmission = nothing) -> NamedTuple
 
 The record of a history by the imager. `L` is the detected radiance per element (rows)
 at each time of `time` (ns, columns), the [`detected_radiance`](@ref) of each step, taken
@@ -296,16 +309,32 @@ as linear between the times. The result is `(; images, times)`. For
 `mode = :integrated` it holds one image of the time integral (kJ mm⁻² sr⁻¹, as TW·ns),
 with `times` empty. For `:gated` it holds one frame per gate time, the integral against
 the gate (peak 1; kJ mm⁻² sr⁻¹), with `times` the gate times.
+
+`transmission` is the open fraction per element (rows) at each time (columns), the
+`transmission` of each step (`drive_history(...; keep_albedo = true)`). With it, a pixel
+seen through a closing lip integrates the radiance times the open fraction of the lip.
 """
-function imager_record(im::XrayImager, t::Target, time::AbstractVector, L::AbstractMatrix)
+function imager_record(im::XrayImager, t::Target, time::AbstractVector, L::AbstractMatrix;
+                       transmission::Union{Nothing,AbstractMatrix} = nothing)
     size(L, 2) == length(time) || throw(ArgumentError("one column of L per time"))
+    transmission === nothing || size(transmission) == size(L) ||
+        throw(ArgumentError("transmission takes one open fraction per element and time, as L"))
     issorted(time) || throw(ArgumentError("times must increase"))
     gates = im.mode === :integrated ? [τ -> 1.0] : [_gate(im.gate_shape, t0, im.gate) for t0 in im.times]
-    P = _imager_pixels(im, t)
+    P, Q = _imager_view(im, t)
     images = map(gates) do g
         w = _gate_weights(time, g)
         Lw = L * w
-        _blur(im, [p > 0 ? Lw[p] : 0.0 for p in P])
+        raw = [p > 0 ? Lw[p] : 0.0 for p in P]
+        if transmission !== nothing
+            # A pixel behind a lip integrates the radiance times the open fraction of the
+            # lip at each time.
+            for k in CartesianIndices(P)
+                P[k] > 0 && Q[k] > 0 || continue
+                raw[k] = sum(w[j] * L[P[k], j] * transmission[Q[k], j] for j in eachindex(w))
+            end
+        end
+        _blur(im, raw)
     end
     return (; images, times = im.mode === :integrated ? Float64[] : copy(im.times))
 end

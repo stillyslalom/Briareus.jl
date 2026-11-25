@@ -251,10 +251,7 @@ function _dante_footprint(t::Target, v::DanteView, fov = v.field_of_view)
     np = v.pixels
     px = 2half / np
     ray = -d
-    # Collect the triangles of transmitting apertures, which are closing lips.
-    lips = [k for (ci, comp) in enumerate(t.components)
-            if comp.kind === :aperture && _transmits(comp.material.albedo)
-            for e in t.comp_elems[ci] for k in t.elem_tris[e]]
+    lips = _lip_triangles(t)      # of transmitting apertures, which are closing lips
     acc = Dict{Tuple{Int,Int},Float64}()
     for i in 1:np, j in 1:np
         x, y = -half + (i - 0.5) * px, -half + (j - 0.5) * px
@@ -268,11 +265,7 @@ function _dante_footprint(t::Target, v::DanteView, fov = v.field_of_view)
         tri == 0 && continue
         e = Int(dot(ray, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri])
         e > 0 || continue
-        l, tl = 0, th
-        for k in lips
-            s = _intersect(o, ray, t.tri_v0[k], t.tri_e1[k], t.tri_e2[k], tl)
-            s < tl && ((tl, l) = (s, Int(max(t.tri_front[k], t.tri_back[k]))))
-        end
+        l = _first_lip(t, lips, o, ray, th)
         acc[(e, l)] = get(acc, (e, l), 0.0) + px^2
     end
     ks = collect(keys(acc))

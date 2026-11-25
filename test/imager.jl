@@ -110,4 +110,47 @@ using Briareus, Test
                        check_diagnostics(; paths = [diagnostic_paths()[1], dir]))
         end
     end
+
+    @testset "closing lips on the line of sight" begin
+        # An emitting disk seen from the pole through a closing lip, an annular aperture
+        # of two rings with open fractions 0.25 and 0.6. The power toward the detector is
+        # the radiance times the emitter area less the closed area of the lip rings,
+        # (1 − τ) of each lip element. The rendered image, the line-of-sight power and the
+        # Dante view take the same open fractions, and the imager scales its image by the
+        # same ratio.
+        lip = aperture(:lip, annulus_mesh(0.8, 1.5, 1.0; nr = 2, nphi = 32);
+                       closure = GapClosure(closure = 5.0))
+        tl = Target([disk, lip])
+        n = nelements(tl)
+        le = elements(tl, :lip)
+        τ = zeros(n)
+        rmid(e) = hypot(tl.elem_centroid[e][1], tl.elem_centroid[e][2])
+        split = sum(rmid, le) / length(le)
+        τ[le] .= [rmid(e) < split ? 0.25 : 0.6 for e in le]
+        B = [e in le ? 0.0 : Bd for e in 1:n]
+        sl = RadiationSolution(RadiationModel(tl; F = zeros(n, n)), zeros(n), zeros(n), B,
+                               zeros(n), zeros(n), zeros(n), τ, 0.0)
+        emit = sum(tl.elem_area[elements(tl, :emitter)])
+        closed = sum((1 - τ[e]) * tl.elem_area[e] for e in le)
+        exact = Bd / π * (emit - closed)
+        @test 0.05 < closed / emit < 0.5
+        cam = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 6.0, nx = 600)
+        px = (6.0 / 600)^2
+        @test sum(render(tl, radiance(sl), cam; background = 0.0, sl.transmission)) * px ≈ exact rtol = 5e-3
+        @test sum(render(tl, radiance(sl), cam; background = 0.0)) * px ≈ Bd / π * emit rtol = 5e-3
+        @test line_of_sight_power(tl, sl.B, (0, 0, 1); sl.transmission, nsub = 64, refine = 1) ≈ exact rtol = 5e-3
+        @test line_of_sight_power(tl, sl.B, (0, 0, 1)) ≈ Bd / π * emit rtol = 1e-12
+        view = DanteView(0, 0; through = nothing, field_of_view = 6.0, pixels = 600)
+        @test dante(view, sl).intensity ≈ exact rtol = 5e-3
+        Ll = detected_radiance(im, sl)
+        @test sum(imager_image(im, sl)) / sum(imager_image(im, tl, Ll)) ≈ (emit - closed) / emit rtol = 5e-3
+        @test imager_image(im, tl, Ll; sl.transmission) == imager_image(im, sl)
+        # a record of two times with the lip closing: the integral of L τ(t), linear in t
+        τ2 = hcat(ones(n), τ)
+        rec = imager_record(sxi(mode = :integrated), tl, [0.0, 2.0], hcat(Ll, Ll); transmission = τ2)
+        both = imager_image(im, tl, Ll) .+ imager_image(im, sl)
+        @test rec.images[1] ≈ both rtol = 1e-12
+        @test_throws ArgumentError imager_record(sxi(mode = :integrated), tl, [0.0, 2.0], hcat(Ll, Ll);
+                                                 transmission = ones(n, 3))
+    end
 end
