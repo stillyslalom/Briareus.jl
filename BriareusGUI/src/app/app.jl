@@ -31,19 +31,40 @@ end
 
 function _main(args)
     "--shortcut" in args && (foreach(p -> println("created ", p), install_shortcut()); return 0)
+    ("--help" in args || "-h" in args) && (print(USAGE); return 0)
+    c = try
+        parse_command(args)
+    catch err
+        err isa ArgumentError || rethrow()
+        println(stderr, "briareus: ", err.msg)
+        return 1
+    end
+    if c.command != ""
+        try
+            return _run_command(c)
+        catch err
+            err isa ArgumentError || rethrow()
+            println(stderr, "briareus ", c.command, ": ", err.msg)
+            return 1
+        end
+    end
     # the status file of the splash a shortcut's script shows
     splash = "--from-shortcut" in args ? get(ENV, SPLASH_ENV, "") : ""
     stage(text) = isempty(splash) || try write(splash, text) catch end
-    files = filter(a -> !startswith(a, "--"), args)
+    files = c.files
     if !isempty(files) && !isfile(files[1])
         println(stderr, "briareus: no such file: ", files[1])
+        return 1
+    end
+    if c.tab !== nothing && !(c.tab in TABS)
+        println(stderr, "briareus: --tab must be one of ", join(TABS, ", "))
         return 1
     end
     try
         stage("Opening the window")
         sess = DesignSession()
         isempty(files) || load_session!(sess, files[1])
-        briareus(sess; shown = () -> stage("quit"))
+        briareus(sess; shown = () -> (stage("quit"); c.tab === nothing || request_tab(c.tab)))
     catch err
         @error "Briareus could not start" exception = (err, catch_backtrace())
         # the message on one line (a TOML error's first line is only "TOML Parser error:")

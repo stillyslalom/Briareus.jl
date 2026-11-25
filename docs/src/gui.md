@@ -56,6 +56,30 @@ returns when the window closes. A shortcut has no terminal: its output goes to
 `%LOCALAPPDATA%\Briareus\briareus.log` (on macOS, `~/Library/Logs/Briareus/`), and a
 failure to start shows in the splash with the location of the log.
 
+`briareus design.briar --tab talis` opens the window on a results tab (`beams`, `drive`,
+`time`, `diagnostics`, `optimize`, `clearance`, `sweep` or `talis`), so a session written
+by a script is checked by eye in one step.
+
+The command also runs without a window. A design is a saved session or a VisRad
+workspace (`.vrw`), and each command writes files that open without Briareus:
+
+```
+briareus talis design.vrw --out talis.csv --json       # the TaLIS checks; exit code 2 when a check fails
+briareus review-1w design.briar --out review/          # the 1ω review: HTML, CSV, one SVG slice per tight pair
+briareus roe design.briar --out roe/ --json            # the beam rules of engagement: HTML, CSV, Markdown, port map
+briareus run script.jl args...                         # a script with Briareus and the controllers loaded
+```
+
+`review-1w` takes `--threshold` (mm, default 1.0) for the margin below which a passing
+pair is drawn. The checks run with the settings saved in the design, through
+`Briareus.talis_check`, `Briareus.omega1_review` and `Briareus.roe_scan`, so a script
+that calls those functions gets the same numbers. `roe` scans the drive scenario of the
+design against the criteria that `Briareus.roe_default_criteria` selects from the
+observed part and the foils, lists them in the sheet, and applies to a design without a
+hohlraum. These thresholds are engineering defaults, and a shot sheet needs the criteria
+of the experiment, passed to `roe_scan` from a script. The commands load the same
+package as the window, which takes most of their time.
+
 `pkg> app update BriareusGUI` updates the app, and `pkg> app rm BriareusGUI` removes it
 (the shortcuts are deleted by hand). A shortcut runs a script that names the Qt
 libraries of the installed app for its splash, so `briareus --shortcut` is run again

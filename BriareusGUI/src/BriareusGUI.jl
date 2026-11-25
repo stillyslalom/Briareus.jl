@@ -15,7 +15,15 @@ The package is also the `briareus` command (a Pkg app, `[apps.briareus]` in its
 
     briareus                       # the window on a fresh design
     briareus design.briar          # on a saved session
+    briareus design.briar --tab talis   # on a saved session, showing a results tab
     briareus --shortcut            # add Briareus to the desktop and the applications menu
+    briareus talis design.vrw --out talis.csv --json      # the TaLIS checks, no window
+    briareus review-1w design.briar --out review/         # the 1ω review packet (HTML, SVG)
+    briareus roe design.briar --out roe/                  # the beam rules of engagement
+    briareus run script.jl                                # a script with Briareus loaded
+
+`briareus --help` lists the commands. The commands that take a design read a saved
+session or a VisRad workspace (`.vrw`) and need no graphics context.
 
 A shortcut runs a script that shows a splash while the package loads and writes the
 command's output to `BriareusGUI.log_path()`.
@@ -202,6 +210,7 @@ include("qt/dirty.jl")                  # the dirty domains of the panels
 include("qt/refresh.jl")                # the shell, and what QML shows of the session
 include("qt/callbacks.jl")              # the tick and the functions QML calls
 include("qt/window.jl")                 # `briareus`
+include("app/commands.jl")             # the headless commands of `briareus`
 include("app/app.jl")                  # the `briareus` command and its shortcuts
 
 using PrecompileTools: @setup_workload, @compile_workload

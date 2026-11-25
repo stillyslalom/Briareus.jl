@@ -223,4 +223,93 @@ end
              "precompile(Tuple{typeof(Base.no_such_function_here), Int64})\n")
     @test BriareusGUI._replay_precompiles(f) == (; compiled = 1, failed = 2)
     @test BriareusGUI._replay_precompiles(joinpath(dirname(f), "missing.jl")) == (; compiled = 0, failed = 0)
+
+    @testset "arguments" begin
+        c = A.parse_command(["design.briar", "--tab", "talis"])
+        @test c.command == "" && c.files == ["design.briar"] && c.tab == "talis" && !c.json
+        c = A.parse_command(["review-1w", "in.vrw", "--out", "dir", "--threshold", "0.5", "--json"])
+        @test (c.command, c.files, c.out, c.threshold, c.json) == ("review-1w", ["in.vrw"], "dir", 0.5, true)
+        c = A.parse_command(["run", "s.jl", "--out", "x", "talis"])
+        @test c.command == "run" && c.files == ["s.jl"] && c.rest == ["--out", "x", "talis"] && c.out === nothing
+        @test A.parse_command(String[]).files == String[] && A.parse_command(["--from-shortcut"]).files == String[]
+        @test_throws ArgumentError A.parse_command(["talis", "a.briar", "--out"])
+        @test_throws ArgumentError A.parse_command(["review-1w", "a.briar", "--threshold", "wide"])
+        @test A._main(["--help"]) == 0 && all(t -> occursin(t, A.USAGE), A.TABS)
+        mktempdir() do dir
+            f = joinpath(dir, "d.briar.toml")
+            save_session(f, DesignSession(resolution = :coarse))
+            @test A._main([f, "--tab", "nonesuch"]) == 1            # checked before a window opens
+            @test A._main(["talis", f]) == 1                         # no --out
+            @test A._main(["roe", joinpath(dir, "absent.briar"), "--out", dir]) == 1
+        end
+    end
+
+    @testset "headless commands" begin
+        isdefined(@__MODULE__, :synthetic_workspace) || include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
+        mktempdir() do dir
+            # a saved session of the hohlraum starter: the commands against the core calls
+            src = joinpath(dir, "design.briar.toml")
+            s0 = DesignSession(resolution = :coarse)
+            save_session(src, s0)
+            sess = A.load_design(src)
+            @test sess isa DesignSession && length(sess.beams.beams[]) == length(s0.beams.beams[])
+            @test_throws ArgumentError A.load_design(joinpath(dir, "absent.briar"))
+            t, bs, kw = sess.target.target[], active_beams(sess.beams), talis_kwargs(sess.talis, sess.review)
+            ref = talis_check(t, bs; kw...)
+            out = A.talis_command(sess, joinpath(dir, "out", "talis.csv"); json = true)
+            @test basename.(out.paths) == ["talis.csv", "talis.json"] && all(isfile, out.paths)
+            @test [(x.beam, x.rule, x.status, x.margin) for x in out.report.rows] ==
+                  [(x.beam, x.rule, x.status, x.margin) for x in ref.rows]
+            @test length(Briareus.JSON.parsefile(out.paths[2])["rows"]) == length(ref.rows)
+            rv = A.review_1w_command(sess, joinpath(dir, "review"); threshold = 2.0, json = true)
+            @test rv.review.threshold == 2.0 && length(rv.review.report.rows) == length(ref.rows)
+            @test basename(rv.paths[1]) == "review-1w.html" && basename(rv.paths[end]) == "review-1w.json" &&
+                  count(p -> endswith(p, ".svg"), rv.paths) == length(rv.review.items)
+            html = read(rv.paths[1], String)
+            @test occursin("<h2>All checks</h2>", html) && count("<figure id=\"approach-", html) == length(rv.review.items)
+            ro = A.roe_command(sess, joinpath(dir, "roe"); json = true)
+            @test [c.name for c in ro.criteria] == [:drive, :P2, :P4, :hotspot_velocity]
+            @test basename.(ro.paths) == ["roe.html", "roe.csv", "roe.md", "ports.svg", "roe.json"]
+            sc = sess.drive.scenario[]
+            direct = roe_scan(sc, display_beams(sess.beams), ro.criteria)
+            @test ro.report.tiers == direct.tiers && [o.scores for o in ro.report.singles] == [o.scores for o in direct.singles]
+            @test occursin("close on themselves", ro.notes[1]) && occursin(ro.notes[1], read(ro.paths[1], String))
+
+            # through the command line: messages, files and exit codes
+            code = redirect_stdout(devnull) do
+                A._main(["talis", src, "--out", joinpath(dir, "cli", "t.csv"), "--json"])
+            end
+            @test code == (any(x -> x.status === :fail, ref.rows) ? 2 : 0) && isfile(joinpath(dir, "cli", "t.json"))
+            @test redirect_stdout(() -> A._main(["review-1w", src, "--out", joinpath(dir, "cli1w")]), devnull) == 0 &&
+                  isfile(joinpath(dir, "cli1w", "review-1w.html")) && !isfile(joinpath(dir, "cli1w", "review-1w.json"))
+            @test redirect_stdout(() -> A._main(["roe", src, "--out", joinpath(dir, "cliroe")]), devnull) == 0 &&
+                  isfile(joinpath(dir, "cliroe", "roe.html"))
+
+            # a foil design with no hohlraum: criteria from the foil, on OMEGA beams, where
+            # the TaLIS rules do not apply
+            fsrc = joinpath(dir, "foil.briar.toml")
+            save_session(fsrc, DesignSession(starter = :foil, resolution = :coarse))
+            fs = A.load_design(fsrc)
+            fo = A.roe_command(fs, joinpath(dir, "foilroe"))
+            @test !isempty(fo.criteria) && all(c -> occursin("irradiance", string(c.name)) || occursin("centroid", string(c.name)), fo.criteria)
+            @test isfile(joinpath(dir, "foilroe", "roe.html")) && length(fo.report.units) > 0
+            @test_throws ArgumentError A.talis_command(fs, joinpath(dir, "foil.csv"))
+            @test A._main(["talis", fsrc, "--out", joinpath(dir, "foil.csv")]) == 1
+
+            # a VisRad workspace mock-up
+            vrw = joinpath(dir, "work.vrw")
+            write(vrw, synthetic_workspace())
+            vs = A.load_design(vrw)
+            @test vs.visrad_source[] == vrw || !isempty(vs.beams.beams[])
+            vo = A.roe_command(vs, joinpath(dir, "vrwroe"))
+            @test !isempty(vo.criteria) && isfile(joinpath(dir, "vrwroe", "roe.html"))
+
+            # a script: Briareus and the controllers in scope, its arguments in ARGS
+            script = joinpath(dir, "s.jl")
+            write(script, "s = DesignSession(resolution = :coarse)\nwrite(ARGS[1], string(length(nif_quads()), \" \", length(s.beams.beams[])))\n")
+            before = copy(ARGS)
+            @test A._main(["run", script, joinpath(dir, "s.txt")]) == 0 && read(joinpath(dir, "s.txt"), String) == "48 48"
+            @test ARGS == before && A._main(["run", joinpath(dir, "absent.jl")]) == 1
+        end
+    end
 end
