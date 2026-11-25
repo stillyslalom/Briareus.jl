@@ -232,3 +232,69 @@ function compare_visrad(ws::VisRadWorkspace, sol::RadiationSolution; elements::A
     end
     return (; rows, elements = stats)
 end
+
+const _VR_RESIDUAL_COLUMNS = Dict(:flux_in => (r"flux\s*in"i, :H), :flux_out => (r"flux\s*out"i, :B),
+                                  :rad_t => (r"rad\.?\s*t"i, :TH), :emis_t => (r"emis\.?\s*t"i, :TB))
+
+"""
+    visrad_residuals(workspace, sol; quantity = :laser, elements = Dict(),
+                     sources = visrad_power_sources(workspace; stale = :nothing), relative = false,
+                     index_base = nothing) -> (; residual, briareus, visrad, unit)
+
+Element residuals `Briareus − VisRad` of one quantity, on the elements of the target of
+`sol`, for coloring the mesh by the disagreement. [`compare_visrad`](@ref) gives the
+summary rows of the same comparison, and the target must be built on the VisRad elements
+as described there.
+
+- `quantity = :laser` is the absorbed laser flux (TW/mm²), `sol.laser` over the element
+  area against the power sources that the workspace saves (`sources`).
+- `:flux_in`, `:flux_out`, `:rad_t` and `:emis_t` are the incident and emitted x-ray
+  flux (TW/mm²) and their radiation temperatures (eV), against VisRad's Surface Element
+  Properties export per object in `elements`, mapped as in
+  [`visrad_element_values`](@ref).
+
+`residual`, `briareus` and `visrad` have one entry per element. An element without a
+VisRad value is `NaN` in `visrad` and `residual`. With `relative = true` the residual is
+divided by the largest absolute VisRad value of the quantity, so the entries are
+fractions of the peak.
+"""
+function visrad_residuals(ws::VisRadWorkspace, sol::RadiationSolution; quantity::Symbol = :laser,
+                          elements::AbstractDict = Dict{String,Any}(),
+                          sources = visrad_power_sources(ws; stale = :nothing), relative::Bool = false,
+                          index_base::Union{Nothing,Integer} = nothing)
+    t = sol.model.target
+    v = ForwardDiff.value
+    if quantity === :laser
+        sources === nothing && throw(ArgumentError("the laser residual needs the power sources of the workspace"))
+        names = Set(keys(sources.tables))
+        PV = Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+            visrad_deposition(ws, t; sources)
+        end
+        B = [v(sol.laser[e]) / t.elem_area[e] for e in eachindex(PV)]
+        V = [String(t.components[t.elem_comp[e]].name) in names ? PV[e] / t.elem_area[e] : NaN for e in eachindex(PV)]
+        unit = "TW/mm2"
+    else
+        haskey(_VR_RESIDUAL_COLUMNS, quantity) ||
+            throw(ArgumentError("quantity must be :laser, :flux_in, :flux_out, :rad_t or :emis_t, got :$quantity"))
+        re, k = _VR_RESIDUAL_COLUMNS[quantity]
+        V = fill(NaN, nelements(t))
+        for (name, tb) in elements
+            tbl = tb isa AbstractString ? read_visrad_table(tb) : tb
+            _vr_find_col(tbl, re) === nothing && continue
+            Vn = visrad_element_values(ws, t, Dict(String(name) => tbl), re; index_base)
+            for e in eachindex(V)
+                isnan(Vn[e]) || (V[e] = Vn[e])
+            end
+        end
+        H = k in (:H, :TH) ? v.(sol.H) : v.(sol.B)
+        B = k in (:TH, :TB) ? radiation_temperature.(H) : H
+        unit = k in (:TH, :TB) ? "eV" : "TW/mm2"
+    end
+    residual = B .- V
+    if relative
+        peak = maximum(abs, (x for x in V if !isnan(x)); init = 0.0)
+        peak > 0 && (residual ./= peak)
+        unit = "of peak"
+    end
+    return (; residual, briareus = B, visrad = V, unit)
+end

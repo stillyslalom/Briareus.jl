@@ -733,6 +733,21 @@ end
     @test row("Laser Pwr Dep [CAD_0]").difference == 0 && stat("CAD_0", "Laser").rms == 0
     @test !any(r -> occursin("Rectangle_0", r.quantity), cmp.rows)               # not in the target
     @test occursin("P2/P0 [Capsule_0]", String(take!(out)))
+    # Element residuals, Briareus less VisRad, of the same tables.
+    els = Dict("Capsule_0" => pcap, "CAD_0" => ptet)
+    ro = visrad_residuals(ws, sol; quantity = :flux_out, elements = els)
+    @test ro.residual[ec] ≈ -0.02 .* B rtol = 1e-9
+    @test all(isnan, ro.residual[es]) && ro.unit == "TW/mm2"    # the capsule table has no Flux Out
+    ri = visrad_residuals(ws, sol; quantity = :flux_in, elements = els)
+    @test ri.residual[es] ≈ sol.H[es] .- f ./ 100 && ri.visrad[es] ≈ f ./ 100
+    rt = visrad_residuals(ws, sol; quantity = :rad_t, elements = els)
+    @test rt.residual[es] ≈ radiation_temperature.(sol.H[es]) .- radiation_temperature.(f ./ 100) && rt.unit == "eV"
+    rr = visrad_residuals(ws, sol; quantity = :flux_out, elements = els, relative = true)
+    @test rr.residual[ec] ≈ -0.02 .* B ./ maximum(1.02 .* B) rtol = 1e-9
+    rl = visrad_residuals(ws, sol)
+    @test all(==(0), rl.residual[ec])
+    @test rl.visrad[ec] ≈ qcad ./ 100 rtol = 1e-12
+    @test_throws ArgumentError visrad_residuals(ws, sol; quantity = :nothing)
     # A 1-based index is found from the largest index, and ambiguous tables are refused.
     part = (; header = ["Surf Index", "Flux Out (TW/cm2)"], labels = fill("", 3), data = [1.0 1; 2 2; 3 3])
     @test_throws ArgumentError visrad_element_values(ws, t, Dict("CAD_0" => part), r"flux\s*out"i)
