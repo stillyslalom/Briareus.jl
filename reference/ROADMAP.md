@@ -888,15 +888,17 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     records nothing yet). `TabulatedCurve` interpolates as v₁ + w (v₂ − v₁), not through
     `_interp`: switching changes its values at the last bit, so it waits for a change that
     remeasures the Dante responses. Left open by the cleanup of 2026-11-25:
-    - **`_drive_history`** is still one 400-line function with closures over about forty
-      locals. Its per-element state is typed (`_StepState`), and the split into
-      `_init_history_state`, `_solve_history_step!`, `_record_history_step!` and
-      `_assemble_history_output` waits for a state struct. `test/inference.jl` (one
-      compiled instance for every closure, JET `report_call`) must stay green through it.
-    - **Include order.** `src/Briareus.jl` still has forward references between files
-      (functions only; types and constants are defined before use). The workspace and
-      JSON readers of VisRad call each other. The VisRad and diagnostics names are
-      candidates for submodules like `Briareus.Benchmarks`.
+    - **Include order.** 31 pairs of files still refer forward (45 before `pulses.jl`
+      left `history.jl`, `lpi.jl` moved ahead of its users and five small helpers moved
+      to earlier files), counted by name over `src/`. They are functions only, except
+      `DanteResponse` and `PlacementReport`. What remains is mutual by design: the
+      constraints and the keep-outs, the optimizer and the constrained solver, the
+      workspace and JSON readers of VisRad, `dante.jl` and `dante_response.jl`,
+      `frames.jl` and `placement.jl`. Removing those means merging or re-cutting files.
+    - **Export surface** (owner's decision). `Briareus` exports 514 names after the 27
+      of `Briareus.Benchmarks` left. Submodules for the 29 VisRad names and the 33
+      diagnostic names would leave about 450, so the plan's goal of under 250 needs a
+      triage of the whole API, which is not a mechanical change.
     - **Lines of sight through closing lips.** The Dante footprint scans the lip
       triangles linearly per ray; a small BVH over them would remove the scan.
     - **Declined, with the reasons** (2026-11-25; the items of the cleanup plan that are
