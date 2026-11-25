@@ -570,7 +570,7 @@
         # satisfied.
         top = aperture_clearance(sk, ev.beams)
         @test count(isinf, top) == 24 && all(r -> r.status === :satisfied, rows[97:end][isinf.(top)])
-        @test_throws ArgumentError clearance_floor(42)
+        @test_throws MethodError clearance_floor(42)
         # any keep-out with a `keepout_clearance` method and a `minimum`: a capture rule
         kc = CaptureKeepIn(t, :wall; minimum = 0.0)
         cc = clearance_floor(kc; name = :capture)

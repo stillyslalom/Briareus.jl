@@ -8,6 +8,39 @@ const _CYL_FIELDS = (:z, :r, :phi, :split)
 const _SPH_FIELDS = (:theta_s, :dphi_s, :split_theta, :split_phi)
 
 """
+    AbstractParameterization
+
+Supertype of the maps from a parameter vector to beams that a [`Scenario`](@ref)
+optimizes: [`GroupPointing`](@ref), [`FramePointing`](@ref), [`HeldParameters`](@ref),
+[`PowerScales`](@ref) and [`PhasedPointing`](@ref). A subtype has the methods
+`apply(p, x)`, which returns the beams of the parameters `x` and is generic in their
+number type, and `initial_parameters(p)`. `parameter_names(p)` labels the parameters in
+results and selects them by name in [`HeldParameters`](@ref), and `nparams(p)` defaults
+to the length of the initial parameters. An object of another type with the first two
+methods is also accepted by `Scenario`, and its parameters are then labeled `x[i]`.
+"""
+abstract type AbstractParameterization end
+
+"""
+    AbstractKeepOut
+
+Supertype of the smooth geometric rules on the beams that an optimization holds:
+[`ApertureKeepOut`](@ref), [`SphereKeepOut`](@ref), [`HardwareKeepOut`](@ref),
+[`CaptureKeepIn`](@ref), [`IncidenceRule`](@ref) and [`Omega1KeepOut`](@ref). A subtype
+has a [`keepout_clearance`](@ref) method, the clearance per beam, and the fields
+`minimum`, the clearance to keep, and `weight`, the weight of its penalty
+([`keepout_penalty`](@ref)). [`clearance_floor`](@ref) makes a constraint of any of them.
+"""
+abstract type AbstractKeepOut end
+
+nparams(p::AbstractParameterization) = length(initial_parameters(p))
+
+# Returns the names of the `n` parameters of `p`: its `parameter_names`, or `x[i]` for an
+# object that is not an `AbstractParameterization`.
+_parameter_names(p::AbstractParameterization, n) = collect(String, parameter_names(p))
+_parameter_names(p, n) = ["x[$i]" for i in 1:n]
+
+"""
     GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true,
                   relative = false, unit = :quad, radius = nothing, center = (0, 0, 0))
 
@@ -96,7 +129,7 @@ members are kept. This re-points an as-shot table, whose beams within a quad aim
 different points (the per-beam offsets of a facility), by one shift per quad. The initial
 parameters are then zero; the other fields stay absolute.
 """
-struct GroupPointing{K}
+struct GroupPointing{K} <: AbstractParameterization
     template::Vector{Beam{Float64}}
     keys::Vector{K}
     members::Vector{Vector{Int}}
@@ -2053,9 +2086,6 @@ struct PointingResult{B}
     capped::Int
 end
 
-_names(p::GroupPointing, n) = parameter_names(p)
-_names(p, n) = hasmethod(parameter_names, Tuple{typeof(p)}) ?
-               collect(String, parameter_names(p)) : ["x[$i]" for i in 1:n]
 
 # Returns 0 inside the box, -1 at the lower bound and 1 at the upper bound, within 1e-8
 # of the width. A parameter fixed by lower == upper counts as inside.
@@ -2077,7 +2107,7 @@ Base.@nospecializeinfer function _pointing_result(
         @nospecialize(phase1 = nothing), relaxations::Vector{Relaxation} = Relaxation[],
         @nospecialize(least_violation = nothing), @nospecialize(last_feasible = nothing), capped::Int = 0)
     x = collect(Float64, x)
-    names = _names(s.param, length(x))
+    names = _parameter_names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
     atb = names[side .!= 0]
     outcome = _outcome(reason, constraints, atb)

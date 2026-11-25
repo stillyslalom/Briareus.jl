@@ -138,7 +138,7 @@ as `keepout` to the objectives, by itself or in a tuple with other keep-outs; th
 objectives then add
 `weight × Σᵢ max(0, minimum − cᵢ)²` ([`keepout_penalty`](@ref)).
 """
-struct HardwareKeepOut
+struct HardwareKeepOut <: AbstractKeepOut
     names::Vector{Symbol}
     target::Target
     parts::Set{Int}                      # the parts' components
@@ -610,7 +610,7 @@ quantity is a surrogate checked against `talis_check` in this package (see the
 research notes), not against the facility tool. Pass it as `keepout` to the objectives,
 which add `weight × Σᵢ max(0, minimum − mᵢ)²` ([`keepout_penalty`](@ref)).
 """
-struct CaptureKeepIn
+struct CaptureKeepIn <: AbstractKeepOut
     names::Vector{Symbol}
     target::Target
     comps::Set{Int}                              # the parts' components
@@ -719,7 +719,7 @@ rule is the margin `max_incidence − incidence` in degrees, held at or above `m
 quantity is a surrogate checked against `talis_check` in this package (see the research
 notes), not against the facility tool.
 """
-struct IncidenceRule
+struct IncidenceRule <: AbstractKeepOut
     names::Vector{Symbol}
     target::Target
     comps::Set{Int}
@@ -852,7 +852,7 @@ scope of this quantity. The defaults are `talis_check`'s; the quantity is a surr
 checked against `talis_check` in this package (see the research notes), not against the
 facility tool.
 """
-struct Omega1KeepOut{O,B}
+struct Omega1KeepOut{O,B} <: AbstractKeepOut
     names::Vector{Symbol}
     target::Target
     tris::Vector{NTuple{3,Vec3}}

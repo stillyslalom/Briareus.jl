@@ -187,7 +187,7 @@ one pulse shape for them and a multiplier per phase. The keys of the scales, `ke
 pointing at `x[1:n]` with the power of each phase, multiplied by the scale of the group
 in a scaled phase. Generic in the number type.
 """
-struct PhasedPointing{P,K}
+struct PhasedPointing{P,K} <: AbstractParameterization
     pointing::P
     n::Int                                          # parameters of `pointing`
     phases::Vector{Symbol}
@@ -245,7 +245,7 @@ Names of the parameters of a `PhasedPointing`. The names of the pointing come fi
 (`"x[i]"` for a pointing without names), then `"<key>.power_scale.<phase>"` per scale.
 """
 parameter_names(p::PhasedPointing) =
-    vcat(_inner_names(p.pointing, p.n), [string(k, ".power_scale.", ph) for (k, ph) in p.keys])
+    vcat(_parameter_names(p.pointing, p.n), [string(k, ".power_scale.", ph) for (k, ph) in p.keys])
 
 """
     initial_parameters(p::PhasedPointing) -> Vector{Float64}

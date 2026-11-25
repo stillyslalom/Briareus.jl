@@ -238,5 +238,5 @@ end
     # infinite and collapsed boxes, and names of a parameterization without parameter_names
     @test Briareus._bound_side.([0.0, 1.0, 5.0, 2.0], [0.0, 0.0, 0.0, 2.0], [Inf, Inf, 5.0, 2.0]) ==
           [-1, 0, 1, 0]
-    @test Briareus._names(_Shift(p, x0), 2) == ["x[1]", "x[2]"]
+    @test Briareus._parameter_names(_Shift(p, x0), 2) == ["x[1]", "x[2]"]
 end

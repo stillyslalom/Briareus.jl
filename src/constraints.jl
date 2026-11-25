@@ -891,9 +891,9 @@ end
 
 A floor on the worst-case clearance (mm) of each beam from a keep-out: the
 [`Constraint`](@ref) `keepout_clearance(keepout, ev) .≥ minimum`, one component per beam
-of the evaluation, labeled by the beam name. The keep-out is any with a
-[`keepout_clearance`](@ref) method and a `minimum` field: an [`ApertureKeepOut`](@ref),
-a [`SphereKeepOut`](@ref), a [`HardwareKeepOut`](@ref). A beam the keep-out does not
+of the evaluation, labeled by the beam name. The keep-out is any
+[`AbstractKeepOut`](@ref), such as an [`ApertureKeepOut`](@ref), a
+[`SphereKeepOut`](@ref) or a [`HardwareKeepOut`](@ref). A beam the keep-out does not
 apply to (clearance `Inf`) gives a component that is always met; a clearance of `-Inf` or
 `NaN` throws an `ArgumentError` naming the keep-out and the beam, as in
 [`keepout_penalty`](@ref). The `weight` of the keep-out is not used: the constraint
@@ -932,10 +932,8 @@ aims, so a keep-out that does not read the beam power (an `ApertureKeepOut` at a
 keep-out at an absolute `intensity` widens with the power, and the brightest phase sets the
 clearance.
 """
-function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale::Real = 1.0,
+function clearance_floor(keepout::AbstractKeepOut; minimum::Union{Nothing,Real} = nothing, scale::Real = 1.0,
                          name = :clearance)
-    hasmethod(keepout_clearance, Tuple{typeof(keepout),Vector{Beam{Float64}}}) ||
-        throw(ArgumentError("$(typeof(keepout)) has no keepout_clearance method"))
     lim = minimum === nothing ? keepout.minimum : minimum
     return Constraint(name, _ClearanceValue(keepout); lower = lim, scale, labels = _beam_names)
 end

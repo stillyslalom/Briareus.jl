@@ -54,7 +54,7 @@ export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone
        FoilIrradiance
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
-       ApertureKeepOut, aperture_clearance, SphereKeepOut, sphere_clearance,
+       AbstractKeepOut, ApertureKeepOut, aperture_clearance, SphereKeepOut, sphere_clearance,
        keepout_clearance, keepout_penalty, direct_fraction, HardwareKeepOut, hardware_clearance,
        CaptureKeepIn, capture_margin, IncidenceRule, incidence_angle, Omega1KeepOut, omega1_clearance,
        beam_component_power, violations, min_clearance, write_clearance_csv,
@@ -99,7 +99,7 @@ export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_c
        mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area,
        AbstractDanteChannel, DanteResponse, GrazingMirror, dante1_responses, xrd_sensitivity, dante_unfold,
        sentinel
-export GroupPointing, nparams, parameter_names, initial_parameters, parameters, apply, bounds,
+export AbstractParameterization, GroupPointing, nparams, parameter_names, initial_parameters, parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
        flux_moments, mean_flux, symmetry_objective, irradiance_objective, face_flux, face_mean_flux,

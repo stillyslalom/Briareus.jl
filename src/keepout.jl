@@ -109,7 +109,7 @@ be confirmed with `clearance`, which also accounts for wings and power on hardwa
 keep-out is passed as `keepout` to `symmetry_objective` or `asymmetry_objective`, which
 then add `weight × Σᵢ max(0, minimum − cᵢ)²`.
 """
-struct ApertureKeepOut
+struct ApertureKeepOut <: AbstractKeepOut
     names::Vector{Symbol}
     centers::Vector{Vec3}
     rims::Vector{Vector{_RimPiece}}
@@ -721,7 +721,7 @@ The deposition penalty `direct` (the squared fraction of power on the capsule) v
 as the spot edge starts to clip, so it cannot hold a margin. This keep-out serves when
 the capsule must stay clear, and a design is confirmed with `clearance` on the capsule.
 """
-struct SphereKeepOut
+struct SphereKeepOut <: AbstractKeepOut
     names::Vector{Symbol}
     centers::Vector{Vec3}
     radii::Vector{Float64}

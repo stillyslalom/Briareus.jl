@@ -39,7 +39,7 @@ inner = Set(b.quad for b in quads if b.group in (:inner23, :inner30))
 outers_only = HeldParameters(pointing, n -> first(split(n, '.')) in inner)
 ```
 """
-struct HeldParameters{P}
+struct HeldParameters{P} <: AbstractParameterization
     inner::P
     values::Vector{Float64}
     free::Vector{Int}
@@ -48,7 +48,7 @@ end
 function HeldParameters(p, held; values = initial_parameters(p))
     v = collect(Float64, values)
     n = length(v)
-    hasmethod(nparams, Tuple{typeof(p)}) && nparams(p) != n &&
+    p isa AbstractParameterization && nparams(p) != n &&
         throw(DimensionMismatch("$(length(v)) values for $(nparams(p)) parameters"))
     mask = _held_mask(p, held, n)
     return HeldParameters(p, v, findall(!, mask))
@@ -82,7 +82,7 @@ _held_mask(p, held, n) = Bool[held(nm)::Bool for nm in parameter_names(p)]
 nparams(h::HeldParameters) = length(h.free)
 
 "Names of the free parameters of a `HeldParameters` (those of its inner parameterization)."
-parameter_names(h::HeldParameters) = _inner_names(h.inner, length(h.values))[h.free]
+parameter_names(h::HeldParameters) = _parameter_names(h.inner, length(h.values))[h.free]
 
 """
     initial_parameters(h::HeldParameters) -> Vector{Float64}
@@ -157,7 +157,7 @@ facility limit sets them; with `scale_max = 1`, each group stays at or below the
 `power_scale` of its key ([`parameters`](@ref)), and a [`subset`](@ref) of a scenario
 contains the scales of the groups that still have a beam.
 """
-struct PowerScales{P,K}
+struct PowerScales{P,K} <: AbstractParameterization
     inner::P
     n::Int                 # parameters of `inner`
     keys::Vector{K}        # group keys, in order of first appearance
@@ -185,12 +185,8 @@ Returns the names of the parameters of a `PowerScales`. These are the names of t
 parameterization, or `"x[i]"` for one without names, then `"<key>.power_scale"`.
 """
 parameter_names(ps::PowerScales) =
-    vcat(_inner_names(ps.inner, ps.n), [string(k, ".power_scale") for k in ps.keys])
+    vcat(_parameter_names(ps.inner, ps.n), [string(k, ".power_scale") for k in ps.keys])
 
-# Returns the parameter names of `p`, which has `n` parameters, or "x[i]" when `p` has no
-# `parameter_names` method.
-_inner_names(p, n) = hasmethod(parameter_names, Tuple{typeof(p)}) ?
-                     collect(String, parameter_names(p)) : ["x[$i]" for i in 1:n]
 
 """
     initial_parameters(ps::PowerScales) -> Vector{Float64}
@@ -315,7 +311,7 @@ function _named_values(h::HeldParameters, kv)
     pos[h.free] = eachindex(h.free)
     out = Pair{Int,Any}[]
     for (i, v) in _named_values(h.inner, kv)
-        pos[i] == 0 && throw(ArgumentError("parameter $(_inner_names(h.inner, length(h.values))[i]) is held " *
+        pos[i] == 0 && throw(ArgumentError("parameter $(_parameter_names(h.inner, length(h.values))[i]) is held " *
                                            "(at $(h.values[i]))"))
         push!(out, pos[i] => v)
     end
@@ -330,8 +326,8 @@ _named_values(p, kv) = isempty(kv) ? Pair{Int,Any}[] :
 # kept parameters, matched by name, keep their values and stay held or free as they were.
 function _subset_param(h::HeldParameters, keep)
     inner = _subset_param(h.inner, keep)
-    old = _inner_names(h.inner, length(h.values))
-    new = _inner_names(inner, length(initial_parameters(inner)))
+    old = _parameter_names(h.inner, length(h.values))
+    new = _parameter_names(inner, length(initial_parameters(inner)))
     idx = [something(findfirst(==(n), old), 0) for n in new]
     any(iszero, idx) && throw(ArgumentError("the subset's parameters are not among the parameterization's"))
     isfree = falses(length(h.values))

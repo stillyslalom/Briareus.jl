@@ -35,7 +35,7 @@ zero. The other fields stay absolute.
 ForwardDiff duals), so the parameterization can be used with [`Scenario`](@ref),
 [`optimize_pointing`](@ref) and [`subset`](@ref) in the same way as a `GroupPointing`.
 """
-struct FramePointing{K}
+struct FramePointing{K} <: AbstractParameterization
     template::Vector{Beam{Float64}}
     keys::Vector{K}
     members::Vector{Vector{Int}}
