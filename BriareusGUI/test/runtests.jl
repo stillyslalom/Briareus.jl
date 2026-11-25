@@ -50,6 +50,7 @@ closed_design(ts) = (cs = Controllers._closed_cavities(ts); !isempty(cs) && all(
     include("test_time_unconverted.jl") # drive histories and retunes with 1ω, 2ω light (no GL)
     include("test_diagnostics.jl")      # diagnostic definitions, their list, folders and sessions (no GL)
     include("test_units.jl")            # quads as units, facilities, instruments, pulse shapes, the history export (no GL)
+    include("test_dirty.jl")            # the window's dirty domains, partial against full refreshes (no window)
     include("test_app.jl")              # the `briareus` command: shortcuts, script, splash (no GL)
     include("test_canvas.jl")           # 3D and map canvases (offscreen GL)
     include("test_triad.jl")            # the edits and handles of the placement triad (offscreen GL)

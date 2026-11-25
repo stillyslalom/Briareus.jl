@@ -110,7 +110,7 @@ end
 
 # Run a callback body on the current shell, reporting errors in the status line
 # instead of letting them escape into Qt.
-function _with_shell(f)
+function _with_shell(f, dirty::UInt16 = _DIRTY_ALL)
     sh = _SHELL[]
     sh === nothing && return nothing
     try
@@ -119,9 +119,13 @@ function _with_shell(f)
         sh.sess.status[] = "error: " * Controllers._errmsg(err)
         @error "BriareusGUI callback failed" exception = (err, catch_backtrace())
     end
-    sh.dirty[] = true
+    _mark!(sh.dirty, dirty)
     return nothing
 end
+
+# The mask of a callback that only sets observables of the session: each observable marks
+# the domains that show it (`_dirty_sources`), and the callback marks the edit.
+const _DIRTY_OBSERVED = _dirty_mask()
 
 # Returns 2 (close the window), or the canvases to redraw as bits: 1 the 3D view or the
 # map, 4 the time chart, 8 the sweep chart, 16 the Diagnostics tab's chart and image.
@@ -160,10 +164,10 @@ function br_tick()
     end
     sess = sh.sess
     # After any action, note the design for undo and then show the new state.
-    if sh.dirty[]
-        sh.dirty[] = false
+    mask = _take_dirty!(sh.dirty)
+    if mask != _DIRTY_NONE
         record!(sess)
-        _refresh!(sh)
+        _refresh!(sh, mask)
         _LAST_REFRESH[] = time()
     elseif (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
             sess.talis.running[] || sess.time.running[] || sess.sweep.running[] ||
@@ -325,7 +329,7 @@ function br_node_include(id, on)
         isempty(comps) || include_components!(sess, comps, Bool(on))
     end
 end
-br_toggle_expand(id) = _with_shell(sh -> toggle_expanded!(sh.sess.view, String(id)))
+br_toggle_expand(id) = _with_shell(sh -> toggle_expanded!(sh.sess.view, String(id)), _DIRTY_OBSERVED)
 function br_tree_on(id, on)
     _with_shell() do sh
         sess = sh.sess
@@ -807,7 +811,7 @@ function br_part_role(index)
             p = i === nothing ? ts.parts[][something(part_index(ts, name), idx[1])] : ts.parts[][i]
             select!(sh.sess.view, "part:" * String(p.name))
             sh.sess.status[] = "$(p.name): " * lowercase(PART_ROLE_LABELS[part_role(p)])
-            sh.dirty[] = true
+            _mark!(sh.dirty)
         end
         if set_part_role!(ts, idx[1], role; done)
             name in ts.fitting[] && (sh.sess.status[] = "$name: fitting the capsule's sphere…")
@@ -825,7 +829,7 @@ function br_piece_role(index)
         role = PIECE_ROLES[Int(index)+1]
         if set_piece_role!(sh.sess.target, name, role)
             sh.sess.status[] = "$name: " * lowercase(PIECE_ROLE_LABELS[role])
-            sh.dirty[] = true
+            _mark!(sh.dirty)
         else
             sh.sess.status[] = sh.sess.target.error[]
         end
@@ -1294,9 +1298,9 @@ function br_retune(table, out, by, cap, stay, on, target, level, load)
     end
 end
 # Time panel
-br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)))
+br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)), _DIRTY_OBSERVED)
 # A click on a beam-table header sorts the display of the rows by that column.
-br_sort_beams(key) = _with_shell(sh -> sort_beam_rows!(sh.sess.view, _sym(key)))
+br_sort_beams(key) = _with_shell(sh -> sort_beam_rows!(sh.sess.view, _sym(key)), _DIRTY_OBSERVED)
 br_time_pulses(url) = _with_shell(sh -> load_pulses!(sh.sess, _url_to_path(String(url))))
 # A pulse table's cone or quad columns as powers per "quad" or per "beam".
 br_time_unit(unit) = _with_shell(sh -> set_pulse_unit!(sh.sess, _sym(unit)))
@@ -1319,8 +1323,8 @@ end
 br_time_run() = _with_shell(sh -> start_history!(sh.sess))
 br_time_checks() = _with_shell(sh -> start_irradiance!(sh.sess))
 br_time_cancel() = _with_shell(sh -> cancel_history!(sh.sess))
-br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)))
-br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN))
+br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)), _DIRTY_OBSERVED)
+br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN), _DIRTY_OBSERVED)
 br_time_diagnostic(id, on) = _with_shell(sh -> set_diagnostic!(sh.sess, String(id), Bool(on)))
 # Record an instrument of the Diagnostics tab's list (its default configuration), or stop.
 br_diag_record(instrument, on) = _with_shell(sh -> Controllers.set_instrument!(sh.sess, String(instrument), Bool(on)))
@@ -1413,21 +1417,21 @@ br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(S
 br_cancel_all() = _with_shell(sh -> (cancel_optimize!(sh.sess); cancel_clearance!(sh.sess);
                                      cancel_talis!(sh.sess); cancel_sweep!(sh.sess)))
 # Viewer
-br_set_color(mode) = _with_shell(sh -> set_color!(sh.sess, _sym(mode)))
-br_beam_style(s) = _with_shell(sh -> (s = _sym(s); s in BEAM_STYLES && Controllers._assign!(sh.sess.view.beams, s)))
+br_set_color(mode) = _with_shell(sh -> set_color!(sh.sess, _sym(mode)), _DIRTY_OBSERVED)
+br_beam_style(s) = _with_shell(sh -> (s = _sym(s); s in BEAM_STYLES && Controllers._assign!(sh.sess.view.beams, s)), _DIRTY_OBSERVED)
 br_beam_color(s) = _with_shell(sh -> (s = _sym(s); s in BEAM_COLORINGS &&
                                                    Controllers._assign!(sh.sess.view.beam_color, s)))
 br_beam_length(text) = _with_shell(sh -> Controllers._assign!(sh.sess.view.beam_length,
                                                               isempty(strip(string(text))) ? 0.0 :
                                                               Controllers._parse_number(string(text), "the beam length";
                                                                                         nonnegative = true)))
-br_show_off(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.show_off, Bool(on)))
-br_set_cutaway(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.cutaway, Bool(on)))
+br_show_off(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.show_off, Bool(on)), _DIRTY_OBSERVED)
+br_set_cutaway(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.cutaway, Bool(on)), _DIRTY_OBSERVED)
 # Cut parameters (the Cutaway button's right-click menu); any change turns the cut on.
 br_cut_width(w) = _with_shell(sh -> (set_cut!(sh.sess.view; width = Float64(w), kind = :sector);
-                                     Controllers._assign!(sh.sess.view.cutaway, true)))
+                                     Controllers._assign!(sh.sess.view.cutaway, true)), _DIRTY_OBSERVED)
 br_cut_azimuth(a) = _with_shell(sh -> (set_cut!(sh.sess.view; azimuth = Float64(a), kind = :sector);
-                                       Controllers._assign!(sh.sess.view.cutaway, true)))
+                                       Controllers._assign!(sh.sess.view.cutaway, true)), _DIRTY_OBSERVED)
 # Center the cut on the side the 3D view looks from.
 function br_cut_toward_view()
     _with_shell() do sh
@@ -1442,9 +1446,9 @@ function br_cut_toward_view()
 end
 # The cut's kind ("sector" or "plane") and the sector's axis ("x", "y", "z").
 br_cut_kind(k) = _with_shell(sh -> (set_cut!(sh.sess.view; kind = _sym(k));
-                                    Controllers._assign!(sh.sess.view.cutaway, true)))
+                                    Controllers._assign!(sh.sess.view.cutaway, true)), _DIRTY_OBSERVED)
 br_cut_axis(a) = _with_shell(sh -> (set_cut!(sh.sess.view; axis = _sym(a), kind = :sector);
-                                    Controllers._assign!(sh.sess.view.cutaway, true)))
+                                    Controllers._assign!(sh.sess.view.cutaway, true)), _DIRTY_OBSERVED)
 # The bounds of the sector along its axis, as text; empty when unbounded.
 function br_cut_range(lo, hi)
     _with_shell() do sh
@@ -1475,7 +1479,7 @@ function br_cut_plane(which)
     end
 end
 br_cut_offset(x) = _with_shell(sh -> (set_cut_plane!(sh.sess.view; offset = Float64(x));
-                                      Controllers._assign!(sh.sess.view.cutaway, true)))
+                                      Controllers._assign!(sh.sess.view.cutaway, true)), _DIRTY_OBSERVED)
 # The plane's normal typed as port angles θ, φ (degrees) or as a vector "x, y, z".
 br_cut_angles(theta, phi) =
     _with_shell(sh -> (set_cut_plane!(sh.sess.view; angles = (_parse(theta, "the polar angle θ"),
@@ -1523,7 +1527,7 @@ function br_cut_line(theta, phi, from_selected, rotation)
     end
 end
 br_cut_rotation(a) = _with_shell(sh -> (set_cut_line!(sh.sess.view; rotation = Float64(a));
-                                        Controllers._assign!(sh.sess.view.cutaway, true)))
+                                        Controllers._assign!(sh.sess.view.cutaway, true)), _DIRTY_OBSERVED)
 function br_cut_component(name, on)
     _with_shell() do sh
         v = sh.sess.view

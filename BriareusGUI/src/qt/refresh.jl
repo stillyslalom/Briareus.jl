@@ -31,7 +31,7 @@ mutable struct BriareusShell
     rows::Dict{Symbol,Vector}
     models::Dict{Symbol,JuliaItemModel}
     queue::Channel{Any}
-    dirty::Base.RefValue{Bool}
+    dirty::Base.RefValue{UInt16}                   # the domains to refresh (dirty.jl)
     shown::Dict{String,Any}
     figure::Any                                    # the figure on the canvas
     session_path::String                           # the session file, once saved or opened
@@ -45,7 +45,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     scene = scene_canvas(sess)
     sh = BriareusShell(sess, scene, map_canvas(sess), time_canvas(sess), sweep_canvas(sess),
                        diagnostics_canvas(sess), image_canvas(),
-                       JuliaPropertyMap(), rows, models, queue, Ref(true), Dict{String,Any}(),
+                       JuliaPropertyMap(), rows, models, queue, Ref(_DIRTY_ALL), Dict{String,Any}(),
                        scene.fig, "", nothing, Figure(size = (40, 40)))
     sh.app["canvas"] = scene.fig
     sh.app["timeCanvas"] = sh.time.fig
@@ -143,40 +143,63 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "tfError", "")
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
-    mark = (_...) -> (sh.dirty[] = true)
-    ts, bt, dr, st, rv, tl, v, tm = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
-                                    sess.talis, sess.view, sess.time
-    for obs in (sess.status, sess.meshing, sess.cad_changed, ts.mesh, ts.resolution,
-                ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
-                bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
-                dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
-                dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
-                dr.spot_radius, dr.status, dr.retune_running, dr.unconverted_ratio,
-                dr.retune_status, dr.wall_cavity,
-                st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
-                st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.uniformity, st.iterations,
-                st.max_evaluations, st.running, st.evaluations, st.iteration, st.status,
-                st.error, st.result, bt.cluster, bt.aim_frame, ts.frames, v.extra,
-                sess.sweep.subject, sess.sweep.frame, sess.sweep.axis, sess.sweep.start, sess.sweep.stop,
-                sess.sweep.step, sess.sweep.clearance, sess.sweep.los, sess.sweep.los_theta,
-                sess.sweep.los_phi, sess.sweep.los_object, sess.sweep.capture, sess.sweep.optimize,
-                sess.sweep.quality, sess.sweep.running, sess.sweep.progress, sess.sweep.status,
-                sess.sweep.error, sess.sweep.result, sess.sweep.selected,
-                rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
-                rv.running, rv.progress, rv.status, rv.error, rv.report,
-                tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
-                tl.running, tl.status, tl.error, tl.report,
-                v.color, v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway, v.display, v.selection,
-                v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted, v.cut_kind, v.cut_axis,
-                v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, v.cut_line, v.cut_rotation,
-                v.cut_azimuth, v.cut_width,
-                v.expanded, v.triads, v.beam_sort, v.camera, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
-                tm.catalog, tm.issues, tm.running,
-                tm.progress, tm.status, tm.prepulse, tm.threshold, tm.irradiance, tm.checking)
-        on(mark, obs)
+    for (obs, mask) in _dirty_sources(sess)
+        on(_ -> _mark!(sh.dirty, mask), obs)
     end
     _refresh!(sh)
     return sh
+end
+
+# The observables of a session that the window shows, each with the mask of the domains a
+# change of it marks. Most mark every domain: only an observable whose readers are known
+# marks fewer, and a new one belongs in the first list until its readers are checked
+# (the test "dirty domains" compares a refresh of the marked domains with a full one).
+function _dirty_sources(sess::DesignSession)
+    ts, bt, dr, st, rv, tl, v, tm, sw = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
+                                        sess.talis, sess.view, sess.time, sess.sweep
+    all = Any[sess.status, sess.meshing, sess.cad_changed, ts.mesh, ts.resolution,
+              ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
+              bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
+              dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
+              dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
+              dr.spot_radius, dr.status, dr.retune_running, dr.unconverted_ratio,
+              dr.retune_status, dr.wall_cavity,
+              st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
+              st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.uniformity, st.iterations,
+              st.max_evaluations, st.running, st.status,
+              st.error, st.result, bt.cluster, bt.aim_frame, ts.frames, v.extra,
+              sw.subject, sw.frame, sw.axis, sw.start, sw.stop,
+              sw.step, sw.clearance, sw.los, sw.los_theta,
+              sw.los_phi, sw.los_object, sw.capture, sw.optimize,
+              sw.quality, sw.running, sw.status,
+              sw.error, sw.result, sw.selected,
+              rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
+              rv.running, rv.status, rv.error, rv.report,
+              tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
+              tl.running, tl.status, tl.error, tl.report,
+              v.display, v.selection, v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted,
+              v.triads, tm.pulses, tm.history, tm.retune, tm.diagnostics,
+              tm.catalog, tm.issues, tm.running,
+              tm.status, tm.prepulse, tm.threshold, tm.irradiance, tm.checking]
+    # the viewer's options, which the View menu and the cut settings show
+    view = Any[v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway,
+               v.cut_kind, v.cut_axis, v.cut_range, v.cut_point, v.cut_normal, v.cut_shift,
+               v.cut_line, v.cut_rotation, v.cut_azimuth, v.cut_width, v.camera]
+    # the progress of a job: its panel, its row of the model tree and the list of running jobs
+    progress(d) = _dirty_mask(d, :tree, :view)
+    return Pair{Any,UInt16}[[o => _DIRTY_ALL for o in all];
+                            [o => _dirty_mask(:view) for o in view];
+                            # the coloring: the viewer's options, and the mode of the Time tab
+                            v.color => _dirty_mask(:view, :time, :drive);
+                            tm.cursor => _dirty_mask(:time);
+                            tm.chart => _dirty_mask(:time);
+                            v.beam_sort => _dirty_mask(:beams);
+                            v.expanded => _dirty_mask(:tree);
+                            st.evaluations => progress(:optimize);
+                            st.iteration => progress(:optimize);
+                            rv.progress => progress(:review);
+                            sw.progress => progress(:sweep);
+                            tm.progress => progress(:time)]
 end
 
 # Assign a QML property only when its value changed.
@@ -202,8 +225,15 @@ end
 _power_text(p::Real) = abs(p) < 1e-3 ? "< 0.001" : @sprintf("%.4g", p)
 _power_pct(x::Real) = isfinite(x) && abs(x) < 5e-5 ? "< 0.01%" : _pct(x)
 
-function _refresh!(sh::BriareusShell)
+"""
+    _refresh!(sh::BriareusShell, mask = _DIRTY_ALL)
+
+Set what QML shows from the session: the title, the status and the undo state, and the
+panels of the domains `mask` holds ([`DIRTY_DOMAINS`](@ref)); every panel by default.
+"""
+function _refresh!(sh::BriareusShell, mask::UInt16 = _DIRTY_ALL)
     sess = sh.sess
+    dirty(d) = _is_dirty(mask, d)
     file = isempty(sh.session_path) ? "" : basename(sh.session_path) * " | "
     _set!(sh, "title", "Briareus | " * file * target_summary(sess.target))
     _set!(sh, "sessionPath", sh.session_path)
@@ -218,32 +248,37 @@ function _refresh!(sh::BriareusShell)
     _set!(sh, "status", sess.status[])
     _set!(sh, "ortho", sh.scene.camera.ortho)             # (a session's camera sets them too)
     _set!(sh, "turntable", sh.scene.camera.turntable)
-    _refresh_view!(sh)
-    _refresh_target!(sh)
-    _refresh_beams!(sh)
-    _refresh_selection!(sh)
-    _refresh_frames!(sh)
-    _refresh_drive!(sh)
-    _refresh_time!(sh)
-    _refresh_optimize!(sh)
-    _refresh_review!(sh)
-    _refresh_sweep!(sh)
-    tree = [TreeItem(r...) for r in model_tree(sess)]
-    _set!(sh, "selectionCount", length(selected_ids(sess.view)))
-    _sync_rows!(sh.rows[:treeModel], sh.models[:treeModel], tree)
-    # the flux map (or the x-ray image) when chosen, in place of the 3D view or beside it
-    side = sess.drive.side[]
-    fig = !side && sess.drive.view[] in (:map, :image) ? sh.map.fig : sh.scene.fig
-    sidefig = side ? sh.map.fig : sh.blank
-    if fig !== sh.figure
-        sh.figure = fig
-        sh.app["canvas"] = fig
+    dirty(:view) && _refresh_view!(sh)
+    dirty(:tree) && _refresh_target!(sh)
+    dirty(:beams) && _refresh_beams!(sh)
+    dirty(:selection) && _refresh_selection!(sh)
+    dirty(:tree) && _refresh_frames!(sh)
+    dirty(:drive) && _refresh_drive!(sh)
+    dirty(:time) && _refresh_time!(sh)
+    dirty(:optimize) && _refresh_optimize!(sh)
+    dirty(:review) && _refresh_review!(sh)
+    dirty(:talis) && _refresh_talis!(sh)
+    dirty(:sweep) && _refresh_sweep!(sh)
+    if dirty(:tree)
+        tree = [TreeItem(r...) for r in model_tree(sess)]
+        _set!(sh, "selectionCount", length(selected_ids(sess.view)))
+        _sync_rows!(sh.rows[:treeModel], sh.models[:treeModel], tree)
     end
-    if sidefig !== sh.side_figure
-        sh.side_figure = sidefig
-        sh.app["sideCanvas"] = sidefig
+    if dirty(:drive)
+        # the flux map (or the x-ray image) when chosen, in place of the 3D view or beside it
+        side = sess.drive.side[]
+        fig = !side && sess.drive.view[] in (:map, :image) ? sh.map.fig : sh.scene.fig
+        sidefig = side ? sh.map.fig : sh.blank
+        if fig !== sh.figure
+            sh.figure = fig
+            sh.app["canvas"] = fig
+        end
+        if sidefig !== sh.side_figure
+            sh.side_figure = sidefig
+            sh.app["sideCanvas"] = sidefig
+        end
+        _set!(sh, "sideView", side)
     end
-    _set!(sh, "sideView", side)
     return
 end
 
@@ -887,7 +922,6 @@ function _refresh_review!(sh::BriareusShell)
     _sync_rows!(sh.rows[:compModel], sh.models[:compModel], comps)
     _sync_rows!(sh.rows[:clearModel], sh.models[:clearModel], ClearRow[_clear_row(x) for x in clearance_rows(rv)])
     _sync_rows!(sh.rows[:worstModel], sh.models[:worstModel], ClearRow[_clear_row(x) for x in worst_rows(rv)])
-    _refresh_talis!(sh)
     return
 end
 

@@ -190,6 +190,7 @@ include("canvas/map_canvas.jl")
 include("canvas/time_canvas.jl")
 include("qt/platform.jl")               # Qt and GLFW guards, glyph and canvas warm-up, the window icon
 include("qt/models.jl")                 # the rows of the item models
+include("qt/dirty.jl")                  # the dirty domains of the panels
 include("qt/refresh.jl")                # the shell, and what QML shows of the session
 include("qt/callbacks.jl")              # the tick and the functions QML calls
 include("qt/window.jl")                 # `briareus`
