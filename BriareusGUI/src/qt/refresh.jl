@@ -397,182 +397,210 @@ function _refresh_selection!(sh::BriareusShell)
     _set!(sh, "selection", id)
     _set!(sh, "selKind", String(kind))
     _set!(sh, "selKey", key)
-    t = sess.target.target[]
-    if kind in (:comp, :part, :window)
-        name = selected_component(sess)
-        # a component left out of the calculations is described from the ghost
-        g = sess.target.ghost[]
-        tc = any(c -> c.name === name || c.part === name, t.components) || g === nothing ? t : g
-        ci = findfirst(c -> c.name === name, tc.components)
-        _set!(sh, "compIncluded", !(name in sess.target.excluded[]))
-        if ci === nothing && any(c -> c.part === name, tc.components)
-            # a part made in pieces (a hohlraum part): its pieces together
-            es = elements(tc, name)
-            np = count(c -> c.part === name, tc.components)
-            _set!(sh, "compInfo", @sprintf("%d pieces · %d elements · %.4g mm²%s", np, length(es),
-                                           sum(tc.elem_area[e] for e in es; init = 0.0),
-                                           tc === t ? "" : " · not in the calculations"))
-            _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
-            _set!(sh, "selTitle", String(name))
-        elseif ci !== nothing
-            c = tc.components[ci]
-            # an entrance hole is shown with its closing lip (a split for the calculations)
-            li = findfirst(l -> is_lip(l) && shown_component(l.name) === name, tc.components)
-            es = li === nothing ? elements(tc, name) : [elements(tc, name); elements(tc, tc.components[li].name)]
-            A = sum(tc.elem_area[e] for e in es; init = 0.0)
-            what = li !== nothing ?
-                   @sprintf("closing entrance hole (rays pass; its outer lip lets x-rays escape until %.3g ns, then re-emits them)",
-                            tc.components[li].material.albedo.closure) :
-                   c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
-                   c.two_sided ? "two-sided surface" : "one-sided surface"
-            mat = c.kind === :aperture ? "" :
-                  @sprintf(" · albedo %.3g · conversion %.3g", albedo(c.material), c.material.conversion)
-            surf = c.surface === nothing ? "faceted" : "exact " * replace(string(nameof(typeof(c.surface))), "Surface" => "") * " surface"
-            _set!(sh, "compInfo", @sprintf("%s · %d elements · %.4g mm² · %s%s%s", what, length(es), A,
-                                           surf, mat, tc === t ? "" : " · not in the calculations"))
-            _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
-            _set!(sh, "selTitle", String(name))
-        end
-        # a hohlraum part's piece: its role, and those it can take (indices into PIECE_ROLES)
-        pr = name === nothing ? nothing : piece_roles(sess.target, name)
-        _set!(sh, "pieceRoleable", pr !== nothing && length(pr.roles) > 1)
-        _set!(sh, "pieceRole", pr === nothing ? 0 : findfirst(==(pr.role), PIECE_ROLES) - 1)
-        _set!(sh, "pieceRoleAllowed", [pr !== nothing && r in pr.roles for r in PIECE_ROLES])
-    end
+    kind in (:comp, :part, :window) && _refresh_component_props!(sh)
     if kind in (:part, :frame, :assembly)
-        i = part_index(sess.target, Symbol(key))
-        if i !== nothing
-            p = sess.target.parts[][i]
-            _set!(sh, "partNumber", i)
-            _set!(sh, "partKind", is_port_frame(p) ? "Port frame" : PART_KIND_LABELS[p.kind])
-            if p.kind === :frame
-                _set!(sh, "selTitle", String(p.name))
-                _set!(sh, "framePort", p.object)
-                _set!(sh, "frameTriad", p.name in sess.view.triads[])
-                _set!(sh, "frameInfo", _frame_info(sess, p))
-            elseif p.kind === :assembly
-                _set!(sh, "selTitle", String(p.name))
-                _set!(sh, "assemblyInfo", _assembly_info(sess, p))
-            end
-            _set!(sh, "partName", String(p.name))
-            src = cad_source(sess, p.file)
-            _set!(sh, "partFile", src)
-            _set!(sh, "partCopy", src != p.file)            # uses the copy saved in the session
-            _set!(sh, "partSourceExists", src != p.file && isfile(src))
-            # Its frame is that of the target or of another part.
-            frames = _part_frame_choices(sess, p)
-            _set!(sh, "frameLabels", [_frame_label(f) for f in frames])
-            _set!(sh, "partFrame", something(findfirst(==(p.frame), frames), 0) - 1)
-            # The move row moves along an axis of any frame, the part frame by default.
-            mf = _move_frame_choices(sess)
-            _set!(sh, "moveFrames", [_frame_label(f) for f in mf])
-            # (the part frame when another part is selected; kept by name as frames come and go)
-            get(sh.shown, "_movePart", nothing) === p.name || (sh.shown["_movePart"] = p.name;
-                                                                sh.shown["_moveFrameName"] = p.name)
-            _set!(sh, "moveFrame", something(findfirst(==(_move_frame(sh)), mf), 1) - 1)
-            _set!(sh, "partCoords", findfirst(==(p.coords), PART_COORDINATES) - 1)
-            _set!(sh, "partTwoSided", p.two_sided)
-            _set!(sh, "partInward", p.inward)
-            _set!(sh, "partAperture", p.aperture)
-            _set!(sh, "partRole", findfirst(==(part_role(p)), PART_ROLES) - 1)
-            _set!(sh, "partFilm", p.name in sess.drive.films[])
-            pos = Dict(part_position(p))
-            fields = is_port_frame(p) ?
-                     [FieldRow("rotation", "Roll about the axis", "°", _num(p.values[:rotation]))] :
-                     [[FieldRow(String(k), label, unit, _num(p.values[k]))
-                       for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
-                      [FieldRow(String(k), label, unit, _num(pos[k]))
-                       for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
-                      [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
-                       for (k, label, unit, _) in PART_FIELDS
-                       if !(k in (:x, :y, :z)) && !(Controllers._no_geometry(p) && k in (:albedo, :conversion, :h))]]
-            # a hohlraum's ends and closing entrance holes
-            hoh = p.kind === :hohlraum
-            _set!(sh, "partTopEnd", hoh ? Int(p.values[:top_end]) : 1)
-            _set!(sh, "partBottomEnd", hoh ? Int(p.values[:bottom_end]) : 1)
-            _set!(sh, "partLehClosure", hoh && p.values[:leh_closure] != 0)
-            _set!(sh, "partCapsuleMesh", p.kind === :sphere && p.values[:capsule_mesh] != 0)
-            hoh && p.values[:bottom_end] == 1 &&
-                insert!(fields, length(PART_SIZE_FIELDS[:hohlraum]) + 1,
-                        FieldRow("bottom_leh_radius", "Bottom LEH radius", "mm (0: the LEH radius)",
-                                 _num(p.values[:bottom_leh_radius])))
-            hoh && p.values[:leh_closure] != 0 &&
-                append!(fields, [FieldRow(String(k), label, unit, _num(p.values[k])) for (k, label, unit, _) in LEH_CLOSURE_FIELDS])
-            # The profile of a hohlraum gives the waist and end radii of a frustraum, and
-            # the breaks of a section list form a separate table (its radius field unused).
-            prof = hoh ? Int(p.values[:profile]) : 0
-            _set!(sh, "partProfile", prof)
-            _set!(sh, "partSectionZ", hoh && prof == 2 ? [_num(z) for (z, _) in p.sections] : String[])
-            _set!(sh, "partSectionR", hoh && prof == 2 ? [_num(r) for (_, r) in p.sections] : String[])
-            if hoh && prof != 0
-                k = findfirst(f -> f.key == "radius", fields)
-                if prof == 1
-                    fields[k] = FieldRow("radius", "Waist radius", "mm", fields[k].value)
-                    insert!(fields, k + 1, FieldRow("end_radius", "End radius", "mm (top)", _num(p.values[:end_radius])))
-                    insert!(fields, k + 2, FieldRow("bottom_end_radius", "Bottom end radius", "mm (0: the end radius)",
-                                                    _num(p.values[:bottom_end_radius])))
-                else
-                    deleteat!(fields, k)
-                end
-            end
-            _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
-            rows, note = _step_rows(sess, i)
-            _sync_rows!(sh.rows[:stepModel], sh.models[:stepModel], rows)
-            _set!(sh, "placementNote", note)
-        end
+        _refresh_part_props!(sh, key)
     elseif kind === :window
-        w = window_of(sess.target, Symbol(key))
-        _set!(sh, "windowNumber", w === nothing ? 0 : w[2])
+        _refresh_window_props!(sh, key)
     elseif kind in (:group, :quad, :beam)
-        bt = sess.beams
-        idx = selected_beams(sess)
-        if !isempty(idx)
-            n = beam_set_values(bt, idx)
-            bs = bt.beams[]
-            nsel = length(selected_ids(sess.view))
-            gname = split(key, '@')
-            _set!(sh, "selTitle", nsel > 1 ? "$(nsel) selections · $(n.count) beams" :
-                                  kind === :group ? "Group " * key :
-                                  kind === :quad ? "Quad " * gname[1] * (length(gname) > 1 ? " (" * gname[2] * ")" : "") :
-                                  "Beam " * key)
-            _set!(sh, "bnBy", nsel > 1 ? "set" : String(_BY_OF_KIND[kind]))
-            for (f, v) in ((:z, n.z), (:r, n.r), (:phi, n.phi), (:defocus, n.defocus),
-                           (:aim_x, n.aim_local[1]), (:aim_y, n.aim_local[2]), (:aim_z, n.aim_local[3]))
-                _set!(sh, "bn_" * String(f), _fix(v))
-            end
-            _set!(sh, "bn_power", _num(n.power))
-            _set!(sh, "bnPowerUnit", String(n.power_unit))
-            _set!(sh, "bnMirrored", n.mirrored)
-            _set!(sh, "bnOn", n.enabled === missing ? 2 : n.enabled ? 1 : 0)
-            _set!(sh, "bnMatrix", beam_matrix(sess, idx))
-            _set!(sh, "bnCount", n.count)
-            cls = unique(bt.cluster[][idx])
-            _set!(sh, "bnCluster", length(cls) == 1 ? String(cls[1]) : "")
-            _set!(sh, "clusterNames", String.(clusters(bt)))
-            # the frame the beams aim in (its axes and origin for the aim point's fields)
-            choices = _aim_choices(sess)
-            _set!(sh, "aimChoices", [_frame_label(c) for c in choices])
-            f = n.aim_frame
-            _set!(sh, "bnAimFrame", f === nothing ? -1 : something(findfirst(==(f), choices), 1) - 1)
-            _set!(sh, "bnAimFrameLabel", f === nothing ? "the chamber (the beams aim in different frames)" :
-                                         f === :tcc ? "the chamber" : _frame_label(f))
-            # NIF quads held as one beam can be split, and those held as four merged.
-            qs = unique(bs[i].quad for i in idx)
-            _set!(sh, "bnQuad", length(qs) == 1 ? qs[1] : "")
-            _set!(sh, "bnSplit", length(Controllers.quads_to_split(bt, idx)))
-            _set!(sh, "bnMerge", length(Controllers.quads_to_merge(bt, idx)))
-            b = bs[idx[1]]
-            p = beam_path(t, b)
-            land = n.count > 1 ? "" : p.component === :missed ? " · misses the target" :
-                   " · axis lands on " * _in_text(p.component)
-            spot = @sprintf("spot %.3g × %.3g mm (order %.3g), f/%.3g", b.spot.a, b.spot.b,
-                            b.spot.order, b.fnumber)
-            θ, φ = port_angles(b)
-            angles = n.count == 1 ? @sprintf("port θ %.2f°, φ %.2f°", θ, φ) : ""
-            _set!(sh, "bnInfo", join(filter(!isempty, [@sprintf("%d beam%s", n.count, n.count == 1 ? "" : "s"),
-                                                        angles, spot]), " · ") * land)
+        _refresh_beam_props!(sh, kind, key)
+    end
+    return
+end
+
+# The selected component, part or window as a component: what it is, its elements and area,
+# its display mode, and the role of a piece of a hohlraum part.
+function _refresh_component_props!(sh::BriareusShell)
+    sess = sh.sess
+    t = sess.target.target[]
+    name = selected_component(sess)
+    # a component left out of the calculations is described from the ghost
+    g = sess.target.ghost[]
+    tc = any(c -> c.name === name || c.part === name, t.components) || g === nothing ? t : g
+    ci = findfirst(c -> c.name === name, tc.components)
+    _set!(sh, "compIncluded", !(name in sess.target.excluded[]))
+    if ci === nothing && any(c -> c.part === name, tc.components)
+        # a part made in pieces (a hohlraum part): its pieces together
+        es = elements(tc, name)
+        np = count(c -> c.part === name, tc.components)
+        _set!(sh, "compInfo", @sprintf("%d pieces · %d elements · %.4g mm²%s", np, length(es),
+                                       sum(tc.elem_area[e] for e in es; init = 0.0),
+                                       tc === t ? "" : " · not in the calculations"))
+        _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
+        _set!(sh, "selTitle", String(name))
+    elseif ci !== nothing
+        c = tc.components[ci]
+        # an entrance hole is shown with its closing lip (a split for the calculations)
+        li = findfirst(l -> is_lip(l) && shown_component(l.name) === name, tc.components)
+        es = li === nothing ? elements(tc, name) : [elements(tc, name); elements(tc, tc.components[li].name)]
+        A = sum(tc.elem_area[e] for e in es; init = 0.0)
+        what = li !== nothing ?
+               @sprintf("closing entrance hole (rays pass; its outer lip lets x-rays escape until %.3g ns, then re-emits them)",
+                        tc.components[li].material.albedo.closure) :
+               c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
+               c.two_sided ? "two-sided surface" : "one-sided surface"
+        mat = c.kind === :aperture ? "" :
+              @sprintf(" · albedo %.3g · conversion %.3g", albedo(c.material), c.material.conversion)
+        surf = c.surface === nothing ? "faceted" : "exact " * replace(string(nameof(typeof(c.surface))), "Surface" => "") * " surface"
+        _set!(sh, "compInfo", @sprintf("%s · %d elements · %.4g mm² · %s%s%s", what, length(es), A,
+                                       surf, mat, tc === t ? "" : " · not in the calculations"))
+        _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
+        _set!(sh, "selTitle", String(name))
+    end
+    # a hohlraum part's piece: its role, and those it can take (indices into PIECE_ROLES)
+    pr = name === nothing ? nothing : piece_roles(sess.target, name)
+    _set!(sh, "pieceRoleable", pr !== nothing && length(pr.roles) > 1)
+    _set!(sh, "pieceRole", pr === nothing ? 0 : findfirst(==(pr.role), PIECE_ROLES) - 1)
+    _set!(sh, "pieceRoleAllowed", [pr !== nothing && r in pr.roles for r in PIECE_ROLES])
+    return
+end
+
+# The selected part, frame or assembly `key`: its kind, name and file, its frame and the
+# frames of the move row, its flags and role, its fields, and its placement steps.
+function _refresh_part_props!(sh::BriareusShell, key)
+    sess = sh.sess
+    i = part_index(sess.target, Symbol(key))
+    i === nothing && return
+    p = sess.target.parts[][i]
+    _set!(sh, "partNumber", i)
+    _set!(sh, "partKind", is_port_frame(p) ? "Port frame" : PART_KIND_LABELS[p.kind])
+    if p.kind === :frame
+        _set!(sh, "selTitle", String(p.name))
+        _set!(sh, "framePort", p.object)
+        _set!(sh, "frameTriad", p.name in sess.view.triads[])
+        _set!(sh, "frameInfo", _frame_info(sess, p))
+    elseif p.kind === :assembly
+        _set!(sh, "selTitle", String(p.name))
+        _set!(sh, "assemblyInfo", _assembly_info(sess, p))
+    end
+    _set!(sh, "partName", String(p.name))
+    src = cad_source(sess, p.file)
+    _set!(sh, "partFile", src)
+    _set!(sh, "partCopy", src != p.file)            # uses the copy saved in the session
+    _set!(sh, "partSourceExists", src != p.file && isfile(src))
+    # Its frame is that of the target or of another part.
+    frames = _part_frame_choices(sess, p)
+    _set!(sh, "frameLabels", [_frame_label(f) for f in frames])
+    _set!(sh, "partFrame", something(findfirst(==(p.frame), frames), 0) - 1)
+    # The move row moves along an axis of any frame, the part frame by default.
+    mf = _move_frame_choices(sess)
+    _set!(sh, "moveFrames", [_frame_label(f) for f in mf])
+    # (the part frame when another part is selected; kept by name as frames come and go)
+    get(sh.shown, "_movePart", nothing) === p.name || (sh.shown["_movePart"] = p.name;
+                                                        sh.shown["_moveFrameName"] = p.name)
+    _set!(sh, "moveFrame", something(findfirst(==(_move_frame(sh)), mf), 1) - 1)
+    _set!(sh, "partCoords", findfirst(==(p.coords), PART_COORDINATES) - 1)
+    _set!(sh, "partTwoSided", p.two_sided)
+    _set!(sh, "partInward", p.inward)
+    _set!(sh, "partAperture", p.aperture)
+    _set!(sh, "partRole", findfirst(==(part_role(p)), PART_ROLES) - 1)
+    _set!(sh, "partFilm", p.name in sess.drive.films[])
+    pos = Dict(part_position(p))
+    fields = is_port_frame(p) ?
+             [FieldRow("rotation", "Roll about the axis", "°", _num(p.values[:rotation]))] :
+             [[FieldRow(String(k), label, unit, _num(p.values[k]))
+               for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
+              [FieldRow(String(k), label, unit, _num(pos[k]))
+               for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
+              [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
+               for (k, label, unit, _) in PART_FIELDS
+               if !(k in (:x, :y, :z)) && !(Controllers._no_geometry(p) && k in (:albedo, :conversion, :h))]]
+    # a hohlraum's ends and closing entrance holes
+    hoh = p.kind === :hohlraum
+    _set!(sh, "partTopEnd", hoh ? Int(p.values[:top_end]) : 1)
+    _set!(sh, "partBottomEnd", hoh ? Int(p.values[:bottom_end]) : 1)
+    _set!(sh, "partLehClosure", hoh && p.values[:leh_closure] != 0)
+    _set!(sh, "partCapsuleMesh", p.kind === :sphere && p.values[:capsule_mesh] != 0)
+    hoh && p.values[:bottom_end] == 1 &&
+        insert!(fields, length(PART_SIZE_FIELDS[:hohlraum]) + 1,
+                FieldRow("bottom_leh_radius", "Bottom LEH radius", "mm (0: the LEH radius)",
+                         _num(p.values[:bottom_leh_radius])))
+    hoh && p.values[:leh_closure] != 0 &&
+        append!(fields, [FieldRow(String(k), label, unit, _num(p.values[k])) for (k, label, unit, _) in LEH_CLOSURE_FIELDS])
+    # The profile of a hohlraum gives the waist and end radii of a frustraum, and
+    # the breaks of a section list form a separate table (its radius field unused).
+    prof = hoh ? Int(p.values[:profile]) : 0
+    _set!(sh, "partProfile", prof)
+    _set!(sh, "partSectionZ", hoh && prof == 2 ? [_num(z) for (z, _) in p.sections] : String[])
+    _set!(sh, "partSectionR", hoh && prof == 2 ? [_num(r) for (_, r) in p.sections] : String[])
+    if hoh && prof != 0
+        k = findfirst(f -> f.key == "radius", fields)
+        if prof == 1
+            fields[k] = FieldRow("radius", "Waist radius", "mm", fields[k].value)
+            insert!(fields, k + 1, FieldRow("end_radius", "End radius", "mm (top)", _num(p.values[:end_radius])))
+            insert!(fields, k + 2, FieldRow("bottom_end_radius", "Bottom end radius", "mm (0: the end radius)",
+                                            _num(p.values[:bottom_end_radius])))
+        else
+            deleteat!(fields, k)
         end
     end
+    _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
+    rows, note = _step_rows(sess, i)
+    _sync_rows!(sh.rows[:stepModel], sh.models[:stepModel], rows)
+    _set!(sh, "placementNote", note)
+    return
+end
+
+# The selected window `key`: its number among the windows of its hohlraum part.
+function _refresh_window_props!(sh::BriareusShell, key)
+    sess = sh.sess
+    w = window_of(sess.target, Symbol(key))
+    _set!(sh, "windowNumber", w === nothing ? 0 : w[2])
+    return
+end
+
+# The selected beams (a group, a quad, a beam, or several of them): their shared values,
+# their aim frame, the quads to split or merge, and where the first beam lands.
+function _refresh_beam_props!(sh::BriareusShell, kind::Symbol, key)
+    sess = sh.sess
+    t = sess.target.target[]
+    bt = sess.beams
+    idx = selected_beams(sess)
+    isempty(idx) && return
+    n = beam_set_values(bt, idx)
+    bs = bt.beams[]
+    nsel = length(selected_ids(sess.view))
+    gname = split(key, '@')
+    _set!(sh, "selTitle", nsel > 1 ? "$(nsel) selections · $(n.count) beams" :
+                          kind === :group ? "Group " * key :
+                          kind === :quad ? "Quad " * gname[1] * (length(gname) > 1 ? " (" * gname[2] * ")" : "") :
+                          "Beam " * key)
+    _set!(sh, "bnBy", nsel > 1 ? "set" : String(_BY_OF_KIND[kind]))
+    for (f, v) in ((:z, n.z), (:r, n.r), (:phi, n.phi), (:defocus, n.defocus),
+                   (:aim_x, n.aim_local[1]), (:aim_y, n.aim_local[2]), (:aim_z, n.aim_local[3]))
+        _set!(sh, "bn_" * String(f), _fix(v))
+    end
+    _set!(sh, "bn_power", _num(n.power))
+    _set!(sh, "bnPowerUnit", String(n.power_unit))
+    _set!(sh, "bnMirrored", n.mirrored)
+    _set!(sh, "bnOn", n.enabled === missing ? 2 : n.enabled ? 1 : 0)
+    _set!(sh, "bnMatrix", beam_matrix(sess, idx))
+    _set!(sh, "bnCount", n.count)
+    cls = unique(bt.cluster[][idx])
+    _set!(sh, "bnCluster", length(cls) == 1 ? String(cls[1]) : "")
+    _set!(sh, "clusterNames", String.(clusters(bt)))
+    # the frame the beams aim in (its axes and origin for the aim point's fields)
+    choices = _aim_choices(sess)
+    _set!(sh, "aimChoices", [_frame_label(c) for c in choices])
+    f = n.aim_frame
+    _set!(sh, "bnAimFrame", f === nothing ? -1 : something(findfirst(==(f), choices), 1) - 1)
+    _set!(sh, "bnAimFrameLabel", f === nothing ? "the chamber (the beams aim in different frames)" :
+                                 f === :tcc ? "the chamber" : _frame_label(f))
+    # NIF quads held as one beam can be split, and those held as four merged.
+    qs = unique(bs[i].quad for i in idx)
+    _set!(sh, "bnQuad", length(qs) == 1 ? qs[1] : "")
+    _set!(sh, "bnSplit", length(Controllers.quads_to_split(bt, idx)))
+    _set!(sh, "bnMerge", length(Controllers.quads_to_merge(bt, idx)))
+    b = bs[idx[1]]
+    p = beam_path(t, b)
+    land = n.count > 1 ? "" : p.component === :missed ? " · misses the target" :
+           " · axis lands on " * _in_text(p.component)
+    spot = @sprintf("spot %.3g × %.3g mm (order %.3g), f/%.3g", b.spot.a, b.spot.b,
+                    b.spot.order, b.fnumber)
+    θ, φ = port_angles(b)
+    angles = n.count == 1 ? @sprintf("port θ %.2f°, φ %.2f°", θ, φ) : ""
+    _set!(sh, "bnInfo", join(filter(!isempty, [@sprintf("%d beam%s", n.count, n.count == 1 ? "" : "s"),
+                                                angles, spot]), " · ") * land)
     return
 end
 
