@@ -30,6 +30,9 @@ a 1ω clearance: the hardware point, the closest point of the footprint square, 
 beamlet, focal plane and side of the square that hold it, and the terms between the
 nominal distance and the margin ([`Omega1Approach`](@ref)). The square itself comes
 from [`omega1_contour`](@ref) for the rules, the keep-out and the application alike.
+[`omega1_reflection`](@ref) gives the specular reflection behind a 1ω management row: the
+reflected ray, the open port it threatens and the projected area that reflects toward it
+([`Omega1Reflection`](@ref)).
 [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency

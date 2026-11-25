@@ -58,16 +58,65 @@ struct TaLISRow
 end
 
 """
+    Omega1Reflection
+
+The specular 1ω reflection behind a `:management_1w` row of [`talis_check`](@ref) that
+was decided on reflection, as [`omega1_reflection`](@ref) returns it.
+
+- `beam`, `component` — as in the row
+- `beamlet_index`, `incident` — the beamlet whose reflection comes closest to an open
+  port, and its direction
+- `point`, `normal` — the centroid of the sub-triangle that reflects it, and the normal
+  there
+- `reflected` — the direction of the specular reflection
+- `port`, `port_index` — the direction to the open port nearest that reflection, and
+  its place among the open ports of the check
+- `angle` — the angle (degrees) between `reflected` and `port`
+- `spread` — the allowance (degrees) for the turn of the normal over the sub-triangle,
+  twice the spread of the normal (0 on a flat mesh)
+- `worst`, `margin` — `angle - spread` less twice the rule tolerance, and that less the
+  required angle, as in the row
+- `exposed_area` — the area (mm², projected along the beam) of the sub-triangles of the
+  item that lie in the worst-case 1ω footprint and are judged on reflection; a
+  sub-triangle that reaches the footprint anywhere counts whole
+- `offending_area` — the part of `exposed_area` on sub-triangles whose reflection comes
+  within the required angle of an open port
+
+The areas separate a reflector from a sliver: the hazard is the reflected 1ω power that
+enters another beamline, which scales with `offending_area` over the area of the
+footprint.
+"""
+struct Omega1Reflection
+    beam::String
+    component::Symbol
+    beamlet_index::Int
+    incident::Vec3
+    point::Vec3
+    normal::Vec3
+    reflected::Vec3
+    port::Vec3
+    port_index::Int
+    angle::Float64
+    spread::Float64
+    worst::Float64
+    margin::Float64
+    exposed_area::Float64
+    offending_area::Float64
+end
+
+"""
     TaLISReport
 
 Result of `talis_check`, with `rows` (one `TaLISRow` per beam, rule and component), the
-`settings` used (thresholds, error set, tolerance interpretation) and `notes` on checks
-that were not evaluated. See `violations`, `write_talis_csv`.
+`settings` used (thresholds, error set, tolerance interpretation), `notes` on checks
+that were not evaluated, and `reflections` (one [`Omega1Reflection`](@ref) per
+`:management_1w` row decided on reflection). See `violations`, `write_talis_csv`.
 """
 struct TaLISReport
     rows::Vector{TaLISRow}
     settings::NamedTuple
     notes::Vector{String}
+    reflections::Vector{Omega1Reflection}
 end
 
 # The rule tolerance is a lateral allowance tan(α)·r, with r the distance of the point
@@ -317,8 +366,9 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           curvature, ε = Float64(resolution), rtol = Float64(rtol),
           lip1 = _omega1_lipschitz(o1.c0, o1.h0, f1, lens_distance))
     out = [TaLISRow[] for _ in vb]
+    refl = [Omega1Reflection[] for _ in vb]
     Threads.@threads for bi in eachindex(vb)
-        _talis_beam!(out[bi], t, vb[bi], bls[bi], cx)
+        _talis_beam!(out[bi], refl[bi], t, vb[bi], bls[bi], cx)
     end
     rows = reduce(vcat, out; init = TaLISRow[])
     append!(rows, _talis_stay_in(t, vb, surf, Float64(stay_in), Float64(hardware_tolerance)))
@@ -346,12 +396,12 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                 level = Int(level), resolution = Float64(resolution), rtol = Float64(rtol),
                 capture = Symbol[first(g) for g in cap_idx], leh = cx.leh,
                 diagnostics = Symbol[first(g) for g in dg_idx])
-    return TaLISReport(rows, settings, notes)
+    return TaLISReport(rows, settings, notes, reduce(vcat, refl; init = Omega1Reflection[]))
 end
 
 # Per-beam checks (3ω capture, incidence and clearance; 1ω clearance, management and
 # diagnostics). `bl` contains the 1ω beamlets of the beam, or is `nothing`.
-function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
+function _talis_beam!(rows, refl, t::Target, b::Beam, bl, cx)
     aim = Vec3(b.aim)
     tol = cx.tol
     k = direction(b)
@@ -425,7 +475,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             push!(rows, TaLISRow(b.name, :clearance_1w, name, :review, m, :mm, worst, nom,
                                  cx.omega1_margin, wp,
                                  "1ω footprint does not clear: unconverted-light management required (see management_1w)"))
-            push!(rows, _talis_management(t, name, cis, b, bl, cx))
+            push!(rows, _talis_management!(refl, t, name, cis, b, bl, cx))
         end
     end
     # diagnostics to 1ω light
@@ -473,21 +523,30 @@ function _talis_incidence(t::Target, g, env, k, aim, shift, lip, res)
 end
 
 # 1ω management of an uncleared item `name` made of the components `cis`. The result is the
-# worst row of its components (status first, then margin), under the name of the item.
-function _talis_management(t::Target, name::Symbol, cis, b::Beam, bl, cx)
+# worst row of its components (status first, then margin), under the name of the item. If
+# that row was decided on reflection, its reflection is pushed to `refl`, with the areas of
+# every component of the item.
+function _talis_management!(refl, t::Target, name::Symbol, cis, b::Beam, bl, cx)
     rank(r) = r.status === :fail ? 0 : r.status === :review ? 1 : 2
-    best = nothing
+    best, bx = nothing, nothing
+    xs = Omega1Reflection[]
     for ci in cis
-        r = _talis_management(t, ci, b, bl, cx)
-        (best === nothing || (rank(r), r.margin) < (rank(best), best.margin)) && (best = r)
+        r, x = _talis_management(t, ci, b, bl, cx)
+        x === nothing || push!(xs, x)
+        (best === nothing || (rank(r), r.margin) < (rank(best), best.margin)) && ((best, bx) = (r, x))
     end
     r = best
+    bx === nothing ||
+        push!(refl, Omega1Reflection(bx.beam, name, bx.beamlet_index, bx.incident, bx.point, bx.normal,
+                                     bx.reflected, bx.port, bx.port_index, bx.angle, bx.spread, bx.worst,
+                                     bx.margin, sum(x -> x.exposed_area, xs), sum(x -> x.offending_area, xs)))
     return r.component === name ? r :
            TaLISRow(r.beam, r.rule, name, r.status, r.margin, r.unit, r.worst, r.nominal, r.required,
                     r.point, r.note)
 end
 
-# 1ω management of an uncleared component, by curvature or else by specular reflection.
+# 1ω management of an uncleared component, by curvature or else by specular reflection:
+# its row and, when the row was decided on reflection, the reflection.
 function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     c = t.components[ci]
     aim = Vec3(b.aim)
@@ -500,13 +559,13 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
         # The NIF User Guide (§5.6.2) requires a dimple half-side / radius of at least 0.25.
         if kind === :dimpled && !isfinite(half)
             return TaLISRow(b.name, :management_1w, c.name, :review, lim - rc, :mm, rc, rc, lim, aim,
-                            note * "; dimple spacing unknown: give (:dimpled, r, half_side) to check half-side/radius ≥ 0.25 (User Guide §5.6.2)")
+                            note * "; dimple spacing unknown: give (:dimpled, r, half_side) to check half-side/radius ≥ 0.25 (User Guide §5.6.2)"), nothing
         elseif kind === :dimpled && half / rc < 0.25
             return TaLISRow(b.name, :management_1w, c.name, :review, lim - rc, :mm, rc, rc, lim, aim,
                             note * @sprintf("; dimple half-side/radius %.3g < 0.25 (User Guide §5.6.2: periodicity too short)",
-                                            half / rc))
+                                            half / rc)), nothing
         end
-        return TaLISRow(b.name, :management_1w, c.name, :pass, lim - rc, :mm, rc, rc, lim, aim, note)
+        return TaLISRow(b.name, :management_1w, c.name, :pass, lim - rc, :mm, rc, rc, lim, aim, note), nothing
     end
     g = cx.geo[ci]
     αw, αn, wp = Inf, Inf, aim
@@ -517,6 +576,9 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     varying = kind === :cone || kind === :torus
     scat = (Inf, NaN, NaN, aim)                  # (limit − radius, radius, limit, point), the least
     gentle = 0.0
+    kq = direction(b)
+    exposed, offending = 0.0, 0.0
+    wit = (0, kq, kq, kq, 0, NaN, 0.0)           # beamlet, k, normal, reflection, port, angle, spread
     for (leaf, n, spread) in zip(g.leaves, g.normals, g.spreads)
         tri = (leaf[1], leaf[2], leaf[3])
         _talis_reaches(fw, tri, cx.lip1 + cx.tol.tanα, cx.omega1_margin, cx.ε) || continue
@@ -531,19 +593,28 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
             gentle = max(gentle, R1)
         end
         hitn = _talis_reaches(fn, tri, cx.lip1, 0.0, cx.ε)
-        for (kb, _, _) in bl
+        αl = Inf
+        for (j, (kb, _, _)) in enumerate(bl)
             r = kb - 2 * dot(kb, n) * n
             # a normal turned by the spread turns the reflection by twice that
-            α = minimum(acosd(clamp(dot(r, p), -1.0, 1.0)) for p in cx.ports) - 2 * spread
-            α < αw && ((αw, wp) = (α, leaf[4]))
+            raw, pj = findmin(p -> acosd(clamp(dot(r, p), -1.0, 1.0)), cx.ports)
+            α = raw - 2 * spread
+            αl = min(αl, α)
+            if α < αw
+                αw, wp = α, leaf[4]
+                wit = (j, kb, n, r, pj, raw, 2 * spread)
+            end
             hitn && (αn = min(αn, α))
         end
+        ap = abs(dot(cross(leaf[2] - leaf[1], leaf[3] - leaf[1]), kq)) / 2
+        exposed += ap
+        αl - 2 * cx.tolerance <= cx.reflection_angle && (offending += ap)
     end
     if varying && !isfinite(αw) && isfinite(scat[1])
         note = @sprintf("%s radius of curvature ≤ %.3g mm < %.3g mm over the surface in the footprint scatters 1ω",
                         kind, scat[2], scat[3])
         return TaLISRow(b.name, :management_1w, c.name, :pass, scat[1], :mm, scat[2], scat[2], scat[3],
-                        scat[4], note)
+                        scat[4], note), nothing
     end
     worst = αw - 2 * cx.tolerance
     m = worst - cx.reflection_angle
@@ -553,9 +624,29 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
            @sprintf("%s radius %.3g mm ≥ %.3g mm", kind, rc, lim)
     status = m > 0 ? :pass : kind === :unknown ? :review : :fail
     note = m > 0 ? "$desc; specular 1ω reflection clears open quads" :
-           "$desc; specular 1ω reflection within $(cx.reflection_angle)° of an open quad: TaLIS additional review, may not be allowed"
-    return TaLISRow(b.name, :management_1w, c.name, status, m, :deg, worst, αn,
-                    cx.reflection_angle, wp, note)
+           "$desc; specular 1ω reflection within $(cx.reflection_angle)° of an open quad" *
+           @sprintf(" from %.3g mm² of %.3g mm² in the footprint (projected along the beam)", offending, exposed) *
+           ": TaLIS additional review, may not be allowed"
+    row = TaLISRow(b.name, :management_1w, c.name, status, m, :deg, worst, αn,
+                   cx.reflection_angle, wp, note)
+    isfinite(αw) || return row, nothing
+    j, kb, n, r, pj, raw, sp = wit
+    return row, Omega1Reflection(b.name, c.name, j, kb, wp, n, r, cx.ports[pj], pj, raw, sp, worst, m,
+                                 exposed, offending)
+end
+
+"""
+    omega1_reflection(report::TaLISReport, row::TaLISRow) -> Union{Omega1Reflection,Nothing}
+
+The specular reflection behind a `:management_1w` row of `report`: the reflecting point,
+the incident and reflected directions, the open port that the reflection threatens and
+the projected areas in the footprint. `nothing` for a row decided on curvature and for a
+row of another rule.
+"""
+function omega1_reflection(r::TaLISReport, row::TaLISRow)
+    row.rule === :management_1w || return nothing
+    i = findfirst(x -> x.beam == row.beam && x.component === row.component, r.reflections)
+    return i === nothing ? nothing : r.reflections[i]
 end
 
 # The unsigned principal radii of curvature (smaller, larger) of a cone or torus, each the

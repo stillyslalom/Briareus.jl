@@ -149,8 +149,22 @@
     # tilted 45° about ô⊥ the reflection leaves at 90° from the beam: passes
     Rt = Rm * [cosd(45) 0 sind(45); 0 1 0; -sind(45) 0 cosd(45)]
     pt = Component(:mirror, transform(rectangle_mesh(4.0, 4.0; nu = 2, nv = 2), Rt, 8.0 * ô), gold())
-    mt = trow(talis_check(Target(pt), [bl]; capture = (), open_ports = [pq]), :management_1w, :mirror)
+    rt = talis_check(Target(pt), [bl]; capture = (), open_ports = [pq])
+    mt = trow(rt, :management_1w, :mirror)
     @test mt.status === :pass && mt.worst > 60
+    # the reflection behind each row: the ray, the port it threatens and the projected
+    # areas of the plate, which lies whole in the footprint
+    xm, xt = omega1_reflection(rm, mg), omega1_reflection(rt, mt)
+    @test xm.beam == bl.name && xm.component === :mirror && xm.beamlet_index == 1 && xm.port_index == 1
+    @test xm.incident ≈ k && xm.reflected ≈ -k && xm.port == pq && abs(dot(xm.normal, k)) ≈ 1
+    @test xm.angle ≈ α atol = 1e-6
+    @test xm.spread == 0 && xm.worst == mg.worst && xm.margin == mg.margin && xm.point == mg.point
+    @test xm.exposed_area ≈ 16 rtol = 1e-12
+    @test xm.offending_area ≈ 16 rtol = 1e-12
+    @test xt.exposed_area ≈ 16 * cosd(45) rtol = 1e-12
+    @test xt.offending_area == 0 && abs(dot(xt.reflected, k)) < 1e-12
+    @test occursin("from 16 mm² of 16 mm²", mg.note)
+    @test omega1_reflection(rm, cm) === nothing && length(rm.reflections) == 1
 
     # Curved surface reflecting toward a port: the upstream pole of a sphere in the 1ω
     # footprint reflects 1ω straight back toward the FOA. R = 6 mm (≥ 5 mm) fails the
@@ -164,6 +178,7 @@
     @test m6.status === :fail && m6.worst < 5 - 1.0
     rb4 = talis_check(Target(ball(4.0, 10.0 * ô)), [bl]; capture = (), open_ports = [-k])
     m4 = trow(rb4, :management_1w, :ball)
+    @test omega1_reflection(rb4, m4) === nothing && omega1_reflection(rb6, m6).spread > 0
     @test m4.status === :pass && m4.unit === :mm
     @test m4.margin ≈ 1.0
     # A coarse mesh of that sphere and a port on the reflection from one of its vertices:
