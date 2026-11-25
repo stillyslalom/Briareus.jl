@@ -3,140 +3,47 @@
 Aim (user, 2026-10-29): synthetic diagnostics as good as public information allows,
 and a framework that a user group extends with (non-public) details for the
 configurations of that group, without editing the package. First kind: the soft x-ray power
-diagnostics (NIF Dante 1 and 2, Sentinel, Omega Dante). Decisions 10 and 11 of
-`reference/assemblies-design.md` (whole-assembly view, collimator field of view,
-reference area, shields as parts) are this file's geometry. Remove each phase once it
+diagnostics (NIF Dante 1 and 2, Sentinel, Omega Dante). Remove each phase once it
 lands; the docstrings and research notes then hold what was built.
+
+Phases 1–4 and the first parts of phase 5 have landed and are removed: the definitions
+(TOML files, registered kinds, `extends`, CSV curves, the search path,
+`check_diagnostics`), the field of view and reference area, the public definitions in
+`data/diagnostics`, the GUI's Diagnostics tab and sessions that embed their definitions,
+the x-ray pinhole imagers in core and GUI, backlit radiography in core, named ports and a
+field of view per channel. The docs page "Diagnostic definitions" gives the schema; the
+research notes give the public values ("Dante-family hardware and geometry: what is
+public (2026-10-29)", "Public diagnostic definitions and the time-dependent Tr area",
+"The x-ray pinhole imager model and its public definitions", "Backlit radiography: the
+model and its public definitions", "Named ports and per-channel fields").
 
 ## Today
 
-- Definitions (phase 1, 2026-10-29): `src/diagnostics.jl`, the docs page "Diagnostic
-  definitions" (schema, search path, extends, CSV curves, kinds); the kind
-  `xray_power`; built-ins `nif_dante1_2021` and `nif_dante1` in `data/diagnostics`,
-  from which `dante1()` and `dante1_responses()` build (identical to the table they
-  replaced).
-- Field of view and reference area (phase 2, 2026-10-29): `DanteView(...;
-  field_of_view, center, area)`, `[view]` keys `field_of_view_mm`, `center_part`,
-  `center_mm`, `area_part`; the view through a hole is unchanged.
-- Public definitions and the time-dependent Tr area (phase 3, 2026-10-29): Dante 1 by
-  date and shot, Dante 2, Sentinel N170924, Omega Dante in `data/diagnostics`; fresnel
-  mirrors (`GrazingMirror`); `area = :open` and an area history (`area_open`,
-  `area_history_csv`). Research notes, "Public diagnostic definitions and the
-  time-dependent Tr area".
-- The GUI (phase 4, 2026-10-29): Time lists the definitions on the search path and those
-  saved with the session (a tooltip lists files, origin, problems and keys changed); each
-  ticked one is recorded in the drive history (Tr and intensity per step; a *Diagnostics*
-  chart). Diagnostics ▸ Folders… edits the saved folders and lists `check_diagnostics`.
-  Sessions (version 6) save the ticked ids and each one's resolved definition
-  (`diagnostic_table`, CSVs in the archive as `diagnostics/<sha256>.csv`); on opening, the
-  saved definition is used, one that differs from the search path's is reported
-  (`diagnostic_diff`) and ↺ switches to the search path's; the save status names definitions
-  from outside the built-ins and non-public ones.
-- X-ray pinhole imagers (phase 5, first part, 2026-10-29): `XrayImager`, kind
-  `xray_imager` (pinhole, filters, mirror, detector absorber; integrated or gated
-  recording from a history); built-ins `nif_sxi_lower`, `nif_sxi_upper`, `nif_gleh2`.
-  Research notes, "The x-ray pinhole imager model and its public definitions". The GUI
-  records ticked imagers in a drive history and shows the image at the time cursor or
-  each gate's frame (the Images row in Time).
-- Backlit radiography (phase 5, second part, 2026-11-01, core, 80d7c12): `Radiograph` and
-  `radiograph`, kind `radiography` (a backlighter's He-α line from
-  `backlighter_signal`'s source chain, through an object of closed parts with
-  materials, a pinhole or a point projection, filters and a detector; integrated or
-  gated over the emission); built-in `nif_inflight_radiography` (Rygg 2014; the values
-  that are not public left to an extending file). Research notes, "Backlit radiography:
-  the model and its public definitions". The GUI does not record it.
-- Named ports (2026-11-03): a line of sight may name a NIF diagnostic port
-  (`port = "P143-274"`, `NIF_DIAGNOSTIC_PORTS`, the User Guide's Table 5-1); the NIF
-  built-ins do, and Dante 1 moved from the papers' θ 143° to the table's 143.25°.
-- A field of view per channel (2026-11-03): a channel's `field_of_view_mm` replaces the
-  view's for its signal (one footprint per distinct field); Dante 1's multilayer channel
-  has its 12 mm (Rubery 2022, which finds it covers every NIF hohlraum).
-- Not yet: time response, uncertainty, the recording modes other than `history`,
-  channel voltages and the unfold in the GUI (its histories are gray: they need a
-  spectral history). `sentinel(dim)` constructs a view in code with Dante 1's channels;
-  `dante2()` builds `nif_dante2` (2026-11-03) with Dante 1's channels, assumed, the
-  definition holding none.
-- XRD cathodes `:Al`, `:Cr`, `:Ni` (a Henke-yield model fitted to Rubery's curves),
-  SiO₂ mirrors (Fresnel, angle and roughness scaled to Rubery Fig. 3a), the Cr/Sc
-  multilayer as Rubery's digitized curve; filters by Henke's tables.
+- Three kinds are registered: `xray_power` (recording mode `history`), `xray_imager` and
+  `radiography` (`integrated` or `gated`).
+- The GUI lists radiography definitions and does not record them.
+- Not yet: time response, uncertainty, the streaked recording mode, channel voltages and
+  the unfold in the GUI (its histories are gray: they need a spectral history).
+  `sentinel(dim)` constructs a view in code with Dante 1's channels; `dante2()` builds
+  `nif_dante2` (2026-11-03) with Dante 1's channels, assumed, the definition holding none.
 
-## Model
+## Model (open parts)
 
-1. **One TOML file per diagnostic.** TOML: comments for sources, already the session
-   format, a standard library. A file names its schema (`schema = 1`), an `id`
-   (unique, `nif_dante1`), a display `name`, a `kind`, and per value optional `source`
-   and `confidence` (shown in the GUI's tooltip). Unknown keys are errors (a typo fails
-   loudly, with the file and key).
-2. **Kinds are registered.** `kind = "xray_power"` (the Dante family) first; a kind is a
-   parser and a constructor registered in code (`register_diagnostic_kind`), so imagers
-   and other kinds plug in later without a schema change.
-3. **Built-ins are files.** The public definitions live in `data/diagnostics/*.toml`
-   and the code constructors (`dante1()`) read them; Dante 1 reproduces today's
-   channels exactly. Missing public values are absent, not guessed; a definition
-   that lacks a value a calculation needs fails with the key to supply.
-4. **Overrides by inheritance.** `extends = "nif_dante1"` takes a definition and
-   replaces what the file gives: channels by `number` (a campaign's filter set), the
-   field of view, the reference area. A user group keeps a directory of small files on
-   top of the public ones.
-5. **Measured curves by file.** Any modeled component (a cathode's sensitivity, a
-   mirror's reflectivity, a filter's transmission, a whole channel's response) can be a
-   two-column CSV (energy eV, value) given by a path relative to the TOML; a measured
-   response replaces the model, each one stated in the sources of the result.
-6. **Search path.** Built-ins, then each user directory in order, then the session
-   directory; a later definition of an `id` shadows an earlier one, with a warning naming
-   both files. Directories come from a user configuration file (platform config dir:
-   `%APPDATA%\Briareus\config.toml`, `~/Library/Application Support/Briareus`,
-   `$XDG_CONFIG_HOME/briareus`; key `diagnostics.paths`), from `BRIAREUS_DIAGNOSTICS`
-   (a path list, for batch jobs and clusters), and from calls
-   (`add_diagnostic_path(dir; save = true)`). The GUI's Diagnostics ▸ Folders… edits
-   the saved list; a shared network directory can supply a whole group.
-7. **Checking.** `check_diagnostics(dir)` reads every file, resolves `extends`, builds
-   each channel and reports errors and missing values by file and key; the GUI shows
-   the same report.
-8. **Geometry from the target.** The line of sight is a port (θ, φ) or a named port;
-   the field of view a collimator (see the research below) centered on a frame (TCC by
-   default, any part or piece frame); the reference area an aperture component, a part
-   or piece, or a number (mm²). The view rays over the field of view, occluded by all
-   included geometry (assemblies decision 10).
-9. **Recording is part of the definition from the start.** A `[recording]` table names
-   the mode: `history` (a time series per channel, Dante), `integrated` (an image or a
-   number over the shot), `gated` (frames with times, gate width, interframe time and strips),
+9. **Recording is part of the definition.** A `[recording]` table names the mode:
+   `history` (a time series per channel, Dante), `integrated` (an image or a number over
+   the shot), `gated` (frames with times, gate width, interframe time and strips),
    `streaked` (one spatial axis along a slit × time: slit position, width and
    orientation on the target, sweep window, temporal and spatial resolution). The
-   streaked mode exists from schema 1 because VISAR and SOP are of value only streaked
-   (user, 2026-10-29); a kind declares which modes it supports.
-10. **Sessions embed what they use.** A saved session (`.briar`) carries the definitions
-    its diagnostics use, with their CSVs, as it carries CAD files (user, 2026-10-29): a
-    session reproduces on any machine. On opening, an embedded definition that differs
-    from the one of the same `id` on the search path is reported (file, keys) and the
-    embedded one is used unless the user switches. Sessions then contain the group's
-    detail wherever they are sent; the GUI's Save dialog states it when a session
-    embeds a definition from outside the built-ins.
-11. **GUI.** Time ▸ Diagnostics lists the loaded definitions (built-in, user, session);
-   each ticked one is recorded in the drive history, its power, channel voltages and
-   unfolded Tr plotted; a tooltip shows the file and each value's source.
+   streaked mode is wanted because VISAR and SOP are of value only streaked (user,
+   2026-10-29); a kind declares which modes it supports.
+11. **GUI.** Each ticked definition is recorded in the drive history. Still to plot: its
+    channel voltages and unfolded Tr.
 
-## What the research sets (research notes, "Dante-family hardware and geometry: what is public (2026-10-29)")
+## What the research sets, still open (research notes, "Dante-family hardware and geometry: what is public (2026-10-29)")
 
-- **Configurations are dated.** Dante 1's channels changed in 2009, 2012–15, 2017–18 (shot
-  by shot) and October 2021; each published set becomes a separate built-in file
-  (`nif_dante1_2021`, `nif_dante1_N170924`, …) with `valid_from` / `shots`, and `nif_dante1`
-  extends the latest. A session records which one it used.
-- **Field of view per channel.** The instrument's field of view (NIF: ±30 mm, the 2004
-  design) is the default and a channel may narrow it (the multilayer channel: 12 mm;
-  done 2026-11-03).
-  With a 60 mm field the view is limited by occlusion and the target's extent.
-- **Ports from the facility table.** The line of sight is a port name resolved in the
-  facility's port table (P143-274 is θ 143.25° there; Rubery's 37° is θ 143°): adopted
-  2026-11-03, the change measured in the research notes ("Named ports and per-channel
-  fields"). Omega's diagnostic ports (H16I) are not tabulated, so `omega_dante` keeps
-  its angles.
-- **Tr's area is a setting**: `initial` (an aperture's initial area, the default and the
-  convention of Rubery 2024 and the BAH paper), `projected` (a part's projected area, as
-  Fournier 2010), `history` (an area per time), or a number.
 - **Time response per channel**: a Gaussian FWHM (≈ 400 ps for NIF) or a CSV impulse
   response, applied to the voltage histories before the unfold.
-- **Uncertainty per channel** (fraction, 1σ), for the UQ path (ROADMAP item 11).
+- **Uncertainty per channel** (fraction, 1σ), for the UQ path (ROADMAP item 14).
 - **Not public, so absent from the built-ins**: Dante 2's channels and solid angles,
   Omega Dante's standoff and solid angles, the fielded NIF collimators. The definitions
   say so in their comments; `check_diagnostics` names the keys to supply.
@@ -153,8 +60,7 @@ lands; the docstrings and research notes then hold what was built.
    a bremsstrahlung source, opacity radiographs, which need a spectrometer, image plates
    with Rosenberg's response, and the streaked mode); streaked VISAR and SOP. SOP needs optical emission and VISAR a moving reflector, neither of
    which the radiation model has: they need a hydro coupling (CompactLES, ROADMAP item
-   15) or a prescribed shock, so the streaked mode is in the schema at once and those
-   kinds come with the coupling.
+   18) or a prescribed shock, so those kinds come with the coupling.
 
    Every kind is a chain from the line of sight through the optic and the spectral
     response to the recorder (research notes,

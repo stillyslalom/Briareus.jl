@@ -1,9 +1,15 @@
 # Roadmap
 
 Open work only. Each item states where it stands, what remains and what data would settle
-it. What has been done is in the git history and in `reference/research-notes.md`, under
+it. What has been done is in the git history and in the research notes
+(`reference/notes/`; `reference/research-notes.md` lists every section by file), under
 the sections named here. Items marked *(survey)* come from the code survey of 2026-11-02;
 those under "Correctness" were read in the code, the rest are leads to confirm first.
+
+Items are grouped by theme, and an item keeps its number for as long as it is open: code
+comments, data headers and the literature reviews cite items by number. A closed item
+leaves a gap (1, 3 and 5 are closed), and a new item takes the next free number wherever
+its theme puts it (34–36 under "Re-pointing studies", 37 under "Correctness").
 
 **Priorities** (user review, 2026-11-18). First, the hohlraum physics against shot data:
 the gold bubble (item 10), CBET (item 11), then the energetics and the wall and spectral
@@ -725,9 +731,6 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     - Removing a part keeps the survivors' places when their remaining placement steps
       are relations; one left with relative steps (Offset, Rotate) keeps its placement
       fields and may move (`Controllers.remove_parts!`).
-    - The design docs keep built phases against their own rule (remove each phase once it
-      lands; `assemblies-design.md` "Today", `frames-design.md` phases 1–3 and phase 5,
-      done by the foil starter).
 23. **GUI: workflow gaps** *(survey)*.
     - Modes stop at l = 4 in the tables, weights and retune.
     - Beams: spot shape, f-number, wavelength and port are saved but not editable; aims
@@ -744,8 +747,7 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       `unit = :quad`: the rows, the 192-beam preset, the optimizer) and a per-quad power
       (the rows; a pulse table's cone and quad columns, `Controllers.PULSE_UNITS`; the
       retune's result), and a click on its beams selects it while its row is closed.
-      Left: in the core `GroupPointing`'s default stays `unit = :beam` (the window opts
-      in; `hybride_mock_pointing` uses the quad's azimuth already), and `with_pulses`,
+      Left: in the core, `with_pulses`,
       `cone_fraction_pulses` and the pulse tables are per beam (the N221204 benchmark
       fires 192 beams on them): the per-quad reading is the window's;
       a quad's four beams pointed apart ("split quads" in the pointing sense) have no
@@ -759,8 +761,6 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     structured entries (`qml/common/help.js`), never page paragraphs)*.
     - Controls outside the survey's list still without tooltips: Target, Component,
       Frames and placement-step properties, the model tree's dialogs, Look from port.
-    - The documentation's screenshots (`docs/src/assets/gui`, `dev/gui_screenshots.jl`)
-      predate the Diagnostics tab, the Help window and the menus of 2026-11-13.
 25. **GUI density and layout (user review, 2026-10-29).** The aim is Office-ribbon
     density, but not all the way, with the 3D view first. *Left:* the next pass on what
     still takes room once the user has used it. The principle is to keep frequent

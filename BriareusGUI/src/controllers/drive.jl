@@ -455,8 +455,8 @@ _observed_part(s::Scenario) = (o = _observed_parts(s); isempty(o) ? nothing : fi
 _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 
 # The cavities of the design whose view factors the drive balances separately (core
-# `RadiationModel(...; closed)` with one element set per cavity; reference/
-# assemblies-design.md, "Per-cavity balancing as built"): one per hohlraum part in the
+# `RadiationModel(...; closed)` with one element set per cavity; research notes,
+# "Per-cavity balancing"): one per hohlraum part in the
 # calculations, its closed volume (its profile about its axis, ends included) placed by
 # its frame (`_cavity_volumes`, session.jl). Which elements a cavity holds is decided on
 # the drive's target (`_cavity_elements`), and whether it is closed by rays
