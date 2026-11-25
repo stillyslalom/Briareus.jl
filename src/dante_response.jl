@@ -414,34 +414,3 @@ function dante_unfold(ch::AbstractVector{<:DanteResponse}, V::AbstractVector{<:R
             channel_temperatures = Tc, fit,
             misfit = maximum(abs(fit[c] / V[c] - 1) for c in use), solver, iterations)
 end
-
-# Solves min ‖Ax − b‖ subject to x ≥ 0 by Lawson–Hanson nonnegative least squares.
-function _nnls(A::AbstractMatrix, b::AbstractVector; tol = 1e-12, maxiter = 10 * size(A, 2))
-    n = size(A, 2)
-    x = zeros(n)
-    P = falses(n)
-    r = b - A * x
-    w = A' * r
-    for _ in 1:maxiter
-        cand = [j for j in 1:n if !P[j] && w[j] > tol * norm(w, Inf)]
-        isempty(cand) && break
-        P[cand[argmax(w[cand])]] = true
-        for _ in 1:10n
-            idx = findall(P)
-            z = zeros(n)
-            z[idx] = A[:, idx] \ b
-            if all(z[idx] .> 0)
-                x = z
-                break
-            end
-            neg = [i for i in idx if z[i] <= 0]
-            α = minimum(x[i] / (x[i] - z[i]) for i in neg)
-            x .+= α .* (z .- x)
-            for i in idx
-                x[i] <= 1e-15 && (P[i] = false; x[i] = 0.0)
-            end
-        end
-        w = A' * (b - A * x)
-    end
-    return x
-end
