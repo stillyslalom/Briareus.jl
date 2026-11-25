@@ -917,3 +917,19 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     - **Lines of sight through closing lips.** The Dante footprint scans the lip
       triangles linearly per ray. The image and Dante tabs of the application do not pass
       the lip transmission history to `imager_record` (`keep_albedo` histories have it).
+    - **Declined, with the reasons** (2026-11-25; the two items of the cleanup plan that
+      are closed without the change).
+      - *A type parameter for `Scenario.lpi`.* The plan wanted `Scenario{P,M,L}` so that
+        the reference-model check of a constraint could be inferred. `_ReferenceModel{L}`
+        gives the check the type on the constraint side, and it passes JET `report_opt`
+        with `lpi::Any`. A parameter on the scenario would compile the optimizer and the
+        gradient drivers once per model type, and every `remake(s; lpi)` and every CBET
+        schedule given as a closure is a new type. "Compile latency (2026-10-25)"
+        measured that cost on the history march, 52 s of inference in the suite.
+      - *Merging the line parser of the VisRad readers into `read_csv`.* `read_csv`
+        scans the whole file by character, since a quoted field may hold line breaks,
+        takes the first line that is not a comment as the header and keeps quoted text
+        as written. The VisRad readers work by line, find the header after a preamble
+        of free text, strip quoted fields and accept columns separated by blanks in the
+        result tables. One function for both would hold two parsers. The digitized
+        tables of data/ do share one loader (`_data_table`).
