@@ -548,23 +548,26 @@ end
 # integral uses composite Gauss–Legendre rules in θ and r, and the share of a taper is
 # subtracted, integrated on the taper band. The table is built once per
 # (a, b, n, F, env, taper) and cached. Frames are built per beam and work unit, so reads
-# take no lock and allocate nothing. On a miss, the cache is copied, the entry is added
-# and the copy is swapped in under the lock.
+# take no lock and allocate nothing: the table dictionary is an atomic field. On a miss,
+# the cache is copied, the entry is added and the copy is swapped in under the lock.
 const _VR_NTAB_H = 0.1
 const _VR_NTAB_ZMAX = 60.0
 const _VRNormKey = NTuple{6,Float64}
-const _VR_NTABS = Ref(Dict{_VRNormKey,Vector{Float64}}())
+mutable struct _AtomicBox{T}
+    @atomic x::T
+end
+const _VR_NTABS = _AtomicBox(Dict{_VRNormKey,Vector{Float64}}())
 const _VR_NTABS_LOCK = ReentrantLock()
 
 function _vr_ntab(a, b, n, F, env, taper)
     key = (a, b, n, F, env, taper)
-    v = get(_VR_NTABS[], key, nothing)
+    v = get((@atomic _VR_NTABS.x), key, nothing)
     v === nothing || return v
     lock(_VR_NTABS_LOCK)
     try
-        d = copy(_VR_NTABS[])
+        d = copy(@atomic _VR_NTABS.x)
         v = get!(() -> _vr_ntab_build(a, b, n, F, env, taper), d, key)
-        _VR_NTABS[] = d
+        @atomic _VR_NTABS.x = d
         return v
     finally
         unlock(_VR_NTABS_LOCK)

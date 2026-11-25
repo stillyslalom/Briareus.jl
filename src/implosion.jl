@@ -236,16 +236,24 @@ function shape_amplification(P2::Real)
 end
 
 const _NORA_TABLE1 = Ref{Any}(nothing)
+const _NORA_LOCK = ReentrantLock()
+
+function _nora_table1()
+    lock(_NORA_LOCK) do
+        tab = _NORA_TABLE1[]
+        if tab === nothing
+            d = _data_table("nora2023_table1.csv")
+            ks = [k for k in keys(d) if k !== :theta]
+            p2 = [parse(Float64, replace(String(k)[4:end], "m" => "-")) / 100 for k in ks]
+            tab = (; theta = d.theta, p2, v = reduce(hcat, [getproperty(d, k) for k in ks]))
+            _NORA_TABLE1[] = tab
+        end
+        tab
+    end
+end
 
 function shape_amplification(P2::Real, theta::Real)
-    tab = _NORA_TABLE1[]
-    if tab === nothing
-        d = _data_table("nora2023_table1.csv")
-        ks = [k for k in keys(d) if k !== :theta]
-        p2 = [parse(Float64, replace(String(k)[4:end], "m" => "-")) / 100 for k in ks]
-        tab = (; theta = d.theta, p2, v = reduce(hcat, [getproperty(d, k) for k in ks]))
-        _NORA_TABLE1[] = tab
-    end
+    tab = _nora_table1()
     θ = mod(Float64(theta), 360.0)
     θ = θ > 180 ? 360 - θ : θ
     θ = min(θ, 180 - θ)

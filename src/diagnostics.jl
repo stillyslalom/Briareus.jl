@@ -62,6 +62,11 @@ struct _Kind
 end
 
 const _DIAGNOSTIC_KINDS = Dict{Symbol,_Kind}()
+const _DIAGNOSTIC_KINDS_LOCK = ReentrantLock()
+
+# The registered kind, or `nothing`; the names of the registered kinds.
+_diagnostic_kind(kind::Symbol) = lock(() -> get(_DIAGNOSTIC_KINDS, kind, nothing), _DIAGNOSTIC_KINDS_LOCK)
+_diagnostic_kind_names() = lock(() -> sort!(string.(keys(_DIAGNOSTIC_KINDS))), _DIAGNOSTIC_KINDS_LOCK)
 
 """
     register_diagnostic_kind(kind::Symbol, schema::Dict{String,DiagnosticField}, build)
@@ -74,7 +79,7 @@ covers the keys besides the header keys, which are `schema`, `id`, `kind`, `name
 earlier one.
 """
 function register_diagnostic_kind(kind::Symbol, schema::Dict{String,DiagnosticField}, build)
-    _DIAGNOSTIC_KINDS[kind] = _Kind(schema, build)
+    lock(() -> (_DIAGNOSTIC_KINDS[kind] = _Kind(schema, build)), _DIAGNOSTIC_KINDS_LOCK)
     return kind
 end
 
@@ -498,12 +503,13 @@ function _checked(raws::Dict{String,_Raw}, issues)
         n = length(issues)
         d = _resolve(id, raws, issues)
         d === nothing && continue
-        if !haskey(_DIAGNOSTIC_KINDS, d.kind)
+        kind = _diagnostic_kind(d.kind)
+        if kind === nothing
             push!(issues, DiagnosticIssue(d.file, "kind", "unknown kind \"$(d.kind)\" (registered: " *
-                                          join(sort(string.(keys(_DIAGNOSTIC_KINDS))), ", ") * ")", :error))
+                                          join(_diagnostic_kind_names(), ", ") * ")", :error))
             continue
         end
-        spec = _DIAGNOSTIC_KINDS[d.kind].schema
+        spec = kind.schema
         body = Dict(k => v for (k, v) in d.data if !haskey(_HEADER_KEYS, k) && !haskey(_PROVENANCE_KEYS, k) &&
                     k != "remove_channels")
         # The keys that the file sets come first, so that an error names the file, then
@@ -538,7 +544,11 @@ function diagnostic(id::AbstractString; paths = diagnostic_paths(), kwargs...)
                         (isempty(mine) ? "" : ":\n" * join(sprint.(show, mine), "\n"))))
 end
 
-diagnostic(def::DiagnosticDefinition; kwargs...) = _DIAGNOSTIC_KINDS[def.kind].build(def; kwargs...)
+function diagnostic(def::DiagnosticDefinition; kwargs...)
+    kind = _diagnostic_kind(def.kind)
+    kind === nothing && throw(KeyError(def.kind))
+    return kind.build(def; kwargs...)
+end
 
 """
     check_diagnostics(; paths = diagnostic_paths()) -> Vector{DiagnosticIssue}
@@ -852,18 +862,23 @@ _peak_energy(c::DanteResponse) =
     isnan(c.energy) ? DanteResponse(c.number, c.E[argmax(c.R)], c.filters, c.tables, c.grid, c.mirror, c.cathode,
                                     c.response, c.solid_angle, c.E, c.R, c.field_of_view) : c
 
-# channels built once per content, since the responses are costly to build
-const _CHANNEL_CACHE = Dict{UInt,Vector{DanteResponse}}()
+# Channels are built once per content, since the responses are costly to build. The cache
+# is keyed on a copy of the channel tables, compared by content, and holds at most
+# `_CHANNEL_CACHE_SIZE` sets. A full cache is emptied.
+const _CHANNEL_CACHE = Dict{Any,Vector{DanteResponse}}()
 const _CHANNEL_CACHE_LOCK = ReentrantLock()
+const _CHANNEL_CACHE_SIZE = 64
 
 function _channels(cs::AbstractVector)
-    h = hash(cs)
-    hit = lock(() -> get(_CHANNEL_CACHE, h, nothing), _CHANNEL_CACHE_LOCK)
+    hit = lock(() -> get(_CHANNEL_CACHE, cs, nothing), _CHANNEL_CACHE_LOCK)
     hit === nothing || return hit
     numbers = [c["number"] for c in cs]
     allunique(numbers) || throw(_KeyedError("channel", "channel numbers must be unique"))
     ch = [_channel(c) for c in sort(cs; by = c -> c["number"])]
-    lock(() -> (_CHANNEL_CACHE[h] = ch), _CHANNEL_CACHE_LOCK)
+    lock(_CHANNEL_CACHE_LOCK) do
+        length(_CHANNEL_CACHE) >= _CHANNEL_CACHE_SIZE && empty!(_CHANNEL_CACHE)
+        _CHANNEL_CACHE[deepcopy(cs)] = ch
+    end
     return ch
 end
 

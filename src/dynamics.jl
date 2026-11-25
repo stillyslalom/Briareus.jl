@@ -327,17 +327,19 @@ build it once.
 function model_at(kf::Keyframes, τ::Real)
     k0, k1, w = _bracket(kf.time, τ)
     w == 0 && return first(_keyframe(kf, k0))
-    b = kf.between[]
-    b !== nothing && b[1] == τ && return b[2]
-    m0, _ = _keyframe(kf, k0)
-    m1, _ = _keyframe(kf, k1)
-    t = _check_elements(kf, kf.build(τ), τ)
-    A0, A1, A = m0.target.elem_area, m1.target.elem_area, t.elem_area
-    F = _interpolate_exchange(m0.F, m1.F, A0, A1, A, w)
-    kf.closed === nothing || enforce_closure!(F, A; cavities = kf.closed)
-    m = RadiationModel(t, F)
-    kf.between[] = (τ, m)
-    return m
+    lock(kf.lock) do
+        b = kf.between[]
+        b !== nothing && b[1] == τ && return b[2]
+        m0, _ = _keyframe(kf, k0)
+        m1, _ = _keyframe(kf, k1)
+        t = _check_elements(kf, kf.build(τ), τ)
+        A0, A1, A = m0.target.elem_area, m1.target.elem_area, t.elem_area
+        F = _interpolate_exchange(m0.F, m1.F, A0, A1, A, w)
+        kf.closed === nothing || enforce_closure!(F, A; cavities = kf.closed)
+        m = RadiationModel(t, F)
+        kf.between[] = (Float64(τ), m)
+        return m
+    end
 end
 
 """
