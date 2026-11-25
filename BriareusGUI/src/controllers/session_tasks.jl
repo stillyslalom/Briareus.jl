@@ -109,6 +109,52 @@ start_talis!(sess::DesignSession; spawn::Bool = true) =
 cancel_talis!(sess::DesignSession) = (cancel_talis!(sess.talis); sess)
 
 """
+    corridor_sight_lines(sess::DesignSession) -> Vector{SightLine}
+
+The lines of sight of the ticked diagnostics of the session (`Briareus.sight_line`), in
+the order ticked. A definition without a direction or a field of view, or with a field
+centered on a part, is left out.
+"""
+function corridor_sight_lines(sess::DesignSession)
+    out = SightLine[]
+    for d in _recorded_definitions(sess)
+        d.def === nothing && continue
+        try
+            push!(out, sight_line(d.def; name = d.name))
+        catch e
+            e isa ArgumentError || rethrow()
+        end
+    end
+    return out
+end
+
+"""
+    show_corridor!(sess::DesignSession, on::Bool = true) -> sess
+
+Draw the keep-out map of the enabled beams and the ticked diagnostics in the 3D view
+([`update_corridor!`](@ref)), or take it away. Showing it again updates it.
+"""
+function show_corridor!(sess::DesignSession, on::Bool = true)
+    cs = sess.corridor
+    _assign!(cs.shown, on)
+    on ? update_corridor!(cs, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess)) :
+         clear_corridor!(cs)
+    return sess
+end
+
+"""
+    set_corridor_radius!(sess::DesignSession, radius) -> sess
+
+Set the radius (mm) of the keep-out map, and update the map if it is shown.
+"""
+function set_corridor_radius!(sess::DesignSession, radius::Real)
+    radius > 0 && isfinite(radius) || throw(ArgumentError("the radius must be a positive length in mm"))
+    _assign!(sess.corridor.radius, Float64(radius))
+    sess.corridor.shown[] && show_corridor!(sess, true)
+    return sess
+end
+
+"""
     run_task!(sess::DesignSession, task::Symbol; spawn = true) -> sess
 
 Start analysis `task`, one of [`TASKS`](@ref): `:drive` builds the scenario

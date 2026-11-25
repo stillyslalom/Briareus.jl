@@ -81,4 +81,18 @@ ColumnLayout {
         color: app.rvStale && !app.rvRunning ? "#d08a00" : palette.windowText
         opacity: 1
     }
+    // the keep-out map: where new hardware fits between the beams and the lines of sight
+    SectionLabel { text: "Keep-out map" }
+    CheckLine { text: "Show the keep-outs on a sphere about TCC"; checked: app.cmShown; onToggled: Julia.br_cm_show(checked)
+                tip: "Colors a sphere by what crosses it: 3ω light (blue), 1ω light (vermilion), the lines of sight of the ticked diagnostics (purple). The open region is green, and yellow where the margin is below the tight threshold. Uses the errors above and the TaLIS rule tolerance" }
+    PropRow { label: "Radius"; value: app.cmRadius; unit: "mm from TCC"
+              tip: "The distance from TCC at which the hardware is to be placed"
+              onEdited: (text) => Julia.br_cm_radius(text) }
+    Note {
+        visible: app.cmShown
+        text: app.cmStale ? "Out of date. " + app.cmText : app.cmText
+        tip: app.cmStale ? "The beams, the diagnostics or the settings changed since this map: switch it off and on to update" : ""
+        color: app.cmStale ? "#d08a00" : palette.windowText
+        opacity: 1
+    }
 }

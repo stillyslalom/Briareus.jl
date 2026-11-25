@@ -269,3 +269,59 @@ end
     @test sess.review.view[] === :talis
     @test_throws ArgumentError set_review_view!(sess.review, :tally)
 end
+
+@testset "keep-out map (no GL)" begin
+    spot = SuperGaussianSpot(0.3; order = 4.0)
+    b = Beam("b"; theta = 0, phi = 0, power = 1.0, spot, fnumber = 8.0)
+    cs, rv, tl = CorridorState(), ReviewState(), TaLISState()
+    @test cs.radius[] == 50.0 && !cs.shown[] && cs.map[] === nothing
+    kw = corridor_kwargs(rv, tl)
+    @test kw == (; tolerance = 0.5, pivot = :tcc, pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
+                 focus = 1.0, omega1 = true)
+    @test !corridor_stale(cs, rv, tl, [b], SightLine[])
+    sl = [SightLine("cam", 90, 0; field_of_view = 10.0)]
+    update_corridor!(cs, rv, tl, [b], sl)
+    m = cs.map[]
+    ref = corridor_map([b]; sight_lines = sl, radius = 50.0, kw...)
+    @test m.margin == ref.margin && m.sources == [(:omega3, "b"), (:omega1, "b"), (:sight, "cam")]
+    @test startswith(cs.status[], "sphere of 50 mm about TCC: ") && occursin("1 beams, 1 lines of sight", cs.status[])
+    @test occursin("widest margin", cs.status[]) && !occursin(" %", cs.status[])
+    @test !corridor_stale(cs, rv, tl, [b], sl) && corridor_stale(cs, rv, tl, Beam[], sl) &&
+          corridor_stale(cs, rv, tl, [b], SightLine[])
+    tl.tolerance[] = 1.0
+    @test corridor_stale(cs, rv, tl, [b], sl)
+    tl.tolerance[] = 0.5
+    # the surface: the corners of the cells, two triangles per cell but one at each pole
+    g = corridor_surface(m)
+    nθ, nφ = size(m.margin)
+    @test length(g.vertices) == (nθ + 1) * nφ && length(g.faces) == 2 * nθ * nφ - 2 * nφ == length(g.fills)
+    @test all(abs(sqrt(sum(abs2, v)) - 50.0) < 1e-9 for v in g.vertices)
+    @test all(1 <= i <= length(g.vertices) for f in g.faces for i in f) && issubset(g.fills, 1:5)
+    fl = corridor_fills(m)
+    @test count(==(3), g.fills) == 2 * count(==(3), fl[2:end-1, :]) + count(==(3), fl[[1, end], :])
+    @test Set(g.fills) == Set(fl) && 1 in g.fills && 3 in g.fills && 5 in g.fills
+    @test_throws ArgumentError corridor_surface(corridor_map([b]; plane = ((0, 0, 0), (0, 0, 1)), extent = 5.0, n = 5))
+    clear_corridor!(cs)
+    @test cs.map[] === nothing && cs.status[] == "" && !corridor_stale(cs, rv, tl, [b], sl)
+
+    # through a session: the enabled beams and the ticked diagnostics
+    sess = DesignSession(resolution = :coarse)
+    sess.time.diagnostics[] = ["nif_dante1"]
+    lines = corridor_sight_lines(sess)
+    @test length(lines) == 1 && lines[1].radius == 30.0 && lines[1].axis ≈ sight_line("nif_dante1").axis
+    show_corridor!(sess)
+    cm = sess.corridor
+    @test cm.shown[] && cm.map[] isa CorridorMap && cm.map[].radius == 50.0
+    @test count(s -> s[1] === :sight, cm.map[].sources) == 1 &&
+          count(s -> s[1] === :omega3, cm.map[].sources) == length(active_beams(sess.beams))
+    @test any(<=(0), cm.map[].omega1) && any(<=(0), cm.map[].sight) && any(>(0), cm.map[].margin)
+    set_corridor_radius!(sess, 120.0)
+    @test cm.map[].radius == 120.0 && !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), lines)
+    sess.time.diagnostics[] = String[]
+    @test corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess))
+    @test_throws ArgumentError set_corridor_radius!(sess, 0.0)
+    show_corridor!(sess, false)
+    @test !cm.shown[] && cm.map[] === nothing
+    set_corridor_radius!(sess, 80.0)
+    @test cm.radius[] == 80.0 && cm.map[] === nothing
+end

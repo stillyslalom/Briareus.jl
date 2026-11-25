@@ -692,6 +692,16 @@ The bottom panel has the following tabs.
   beams that close in on a part without their whole 1ω volumes. In a 1ω color mode a
   click on a facet gives its verdict, margin, beamlet, radii and port angle in the status
   line.
+- **Keep-out map:** the clearance page also draws the keep-outs of the shot on a sphere
+  about the target chamber center ([`corridor_map`](@ref)), at a radius to choose. The
+  sphere is blue where 3ω light crosses it, vermilion in 1ω light and purple in the line
+  of sight of a ticked diagnostic. The open region, where new hardware such as stalks and
+  shields fits, is green, and yellow where its margin is below the tight threshold of the
+  TaLIS page. The map uses the errors of the clearance check and the rule tolerance of
+  the TaLIS checks, and a line gives the open share of the sphere and the widest margin
+  with its direction. The camera steps back to take the sphere in when the map is
+  switched on from a closer view. The map is marked out of date when the beams, the
+  ticked diagnostics or a setting changes, and it is not saved with the session.
 
 ### Files in and out
 

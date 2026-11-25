@@ -157,6 +157,7 @@ end
 function _dirty_sources(sess::DesignSession)
     ts, bt, dr, st, rv, tl, v, tm, sw = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                         sess.talis, sess.view, sess.time, sess.sweep
+    cm = sess.corridor
     all = Any[sess.status, sess.meshing, sess.cad_changed, ts.mesh, ts.resolution,
               ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
               bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
@@ -174,7 +175,7 @@ function _dirty_sources(sess::DesignSession)
               sw.quality, sw.running, sw.status,
               sw.error, sw.result, sw.selected,
               rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
-              rv.running, rv.status, rv.error, rv.report,
+              rv.running, rv.status, rv.error, rv.report, cm.radius, cm.shown, cm.map, cm.status,
               tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
               tl.running, tl.status, tl.error, tl.report, tl.tight, tl.hide_curved, tl.focus, tl.pinch,
               v.display, v.selection, v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted,
@@ -917,6 +918,12 @@ function _refresh_review!(sh::BriareusShell)
     _set!(sh, "rvHasReport", rv.report[] !== nothing)
     _set!(sh, "rvBrief", review_brief(rv))
     _set!(sh, "rvStale", review_stale(rv, sess.target.target[], active_beams(sess.beams)))
+    cm = sess.corridor
+    _set!(sh, "cmShown", cm.shown[])
+    _set!(sh, "cmRadius", _num(cm.radius[]))
+    _set!(sh, "cmText", cm.status[])
+    _set!(sh, "cmStale", cm.map[] !== nothing &&
+                         corridor_stale(cm, rv, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess)))
     comps = [CompRow(String(n), component_label(n), n in rv.targets[] ? "target" : n in rv.hardware[] ? "hardware" : "none")
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:compModel], sh.models[:compModel], comps)

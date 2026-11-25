@@ -92,6 +92,7 @@ struct SceneCanvas
     triad_hover::Base.RefValue{Any}              # the triad handle under the pointer, or nothing
     focus_mesh::Any                              # the TaLIS row under inspection: the clearance
     focus_lines::Any                             # plane and reflection cone, and their lines
+    corridor::Any                                # the keep-out map on its sphere (`show_corridor!`)
 end
 
 """
@@ -143,6 +144,7 @@ function scene_canvas(sess::DesignSession)
     focus_mesh = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true, visible = false)
     focus_lines = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2, visible = false,
                                 overdraw = true)
+    corridor = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true, visible = false)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -152,7 +154,7 @@ function scene_canvas(sess::DesignSession)
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
-                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines)
+                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines, corridor)
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -179,6 +181,7 @@ function scene_canvas(sess::DesignSession)
     # target.
     on(p -> _apply_camera!(c, p), v.camera)
     on(_ -> _draw_talis_focus!(c, sess), sess.talis.focus)
+    onany((_...) -> _draw_corridor!(c, sess), sess.corridor.map, sess.talis.tight)
     onany((_...) -> v.color[] in DISPOSITION_MODES && _draw_body!(c, sess), sess.talis.disposition,
           sess.talis.tight, sess.talis.hide_curved)
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
@@ -533,10 +536,7 @@ end
 # component or the value of a drive field on its element.
 function _draw_body!(c::SceneCanvas, sess::DesignSession)
     t = sess.target.target[]
-    g = sess.target.ghost[]
-    # with the beams drawn, and the parts left out of the calculations (CAD mounting
-    # hardware can reach 10² mm): the clip planes hold them all
-    c.camera.bounds = (Makie.Vec3d(0, 0, 0), max(2.2 * t.scale, g === nothing ? 0.0 : 1.05 * g.scale))
+    _camera_bounds!(c, sess)
     c.camera.home = (Makie.Vec3d(0, 0, 0), t.scale)
     if c.fitted[] === nothing
         _apply_camera!(c, sess.view.camera[])          # a session's pose, or the default
@@ -692,6 +692,37 @@ function _draw_talis_focus!(c::SceneCanvas, sess::DesignSession)
     else
         _update!(c.focus_lines, segs; color = scols, visible = true)
     end
+    c.dirty[] = true
+    return c
+end
+
+# The sphere that the clip planes of the camera hold: the target with the beams drawn, the
+# parts left out of the calculations (CAD mounting hardware can reach 10² mm) and the
+# keep-out map.
+function _camera_bounds!(c::SceneCanvas, sess::DesignSession)
+    t, g, m = sess.target.target[], sess.target.ghost[], sess.corridor.map[]
+    c.camera.bounds = (Makie.Vec3d(0, 0, 0), max(2.2 * t.scale, g === nothing ? 0.0 : 1.05 * g.scale,
+                                                 m === nothing ? 0.0 : 1.05 * m.radius))
+    return c
+end
+
+# The keep-out map of the session on its sphere (`show_corridor!`): each cell in the color
+# of its drawing class, the open region faint so that the target shows through.
+function _draw_corridor!(c::SceneCanvas, sess::DesignSession)
+    m = sess.corridor.map[]
+    if m === nothing
+        _update!(c.corridor, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
+    else
+        g = corridor_surface(m; tight = sess.talis.tight[])
+        col = [RGBAf(Makie.RGBf(_hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in 1:5]
+        pts = Point3f[Point3f(g.vertices[i]...) for f in g.faces for i in f]
+        _update!(c.corridor, pts, _faces(length(g.faces)); color = repeat([col[k] for k in g.fills]; inner = 3),
+                 visible = true)
+    end
+    _camera_bounds!(c, sess)
+    # an eye inside the sphere sees none of it: step back to take the whole map in
+    m === nothing || norm(c.camera.eye - c.camera.lookat) > 1.5 * m.radius ||
+        fit_camera!(c.camera, Makie.Vec3d(m.origin...), m.radius)
     c.dirty[] = true
     return c
 end

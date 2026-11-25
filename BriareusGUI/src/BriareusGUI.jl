@@ -61,6 +61,7 @@ include("controllers/drive.jl")
 include("controllers/optimizer.jl")
 include("controllers/review.jl")
 include("controllers/talis.jl")
+include("controllers/corridor.jl")            # the keep-out map of the 3D view
 include("controllers/beam_geometry.jl")
 include("controllers/view.jl")
 include("controllers/cutaway.jl")            # the cut regions and clipped triangles
@@ -154,6 +155,8 @@ export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, TALIS_
        talis_focus_text, talis_view!, pinch_approaches, set_talis_pinch!, pick_disposition!,
        talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale,
        talis_role
+export CorridorState, CORRIDOR_COLORS, CORRIDOR_OPACITY, corridor_kwargs, update_corridor!, clear_corridor!,
+       corridor_stale, corridor_text, corridor_surface, corridor_sight_lines, show_corridor!, set_corridor_radius!
 export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance,
        has_unconverted, unconverted_footprint, unconverted_beamlets, unconverted_square,
        closest_approach_surface, reflection_cone, daylight_view, grazing_view,

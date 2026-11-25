@@ -95,6 +95,16 @@ const B = BriareusGUI
     set_color!(sess, :omega1_disposition)
     clear_talis_focus!(sess.talis)
     @test !sc.focus_mesh.visible[] && !sc.focus_lines.visible[]
+    # the keep-out map is drawn on its sphere in the colors of its classes
+    @test !sc.corridor.visible[]
+    show_corridor!(sess)
+    gs = corridor_surface(sess.corridor.map[]; tight = sess.talis.tight[])
+    @test sc.corridor.visible[] && length(sc.corridor[1][].position) == 3 * length(gs.faces)
+    cc = Set(sc.corridor.color[])
+    @test cc == Set(Makie.RGBAf(Makie.RGBf(B._hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in unique(gs.fills))
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    show_corridor!(sess, false)
+    @test !sc.corridor.visible[]
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
     set_color!(sess, :omega1_margin)
     @test sc.colorbar.blockscene.visible[] && sc.colorbar.limits[] == (-DISPOSITION_RANGE, DISPOSITION_RANGE)
