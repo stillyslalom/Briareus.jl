@@ -3,7 +3,9 @@
 This page is a compact map of the package for a language model that writes Briareus
 scripts, and for anyone who reviews such a script. Every name below is exported and
 links to its docstring. The same text without the links is the file `llms.txt` at the
-root of the repository.
+root of the repository, and the Claude skill `skills/briareus/SKILL.md`, which a copy into
+`~/.claude/skills/` (or the `.claude/skills/` folder of a project) makes available to
+Claude Code.
 
 ## Units and conventions
 

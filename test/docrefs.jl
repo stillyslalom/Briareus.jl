@@ -551,6 +551,7 @@ end
     page = read(joinpath(DocRefs.ROOT, "docs", "src", "llms.md"), String)
     # llms.txt is the page without the links: `julia dev/llms.jl` writes it
     @test read(joinpath(DocRefs.ROOT, "llms.txt"), String) == llms_text(page)
+    @test read(joinpath(DocRefs.ROOT, "skills", "briareus", "SKILL.md"), String) == skill_text(page)
     # every linked name is exported, so a renamed or removed name fails here
     linked = unique!([Symbol(m.captures[1]) for m in eachmatch(r"\[`([^`\n]+)`\]\(@ref\)", page)])
     @test length(linked) > 50
