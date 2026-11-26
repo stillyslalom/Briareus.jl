@@ -32,7 +32,8 @@ nominal distance and the margin ([`Omega1Approach`](@ref)). The square itself co
 from [`omega1_contour`](@ref) for the rules, the keep-out and the application alike.
 [`omega1_reflection`](@ref) gives the specular reflection behind a 1ω management row: the
 reflected ray, the open port it threatens and the projected area that reflects toward it
-([`Omega1Reflection`](@ref)). [`omega1_disposition`](@ref) gives the same rules as a field
+([`Omega1Reflection`](@ref)), and [`omega1_reflected_power`](@ref) turns the share of the
+1ω light on that area into a reflected power. [`omega1_disposition`](@ref) gives the same rules as a field
 over the hardware, one verdict per mesh triangle over all beams: clear, tight, curved
 enough to scatter, clear by its reflection, to review, or failing
 ([`Omega1Disposition`](@ref)). [`omega1_slice`](@ref) gives the plane across the beamlet

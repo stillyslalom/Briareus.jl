@@ -213,6 +213,35 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
   W/cm² against τ₀ + Δ I* 22²/(10¹⁴ r P₀) (1e-12); a prepulse ramp's 10⁸ W/cm² onset
   against its hand value; the 3ω history against `deposit` at every time (1e-12).
 
+### Reflected 1ω power of a TaLIS reflector (2026-11-26)
+
+`Omega1Reflection.reflected_fraction` and `omega1_reflected_power` (`src/talis.jl`).
+*Derived*, **M**, for the geometry; *engineering default*, **L**, for the reflectivity.
+- **Geometry.** Each beamlet is the uniform square of the deposition model above (22 mm
+  at 4.8 mm in the 3ω focal plane, converging to the 1ω focus 460 mm beyond). A
+  sub-triangle of the TaLIS samples counts whole toward a beamlet when its centroid lies
+  in that square and its specular reflection of that beamlet comes within the required
+  20° (less twice the rule tolerance) of an open port. Its share of the beamlet power is
+  its area projected along the beamlet over the area of the square at its distance along
+  the beam. The fraction of the beam is the sum over beamlets divided by their number.
+  Shadowing is left out, so the fraction is an upper bound for a reflector behind other
+  hardware.
+- **Reflectivity.** `reflectivity = 1.0` by default, an upper bound. Cold metals reflect
+  1ω almost entirely (Au ≈0.98, Al ≈0.94 at normal incidence; "Unconverted light:
+  absorption and conversion vs. wavelength" below), and a plasma, formed above about
+  10⁸ W/cm² ("Unconverted light over time"), absorbs most of it. No facility number was
+  found for the reflected power that an opposing beamline tolerates, so the estimate is
+  for ranking reflectors, not a pass or fail.
+- **1ω power.** An input: the `omega1` power of `visrad_unconverted` for a workspace, or
+  a fraction of the 3ω power (no measured fraction against pulse shape was found).
+- **What is left out.** The part of the reflected light that reaches the optics of the
+  port depends on the divergence of the reflected cone and the aperture of the port at
+  the 7.7 m lens distance, which the rule's 20° replaces.
+- **Checks** (`test/talis.jl`): a 4 mm plate normal to one beamlet in the focal plane
+  gives 16/22² of its power (1e-12); 100 mm upstream it gives 16/(22·(1 + 100/460))²
+  (1e-12); a 30 × 26 mm plate over the whole square, with mesh lines on the square's
+  edges, gives 1 (1e-12); the plate tilted 45° gives 0.
+
 ### Unconverted light: absorption and conversion vs. wavelength (2026-10-28)
 
 *Engineering default*, **L**. `nif_unconverted` scales the 1ω and 2ω light relative to

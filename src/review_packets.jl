@@ -171,13 +171,15 @@ function omega1_review_html(r::Omega1Review; title::AbstractString = "1ω review
     if !isempty(rep.reflections)
         println(io, "<h2>Specular reflections</h2>")
         println(io, "<p class=\"note\">One record per 1ω management row decided on reflection: the reflection that ",
-                "comes closest to an open port, and the area of the hardware in the worst-case footprint.</p>")
+                "comes closest to an open port, the area of the hardware in the worst-case footprint, and the ",
+                "fraction of the 1ω power of the beam reflected within the required angle of an open port.</p>")
         _html_table(io, ["Beam", "Component", "Angle to port (°)", "Spread (°)", "Worst (°)", "Margin (°)",
-                         "Exposed area (mm²)", "Offending area (mm²)", "Point (mm)"],
+                         "Exposed area (mm²)", "Offending area (mm²)", "Reflected fraction", "Point (mm)"],
                     [[x.beam, x.component, _html_num(x.angle; digits = 2), _html_num(x.spread; digits = 2),
                       _html_num(x.worst; digits = 2), _html_num(x.margin; digits = 2),
                       _html_num(x.exposed_area, @sprintf("%.4g", x.exposed_area)),
-                      _html_num(x.offending_area, @sprintf("%.4g", x.offending_area)), _packet_vec(x.point)]
+                      _html_num(x.offending_area, @sprintf("%.4g", x.offending_area)),
+                      _html_num(x.reflected_fraction, @sprintf("%.3g", x.reflected_fraction)), _packet_vec(x.point)]
                      for x in rep.reflections])
     end
 
@@ -236,6 +238,7 @@ function _talis_data(rep::TaLISReport)
                                        "spread_deg" => _json_number(x.spread), "worst_deg" => _json_number(x.worst),
                                        "margin_deg" => _json_number(x.margin), "exposed_area_mm2" => _json_number(x.exposed_area),
                                        "offending_area_mm2" => _json_number(x.offending_area),
+                                       "reflected_fraction" => _json_number(x.reflected_fraction),
                                        "point_mm" => _json_vec(x.point), "port" => _json_vec(x.port))
                                   for x in rep.reflections])
 end

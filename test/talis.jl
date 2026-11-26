@@ -164,6 +164,19 @@
     @test xt.exposed_area ≈ 16 * cosd(45) rtol = 1e-12
     @test xt.offending_area == 0 && abs(dot(xt.reflected, k)) < 1e-12
     @test occursin("from 16 mm² of 16 mm²", mg.note)
+    # The reflected 1ω power, against the uniform 22 mm square of the beamlet: the plate
+    # takes 16/22² of it in the focal plane; 100 mm upstream the square is wider by the
+    # cone to the focus 460 mm beyond. A plate over the whole square, with mesh lines on
+    # its edges, reflects all of it; the tilted plate reflects none toward the port.
+    @test xm.reflected_fraction ≈ 16 / 22^2 rtol = 1e-12
+    @test xt.reflected_fraction == 0
+    @test omega1_reflected_power(xm, 0.5; reflectivity = 0.9) ≈ 0.45 * 16 / 22^2 rtol = 1e-12
+    @test_throws ArgumentError omega1_reflected_power(xm, 0.5; reflectivity = 1.5)
+    mirror(w, h, nu, nv, c) = Target(Component(:mirror, transform(rectangle_mesh(w, h; nu, nv), Rm, c), gold()))
+    xu = only(talis_check(mirror(4.0, 4.0, 2, 2, 8.0 * ô - 100.0 * k), [bl]; capture = (), open_ports = [pq]).reflections)
+    @test xu.reflected_fraction ≈ 16 / (22 * (1 + 100 / 460))^2 rtol = 1e-12
+    xw = only(talis_check(mirror(30.0, 26.0, 15, 13, 15.8 * ô), [bl]; capture = (), open_ports = [pq]).reflections)
+    @test xw.reflected_fraction ≈ 1 rtol = 1e-12
     @test omega1_reflection(rm, cm) === nothing && length(rm.reflections) == 1
 
     # Curved surface reflecting toward a port: the upstream pole of a sphere in the 1ω

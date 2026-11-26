@@ -243,7 +243,7 @@ end
     @test dv.width ≈ max(4 * abs(a.distance), 1.0) && abs(dot(dv.up, a.x_hw - a.x_beam)) < 1e-9
     @test gv.up == k && abs(dot(gv.direction, k)) < 1e-12 && abs(dot(gv.direction, a.x_hw - a.x_beam)) < 1e-9
     # the cone of a reflection: its axis, its half-angle and its rim
-    x = Omega1Reflection("b", :c, 1, k, Briareus.Vec3(1, 2, 3), -k, -k, bl.port, 1, 4.0, 3.0, 0.0, -20.0, 16.0, 16.0)
+    x = Omega1Reflection("b", :c, 1, k, Briareus.Vec3(1, 2, 3), -k, -k, bl.port, 1, 4.0, 3.0, 0.0, -20.0, 16.0, 16.0, 0.03)
     rc = reflection_cone(x; length = 10.0, n = 16)
     @test rc.half_angle == 20 + 1 + 3 && rc.incident == (x.point - 10 * k, x.point) && rc.reflected[2] ≈ x.point - 10 * k
     @test length(rc.vertices) == 17 && length(rc.faces) == 16 && rc.port == (x.point, x.point + 10 * bl.port)

@@ -81,10 +81,20 @@ was decided on reflection, as [`omega1_reflection`](@ref) returns it.
   sub-triangle that reaches the footprint anywhere counts whole
 - `offending_area` — the part of `exposed_area` on sub-triangles whose reflection comes
   within the required angle of an open port
+- `reflected_fraction` — the fraction of the 1ω power of the beam that falls on those
+  sub-triangles and leaves within the required angle of an open port, an estimate that
+  [`omega1_reflected_power`](@ref) turns into a power
 
 The areas separate a reflector from a sliver: the hazard is the reflected 1ω power that
 enters another beamline, which scales with `offending_area` over the area of the
-footprint.
+footprint. `reflected_fraction` takes each beamlet as the uniform square beam of the
+nominal footprint ([`omega1_contour`](@ref) with `mode = :nominal`, at the focus of the
+check) that [`unconverted_deposition`](@ref) deposits. A sub-triangle counts toward a
+beamlet whole when its centroid lies in the square of that beamlet and its reflection of
+that beamlet comes within the required angle of an open port, with the share of the
+power of the beamlet equal to its area projected along the beamlet over the area of the
+square at its distance along the beam. Shadowing is not taken into account, so the
+estimate is an upper bound for a reflector behind other hardware.
 """
 struct Omega1Reflection
     beam::String
@@ -102,6 +112,7 @@ struct Omega1Reflection
     margin::Float64
     exposed_area::Float64
     offending_area::Float64
+    reflected_fraction::Float64
 end
 
 """
@@ -359,6 +370,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                for g in cap_idx]
     o1 = omega1_contour(; edge = omega1_edge, size = omega1_size, focus = omega1_focus)
     f1 = o1.focal_shift
+    on = omega1_contour(; mode = :nominal, focus = f1)   # where the light is, for its power
     vb = [_value_beam(b) for b in beams]
     table = any(_is_nif, vb) ? _nif_beam_table() : nothing
     bls = [omega1 ? _omega1_beamlets(b, offsets, table) : nothing for b in vb]
@@ -368,6 +380,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           geo, edges, cap_geo, capture_contour, capture_margin, max_incidence = Float64(max_incidence),
           clearance_contour, clearance_margin, tolerance = Float64(tolerance),
           omega1_margin = Float64(omega1_margin), o1.c0, o1.h0, f1,
+          p0 = on.c0, q0 = on.h0,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
           curvature, curv = Dict{Int,Vector{NTuple{4,Float64}}}(), curv_lock = ReentrantLock(),
@@ -547,7 +560,8 @@ function _talis_management!(refl, t::Target, name::Symbol, cis, b::Beam, bl, cx)
     bx === nothing ||
         push!(refl, Omega1Reflection(bx.beam, name, bx.beamlet_index, bx.incident, bx.point, bx.normal,
                                      bx.reflected, bx.port, bx.port_index, bx.angle, bx.spread, bx.worst,
-                                     bx.margin, sum(x -> x.exposed_area, xs), sum(x -> x.offending_area, xs)))
+                                     bx.margin, sum(x -> x.exposed_area, xs), sum(x -> x.offending_area, xs),
+                                     sum(x -> x.reflected_fraction, xs)))
     return r.component === name ? r :
            TaLISRow(r.beam, r.rule, name, r.status, r.margin, r.unit, r.worst, r.nominal, r.required,
                     r.point, r.note)
@@ -590,7 +604,7 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     scat = (Inf, NaN, NaN, aim)                  # (limit − radius, radius, limit, point), the least
     gentle = 0.0
     kq = direction(b)
-    exposed, offending = 0.0, 0.0
+    exposed, offending, frac = 0.0, 0.0, 0.0
     wit = (0, kq, kq, kq, 0, NaN, 0.0)           # beamlet, k, normal, reflection, port, angle, spread
     for (i, (leaf, n, spread)) in enumerate(zip(g.leaves, g.normals, g.spreads))
         tri = (leaf[1], leaf[2], leaf[3])
@@ -607,7 +621,8 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
         end
         hitn = _talis_reaches(fn, tri, cx.lip1, 0.0, cx.ε)
         αl = Inf
-        for (j, (kb, _, _)) in enumerate(bl)
+        av = cross(leaf[2] - leaf[1], leaf[3] - leaf[1]) / 2
+        for (j, (kb, fb, ô)) in enumerate(bl)
             r = kb - 2 * dot(kb, n) * n
             # a normal turned by the spread turns the reflection by twice that
             raw, pj = findmin(p -> acosd(clamp(dot(r, p), -1.0, 1.0)), cx.ports)
@@ -618,8 +633,15 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
                 wit = (j, kb, n, r, pj, raw, 2 * spread)
             end
             hitn && (αn = min(αn, α))
+            if α - 2 * cx.tolerance <= cx.reflection_angle
+                d = leaf[4] - fb
+                if _omega1_square(d, kb, ô, cx.p0, cx.q0, cx.f1, cx.L) <= 0
+                    h = cx.q0 * abs(1 - dot(d, kb) / cx.f1)
+                    frac += abs(dot(av, kb)) / (4 * h^2)
+                end
+            end
         end
-        ap = abs(dot(cross(leaf[2] - leaf[1], leaf[3] - leaf[1]), kq)) / 2
+        ap = abs(dot(av, kq))
         exposed += ap
         αl - 2 * cx.tolerance <= cx.reflection_angle && (offending += ap)
     end
@@ -645,7 +667,7 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     isfinite(αw) || return row, nothing
     j, kb, n, r, pj, raw, sp = wit
     return row, Omega1Reflection(b.name, c.name, j, kb, wp, n, r, cx.ports[pj], pj, raw, sp, worst, m,
-                                 exposed, offending)
+                                 exposed, offending, frac / length(bl))
 end
 
 """
@@ -660,6 +682,29 @@ function omega1_reflection(r::TaLISReport, row::TaLISRow)
     row.rule === :management_1w || return nothing
     i = findfirst(x -> x.beam == row.beam && x.component === row.component, r.reflections)
     return i === nothing ? nothing : r.reflections[i]
+end
+
+"""
+    omega1_reflected_power(x::Omega1Reflection, power; reflectivity = 1.0) -> Float64
+
+The 1ω power (in the unit of `power`, TW at the API) that the item of `x` reflects within
+the required angle of an open port, when the beam of `x` carries `power` of 1ω light:
+`reflectivity * power * x.reflected_fraction`. `power` is the 1ω power of the whole beam
+(a quad, or a beamlet named by `offsets`), such as the `omega1` power of
+[`visrad_unconverted`](@ref) or a fraction of the 3ω power.
+
+`reflectivity = 1.0` is an *engineering default*, an upper bound: cold metals reflect 1ω
+almost entirely before a plasma forms (gold about 0.98, aluminum about 0.94 at normal
+incidence), and a plasma absorbs most of it (research notes, "Unconverted light:
+absorption and conversion vs. wavelength"). The estimate takes the reflection as
+specular and the light as uniform over the nominal footprint, and leaves out shadowing,
+so it bounds the light reflected toward the port. The part of that light that reaches
+the optics of the port is not estimated.
+"""
+function omega1_reflected_power(x::Omega1Reflection, power::Real; reflectivity::Real = 1.0)
+    0 <= reflectivity <= 1 || throw(ArgumentError("reflectivity must be in [0, 1]"))
+    power >= 0 || throw(ArgumentError("power must not be negative"))
+    return Float64(reflectivity) * Float64(power) * x.reflected_fraction
 end
 
 # The unsigned principal radii of curvature (smaller, larger) of a cone or torus, each the

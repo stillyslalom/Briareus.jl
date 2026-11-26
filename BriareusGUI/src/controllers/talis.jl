@@ -504,9 +504,9 @@ function talis_focus_text(tl::TaLISState)
         push!(lines, "also within the tight threshold: " *
                      join((@sprintf("%s %+.3f mm", p.approach.beam, p.approach.margin) for p in f.pinch), ", "))
     x === nothing ||
-        push!(lines, @sprintf("reflection %.1f° from open port %d (θ %.1f°, φ %.1f°, ringed in the view), less %.1f° of normal spread; %.3g of %.3g mm² within the required angle",
+        push!(lines, @sprintf("reflection %.1f° from open port %d (θ %.1f°, φ %.1f°, ringed in the view), less %.1f° of normal spread; %.3g of %.3g mm² within the required angle, %.3g of the 1ω power of the beam",
                               x.angle, x.port_index, acosd(clamp(x.port[3] / norm(x.port), -1, 1)),
-                              mod(atand(x.port[2], x.port[1]), 360), x.spread, x.offending_area, x.exposed_area))
+                              mod(atand(x.port[2], x.port[1]), 360), x.spread, x.offending_area, x.exposed_area, x.reflected_fraction))
     return join(lines, "\n")
 end
 
