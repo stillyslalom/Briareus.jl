@@ -1682,6 +1682,20 @@ each a function of an `Evaluation` with a green and an amber threshold.
   every quad and 176 of 192 beams red on a symmetric 10.1 mm hohlraum whose full shot has
   no mode 1; a single beam adds 26 to 45 km/s there and a quad 127 to 171 km/s, at
   100 km/s per percent of mode 1. Confidence **L**.
+- **Velocities past the linear range (2026-11-26).** The 100 km/s per percent of
+  `HOTSPOT_VELOCITY_PER_PERCENT` holds to about 0.75% of mode 1, 75 km/s (Young 2020);
+  past it the velocity saturates (Spears 2014: 120 km/s at 2%, where the linear rule gives
+  200). A lost NIF quad adds 1.3 to 1.7% (127 to 171 km/s by the linear rule), and three
+  quads 525 km/s in the window's mock-up, so those scores overstate the speed and are
+  upper bounds. The criterion keeps the linear score, unsaturated and unflagged, for
+  three reasons, all **L**. Both default thresholds (30 and 65 km/s) lie inside the
+  linear range, and the measured saturation is monotone (75 km/s at 0.75%, 120 km/s at
+  2%), so every outage that the linear rule puts past 75 km/s is past 65 km/s either way
+  and the tiers do not change. No saturation curve was found to replace the rule with:
+  Spears gives one point, and the curve depends on the platform. A capped score would
+  also hide the size of a large outage, which still ranks the units. The docstring of
+  `roe_hotspot_velocity` states the range, and an amber threshold above 0.75 times
+  `per_percent` would need a saturation model first.
 - The tier rules are also choices of this package. A unit has the tier of its single
   outage, a green unit whose pair with another green unit is red is raised to amber, and
   the budget of a role allows two green units together only when every scanned pair of

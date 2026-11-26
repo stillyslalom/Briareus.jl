@@ -39,6 +39,13 @@ speed with the outage, the nominal mode 1 included. The default thresholds are t
 at which the piston model loses 2% and 10% of the yield at an implosion velocity of
 380 km/s ([`mode1_tolerance`](@ref) gives 29.7 and 67.4 km/s), rounded. They are
 engineering defaults and not facility criteria.
+
+The velocity per percent of mode 1 ([`HOTSPOT_VELOCITY_PER_PERCENT`](@ref)) is linear to
+about 0.75%, 75 km/s at the default, and saturates past it, so a larger score, such as
+that of a lost NIF quad (1.3 to 1.7% of mode 1), is an upper bound of the speed. The
+default thresholds lie inside the linear range and the saturation is monotone, so the
+tiers hold; a threshold above the linear range needs a saturation model (research
+notes, "Beam rules of engagement").
 """
 function roe_hotspot_velocity(; green::Real = 30.0, amber::Real = 65.0, measure::Symbol = :change,
                               name = :hotspot_velocity, case::Symbol = :default, kwargs...)
