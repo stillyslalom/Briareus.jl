@@ -313,7 +313,18 @@ end
     fl = corridor_fills(m)
     @test count(==(3), g.fills) == 2 * count(==(3), fl[2:end-1, :]) + count(==(3), fl[[1, end], :])
     @test Set(g.fills) == Set(fl) && 1 in g.fills && 3 in g.fills && 5 in g.fills
-    @test_throws ArgumentError corridor_surface(corridor_map([b]; plane = ((0, 0, 0), (0, 0, 1)), extent = 5.0, n = 5))
+    # a plane: one square cell about each sample, two triangles each, in the plane
+    mp = corridor_map([b]; plane = ((0, 0, 3), (0, 0, 1)), extent = 5.0, n = 5)
+    gp = corridor_surface(mp)
+    @test length(gp.vertices) == 36 && length(gp.faces) == 50 == length(gp.fills)
+    @test all(v -> abs(v[3] - 3) < 1e-12 && maximum(abs, v[1:2]) <= 6.25 + 1e-12, gp.vertices)
+    @test gp.fills[1:2:end] == vec(permutedims(corridor_fills(mp)))
+    @test corridor_extent(mp) ≈ 3 + sqrt(2) * 5 && corridor_extent(m) == 50
+    # the drawing of the Clearance tab: the classes as digits, the first index fastest
+    dm = corridor_drawing(m)
+    @test startswith(dm, "{\"surface\":\"sphere\",\"nu\":$nθ,\"nv\":$nφ,") &&
+          occursin("\"fills\":\"" * join(vec(fl)) * "\"", dm)
+    @test occursin("\"surface\":\"plane\",\"nu\":5,\"nv\":5,\"extent\":5.0000,", corridor_drawing(mp))
     clear_corridor!(cs)
     @test cs.map[] === nothing && cs.status[] == "" && !corridor_stale(cs, rv, tl, [b], sl)
 
@@ -345,6 +356,27 @@ end
     @test !cm.shown[] && cm.map[] === nothing
     set_corridor_radius!(sess, 80.0)
     @test cm.radius[] == 80.0 && cm.map[] === nothing
+    @test_throws ArgumentError export_corridor_svg(sess, tempname())
+    # a plane through the mounting zone, set from text; a shown map follows the settings
+    @test edit_corridor!(sess, :point, "0, 0, 8") && edit_corridor!(sess, :normal, "0 0 2") &&
+          edit_corridor!(sess, :extent, "6")
+    @test cm.point[] == (0.0, 0.0, 8.0) && cm.normal[] == (0.0, 0.0, 2.0) && cm.extent[] == 6.0 && cm.error[] == ""
+    @test !edit_corridor!(sess, :normal, "0, 0, 0") && occursin("must not be zero", cm.error[])
+    @test !edit_corridor!(sess, :extent, "-1") && !edit_corridor!(sess, :point, "1, 2") && cm.extent[] == 6.0
+    set_corridor_surface!(sess, :plane)
+    show_corridor!(sess)
+    ref = corridor_map(active_beams(sess.beams); sight_lines = corridor_sight_lines(sess), plane = ((0, 0, 8), (0, 0, 2)),
+                       extent = 6.0, corridor_kwargs(sess.review, sess.talis)...)
+    @test cm.map[].surface === :plane && cm.map[].margin == ref.margin
+    @test startswith(cm.status[], "plane through (0, 0, 8) mm, normal (0, 0, 1), ±6 mm: ")
+    @test edit_corridor!(sess, :extent, "4") && cm.map[].u[end] == 4.0
+    @test !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess))
+    path = export_corridor_svg(sess, joinpath(mktempdir(), "map.svg"))
+    @test read(path, String) == corridor_map_svg(cm.map[]; tight = sess.talis.tight[])
+    @test_throws ArgumentError set_corridor_surface!(sess, :cylinder)
+    set_corridor_surface!(sess, :sphere)
+    @test cm.map[].surface === :sphere && cm.map[].radius == 80.0
+    show_corridor!(sess, false)
 end
 
 @testset "beam rules of engagement (no GL)" begin

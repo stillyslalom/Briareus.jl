@@ -57,6 +57,7 @@ ApplicationWindow {
     }
     function openClearanceExport() { fileDialog.run("export_clearance") }
     function openTalisExport() { fileDialog.run("export_talis") }
+    function openCorridorExport() { corridorDialog.open() }
     function openDiagnostics() { diagnosticsDialog.open() }
     function openStl() { stlDialog.open() }
 
@@ -614,6 +615,14 @@ ApplicationWindow {
         id: reviewReportDialog
         title: "Folder for the 1ω review report (HTML, CSV and one SVG slice per tight pair)"
         onAccepted: Julia.br_tl_review(selectedFolder.toString())
+    }
+    FileDialog {
+        id: corridorDialog
+        title: "Export the keep-out map as SVG"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "svg"
+        nameFilters: ["SVG drawing (*.svg)", "All files (*)"]
+        onAccepted: Julia.br_cm_export(selectedFile.toString())
     }
     FileDialog {
         id: exportScriptDialog

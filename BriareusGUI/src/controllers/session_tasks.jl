@@ -175,6 +175,66 @@ function set_corridor_radius!(sess::DesignSession, radius::Real)
 end
 
 """
+    set_corridor_surface!(sess::DesignSession, surface::Symbol) -> sess
+
+Map the keep-outs on the sphere about TCC (`:sphere`) or on the plane of the corridor
+settings (`:plane`), and update the map if it is shown.
+"""
+function set_corridor_surface!(sess::DesignSession, surface::Symbol)
+    surface in (:sphere, :plane) || throw(ArgumentError("the keep-out map lies on a :sphere or a :plane"))
+    _assign!(sess.corridor.surface, surface)
+    sess.corridor.shown[] && show_corridor!(sess, true)
+    return sess
+end
+
+"""
+    edit_corridor!(sess::DesignSession, key::Symbol, text) -> Bool
+
+Edit a setting of the plane of the keep-out map from text: `:point` and `:normal` as
+`"x, y, z"` (mm; the normal need not be a unit vector), `:extent` as a positive length (mm
+on each side of the point). The map is updated if it is shown. A rejected value sets
+`sess.corridor.error` and returns `false`.
+"""
+function edit_corridor!(sess::DesignSession, key::Symbol, text)
+    cs = sess.corridor
+    try
+        if key === :extent
+            v = _parse_number(text, "the half-width of the plane")
+            v > 0 && isfinite(v) || throw(ArgumentError("the half-width of the plane is a positive length in mm"))
+            _assign!(cs.extent, v)
+        elseif key === :point || key === :normal
+            what = key === :point ? "the point of the plane" : "the normal of the plane"
+            parts = split(strip(string(text)), r"[\s,;]+"; keepempty = false)
+            length(parts) == 3 || throw(ArgumentError("$what is three numbers x, y, z, got \"$text\""))
+            v = Tuple(_parse_number(p, what) for p in parts)
+            key === :normal && !(hypot(v...) > 0) && throw(ArgumentError("the normal of the plane must not be zero"))
+            _assign!(key === :point ? cs.point : cs.normal, v)
+        else
+            throw(ArgumentError("unknown setting :$key of the keep-out map"))
+        end
+        cs.error[] = ""
+        cs.shown[] && show_corridor!(sess, true)
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        cs.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    export_corridor_svg(sess::DesignSession, path) -> path
+
+Write the keep-out map shown in the session to `path` as an SVG drawing
+(`Briareus.write_corridor_map_svg`, with the tight threshold of the TaLIS settings).
+"""
+function export_corridor_svg(sess::DesignSession, path::AbstractString)
+    m = sess.corridor.map[]
+    m === nothing && throw(ArgumentError("no keep-out map to export: show the map first"))
+    return write_corridor_map_svg(path, m; tight = sess.talis.tight[])
+end
+
+"""
     run_task!(sess::DesignSession, task::Symbol; spawn = true) -> sess
 
 Start analysis `task`, one of [`TASKS`](@ref): `:drive` builds the scenario

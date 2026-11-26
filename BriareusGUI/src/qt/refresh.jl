@@ -176,6 +176,7 @@ function _dirty_sources(sess::DesignSession)
               sw.error, sw.result, sw.selected,
               rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
               rv.running, rv.status, rv.error, rv.report, cm.radius, cm.shown, cm.map, cm.status,
+              cm.surface, cm.point, cm.normal, cm.extent, cm.error,
               tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
               tl.running, tl.status, tl.error, tl.report, tl.tight, tl.hide_curved, tl.focus, tl.pinch,
               v.display, v.selection, v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted,
@@ -928,6 +929,12 @@ function _refresh_review!(sh::BriareusShell)
     _set!(sh, "cmShown", cm.shown[])
     _set!(sh, "cmRadius", _num(cm.radius[]))
     _set!(sh, "cmText", cm.status[])
+    _set!(sh, "cmSurface", String(cm.surface[]))
+    _set!(sh, "cmPoint", join((_num(v) for v in cm.point[]), ", "))
+    _set!(sh, "cmNormal", join((_num(v) for v in cm.normal[]), ", "))
+    _set!(sh, "cmExtent", _num(cm.extent[]))
+    _set!(sh, "cmError", cm.error[])
+    _set!(sh, "cmMap", cm.map[] === nothing ? "" : corridor_drawing(cm.map[]; tight = sess.talis.tight[]))
     _set!(sh, "cmStale", cm.map[] !== nothing &&
                          corridor_stale(cm, rv, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess)))
     comps = [CompRow(String(n), component_label(n), n in rv.targets[] ? "target" : n in rv.hardware[] ? "hardware" : "none")

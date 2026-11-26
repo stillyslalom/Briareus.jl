@@ -83,11 +83,33 @@ ColumnLayout {
     }
     // the keep-out map: where new hardware fits between the beams and the lines of sight
     SectionLabel { text: "Keep-out map" }
-    CheckLine { text: "Show the keep-outs on a sphere about TCC"; checked: app.cmShown; onToggled: Julia.br_cm_show(checked)
-                tip: "Colors a sphere by what crosses it: 3ω light (blue), 1ω light (vermilion), the lines of sight of the ticked diagnostics (purple). The open region is green, and yellow where the margin is below the tight threshold. Uses the errors above and the TaLIS rule tolerance" }
-    PropRow { label: "Radius"; value: app.cmRadius; unit: "mm from TCC"
+    CheckLine { text: "Show the keep-out map"; checked: app.cmShown; onToggled: Julia.br_cm_show(checked)
+                tip: "Colors a sphere about TCC or a plane by what crosses it: 3ω light (blue), 1ω light (vermilion), the lines of sight of the ticked diagnostics (purple). The open region is green, and yellow where the margin is below the tight threshold. Uses the errors above and the TaLIS rule tolerance. The Clearance tab draws it flat" }
+    RowLayout {
+        spacing: 8
+        Cell { text: "Surface"; Layout.preferredWidth: 150 }
+        ComboBox {
+            Layout.fillWidth: true
+            textRole: "text"; valueRole: "value"
+            model: [{ text: "Sphere about TCC", value: "sphere" }, { text: "Plane", value: "plane" }]
+            currentIndex: app.cmSurface === "plane" ? 1 : 0
+            onActivated: Julia.br_cm_surface(currentValue)
+            tip: "Sphere: the directions from TCC at one distance. Plane: a slice through the mounting zone"
+        }
+    }
+    PropRow { visible: app.cmSurface !== "plane"; label: "Radius"; value: app.cmRadius; unit: "mm from TCC"
               tip: "The distance from TCC at which the hardware is to be placed"
               onEdited: (text) => Julia.br_cm_radius(text) }
+    PropRow { visible: app.cmSurface === "plane"; label: "Point"; value: app.cmPoint; unit: "x, y, z mm"
+              tip: "A point of the plane, at the center of the map"
+              onEdited: (text) => Julia.br_cm_edit("point", text) }
+    PropRow { visible: app.cmSurface === "plane"; label: "Normal"; value: app.cmNormal; unit: "x, y, z"
+              tip: "The direction across the plane"
+              onEdited: (text) => Julia.br_cm_edit("normal", text) }
+    PropRow { visible: app.cmSurface === "plane"; label: "Half-width"; value: app.cmExtent; unit: "mm"
+              tip: "The map spans this distance on each side of the point"
+              onEdited: (text) => Julia.br_cm_edit("extent", text) }
+    ErrorText { text: app.cmError }
     Note {
         visible: app.cmShown
         text: app.cmStale ? "Out of date. " + app.cmText : app.cmText

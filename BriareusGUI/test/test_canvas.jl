@@ -106,6 +106,14 @@ const B = BriareusGUI
     show_corridor!(sess, false)
     @test !sc.corridor.visible[]
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    # and on a plane
+    set_corridor_surface!(sess, :plane)
+    show_corridor!(sess)
+    gp = corridor_surface(sess.corridor.map[]; tight = sess.talis.tight[])
+    @test sc.corridor.visible[] && length(sc.corridor[1][].position) == 3 * length(gp.faces)
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    show_corridor!(sess, false)
+    set_corridor_surface!(sess, :sphere)
     set_color!(sess, :omega1_margin)
     @test sc.colorbar.blockscene.visible[] && sc.colorbar.limits[] == (-DISPOSITION_RANGE, DISPOSITION_RANGE)
     @test occursin("1ω clearance margin", sc.colorbar.label[])

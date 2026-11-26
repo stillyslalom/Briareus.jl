@@ -1372,6 +1372,9 @@ function br_cm_radius(text)
                                                   set_corridor_radius!(sh.sess, r)
     end
 end
+br_cm_surface(s) = _with_shell(sh -> set_corridor_surface!(sh.sess, _sym(s)))
+br_cm_edit(key, text) = _with_shell(sh -> edit_corridor!(sh.sess, _sym(key), string(text)))
+br_cm_export(url) = _with_shell(sh -> export_corridor_svg(sh.sess, _url_to_path(String(url))))
 br_rv_wings(on) = _with_shell(sh -> (sh.sess.review.wings[] = Bool(on)))
 br_rv_quality(q) = _with_shell(sh -> (q = _sym(q); haskey(REVIEW_QUALITY, q) &&
                                                    Controllers._assign!(sh.sess.review.quality, q)))
@@ -1637,7 +1640,7 @@ function _register_qml_functions()
     @qmlfunction br_diag_remove_folder br_diag_image br_diag_record br_diag_config br_diag_category br_diag_pick_image
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
-    @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel br_cm_show br_cm_radius
+    @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel br_cm_show br_cm_radius br_cm_surface br_cm_edit br_cm_export
     @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
     @qmlfunction br_tl_cancel br_tl_export br_tl_review br_cancel_all br_tl_tight br_tl_hide_curved br_tl_focus br_tl_view br_tl_pinch
     @qmlfunction br_set_color br_beam_style br_beam_color br_roe_start br_beam_length br_set_cutaway br_show_off br_omega1_contour

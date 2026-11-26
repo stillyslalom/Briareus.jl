@@ -748,8 +748,13 @@ The bottom panel has the following tabs.
   TaLIS page. The map uses the errors of the clearance check and the rule tolerance of
   the TaLIS checks, and a line gives the open share of the sphere and the widest margin
   with its direction. The camera steps back to take the sphere in when the map is
-  switched on from a closer view. The map is marked out of date when the beams, the
-  ticked diagnostics or a setting changes, and it is not saved with the session.
+  switched on from a closer view. A plane through a point, with a normal and a half-width
+  to choose, takes the place of the sphere for a slice through the mounting zone. The
+  Clearance tab draws the map flat, the two hemispheres of the sphere as disks with the
+  polar angle from the center of each (as [`corridor_map_svg`](@ref) draws them) or the
+  plane as a square, and Export SVG writes that drawing ([`write_corridor_map_svg`](@ref)).
+  The map is marked out of date when the beams, the ticked diagnostics or a setting
+  changes, and it is not saved with the session.
 
 ### Files in and out
 

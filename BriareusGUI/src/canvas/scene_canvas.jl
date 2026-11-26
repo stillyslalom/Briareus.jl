@@ -715,12 +715,12 @@ end
 function _camera_bounds!(c::SceneCanvas, sess::DesignSession)
     t, g, m = sess.target.target[], sess.target.ghost[], sess.corridor.map[]
     c.camera.bounds = (Makie.Vec3d(0, 0, 0), max(2.2 * t.scale, g === nothing ? 0.0 : 1.05 * g.scale,
-                                                 m === nothing ? 0.0 : 1.05 * m.radius))
+                                                 m === nothing ? 0.0 : 1.05 * corridor_extent(m)))
     return c
 end
 
-# The keep-out map of the session on its sphere (`show_corridor!`): each cell in the color
-# of its drawing class, the open region faint so that the target shows through.
+# The keep-out map of the session on its sphere or plane (`show_corridor!`): each cell in
+# the color of its drawing class, the open region faint so that the target shows through.
 function _draw_corridor!(c::SceneCanvas, sess::DesignSession)
     m = sess.corridor.map[]
     if m === nothing
@@ -734,7 +734,7 @@ function _draw_corridor!(c::SceneCanvas, sess::DesignSession)
     end
     _camera_bounds!(c, sess)
     # an eye inside the sphere sees none of it: step back to take the whole map in
-    m === nothing || norm(c.camera.eye - c.camera.lookat) > 1.5 * m.radius ||
+    m === nothing || m.surface === :plane || norm(c.camera.eye - c.camera.lookat) > 1.5 * m.radius ||
         fit_camera!(c.camera, Makie.Vec3d(m.origin...), m.radius)
     c.dirty[] = true
     return c
