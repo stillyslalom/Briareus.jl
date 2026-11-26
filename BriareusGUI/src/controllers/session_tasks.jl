@@ -264,8 +264,8 @@ end
 """
     start_roe!(sess::DesignSession) -> sess
 
-Scan the beam rules of engagement of the session in place: the drive scenario
-([`build_scenario!`](@ref)) against the criteria that `Briareus.roe_default_criteria`
+Scan the beam rules of engagement of the session in place: the drive scenario (built
+first by [`build_scenario!`](@ref) when it is out of date) against the criteria that `Briareus.roe_default_criteria`
 selects from the observed part and the foils of the design, over the beams with power.
 The report goes to `sess.roe` and the 3D view colors the beams by tier. A design whose
 drive cannot be computed, or whose beams land on nothing, leaves the reason in
@@ -273,12 +273,17 @@ drive cannot be computed, or whose beams land on nothing, leaves the reason in
 """
 function start_roe!(sess::DesignSession)
     rs = sess.roe
-    old = sess.spawn[]
-    sess.spawn[] = false
-    try
-        build_scenario!(sess)
-    finally
-        sess.spawn[] = old
+    # A current scenario serves as it is. Otherwise it is built here, its completion
+    # delivered in place too: a window queues completions for its GUI thread, which would
+    # leave the scan without a scenario.
+    if !_drive_current(sess) || sess.drive.building[]
+        old, oldd = sess.spawn[], sess.deliver[]
+        sess.spawn[], sess.deliver[] = false, f -> f()
+        try
+            build_scenario!(sess)
+        finally
+            sess.spawn[], sess.deliver[] = old, oldd
+        end
     end
     s = sess.drive.scenario[]
     if s === nothing
@@ -295,7 +300,9 @@ function start_roe!(sess::DesignSession)
         return sess
     end
     r = roe_scan(s, beams, choice.criteria)
-    rs.inputs[] = (sess.target.target[], beams)
+    rs.inputs[] = (sess.target.target[], beams, s)
+    _assign!(rs.picked, String[])
+    rs.outage[] === nothing || (rs.outage[] = nothing)
     rs.report[] = r
     n(t) = count(==(t), r.tiers)
     rs.status[] = string(length(r.units), " units against ", join((c.name for c in r.criteria), ", "), ": ", n(:red),
@@ -311,8 +318,41 @@ Whether the target or the beams changed since the last rules-of-engagement scan.
 """
 function roe_stale(sess::DesignSession)
     sess.roe.report[] === nothing && return false
-    t, beams = sess.roe.inputs[]
+    t, beams, _ = sess.roe.inputs[]
     return t !== sess.target.target[] || beams != display_beams(sess.beams)
+end
+
+"""
+    pick_outage!(sess::DesignSession, name) -> sess
+
+Add the unit `name` (a beam or a quad of the last rules-of-engagement scan) to the
+hypothetical outage of the Outages tab, or take it out if it is there, and score the
+outage again (`Briareus.roe_outage`, a full evaluation of the drive scenario of the scan
+with every picked unit at zero power).
+"""
+function pick_outage!(sess::DesignSession, name::AbstractString)
+    rs = sess.roe
+    r = rs.report[]
+    r === nothing && throw(ArgumentError("no outage scan: scan the outages first"))
+    any(u -> u.name == name, r.units) || throw(ArgumentError("$name is not a unit of the scan"))
+    p = copy(rs.picked[])
+    i = findfirst(==(name), p)
+    i === nothing ? push!(p, String(name)) : deleteat!(p, i)
+    rs.picked[] = p
+    _, beams, s = rs.inputs[]
+    rs.outage[] = isempty(p) ? nothing : roe_outage(r, s, beams, p)
+    return sess
+end
+
+"""
+    clear_outage!(sess::DesignSession) -> sess
+
+Empty the hypothetical outage of the Outages tab.
+"""
+function clear_outage!(sess::DesignSession)
+    _assign!(sess.roe.picked, String[])
+    sess.roe.outage[] === nothing || (sess.roe.outage[] = nothing)
+    return sess
 end
 
 """

@@ -540,6 +540,11 @@ beam properties runs the beam rules of engagement on the drive of the design wit
 default criteria (`Briareus.roe_default_criteria`, engineering defaults) and colors each
 beam by tier: green may drop, amber needs approval and red delays the shot. A selected
 beam shows the criterion that binds it and its quad, with the score and the thresholds.
+The Outages tab draws the chamber port map of the scan ([`port_map`](@ref)), each quad or
+beam in the color of its tier on two polar disks, one per hemisphere. A click on a mark
+adds it to a hypothetical outage, or takes it out, and the table beside the map scores
+the picked units together against every criterion of the scan ([`roe_outage`](@ref)),
+so three or more units dropped at once are checked before the shot.
 The target is colored
 by component or by the absorbed laser intensity, the x-ray radiosity or the incident
 x-ray flux (W/cm²); a drive coloring computes the drive when it is missing. For a design

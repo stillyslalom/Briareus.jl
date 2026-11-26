@@ -5,7 +5,7 @@
 # `Briareus.design_diff`.
 
 "The results tabs that `briareus design.briar --tab <name>` opens."
-const TABS = ("beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "talis")
+const TABS = ("beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "outages", "talis")
 
 const USAGE = """
 usage:

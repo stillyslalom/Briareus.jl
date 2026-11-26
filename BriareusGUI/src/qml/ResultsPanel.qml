@@ -12,7 +12,7 @@ Pane {
     id: results
     padding: 0
     property alias currentIndex: tabs.currentIndex
-    readonly property var keys: ["beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "talis"]
+    readonly property var keys: ["beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "outages", "talis"]
     function show(key) { const i = keys.indexOf(key); if (i >= 0) tabs.currentIndex = i }
     function redrawTime() { timePanel.redraw() }
     function redrawDiagnostics() { diagnosticsPanel.redraw() }
@@ -37,7 +37,7 @@ Pane {
             // The side padding of the tabs, less when the panel is narrow, so that every tab
             // shows its whole name instead of being scrolled out of sight. It is computed
             // from the widths of the names, which do not depend on the padding.
-            readonly property var names: ["Beam table", "Drive", "Time", "Diagnostics", "Optimization", "Clearance", "Sweep", "TaLIS"]
+            readonly property var names: ["Beam table", "Drive", "Time", "Diagnostics", "Optimization", "Clearance", "Sweep", "Outages", "TaLIS"]
             FontMetrics { id: tabFont; font: tabs.font }
             readonly property real pad: {
                 const shown = app.facility === "nif" ? names : names.slice(0, -1)   // TaLIS needs NIF beams
@@ -64,6 +64,7 @@ Pane {
             Tab { text: "Optimization" }
             Tab { text: "Clearance" }
             Tab { text: "Sweep" }
+            Tab { text: "Outages" }
             // NIF's rules: the tab only for NIF beams
             Tab { text: "TaLIS"; visible: app.facility === "nif"; width: visible ? Math.ceil(tabFont.advanceWidth(text)) + 2 * tabs.pad + 2 : 0 }
         }
@@ -82,6 +83,9 @@ Pane {
                 ClearancePanel { anchors.fill: parent; anchors.margins: 6 }
             }
             SweepPanel { id: sweepPanel }
+            Item {
+                OutagesPanel { anchors.fill: parent; anchors.margins: 6 }
+            }
             Item {
                 TalisPanel { anchors.fill: parent; anchors.margins: 6 }
             }

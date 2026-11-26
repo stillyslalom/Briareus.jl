@@ -399,6 +399,32 @@ end
     @test occursin(string(r.tiers[i]), text) && occursin(string(r.criteria[o.binding].name), text) && occursin("amber ≤", text)
     @test roe_beam_text(rs, "nonesuch") == ""
     @test occursin("units against drive", rs.status[]) && occursin("engineering defaults", rs.status[])
+    # The port map of the Outages tab, by beam (the quads of the preset are single beams),
+    # in the colors of the tiers.
+    ms = roe_marks(rs)
+    @test [m.name for m in ms] == r.beams && all(m -> m.tier === tiers[m.name] && !m.picked, ms)
+    pd = roe_port_drawing(rs)
+    @test startswith(pd, "[{\"name\":\"" * ms[1].name * "\",") && count("\"tier\":", pd) == length(ms)
+    # A hypothetical outage picked on the map: a pair agrees with the linear pair of the
+    # scan, and a third beam joins it.
+    a, b, c = r.units[1].name, r.units[2].name, r.units[3].name
+    @test roe_outage_text(rs) == "" && isempty(roe_outage_rows(rs))
+    pick_outage!(sess, a)
+    pick_outage!(sess, b)
+    pair = only(p for p in r.pairs if Set(p.units) == Set((1, 2)))
+    @test rs.picked[] == [a, b] && isapprox(rs.outage[].scores, pair.scores; rtol = 1e-9)
+    @test count(m -> m.picked, roe_marks(rs)) == 2
+    pick_outage!(sess, c)
+    o3 = rs.outage[]
+    @test o3.scores == roe_outage(r, sc, beams, [a, b, c]).scores && o3.beams == [1, 2, 3]
+    rows = roe_outage_rows(rs)
+    @test [x.criterion for x in rows] == ["drive", "P2", "P4", "hotspot_velocity"] && count(x -> x.binding, rows) == 1
+    @test startswith(roe_outage_text(rs), "outage of $a, $b, $c (3 beams): $(o3.tier), bound by ")
+    pick_outage!(sess, a)
+    @test rs.picked[] == [b, c] && rs.outage[].beams == [2, 3]
+    @test_throws ArgumentError pick_outage!(sess, "nonesuch")
+    clear_outage!(sess)
+    @test isempty(rs.picked[]) && rs.outage[] === nothing
     # a changed beam marks the scan out of date
     bs = sess.beams.beams[]
     set_beams!(sess.beams, [k == 1 ? remake(b; power = 0.5 * b.power) : b for (k, b) in enumerate(bs)])
