@@ -71,6 +71,8 @@ wall of one cavity (`roe_face_flux`, `roe_face_nonuniformity`, `roe_temperature`
 `roe_corona_rms`), and any other function of an evaluation enters as a criterion of the
 same kind. Several cases in one scan cover the epochs of a pulse and several observed
 faces. The default thresholds of the built-in criteria are engineering defaults.
+[`roe_outage`](@ref) scores any other set of units, such as three beams or a quad with a
+beam of another quad, against the criteria and baseline of a report.
 [`roe_table`](@ref), [`write_roe_csv`](@ref) and [`roe_markdown`](@ref) export the sheet
 by role and tier, with the scores behind each tier and the pairs that are worse together.
 [`port_map_svg`](@ref) draws the ports of the beams of any facility on two polar disks,

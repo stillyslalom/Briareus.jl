@@ -528,6 +528,67 @@ end
 roe_scan(s::Scenario, beams::AbstractVector{<:Beam}, criteria::AbstractVector{ROECriterion}; kwargs...) =
     _roe_scan(Pair{Symbol,Any}[:default => (s, beams)], criteria; kwargs...)
 
+"""
+    roe_outage(report, scenario, beams, drop) -> ROEOutage
+    roe_outage(report, cases, drop) -> ROEOutage
+
+A hypothetical outage of any number of units, scored against the criteria and the
+baseline of `report` (from [`roe_scan`](@ref) on the same `scenario` and `beams`, or the
+same `cases`). `drop` lists the names of units of the report (beams and quads) and of
+beams of the report that are not units, such as beams with no power. The beams of the
+dropped units go to zero power together, and every case of a criterion is evaluated
+again in full, laser–plasma model included, so the result is that of a scan with
+`method = :full`. The scan covers single units and pairs; this function covers three or
+more units, or a pair that the scan left out.
+
+The returned outage lists the dropped units and beams by their indices in the report.
+"""
+function roe_outage(r::ROEReport, s::Scenario, beams::AbstractVector{<:Beam}, drop)
+    return roe_outage(r, Pair{Symbol,Any}[:default => (s, beams)], drop)
+end
+
+function roe_outage(r::ROEReport, @nospecialize(cases), @nospecialize(drop))
+    cs = _roe_cases(cases)
+    Symbol[first(p) for p in cs] == r.cases ||
+        throw(ArgumentError("the cases must be those of the report, " * join((":" * String(c) for c in r.cases), ", ")))
+    units, bs = Int[], Int[]
+    for n in drop
+        name = String(n)
+        i = findfirst(u -> u.name == name, r.units)
+        if i === nothing
+            b = findfirst(==(name), r.beams)
+            b === nothing && throw(ArgumentError("$name is neither a unit nor a beam of the report"))
+            push!(bs, b)
+        else
+            push!(units, i)
+            append!(bs, r.units[i].beams)
+        end
+    end
+    isempty(bs) && throw(ArgumentError("an outage drops at least one beam"))
+    sort!(unique!(units))
+    sort!(unique!(bs))
+    evs = Vector{Union{Nothing,Evaluation}}(nothing, length(cs))
+    function ev(j)
+        evs[j] === nothing || return evs[j]::Evaluation
+        sb = last(cs[j])
+        (sb isa Tuple && length(sb) == 2 && sb[1] isa Scenario) ||
+            throw(ArgumentError("case :$(first(cs[j])) must be a (scenario, beams) tuple"))
+        b2 = collect(Beam{Float64}, sb[2])
+        String[b.name for b in b2] == r.beams ||
+            throw(ArgumentError("case :$(first(cs[j])) has other beams than the report"))
+        for b in bs
+            b2[b] = remake(b2[b]; power = 0.0)
+        end
+        return evs[j] = evaluate(sb[1], b2)
+    end
+    scores = Vector{Float64}(undef, length(r.criteria))
+    for (k, c) in enumerate(r.criteria)
+        j = c.case === :default ? 1 : findfirst(==(c.case), r.cases)
+        scores[k] = _roe_score(c, c.f(ev(j)), r.baseline[k])
+    end
+    return _roe_result(r.criteria, units, bs, scores)
+end
+
 # The final tier of each unit and its pair caveats.
 function _roe_tiers(singles::Vector{ROEOutage}, pairouts::Vector{ROEOutage})
     tiers = Symbol[o.tier for o in singles]

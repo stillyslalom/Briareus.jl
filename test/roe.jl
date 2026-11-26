@@ -251,6 +251,19 @@ end
     @test all(o -> o.scores[1] == 5.0 && o.tiers == [:green, :red] && o.binding == 2, rv.singles)
     rel = ROECriterion(:rel, ev -> 4.0 - length(dropped(ev)); green = 0.3, amber = 0.6, measure = :relative)
     @test scan([rel]).pairs[1].scores == [0.5]
+    # a hypothetical outage of any units: a pair of a full scan is reproduced exactly, and
+    # three beams, or a quad with a beam, drop together
+    rf = scan([rel, count_c(1, 2)[1]]; method = :full)
+    o2 = roe_outage(rf, s4, four, ["B1", "B3"])
+    @test o2.scores == _roe_pair(rf, "B1", "B3").scores && o2.units == [1, 3] && o2.beams == [1, 3]
+    o3 = roe_outage(rf, s4, four, ("B1", :B2, "B4"))
+    @test o3.scores == [0.75, 3.0] && o3.tiers == [:red, :red] && o3.tier === :red
+    rq = roe_scan(s4, four, [rel]; pairs = :none)
+    oq = roe_outage(rq, [:default => (s4, four)], ["QA", "B3"])
+    @test oq.beams == [1, 2, 3] && oq.units == sort([_roe_unit(rq, "QA"), _roe_unit(rq, "B3")]) && oq.scores == [0.75]
+    @test_throws ArgumentError roe_outage(rq, s4, four, ["B9"])
+    @test_throws ArgumentError roe_outage(rq, s4, four, String[])
+    @test_throws ArgumentError roe_outage(rq, [:other => (s4, four)], ["B1"])
 
     # errors
     @test_throws ArgumentError ROECriterion(:a, identity; green = 2, amber = 1)

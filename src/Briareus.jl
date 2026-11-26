@@ -74,7 +74,7 @@ export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_
        Omega1Disposition, omega1_disposition, omega1_slice, omega1_slice_svg, write_omega1_slice_svg,
        SightLine, sight_line, sight_distance, CorridorMap, corridor_map, corridor_margin, corridor_classes,
        corridor_fills, angular_margin, corridor_open_fraction, corridor_map_svg, write_corridor_map_svg,
-       ROECriterion, ROEUnit, ROEOutage, ROEBudget, ROEReport, roe_scan, roe_drive, roe_mode,
+       ROECriterion, ROEUnit, ROEOutage, ROEBudget, ROEReport, roe_scan, roe_outage, roe_drive, roe_mode,
        roe_hotspot_velocity, roe_yield, roe_face_flux, roe_face_nonuniformity, roe_temperature,
        roe_flux_balance, roe_foil_irradiance, roe_foil_nonuniformity, roe_foil_centroid,
        roe_backlighter_signal, roe_illumination_rms, roe_corona_rms, roe_table, write_roe_csv,
