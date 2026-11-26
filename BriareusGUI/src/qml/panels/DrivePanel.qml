@@ -104,6 +104,35 @@ ScrollPage {
                 }
             }
         }
+        // the deposition against the one the imported VisRad workspace saves, per object
+        ColumnLayout {
+            visible: app.visradRows !== ""
+            Layout.alignment: Qt.AlignTop
+            spacing: 4
+            SectionLabel { text: "Against VisRad"; Layout.topMargin: 0 }
+            Label { text: "Absorbed power (TW); flux by element"; opacity: 0.75 }
+            GridLayout {
+                columns: 7
+                columnSpacing: 16
+                rowSpacing: 2
+                Repeater {
+                    model: ["Object", "Briareus", "VisRad", "V − B", "rms", "max", "corr."]
+                    delegate: Label { text: modelData; font.weight: Font.DemiBold }
+                }
+                Repeater {
+                    // one cell per entry, row by row
+                    model: app.visradRows === "" ? [] : JSON.parse(app.visradRows).reduce((a, r) =>
+                        a.concat([r.object, r.briareus, r.visrad, r.relative, r.rms, r.max, r.correlation]), [])
+                    delegate: Label {
+                        required property var modelData
+                        required property int index
+                        Layout.row: 1 + Math.floor(index / 7)
+                        Layout.column: index % 7
+                        text: modelData
+                    }
+                }
+            }
+        }
         Item { Layout.fillWidth: true }
     }
 }

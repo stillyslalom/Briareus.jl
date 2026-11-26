@@ -641,10 +641,29 @@ workspace, the drive is not computed, or the workspace saves no deposition for t
 of the drive.
 """
 function visrad_parity(sess::DesignSession)
+    (isempty(sess.visrad_source[]) || sess.drive.result[] === nothing) && return nothing
+    r = _visrad_comparison(sess)
+    if r === nothing || all(isnan, r.visrad)
+        sess.status[] = "no comparison with VisRad: the workspace saves no laser deposition for the parts of the drive" *
+                        (r === nothing || isempty(r.skipped) ? "" : " (left out: " * join(r.skipped, ", ") * ")")
+        return nothing
+    end
+    return to_Wcm2.(r.residual)
+end
+
+# The last comparison with VisRad, by drive result and workspace file: the resampling
+# searches the VisRad triangles for every element, so it is done once per drive.
+const _VISRAD_COMPARISON = Ref{Any}(nothing)
+
+# The resampled laser residuals of the drive against the workspace of the design
+# (`Briareus.visrad_residuals`), or `nothing` without a workspace, a drive or saved
+# power sources.
+function _visrad_comparison(sess::DesignSession)
     src = sess.visrad_source[]
-    isempty(src) && return nothing
     res = sess.drive.result[]
-    res === nothing && return nothing
+    (isempty(src) || res === nothing || !isfile(src)) && return nothing
+    c = _VISRAD_COMPARISON[]
+    c !== nothing && c[1] === res && c[2] == src && c[3] == mtime(src) && return c[4]
     ev = res.evaluation
     r = try
         ws = _visrad_workspace(src)
@@ -655,12 +674,24 @@ function visrad_parity(sess::DesignSession)
         err isa ArgumentError || rethrow()
         nothing
     end
-    if r === nothing || all(isnan, r.visrad)
-        sess.status[] = "no comparison with VisRad: the workspace saves no laser deposition for the parts of the drive" *
-                        (r === nothing || isempty(r.skipped) ? "" : " (left out: " * join(r.skipped, ", ") * ")")
-        return nothing
-    end
-    return to_Wcm2.(r.residual)
+    _VISRAD_COMPARISON[] = (res, src, mtime(src), r)
+    return r
+end
+
+"""
+    visrad_parity_rows(sess::DesignSession) -> Vector{NamedTuple}
+
+The summary of the comparison of the drive with the deposition that the imported VisRad
+workspace saves, one row per compared object, as the Drive tab shows it (the `objects`
+of `Briareus.visrad_residuals` with `resample = true`): `object`, the absorbed laser
+power of both sides (TW), and the area-weighted rms, largest difference and correlation
+of the absorbed flux, the first two as fractions of the VisRad mean. Empty when
+[`visrad_parity`](@ref) has nothing to compare.
+"""
+function visrad_parity_rows(sess::DesignSession)
+    r = _visrad_comparison(sess)
+    r === nothing && return NamedTuple[]
+    return [o for o in r.objects if o.n > 0]
 end
 
 """

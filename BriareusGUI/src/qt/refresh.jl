@@ -681,6 +681,7 @@ function _refresh_drive!(sh::BriareusShell)
                            @sprintf("%.3g W/cm² · Tr %.1f eV", to_Wcm2(res.mean_flux),
                                     radiation_temperature(res.mean_flux)))
     _set!(sh, "driveFace", res !== nothing && res.face !== nothing)
+    _set!(sh, "visradRows", _visrad_rows_json(visrad_parity_rows(sess)))
     # each cavity's wall temperature, the one shown chosen in the Drive panel
     cavs = res === nothing ? NamedTuple[] : res.cavities
     shown = drive_cavity(sess)
@@ -1072,4 +1073,15 @@ function _roe_rows_json(rows)
                        escape_string(r.criterion), r.score, isempty(r.label) ? "" : " " * escape_string(r.label),
                        r.green, r.amber, r.tier, r.binding)
     return "[" * join((item(r) for r in rows), ",") * "]"
+end
+
+# The summary of the comparison with VisRad in the Drive tab, as the JSON its table reads.
+function _visrad_rows_json(rows)
+    isempty(rows) && return ""
+    pct(x) = isfinite(x) ? @sprintf("%.2f%%", 100x) : "–"
+    item(o) = @sprintf("{\"object\":\"%s\",\"briareus\":\"%.4g\",\"visrad\":\"%.4g\",\"relative\":\"%s\",\"rms\":\"%s\",\"max\":\"%s\",\"correlation\":\"%s\"}",
+                       escape_string(o.object), o.power_briareus, o.power_visrad,
+                       o.power_briareus == 0 ? "–" : pct((o.power_visrad - o.power_briareus) / abs(o.power_briareus)),
+                       pct(o.rms), pct(o.max), isfinite(o.correlation) ? @sprintf("%.4f", o.correlation) : "–")
+    return "[" * join((item(o) for o in rows), ",") * "]"
 end

@@ -766,6 +766,15 @@ end
     facet(c) = argmin(k -> abs(dot(t.elem_normal[ec[k]], c - t.elem_centroid[ec[k]])), 1:4)
     @test rf.visrad ≈ [qcad[facet(c)] / 100 for c in tf.elem_centroid] rtol = 1e-12
     @test rf.residual ≈ lf ./ tf.elem_area .- rf.visrad && isempty(rf.skipped)
+    # the summary of the object: the powers of both sides, the VisRad one on the four
+    # facets, and the means over the refined facets, which partition them
+    o = only(rf.objects)
+    Af = sum(tf.elem_area)
+    @test o.object == "CAD_0" && o.n == 12 && isapprox(o.power_briareus, sum(lf); rtol = 1e-12)
+    @test o.power_visrad ≈ sum(qcad[k] / 100 * t.elem_area[ec[k]] for k in 1:4) rtol = 1e-12
+    @test isapprox(o.briareus, 100 * sum(lf) / Af; rtol = 1e-12) && isapprox(o.visrad, 100 * o.power_visrad / Af; rtol = 1e-12)
+    same = only(visrad_residuals(ws, tf, rf.visrad .* tf.elem_area; resample = true).objects)
+    @test same.rms < 1e-12 && same.max < 1e-12 && isapprox(same.correlation, 1; rtol = 1e-12)
     @test_throws ArgumentError visrad_residuals(ws, sol; quantity = :nothing)
     # A 1-based index is found from the largest index, and ambiguous tables are refused.
     part = (; header = ["Surf Index", "Flux Out (TW/cm2)"], labels = fill("", 3), data = [1.0 1; 2 2; 3 3])

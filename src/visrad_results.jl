@@ -262,7 +262,13 @@ by the part of the element, by the distance to the triangles of the VisRad eleme
 comparison is then exact where the centroid lies on a VisRad element, and it assumes that
 the object stands where the workspace places it. An object whose VisRad element order is
 not established, such as a hohlraum, is left out and named in the field `skipped` of the
-result.
+result. The field `objects` gives the summary of each compared object, as the laser rows
+of [`compare_visrad`](@ref) give it: `object`, the absorbed power (TW) of both sides,
+`power_briareus` on the front elements of the part and `power_visrad` on the elements of
+the object in the workspace (Σ source × area, independent of the mesh), and the
+agreement of the absorbed flux on the front elements (`n`, the area-weighted means
+`briareus` and `visrad` in TW/cm², and `rms`, `max` and `correlation` as in
+`compare_visrad`, with VisRad resampled).
 
 `residual`, `briareus` and `visrad` have one entry per element. An element without a
 VisRad value is `NaN` in `visrad` and `residual`. With `relative = true` the residual is
@@ -306,6 +312,7 @@ function visrad_residuals(ws::VisRadWorkspace, t::Target, laser::AbstractVector;
         B = [v(laser[e]) / t.elem_area[e] for e in 1:nelements(t)]
         V = fill(NaN, nelements(t))
         skipped = String[]
+        objects = NamedTuple[]
         for name in sort!(collect(String, keys(sources.tables)))
             es = [e for e in 1:nelements(t) if t.components[t.elem_comp[e]].part === Symbol(name) && t.elem_side[e] == 1]
             isempty(es) && continue
@@ -326,8 +333,11 @@ function visrad_residuals(ws::VisRadWorkspace, t::Target, laser::AbstractVector;
                 ve = tv.tri_front[k]
                 V[e] = PV[ve] / tv.elem_area[ve]
             end
+            st = _vr_element_stats(name, "Laser", "TW/cm2", 100 .* B[es], 100 .* V[es], t.elem_area[es])
+            push!(objects, (; object = name, power_briareus = sum(e -> v(laser[e]), es), power_visrad = sum(PV),
+                            st.n, st.briareus, st.visrad, st.rms, st.max, st.correlation))
         end
-        return (; _vr_residual(B, V, "TW/mm2", relative)..., skipped)
+        return (; _vr_residual(B, V, "TW/mm2", relative)..., skipped, objects = [o for o in objects])
     end
     names = Set(keys(sources.tables))
     PV = Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do

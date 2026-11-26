@@ -550,7 +550,10 @@ by component or by the absorbed laser intensity, the x-ray radiosity or the inci
 x-ray flux (W/cm²); a drive coloring computes the drive when it is missing. For a design
 imported from a VisRad workspace that saves its laser deposition, the coloring Laser,
 Briareus − VisRad paints the difference of the absorbed intensity on a diverging scale,
-with the VisRad values resampled onto the mesh of the window. Two further
+with the VisRad values resampled onto the mesh of the window. The Drive tab of such a
+design adds a table Against VisRad: per object, the absorbed laser power of both sides
+and the area-weighted rms, largest difference and correlation of the absorbed flux, the
+laser rows of [`compare_visrad`](@ref) with VisRad resampled ([`visrad_residuals`](@ref)). Two further
 views share the canvas. One is the capsule θ–φ flux map, or the foil face for a foil.
 The other is an x-ray image (Compute ▸ X-ray image along the view, `xray_image!`), the
 radiance of the surfaces seen along the direction of the 3D view, framed as the view

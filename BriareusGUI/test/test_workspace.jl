@@ -700,12 +700,19 @@ end
     @test r !== nothing && length(ec) >= 4 && nelements(tv) == 4
     @test r[ec] ≈ mine[ec] .- theirs rtol = 1e-9
     @test all(isnan, r[setdiff(1:nelements(t), ec)])
+    # the summary of the Drive tab: the object, its powers on both sides and the element
+    # agreement, as the core comparison gives them
+    row = only(visrad_parity_rows(s))
+    @test row.object == "CAD_0" && row.n == length(ec)
+    @test isapprox(row.power_briareus, sum(res.evaluation.deposition.element[ec]); rtol = 1e-12)
+    @test isapprox(row.power_visrad, sum(qcad[k] / 100 * tv.elem_area[k] for k in 1:4); rtol = 1e-12)
     # without saved power sources there is no comparison
     src0 = joinpath(dir, "none.vrw")
     write(src0, synthetic_workspace())
     import_visrad_workspace!(s, src0; include = o -> o.name == "CAD_0")
     build_scenario!(s)
     @test visrad_parity(s) === nothing && occursin("saves no laser deposition", s.status[])
+    @test isempty(visrad_parity_rows(s))
 end
 
 @testset "VisRad workspaces in the window (no GL)" begin
