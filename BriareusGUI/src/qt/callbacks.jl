@@ -75,7 +75,7 @@ end
     request_popup(key, path = "")
 
 Open a dialog or menu of the open window: `"retune"`, `"port"`, `"sight"` or `"group"` (the
-dialogs), `"diagnostics"` (the Diagnostics tab's list of instruments) and `"images"` (the
+dialogs), `"cadprep"` or `"cadprep:<step>"` (Prepare CAD target at step 0, 1 or 2), `"diagnostics"` (the Diagnostics tab's list of instruments) and `"images"` (the
 Diagnostics tab on its imagers), `"topics"` or `"topics:<topic>"` (the Help window, see
 `br_help`; `"help"` opens it at the mouse and keys), `"rowmenu:<node id>"` (the model
 tree's row menu for a beam row, a frame or an analysis), a menu bar menu by its title
@@ -1619,6 +1619,54 @@ function br_look_from_diagnostic(id)
         sess.status[] = v.text * "; " * (im.field === :visible ? seen : "image of the " * lowercasefirst(replace(im.label, r" \([^)]*\)$" => "")) * ", " * seen)
     end
 end
+# The guided preparation of a CAD target (Target ▸ Prepare CAD target): the text of step
+# `step` (0, the STL parts and their pieces; 1, the suggested roles; 2, the curvature
+# fits of the parts with a role), and its action (split every part of several pieces;
+# detect again; give the suggested roles), which returns the new text of the step.
+function br_cad_prep(step)
+    sh = _SHELL[]
+    sh === nothing && return ""
+    sess = sh.sess
+    k = Int(step)
+    try
+        if k == 0
+            rows = cad_prep_rows(sess.target)
+            isempty(rows) && return "No STL part: Insert ▸ Mesh from STL file adds one."
+            return join((@sprintf("%-24s %-24s %7d facets  %d piece%s", r.name, r.file, r.facets, r.pieces,
+                                  r.pieces == 1 ? "" : "s") for r in rows), "\n")
+        elseif k == 1
+            return suggest_cad_roles(sess).text
+        else
+            pv = curvature_preview(sess)
+            isempty(pv) && return "No part has a role yet: give the suggested roles."
+            role(n) = (i = part_index(sess.target, n); i === nothing ? "" : String(part_role(sess.target.parts[][i])))
+            return join((@sprintf("%-20s %-9s cylinders %d · cones %d · spheres %d · tori %d · %.0f%% flat", r.part,
+                                  role(r.part), r.cylinders, r.cones, r.spheres, r.tori, 100 * r.flat) for r in pv), "\n")
+        end
+    catch err
+        err isa ArgumentError || rethrow()
+        return "not available: " * sprint(showerror, err)
+    end
+end
+function br_cad_prep_act(step)
+    sh = _SHELL[]
+    sh === nothing && return ""
+    sess = sh.sess
+    k = Int(step)
+    if k == 0
+        n = 0
+        for r in reverse(cad_prep_rows(sess.target))          # from the last, so the indices hold
+            r.pieces > 1 || continue
+            split_cad_part!(sess.target, r.index) ? (n += 1) :
+                (sess.status[] = "not split: " * sess.target.error[])
+        end
+        n > 0 && (sess.status[] = "split $n STL part$(n == 1 ? "" : "s") into their pieces")
+    elseif k == 2
+        failed = apply_cad_roles!(sess)
+        sess.status[] = isempty(failed) ? "gave the suggested roles" : "roles not given: " * join(failed, "; ")
+    end
+    return br_cad_prep(k)
+end
 # Remove the view from a diagnostic laid over the 3D view.
 br_clear_sight() = _with_shell(sh -> clear_sight!(sh.scene))
 # Port angles of beam `i` of the table (0-based, as the dialog lists them), as text.
@@ -1641,7 +1689,7 @@ function _register_qml_functions()
     @qmlfunction br_select_range br_node_menu br_node_show br_node_include
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
-    @qmlfunction br_diagnostic_sights br_look_from_diagnostic br_clear_sight
+    @qmlfunction br_diagnostic_sights br_look_from_diagnostic br_clear_sight br_cad_prep br_cad_prep_act
     @qmlfunction br_set_cluster br_rename_cluster br_split_quads br_merge_quads br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_new_target br_set_resolution br_edit_mesh

@@ -328,17 +328,8 @@ function _stl_key(p::PartSpec, h, toward, raw::Bool)
 end
 
 function _stl_mesh(p::PartSpec, h, toward; raw::Bool = false)
-    scale = p.values[:scale]
     _cached(_STL_CACHE, _stl_key(p, h, toward, raw)) do
-        m0 = if isempty(p.object)
-            read_stl(p.file; scale)
-        else
-            solids = _stl_solids(p.file)
-            k = parse(Int, p.object)
-            1 <= k <= length(solids) || throw(ArgumentError("$(basename(p.file)) has no solid $k"))
-            m = last(solids[k])
-            Mesh([scale * v for v in m.vertices], m.triangles, m.patches)
-        end
+        m0 = _stl_facets(p.file, p.object, p.values[:scale])
         raw && return m0
         m = remesh_mesh(orient_mesh(m0; toward); size = h)
         p.inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
@@ -415,6 +406,37 @@ end
 _with_surface(c::Component, surf) =
     surf === nothing ? c : Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided,
                                      surface = surf)
+
+# The facets (scaled to mm) that part `object` of an STL file names: the whole file (""),
+# solid `k` of a multi-solid file ("k"), or piece `j` (`connected_pieces`, in their order)
+# of either ("#j", "k#j", as `split_cad_part!` names them).
+function _stl_facets(file::AbstractString, object::AbstractString, scale::Real)
+    solid, piece = occursin('#', object) ? split(object, '#'; limit = 2) : (object, "")
+    m = if isempty(solid)
+        read_stl(file; scale)
+    else
+        solids = _stl_solids(file)
+        k = parse(Int, solid)
+        1 <= k <= length(solids) || throw(ArgumentError("$(basename(file)) has no solid $k"))
+        s = last(solids[k])
+        Mesh([scale * v for v in s.vertices], s.triangles, s.patches)
+    end
+    isempty(piece) && return m
+    ps = _stl_pieces(file, String(solid), m)
+    j = parse(Int, piece)
+    1 <= j <= length(ps) || throw(ArgumentError("$(basename(file)) has no piece $object"))
+    return ps[j]
+end
+
+# The connected pieces of solid `solid` ("" for the whole file) of an STL file at the
+# scale of `m`, found once per version and scale.
+const _STL_PIECES = _LRU{Tuple{String,Float64,Int64,String,Vec3},Vector{Mesh}}(_CAD_FILES_KEPT)
+
+function _stl_pieces(file::AbstractString, solid::AbstractString, m::Mesh)
+    probe = isempty(m.vertices) ? zero(Vec3) : m.vertices[1]     # keys the scale
+    key = (abspath(file), mtime(file), filesize(file), String(solid), probe)
+    return _cached(() -> connected_pieces(m), _STL_PIECES, key)
+end
 
 # The solids of a multi-solid (ASCII) STL file, read once per version.
 const _STL_SOLIDS = _LRU{_FileKey,Vector{Pair{String,Mesh}}}(_CAD_FILES_KEPT)

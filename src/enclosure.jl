@@ -506,3 +506,117 @@ _part_value(x, name::Symbol, default) = x
 # Returns the components of `enc.source` that `enc.target` keeps (those with a kept
 # element), in order.
 _survivors(enc::Enclosure) = sort!(unique(enc.source.elem_comp[enc.index]))
+
+"""
+    cad_roles(target; points = [(0, 0, 0)], rays = 512, enclosed = 0.75, thin = 0.05,
+              spread = 0.15) -> (; parts, cavities)
+
+Suggest analysis roles for the parts of a target imported from CAD, as the second step of
+preparing it (after orienting and splitting it, [`orient_mesh`](@ref) and
+[`connected_pieces`](@ref), and before assigning roles and fitting curved surfaces,
+[`curved_components`](@ref)). The suggestions are geometric and serve hohlraums,
+halfraums with several cavities, packages, backlighter foils and free-standing
+hardware alike. They are engineering heuristics, so a user confirms them.
+
+Each part is measured by `rays` rays (a Fibonacci lattice) from the center of its
+bounding box against that part alone. The share of rays that meet it is its enclosure
+of that center, and the share of hits on the front of a surface (either side of a
+two-sided one) tells a cavity, whose surfaces face the center, from a solid seen from
+within its material.
+
+- A part is round when the distances of its triangle centroids from that center differ
+  by less than `spread` of the largest and its three principal extents agree within
+  `spread`. A round part that encloses its center by at least `enclosed` is a capsule,
+  suggested `:observed`.
+- A part whose smallest principal extent is under `thin` of its middle one is a sheet,
+  such as a foil, shield or washer, suggested `:foil` unless it bounds a cavity. A rod
+  or tube is not a sheet.
+- A cavity is a point from which at least `enclosed` of the rays meet a surface from its
+  front, ignoring capsules and apertures. The points tried are `points` (target
+  chamber center by default) and the center of the bounding box of each part that
+  encloses that center from the front, such as each halfraum of a pair. Points whose cavities have the same
+  walls give one cavity. The parts that at least 5% of the rays of a cavity meet first
+  are its walls, suggested `:wall`.
+- Other parts are hardware, suggested `:none`.
+
+`parts` has one row per part, `(; part, role, kind, enclosed, front, extents, center,
+cavity)`: `kind` is `:capsule`, `:wall`, `:sheet`, `:solid` (the center lies inside its
+material) or `:hardware`, `extents` are the principal extents (mm, smallest first) and
+`cavity` is the index of the first cavity that it bounds (0 for none). `cavities` has one
+row per cavity, `(; center, enclosed, walls)`.
+"""
+function cad_roles(t::Target; points = [(0.0, 0.0, 0.0)], rays::Integer = 512, enclosed::Real = 0.75,
+                   thin::Real = 0.05, spread::Real = 0.15)
+    rays > 0 || throw(ArgumentError("rays must be positive"))
+    ps = [p for p in parts(t) if any(c -> c.part === p && c.kind !== :aperture, t.components)]
+    partof = Symbol[t.components[c].part for c in t.tri_comp]
+    # whether a ray along `d` meets triangle `k` on a radiating side
+    facing(d, k) = dot(d, t.tri_normal[k]) < 0 || t.components[t.tri_comp[k]].two_sided
+    golden = π * (3 - sqrt(5))
+    dirs = map(0:rays-1) do i
+        z = 1 - (2i + 1) / rays
+        ρ = sqrt(max(1 - z^2, 0.0))
+        Vec3(ρ * cos(i * golden), ρ * sin(i * golden), z)
+    end
+    ε = 1e-9 * t.scale
+    # the first triangle that a ray from `o` along `d` meets among those `keep` accepts
+    function first_hit(o, d, keep)
+        for _ in 1:256
+            th, tri = closest_hit(t.bvh, o, d)
+            tri == 0 && return 0
+            keep(tri) && return Int(tri)
+            o += (th + ε) * d
+        end
+        return 0
+    end
+    rows = map(ps) do p
+        tris = [k for k in eachindex(partof) if partof[k] === p && t.tri_opaque[k]]
+        cs = [t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3 for k in tris]
+        vs = [v for k in tris for v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])]
+        lo = Vec3(minimum(v[1] for v in vs), minimum(v[2] for v in vs), minimum(v[3] for v in vs))
+        hi = Vec3(maximum(v[1] for v in vs), maximum(v[2] for v in vs), maximum(v[3] for v in vs))
+        o = (lo + hi) / 2
+        m = sum(vs) / length(vs)
+        C = sum((v - m) * (v - m)' for v in vs) / length(vs)
+        ax = eigen(Symmetric(Matrix(C))).vectors
+        ext = sort([maximum(dot(v, ax[:, k]) for v in vs) - minimum(dot(v, ax[:, k]) for v in vs) for k in 1:3])
+        r = [norm(c - o) for c in cs]
+        isround = (maximum(r) - minimum(r)) < spread * maximum(r) && ext[1] > (1 - spread) * ext[3]
+        nhit = nfront = 0
+        for d in dirs
+            k = first_hit(o, d, tri -> partof[tri] === p)
+            k == 0 && continue
+            nhit += 1
+            nfront += facing(d, k)
+        end
+        f = nhit / rays
+        front = nhit == 0 ? 0.0 : nfront / nhit
+        kind = isround && f >= enclosed ? :capsule :
+               ext[1] < thin * ext[2] ? :sheet :
+               f >= enclosed ? (front >= 0.5 ? :wall : :solid) : :hardware
+        (; part = p, kind, enclosed = f, front, extents = (ext[1], ext[2], ext[3]), center = o)
+    end
+    capsules = Set(r.part for r in rows if r.kind === :capsule)
+    cavities = NamedTuple{(:center, :enclosed, :walls),Tuple{Vec3,Float64,Vector{Symbol}}}[]
+    tries = vcat([Vec3(x...) for x in points], [r.center for r in rows if r.kind === :wall])
+    for o in tries
+        counts = Dict{Symbol,Int}()
+        nfront = 0
+        for d in dirs
+            k = first_hit(o, d, tri -> !(partof[tri] in capsules))
+            (k == 0 || !facing(d, k)) && continue
+            nfront += 1
+            counts[partof[k]] = get(counts, partof[k], 0) + 1
+        end
+        nfront >= enclosed * rays || continue
+        walls = sort!([p for (p, n) in counts if n >= 0.05 * rays])
+        any(c -> c.walls == walls, cavities) || push!(cavities, (; center = o, enclosed = nfront / rays, walls))
+    end
+    out = map(rows) do r
+        cav = something(findfirst(c -> r.part in c.walls, cavities), 0)
+        kind = cav > 0 && r.kind in (:hardware, :sheet, :solid) ? :wall : r.kind
+        role = kind === :capsule ? :observed : kind === :wall && cav > 0 ? :wall : kind === :sheet ? :foil : :none
+        (; part = r.part, role, kind, r.enclosed, r.front, r.extents, r.center, cavity = cav)
+    end
+    return (; parts = out, cavities)
+end

@@ -396,6 +396,19 @@ bindings. Help ▸ Documentation opens this page.
   workspace; a VisRad rectangle, sphere or cylindrical hohlraum retains the VisRad element
   grid unless the part is given an element size.
 
+  Target ▸ Prepare CAD target guides a target fabrication export through three steps.
+  The first lists the STL parts with their facets and connected pieces
+  ([`connected_pieces`](@ref)) and splits each part of several pieces into one part per
+  piece, as members of an assembly named after the part. The second suggests roles from
+  the geometry ([`cad_roles`](@ref)): the cavities, with the parts that bound them, a
+  round closed part as the observed capsule, a sheet as a backlighter foil and the rest
+  as hardware. A cavity is looked for at the target center and at the center of each part
+  that encloses it, so each halfraum of a pair is found. The third gives the suggested
+  roles, fitting a sphere to a CAD capsule, and lists the cylinders, cones, spheres and
+  tori that the drive fits to each part with a role ([`curved_components`](@ref)) with the
+  share of its area left flat. The suggestions are heuristics, and each role can be
+  changed afterward in Properties.
+
   The *Role* of a part marks it for the analyses, and the part name is unchanged. The
   roles are:
 

@@ -44,6 +44,7 @@ closed_design(ts) = (cs = Controllers._closed_cavities(ts); !isempty(cs) && all(
     include("test_halfraum.jl")         # open ends, the flat observed face, the halfraum starters (no GL)
     include("test_profiles.jl")         # frustraums and section lists, the frustraum starter (no GL)
     include("test_assemblies.jl")       # model-tree assemblies, their commands, sessions (no GL)
+    include("test_cad_prep.jl")         # the guided preparation of a CAD target (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
     include("test_regressions.jl")      # the survey's fixes: Run, renames, undo, the default cut, flat faces (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)

@@ -43,7 +43,7 @@ export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, 
        beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, NIF_DIAGNOSTIC_PORTS, NIF_LENS_DISTANCE, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, CoronaProfile, CoronaOperator, ablation_pressure_proxy, shell_displacement_proxy, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
-export Enclosure, enclosure, cad_target
+export Enclosure, enclosure, cad_target, cad_roles
 export view_factors, Float32Matrix, HMatrix, closure_error, enforce_closure!, open_fraction, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, wall_temperature, to_Wcm2, SIGMA_SB, albedos, conversions,
        montecarlo_incident

@@ -84,6 +84,12 @@ ApplicationWindow {
         const dialogs = { retune: retuneDialog, port: portDialog, sight: sightDialog, transform: transformDialog }
         if (key.startsWith("topics")) { helpTopics.openAt(key.substring(7)); openPopup = helpTopics }
         else if (key === "help") { helpTopics.openAt("start.keys"); openPopup = helpTopics }
+        else if (key.startsWith("cadprep")) {
+            // the guided CAD preparation, at a step ("cadprep:2")
+            cadPrepDialog.open()
+            cadSteps.currentIndex = parseInt(key.substring(8) || "0")
+            openPopup = cadPrepDialog
+        }
         else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
         else if (key.startsWith("rowmenu:")) {
             // the row menu of the model tree for a node id, such as a beam row, a frame or
@@ -237,6 +243,7 @@ ApplicationWindow {
         AutoMenu {
             title: "&Target"
             Action { text: "Properties"; onTriggered: Julia.br_select("target") }
+            Action { text: "Prepare CAD target…"; onTriggered: cadPrepDialog.open() }
             AutoMenu {
                 title: "Mesh"
                 Action { text: "Coarse"; checkable: true; checked: app.targetResolution === "coarse"; onTriggered: Julia.br_set_resolution("coarse") }
@@ -807,6 +814,59 @@ ApplicationWindow {
             TextField { id: portPhi; text: "0"; Layout.preferredWidth: 100 }
         }
         onAccepted: Julia.br_look_from_port(portTheta.text, portPhi.text)
+    }
+    // the guided preparation of a CAD target, in three steps
+    Dialog {
+        id: cadPrepDialog
+        title: "Prepare CAD target"
+        anchors.centerIn: parent
+        width: 620
+        standardButtons: Dialog.Close
+        property string report: ""
+        onAboutToShow: { cadSteps.currentIndex = 0; report = Julia.br_cad_prep(0) }
+        ColumnLayout {
+            anchors.fill: parent
+            TabBar {
+                id: cadSteps
+                Layout.fillWidth: true
+                TabButton { text: "1. Orient and split" }
+                TabButton { text: "2. Detect" }
+                TabButton { text: "3. Assign and preview" }
+                onCurrentIndexChanged: cadPrepDialog.report = Julia.br_cad_prep(currentIndex)
+            }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.7; font.pixelSize: 11
+                text: ["The facets of each STL part face out of a closed solid, or toward the target center " +
+                       "for an open sheet. A part of several bodies is split into one part per connected piece.",
+                       "Cavities, capsules, sheets and hardware are found from the geometry (rays from each part " +
+                       "and from the target center). The suggestions are heuristics to confirm.",
+                       "The suggested roles are given (a CAD capsule is fitted with a sphere), and the curved " +
+                       "surfaces that the drive fits to the parts with a role are listed."][cadSteps.currentIndex]
+            }
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 220
+                TextArea {
+                    readOnly: true
+                    font.family: "monospace"; font.pixelSize: 11
+                    text: cadPrepDialog.report
+                }
+            }
+            RowLayout {
+                Button {
+                    text: ["Split every part into its pieces", "Detect again", "Give the suggested roles"][cadSteps.currentIndex]
+                    onClicked: cadPrepDialog.report = Julia.br_cad_prep_act(cadSteps.currentIndex)
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: "Next"
+                    enabled: cadSteps.currentIndex < 2
+                    onClicked: cadSteps.currentIndex += 1
+                }
+            }
+        }
     }
     // the view along a diagnostic line of sight, with the parts that enter it selected
     Dialog {

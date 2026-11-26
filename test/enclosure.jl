@@ -141,3 +141,43 @@ end
     tf = visrad_target(ws; select = mesh_only, orient = true, remesh = 0.3, inside = q, fit = false)
     @test [c.name for c in tf.components] == [c.name for c in tr.components] && tf.elem_area == tr.elem_area
 end
+
+@testset "suggested roles of CAD parts" begin
+    au = gold()
+    # A thick-walled hohlraum as one closed solid part, its capsule, a solid stalk, a
+    # backlighter foil and a pair of halfraums (cups open at the waist, each a part) above.
+    hz = thick_hohlraum(mount = false)
+    shell = [Component(c.name, c.mesh, c.material; part = c.name in (:capsule, :shield, :well, :well_out) ? c.name : :hohlraum)
+             for c in hz.components]
+    stalk = merge_meshes(cylinder_mesh(0.1, 4.5, 12.0; nz = 6, nphi = 8, inward = false),
+                         disk_mesh(0.1, 12.0; nr = 1, nphi = 8), disk_mesh(0.1, 4.5; nr = 1, nphi = 8))
+    foil = translate(rectangle_mesh(2.0, 2.0; nu = 4, nv = 4), Vec3(0.0, 0.0, -8.0))
+    cup(z, s) = merge_meshes(cylinder_mesh(1.5, min(z, z + 3s), max(z, z + 3s); nz = 6, nphi = 16, inward = true),
+                             annulus_mesh(0.5, 1.5, z + 3s; nr = 2, nphi = 16, up = s < 0))
+    cs = vcat(shell, [Component(:stalk, stalk, au), Component(:foil, foil, au; two_sided = true),
+                      Component(:half_a, translate(cup(0.0, -1), Vec3(20.0, 0, 0)), au),
+                      Component(:half_b, translate(cup(0.0, 1), Vec3(20.0, 0, 0)), au),
+                      Component(:dual_a, translate(cup(-0.0, 1), Vec3(-20.0, 0, 2.0)), au),
+                      Component(:dual_b, translate(cup(0.0, -1), Vec3(-20.0, 0, -2.0)), au)])
+    t = Target(cs)
+    r = cad_roles(t; points = [(0.0, 0.0, 0.0), (20.0, 0.0, 0.0)])
+    row(p) = r.parts[findfirst(x -> x.part === p, r.parts)]
+    @test row(:capsule).kind === :capsule && row(:capsule).role === :observed && row(:capsule).enclosed > 0.99
+    @test row(:hohlraum).role === :wall && row(:hohlraum).kind === :wall && row(:hohlraum).front > 0.9
+    @test row(:stalk).kind === :solid && row(:stalk).role === :none
+    @test row(:foil).kind === :sheet && row(:foil).role === :foil
+    # the two halves of one hohlraum bound the cavity at its center; two halfraums with a
+    # gap each bound one of their own
+    @test row(:half_a).role === :wall && row(:half_b).role === :wall && row(:half_a).cavity == row(:half_b).cavity
+    @test row(:dual_a).role === :wall && row(:dual_b).role === :wall && row(:dual_a).cavity != row(:dual_b).cavity
+    @test length(r.cavities) == 4 && all(c -> c.enclosed >= 0.75, r.cavities)
+    # the shield in the hohlraum bounds its cavity too (9% of the sphere at 2 mm)
+    @test r.cavities[1].walls == [:hohlraum, :shield] && r.cavities[2].walls == [:half_a, :half_b]
+    # the share of rays from the center of the hohlraum that leave it, with the capsule
+    # ignored: through the top hole only (the shield covers the bottom one), radius 1 at
+    # the end of a 0.3 mm bore from 4 to 4.3 mm, (1 − cos atan(1/4.3))/2 of the sphere
+    hc = r.cavities[1]
+    @test abs((1 - hc.enclosed) - (1 - cosd(atand(1 / 4.3))) / 2) < 0.005
+    @test row(:shield).kind === :wall && row(:shield).role === :wall
+    @test_throws ArgumentError cad_roles(t; rays = 0)
+end
