@@ -82,6 +82,51 @@
     @test all(fl[i] == (mx.omega3[i] <= 0 ? 1 : mx.omega1[i] <= 0 ? 2 : mx.sight[i] <= 0 ? 3 : mx.margin[i] < 1 ? 4 : 5)
               for i in eachindex(fl))
 
+    # Hardware that shadows a keep-out. 30 mm below the focus of b, the light at a point x
+    # came through the focal spot, a disk of radius ρc about the focus F: the line from x
+    # through a point P of the spot meets z = 8 at P + r (P − x), r = 7.9/30.1, so the
+    # nine lines toward the center and edge of the spot meet it within (1 + r) ρc of
+    # C = F + r (F − x), and the line toward the center meets it at C. They stay inside
+    # the f-cone (half-angle atan 1/2F) while |x − F| + ρc < 30.1/2F across the axis.
+    # A disk of radius 3 at z = 8 then blocks the light at every x with |C| + (1 + r) ρc
+    # inside its 64-gon, and one of radius 0.5 none with |C| beyond 0.5. The margins are
+    # those of the map without the target.
+    plane = (; plane = ((0, 0, -30), (0, 0, 1)), extent = 3.0, n = 61, clearance_3w = 0.0, zero_tol...)
+    m0 = corridor_map([b]; plane...)
+    r = 7.9 / 30.1
+    Fl = (0.3, -0.2)
+    across(x) = hypot(x[1] - Fl[1], x[2] - Fl[2])
+    C(x) = hypot(Fl[1] + r * (Fl[1] - x[1]), Fl[2] + r * (Fl[2] - x[2]))
+    inside_cone = [m0.omega3[i] <= 0 && across(m0.points[i]) + ρc < 30.1 / (2F) - 1e-6 for i in eachindex(m0.points)]
+    big = Target(Component(:disk, disk_mesh(3.0, 8.0; nr = 6, nphi = 64), gold(); two_sided = true))
+    ms = corridor_map([b]; target = big, plane...)
+    @test ms.omega3 == m0.omega3 && ms.margin == m0.margin && all(iszero, m0.shadowed)
+    sure = [inside_cone[i] && C(ms.points[i]) + (1 + r) * ρc < 3.0 * cospi(1 / 64) - 1e-6 for i in eachindex(ms.points)]
+    @test count(sure) > 100 && all(ms.shadowed[i] == 0x01 for i in eachindex(sure) if sure[i])
+    @test all(ms.shadowed[i] == 0x00 for i in eachindex(ms.points) if ms.omega3[i] > 0)
+    small = Target(Component(:disk, disk_mesh(0.5, 8.0; nr = 2, nphi = 64), gold(); two_sided = true))
+    mn = corridor_map([b]; target = small, plane...)
+    clear = [inside_cone[i] && C(mn.points[i]) > 0.5 + 1e-6 for i in eachindex(mn.points)]
+    @test count(clear) > 50 && all(mn.shadowed[i] == 0x00 for i in eachindex(clear) if clear[i])
+    @test corridor_fills(ms) == ifelse.(ms.shadowed .!= 0, 6, corridor_fills(m0))
+    @test corridor_open_fraction(ms) == corridor_open_fraction(m0) &&
+          corridor_open_fraction(ms; shadowed = true) - corridor_open_fraction(m0) ≈ count(ms.shadowed .!= 0) / 61^2
+    @test occursin("shadowed by hardware", corridor_map_svg(ms)) && !occursin("shadowed", corridor_map_svg(m0))
+    # a view along +x is blocked behind a plate at x = 5 (2 by 2 mm about the axis) where
+    # the plate covers the line toward the instrument, and a radiography line never is
+    plate = Target(Component(:plate, translate(transform(rectangle_mesh(2.0, 2.0; nu = 2, nv = 2),
+                                                         [0 0 1; 0 1 0; -1 0 0]), Vec3(5.0, 0, 0)), gold();
+                             two_sided = true))
+    view = SightLine("x", 90, 0; field_of_view = 3.0)
+    across = (; plane = ((2, 0, 0), (1, 0, 0)), extent = 2.0, n = 41)
+    mv = corridor_map(Beam[]; sight_lines = [view], target = plate, across...)
+    yz = [(x[2], x[3]) for x in mv.points]
+    inside = mv.sight .<= 0
+    @test all(mv.shadowed[i] == (inside[i] && max(abs(yz[i][1]), abs(yz[i][2])) < 1 - 1e-9 ? 0x04 : 0x00)
+              for i in eachindex(yz) if abs(max(abs(yz[i][1]), abs(yz[i][2])) - 1) > 1e-9)
+    radiography = SightLine("x", 90, 0; field_of_view = 3.0, through = true)
+    @test all(iszero, corridor_map(Beam[]; sight_lines = [radiography], target = plate, across...).shadowed)
+
     # a plane across the through-going cylinder: the margin is the radius less 10 mm
     mp = corridor_map(Beam[]; sight_lines = [SightLine("cyl", 0, 0; field_of_view = 20.0, through = true)],
                       plane = ((0, 0, -7), (0, 0, 1)), extent = 25.0, n = 51)
@@ -133,7 +178,7 @@
     # drawings: plain text, the same for the same map, one legend entry per fill
     svg = corridor_map_svg(mx)
     @test startswith(svg, "<svg") && endswith(svg, "</svg>\n") && svg == corridor_map_svg(mx)
-    @test all(occursin(c, svg) for c in Briareus._CORRIDOR_FILLS) && occursin("% open", svg)
+    @test all(occursin(c, svg) for c in Briareus._CORRIDOR_FILLS[1:5]) && occursin("% open", svg)
     @test count("<path", svg) > 100 && count("<circle", svg) == 6
     @test !occursin("NaN", svg) && !occursin("Inf", svg)
     ps = corridor_map_svg(mp; size = 200)

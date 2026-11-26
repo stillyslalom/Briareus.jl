@@ -148,14 +148,16 @@ corridor_omitted(sess::DesignSession) = last(_corridor_lines(sess))
     show_corridor!(sess::DesignSession, on::Bool = true) -> sess
 
 Draw the keep-out map of the enabled beams and the ticked diagnostics in the 3D view
-([`update_corridor!`](@ref)), or take it away. Showing it again updates it.
+([`update_corridor!`](@ref)), with the parts of the target shadowing the keep-outs when
+`corridor.shadows` is set, or take it away. Showing it again updates it.
 """
 function show_corridor!(sess::DesignSession, on::Bool = true)
     cs = sess.corridor
     _assign!(cs.shown, on)
     if on
         lines, omitted = _corridor_lines(sess)
-        update_corridor!(cs, sess.review, sess.talis, active_beams(sess.beams), lines; omitted)
+        update_corridor!(cs, sess.review, sess.talis, active_beams(sess.beams), lines; omitted,
+                         target = sess.target.target[])
     else
         clear_corridor!(cs)
     end

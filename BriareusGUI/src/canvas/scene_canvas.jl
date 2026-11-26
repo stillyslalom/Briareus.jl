@@ -858,7 +858,7 @@ function _draw_corridor!(c::SceneCanvas, sess::DesignSession)
         _update!(c.corridor, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
     else
         g = corridor_surface(m; tight = sess.talis.tight[])
-        col = [RGBAf(Makie.RGBf(_hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in 1:5]
+        col = [RGBAf(Makie.RGBf(_hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in 1:6]
         pts = Point3f[Point3f(g.vertices[i]...) for f in g.faces for i in f]
         colors = repeat([col[k] for k in g.fills]; inner = 3)
         c.corridor_faces[] = m.surface === :plane ? nothing :

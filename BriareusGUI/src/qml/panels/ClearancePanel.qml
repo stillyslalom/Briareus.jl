@@ -104,7 +104,7 @@ RowLayout {
         Layout.minimumHeight: 120
         property string drawing: app.cmMap
         property color ink: palette.windowText
-        readonly property var fills: ["#0072B2", "#D55E00", "#CC79A7", "#F0E442", "#B7E3D4"]
+        readonly property var fills: ["#0072B2", "#D55E00", "#CC79A7", "#F0E442", "#B7E3D4", "#BBBBBB"]
         onDrawingChanged: requestPaint()
         onInkChanged: requestPaint()
         onWidthChanged: requestPaint()
@@ -171,7 +171,8 @@ RowLayout {
         spacing: 10
         Repeater {
             model: [["#0072B2", "3ω light"], ["#D55E00", "1ω light"], ["#CC79A7", "line of sight"],
-                    ["#F0E442", "open, tight"], ["#B7E3D4", "open"]]
+                    ["#F0E442", "open, tight"], ["#B7E3D4", "open"]].concat(
+                       app.cmMap !== "" && JSON.parse(app.cmMap).fills.indexOf("6") >= 0 ? [["#BBBBBB", "shadowed by hardware"]] : [])
             delegate: Row {
                 spacing: 4
                 Rectangle { width: 12; height: 12; color: modelData[0]; border.width: 0.5; border.color: "#000000" }

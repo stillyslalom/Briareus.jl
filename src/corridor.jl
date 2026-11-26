@@ -242,6 +242,9 @@ returns them.
 - `margin` — the smallest of the three
 - `nearest` — the index in `sources` of the keep-out that sets `margin` (0 with none)
 - `sources` — the keep-outs as pairs of class (`:omega3`, `:omega1`, `:sight`) and name
+- `shadowed` — the classes of keep-out (bits as in [`corridor_classes`](@ref)) that cover
+  a sample only with light or a view that the hardware of a target blocks before the
+  sample, all zero for a map computed without a target
 
 [`corridor_classes`](@ref) gives the classes that cover each sample,
 [`angular_margin`](@ref) the margin on a sphere as an angle, [`corridor_open_fraction`](@ref) the
@@ -261,6 +264,7 @@ struct CorridorMap
     margin::Matrix{Float64}
     nearest::Matrix{Int32}
     sources::Vector{Tuple{Symbol,String}}
+    shadowed::Matrix{UInt8}
 end
 
 function Base.show(io::IO, m::CorridorMap)
@@ -327,8 +331,9 @@ function sight_intrusions(t::Target, l::SightLine; tolerance::Real = 0.0, spacin
 end
 
 """
-    corridor_map(beams; radius, center = (0, 0, 0), axis = (0, 0, 1), ntheta = 90, nphi = 180, kwargs...)
-    corridor_map(beams; plane = (point, normal), extent, n = 121, kwargs...) -> CorridorMap
+    corridor_map(beams; radius, center = (0, 0, 0), axis = (0, 0, 1), ntheta = 90, nphi = 180,
+                 target = nothing, kwargs...)
+    corridor_map(beams; plane = (point, normal), extent, n = 121, target = nothing, kwargs...) -> CorridorMap
 
 Map where new hardware, such as stalks, shields, foils and diagnostic snouts, may be
 placed: the margin of each sample of a surface to the keep-outs of the shot. The surface
@@ -356,13 +361,32 @@ and with the same keywords and defaults:
 A beam distance is measured in the plane through the sample normal to the beam, as the
 rules measure it, and a sight-line distance in three dimensions. A margin is the distance
 less the errors and the required clearance, so a sample is open where its margin is
-positive. Beams upstream and downstream of best focus both count, and hardware that would
-shadow a keep-out is not considered. The map is computed without a target and applies to
-any kind of experiment. `beams` may be empty.
+positive. Beams upstream and downstream of best focus both count. The map is computed
+without a target and applies to any kind of experiment. `beams` may be empty.
+
+With a `target`, the hardware that shadows a keep-out is found: a beam covers a sample
+only through light that reaches it, and a line of sight only where the instrument sees
+it. The 3ω light of a beam is blocked at a sample when nine lines through the sample all
+meet the target on the side of the lens: the lines toward the center of the focal spot
+(the 3ω envelope at best focus, [`BeamEnvelope`](@ref)) and toward eight points of its
+edge, each turned to the edge of the f-cone (the half-angle of the envelope) where it lies
+outside it. Downstream of focus the light at a sample came through the spot, and near
+focus from the whole f-cone. The 1ω light of a beamlet converges to a point, its 1ω
+focus, and is blocked when the line through the sample and that point meets the target
+on the side of the lens; a beam is blocked for 1ω light when each of its beamlets is. These
+nine lines are an engineering sampling of the light, so a sample at the edge of a shadow
+can fall either way. A line of sight is blocked at a sample when the ray from it
+toward the pinhole, or along the axis for a collimated view, meets the target; a line
+of sight `through` the target, as in radiography, is never blocked. The classes that cover
+a sample only through blocked beams and lines of sight are in `shadowed`; the margins
+are unchanged, and [`corridor_fills`](@ref) draws such a sample as shadowed. Apertures are
+transparent. The test is made only at samples inside a keep-out, so the margin of a
+sample just outside one is still measured to the light that a shadow cuts off.
 """
 function corridor_map(beams::AbstractVector{<:Beam}; sight_lines = SightLine[], radius = nothing,
                       center = zero(Vec3), axis = Vec3(0.0, 0.0, 1.0), ntheta::Integer = 90, nphi::Integer = 180,
-                      plane = nothing, extent = nothing, n::Integer = 121, kwargs...)
+                      plane = nothing, extent = nothing, n::Integer = 121, target::Union{Nothing,Target} = nothing,
+                      kwargs...)
     c = _corridor_context(beams, sight_lines; kwargs...)
     if plane === nothing
         radius === nothing && throw(ArgumentError("give `radius` for a sphere or `plane` and `extent` for a plane"))
@@ -373,7 +397,7 @@ function corridor_map(beams::AbstractVector{<:Beam}; sight_lines = SightLine[], 
         u = [(i - 0.5) * 180 / ntheta for i in 1:ntheta]
         v = [(j - 0.5) * 360 / nphi for j in 1:nphi]
         pts = [o + radius * (sind(θ) * (cosd(φ) * ax[1] + sind(φ) * ax[2]) + cosd(θ) * ax[3]) for θ in u, φ in v]
-        return _corridor_fill(c, :sphere, o, Float64(radius), ax, u, v, pts)
+        return _corridor_fill(c, :sphere, o, Float64(radius), ax, u, v, pts, target)
     end
     radius === nothing || throw(ArgumentError("give one of `radius` and `plane`"))
     extent !== nothing && extent > 0 || throw(ArgumentError("a plane needs `extent` > 0 mm"))
@@ -382,16 +406,100 @@ function corridor_map(beams::AbstractVector{<:Beam}; sight_lines = SightLine[], 
     ax = _corridor_axes(Vec3(plane[2]...))
     u = collect(range(-Float64(extent), Float64(extent); length = n))
     pts = [o + p * ax[1] + q * ax[2] for p in u, q in u]
-    return _corridor_fill(c, :plane, o, NaN, ax, u, copy(u), pts)
+    return _corridor_fill(c, :plane, o, NaN, ax, u, copy(u), pts, target)
 end
 
-function _corridor_fill(c::_CorridorContext, surface, o, R, ax, u, v, pts::Matrix{Vec3})
+function _corridor_fill(c::_CorridorContext, surface, o, R, ax, u, v, pts::Matrix{Vec3}, target)
     m3, m1, ms = similar(pts, Float64), similar(pts, Float64), similar(pts, Float64)
     near = similar(pts, Int32)
+    sh = zeros(UInt8, size(pts))
     Threads.@threads for i in eachindex(pts)
         m3[i], m1[i], ms[i], near[i] = _corridor_point(c, pts[i])
+        target === nothing || min(m3[i], m1[i], ms[i]) > 0 || (sh[i] = _corridor_shadowed(c, target, pts[i]))
     end
-    return CorridorMap(surface, o, R, ax, u, v, pts, m3, m1, ms, min.(m3, m1, ms), near, c.sources)
+    return CorridorMap(surface, o, R, ax, u, v, pts, m3, m1, ms, min.(m3, m1, ms), near, c.sources, sh)
+end
+
+# The classes of keep-out (bits as in `corridor_classes`) that cover point `x` only
+# through beams and lines of sight that the hardware of target `t` blocks before `x`.
+function _corridor_shadowed(c::_CorridorContext, t::Target, x::Vec3)
+    req1 = c.diagnostic ? 10 + 0.015 * norm(x) : c.omega1_margin
+    lit3 = lit1 = lits = false              # covered by light or a view that reaches `x`
+    any3 = any1 = anys = false
+    for i in eachindex(c.envs)
+        e = c.envs[i]
+        rot = c.cx.tol(x, c.aims[i])
+        in3 = envelope_distance(e, x)[1] - c.shifts[i] - rot - c.clearance_3w <= 0
+        bl = c.beamlets[i]
+        in1 = bl !== nothing && _omega1_distance(x, bl, c.cx)[2] - c.cx.R - rot - req1 <= 0
+        any3 |= in3
+        any1 |= in1
+        in3 && !lit3 && (lit3 = !_beam_blocked(t, x, e))
+        in1 && !lit1 && (lit1 = !_omega1_blocked(t, x, bl, c.cx))
+    end
+    for l in c.sights
+        sight_distance(l, x) - c.sight_clearance <= 0 || continue
+        anys = true
+        lits || (lits = l.through || !_sight_blocked(t, x, l))
+    end
+    return UInt8(any3 && !lit3) | (UInt8(any1 && !lit1) << 1) | (UInt8(anys && !lits) << 2)
+end
+
+# Whether every ray of 3ω light that reaches `x` meets the target on its way from the
+# lens: the light reaching `x` passes through the focal spot (the ellipse of semi-axes
+# `e.a`, `e.b` about `e.focus`) within the f-cone (half-angle atan `e.cone`). Nine lines
+# through `x` stand for it, toward the center of the spot and eight points of its edge,
+# each turned to the edge of the cone when it lies outside, and each is followed from `x`
+# on the side of the lens.
+function _beam_blocked(t::Target, x::Vec3, e::BeamEnvelope)
+    up = -e.k
+    for j in 0:8
+        φ = (j - 1) * π / 4
+        F = j == 0 ? e.focus : e.focus + e.a * cos(φ) * e.e1 + e.b * sin(φ) * e.e2
+        _lens_side_blocked(t, x, F, up, e.cone) || return false
+    end
+    return true
+end
+
+# Whether the line through `x` and `F`, followed from `x` toward the lens (direction
+# `up`) and turned into the cone of half-angle atan `tanα` about `up`, meets the target.
+function _lens_side_blocked(t::Target, x::Vec3, F::Vec3, up::Vec3, tanα::Float64)
+    d = F - x
+    L = norm(d)
+    u = L > 0 ? d / L : up
+    dot(u, up) < 0 && (u = -u)
+    cα = 1 / sqrt(1 + tanα^2)
+    c = dot(u, up)
+    if c < cα
+        w = u - c * up
+        nw = norm(w)
+        u = nw > 0 ? cα * up + (tanα * cα) * (w / nw) : up
+    end
+    return any_hit(t.bvh, x, u)
+end
+
+# Whether every ray of 1ω light from the beamlets `bl` that reaches `x` meets the target
+# on its way from the lens: the 1ω light of a beamlet converges to a point, its 1ω focus
+# at `f1` past the 3ω focus and `c0 (1 + f1/L)` off the 3ω axis, so the light reaching
+# `x` from it runs along the line through `x` and that point.
+function _omega1_blocked(t::Target, x::Vec3, bl, cx)
+    for (kb, fb, ô) in bl
+        F = fb + cx.f1 * kb + cx.c0 * (1 + cx.f1 / cx.L) * ô
+        _lens_side_blocked(t, x, F, -kb, Inf) || return false
+    end
+    return true
+end
+
+# Whether the target blocks the view from `x` toward the instrument of a line of sight:
+# toward its pinhole, or along its axis for a collimated view.
+function _sight_blocked(t::Target, x::Vec3, l::SightLine)
+    if isfinite(l.distance)
+        p = l.center + l.distance * l.axis
+        L = norm(p - x)
+        L > 0 || return false
+        return any_hit(t.bvh, x, (p - x) / L, L)
+    end
+    return any_hit(t.bvh, x, l.axis)
 end
 
 """
@@ -421,37 +529,45 @@ _corridor_weights(m::CorridorMap) =
     m.surface === :sphere ? [sind(θ) for θ in m.u, _ in m.v] : ones(size(m.margin))
 
 """
-    corridor_open_fraction(map; margin = 0.0) -> Float64
+    corridor_open_fraction(map; margin = 0.0, shadowed = false) -> Float64
 
 The share of the surface of a [`CorridorMap`](@ref) whose margin exceeds `margin` (mm):
-of the solid angle on a sphere, or of the area on a plane.
+of the solid angle on a sphere, or of the area on a plane. With `shadowed`, the samples
+inside keep-outs that the hardware shadows (fill 6 of [`corridor_fills`](@ref)) count as
+open too.
 """
-function corridor_open_fraction(m::CorridorMap; margin::Real = 0.0)
+function corridor_open_fraction(m::CorridorMap; margin::Real = 0.0, shadowed::Bool = false)
     w = _corridor_weights(m)
-    return sum(w[m.margin .> margin]) / sum(w)
+    open = m.margin .> margin
+    shadowed && (open .|= corridor_fills(m) .== 6)
+    return sum(w[open]) / sum(w)
 end
 
 # the fill of a sample: by the class that covers it (3ω first, then 1ω, then a line of
-# sight), or open, with a second shade below the `tight` margin
-function _corridor_fill_index(m3, m1, ms, tight)
-    m3 <= 0 && return 1
-    m1 <= 0 && return 2
-    ms <= 0 && return 3
+# sight) and is not shadowed, shadowed where every class that covers it is, or open, with
+# a second shade below the `tight` margin
+function _corridor_fill_index(m3, m1, ms, tight, sh = 0x00)
+    m3 <= 0 && sh & 0x01 == 0 && return 1
+    m1 <= 0 && sh & 0x02 == 0 && return 2
+    ms <= 0 && sh & 0x04 == 0 && return 3
+    min(m3, m1, ms) <= 0 && return 6
     return min(m3, m1, ms) < tight ? 4 : 5
 end
 
-const _CORRIDOR_FILLS = ("#0072B2", "#D55E00", "#CC79A7", "#F0E442", "#B7E3D4")
-const _CORRIDOR_LABELS = ("3ω light", "1ω light", "line of sight", "open, tight", "open")
+const _CORRIDOR_FILLS = ("#0072B2", "#D55E00", "#CC79A7", "#F0E442", "#B7E3D4", "#BBBBBB")
+const _CORRIDOR_LABELS = ("3ω light", "1ω light", "line of sight", "open, tight", "open", "shadowed by hardware")
 
 """
     corridor_fills(map; tight = 1.0) -> Matrix{Int}
 
 The drawing class of each sample of a [`CorridorMap`](@ref): 1 inside 3ω light, 2 inside
-1ω light, 3 inside a line of sight (the first that applies), 4 open with a margin below
-`tight` (mm) and 5 open. [`corridor_map_svg`](@ref) fills the samples by this class.
+1ω light, 3 inside a line of sight (the first that applies and that the hardware does not
+shadow), 4 open with a margin below `tight` (mm), 5 open and 6 inside keep-outs that the
+hardware of the target of the map shadows ([`corridor_map`](@ref) with `target`).
+[`corridor_map_svg`](@ref) fills the samples by this class.
 """
 corridor_fills(m::CorridorMap; tight::Real = 1.0) =
-    [_corridor_fill_index(m.omega3[i], m.omega1[i], m.sight[i], tight) for i in CartesianIndices(m.margin)]
+    [_corridor_fill_index(m.omega3[i], m.omega1[i], m.sight[i], tight, m.shadowed[i]) for i in CartesianIndices(m.margin)]
 
 """
     corridor_map_svg(map; size = 480, tight = 1.0) -> String
@@ -473,7 +589,17 @@ function corridor_map_svg(m::CorridorMap; size::Integer = 480, tight::Real = 1.0
     io = IOBuffer()
     f(x) = @sprintf("%.2f", x)
     sphere = m.surface === :sphere
-    W, H = sphere ? 2size + 16 : size, size + 44
+    shown = any(==(6), fills) ? 6 : 5               # the shadowed class in the key when drawn
+    W = sphere ? 2size + 16 : size
+    width(label) = 28 + 7 * length(label)
+    rows = 1
+    let x = 8.0
+        for label in _CORRIDOR_LABELS[1:shown]
+            x + width(label) - 12 > W && (rows += 1; x = 8.0)
+            x += width(label)
+        end
+    end
+    H = size + 28 + 16 * rows
     println(io, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"", W, "\" height=\"", H, "\" viewBox=\"0 0 ", W,
             " ", H, "\" font-family=\"sans-serif\" font-size=\"12\">")
     println(io, "<rect width=\"", W, "\" height=\"", H, "\" fill=\"#ffffff\"/>")
@@ -482,12 +608,13 @@ function corridor_map_svg(m::CorridorMap; size::Integer = 480, tight::Real = 1.0
     else
         _corridor_square!(io, m, fills, size, f)
     end
-    x = 8.0
-    for (c, label) in zip(_CORRIDOR_FILLS, _CORRIDOR_LABELS)
-        println(io, "<rect x=\"", f(x), "\" y=\"", f(size + 26.0), "\" width=\"12\" height=\"12\" fill=\"", c,
+    x, y = 8.0, 0.0
+    for (c, label) in zip(_CORRIDOR_FILLS[1:shown], _CORRIDOR_LABELS[1:shown])
+        x + width(label) - 12 > W && (x = 8.0; y += 16)
+        println(io, "<rect x=\"", f(x), "\" y=\"", f(size + 26.0 + y), "\" width=\"12\" height=\"12\" fill=\"", c,
                 "\" stroke=\"#000000\" stroke-width=\"0.5\"/>")
-        println(io, "<text x=\"", f(x + 16), "\" y=\"", f(size + 37.0), "\">", label, "</text>")
-        x += 28 + 7 * length(label)
+        println(io, "<text x=\"", f(x + 16), "\" y=\"", f(size + 37.0 + y), "\">", label, "</text>")
+        x += width(label)
     end
     title = sphere ? @sprintf("sphere of %g mm: %.1f%% open", m.radius, 100 * corridor_open_fraction(m)) :
             @sprintf("plane, ±%g mm: %.1f%% open", m.u[end], 100 * corridor_open_fraction(m))

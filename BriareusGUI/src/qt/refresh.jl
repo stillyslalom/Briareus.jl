@@ -940,7 +940,9 @@ function _refresh_review!(sh::BriareusShell)
     _set!(sh, "cmError", cm.error[])
     _set!(sh, "cmMap", cm.map[] === nothing ? "" : corridor_drawing(cm.map[]; tight = sess.talis.tight[]))
     _set!(sh, "cmStale", cm.map[] !== nothing &&
-                         corridor_stale(cm, rv, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess)))
+                         corridor_stale(cm, rv, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess);
+                                        target = sess.target.target[]))
+    _set!(sh, "cmShadows", cm.shadows[])
     comps = [CompRow(String(n), component_label(n), n in rv.targets[] ? "target" : n in rv.hardware[] ? "hardware" : "none")
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:compModel], sh.models[:compModel], comps)

@@ -794,8 +794,13 @@ The bottom panel has the following tabs.
   Clearance tab draws the map flat, the two hemispheres of the sphere as disks with the
   polar angle from the center of each (as [`corridor_map_svg`](@ref) draws them) or the
   plane as a square, and Export SVG writes that drawing ([`write_corridor_map_svg`](@ref)).
-  The map is marked out of date when the beams, the ticked diagnostics or a setting
-  changes, and it is not saved with the session.
+  With *Shadowed by the target* (on by default), the parts of the target shadow the
+  keep-outs: where every line of light that reaches a sample, through the focal spot and
+  within the f-cone, meets a part on the way from the lens, that beam does not keep the
+  sample out, and where no keep-out is left the sample is drawn gray. The line gives the
+  share of the surface where the target shadows a keep-out and the share it leaves open.
+  The map is marked out of date when the beams, the ticked diagnostics, the target or a
+  setting changes, and it is not saved with the session.
 
 ### Files in and out
 

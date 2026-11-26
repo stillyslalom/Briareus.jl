@@ -85,6 +85,8 @@ ColumnLayout {
     SectionLabel { text: "Keep-out map" }
     CheckLine { text: "Show the keep-out map"; checked: app.cmShown; onToggled: Julia.br_cm_show(checked)
                 tip: "Colors a sphere about TCC or a plane by what crosses it: 3ω light (blue), 1ω light (vermilion), the lines of sight of the ticked diagnostics (purple). The open region is green, and yellow where the margin is below the tight threshold. Uses the errors above and the TaLIS rule tolerance. The Clearance tab draws it flat" }
+    CheckLine { text: "Shadowed by the target"; checked: app.cmShadows; onToggled: Julia.br_cm_shadows(checked)
+                tip: "Where every ray toward the lens of a beam (along it and around its f-cone), or the view toward a diagnostic, meets a part of the target, the keep-out is drawn gray: light or a view that the hardware already blocks" }
     RowLayout {
         spacing: 8
         Cell { text: "Surface"; Layout.preferredWidth: 150 }

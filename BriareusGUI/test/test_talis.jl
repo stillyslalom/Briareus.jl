@@ -309,7 +309,7 @@ end
     nθ, nφ = size(m.margin)
     @test length(g.vertices) == (nθ + 1) * nφ && length(g.faces) == 2 * nθ * nφ - 2 * nφ == length(g.fills)
     @test all(abs(sqrt(sum(abs2, v)) - 50.0) < 1e-9 for v in g.vertices)
-    @test all(1 <= i <= length(g.vertices) for f in g.faces for i in f) && issubset(g.fills, 1:5)
+    @test all(1 <= i <= length(g.vertices) for f in g.faces for i in f) && issubset(g.fills, 1:6)
     fl = corridor_fills(m)
     @test count(==(3), g.fills) == 2 * count(==(3), fl[2:end-1, :]) + count(==(3), fl[[1, end], :])
     @test Set(g.fills) == Set(fl) && 1 in g.fills && 3 in g.fills && 5 in g.fills
@@ -340,7 +340,18 @@ end
           count(s -> s[1] === :omega3, cm.map[].sources) == length(active_beams(sess.beams))
     @test any(<=(0), cm.map[].omega1) && any(<=(0), cm.map[].sight) && any(>(0), cm.map[].margin)
     set_corridor_radius!(sess, 120.0)
-    @test cm.map[].radius == 120.0 && !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), lines)
+    @test cm.map[].radius == 120.0 && !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), lines;
+                                                       target = sess.target.target[])
+    # the hohlraum stops 3ω light that would cross the sphere beyond it (the 1ω light of
+    # those beams still reaches it); without the shadows the margins are the same
+    @test cm.shadows[] && any(==(0x01), cm.map[].shadowed) && occursin("the target shadows keep-outs over ", cm.status[])
+    @test corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), lines)
+    margins = cm.map[].margin
+    cm.shadows[] = false
+    show_corridor!(sess)
+    @test all(iszero, cm.map[].shadowed) && cm.map[].margin == margins && !occursin("shadow", cm.status[])
+    @test !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), lines; target = sess.target.target[])
+    cm.shadows[] = true
     # a ticked diagnostic that gives no line of sight is named in the status line
     @test isempty(corridor_omitted(sess)) && !occursin("left out", cm.status[])
     sess.time.diagnostics[] = ["nif_dante1", "no_such_camera"]
@@ -370,7 +381,8 @@ end
     @test cm.map[].surface === :plane && cm.map[].margin == ref.margin
     @test startswith(cm.status[], "plane through (0, 0, 8) mm, normal (0, 0, 1), ±6 mm: ")
     @test edit_corridor!(sess, :extent, "4") && cm.map[].u[end] == 4.0
-    @test !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess))
+    @test !corridor_stale(cm, sess.review, sess.talis, active_beams(sess.beams), corridor_sight_lines(sess);
+                          target = sess.target.target[])
     path = export_corridor_svg(sess, joinpath(mktempdir(), "map.svg"))
     @test read(path, String) == corridor_map_svg(cm.map[]; tight = sess.talis.tight[])
     @test_throws ArgumentError set_corridor_surface!(sess, :cylinder)
