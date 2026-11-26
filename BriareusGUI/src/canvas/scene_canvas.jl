@@ -94,6 +94,9 @@ struct SceneCanvas
     focus_lines::Any                             # plane and reflection cone, and their lines
     corridor::Any                                # the keep-out map on its sphere (`show_corridor!`)
     corridor_faces::Base.RefValue{Any}           # its triangles: (centers, outward normals, colors)
+    sight_frame::Any                             # the view from a diagnostic (`show_sight!`): the
+    sight_image::Any                             # outline of its volume and the image it sees,
+    sight::Base.RefValue{Any}                    # and the definition it is of (`nothing`: none)
 end
 
 """
@@ -146,6 +149,9 @@ function scene_canvas(sess::DesignSession)
     focus_lines = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2, visible = false,
                                 overdraw = true)
     corridor = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true, visible = false)
+    sight_frame = linesegments!(sc, _NOSEG3; color = SIGHT_FRAME, linewidth = 1.5, visible = false, overdraw = true)
+    sight_image = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), shading = Makie.NoShading, overdraw = true,
+                        visible = false)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -156,7 +162,7 @@ function scene_canvas(sess::DesignSession)
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
                     Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines, corridor,
-                    Ref{Any}(nothing))
+                    Ref{Any}(nothing), sight_frame, sight_image, Ref{Any}(nothing))
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -184,6 +190,7 @@ function scene_canvas(sess::DesignSession)
     on(p -> _apply_camera!(c, p), v.camera)
     on(_ -> _draw_talis_focus!(c, sess), sess.talis.focus)
     onany((_...) -> _draw_corridor!(c, sess), sess.corridor.map, sess.talis.tight)
+    onany((_...) -> c.sight[] === nothing || _draw_sight!(c, sess), sess.target.target, dr.result, v.color)
     onany((_...) -> v.color[] in DISPOSITION_MODES && _draw_body!(c, sess), sess.talis.disposition,
           sess.talis.tight, sess.talis.hide_curved)
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
@@ -285,6 +292,111 @@ function look_from_sight!(c::SceneCanvas, l::SightLine; radius::Real = 2 * l.rad
     orient_camera!(cam, Makie.Vec3d(k...), up)
     fit_camera!(cam, Makie.Vec3d(l.center...), max(Float64(radius), 1.0))
     return c
+end
+
+const SIGHT_FRAME = RGBAf(0.0, 0.62, 0.45, 1.0)
+const SIGHT_SEEN = RGBAf(0.0, 0.75, 0.9, 0.6)      # the observed surface and foils in the image
+const SIGHT_OTHER = RGBAf(0.55, 0.55, 0.55, 0.3)   # the other parts it meets
+
+"""
+    show_sight!(c::SceneCanvas, sess, id) -> view / clear_sight!(c)
+
+Lay the view from diagnostic `id` over the 3D view: the outline of the volume of its line
+of sight (the field of view at the center of the view, the generators toward the optic,
+a cone to the pinhole or a cylinder, and the pinhole where it lies within reach of the
+target) and the image that it sees ([`sight_image`](@ref)) in the plane through the center
+of the view, drawn over the geometry. The image follows the coloring of the body: a drive
+field when the body shows one, else the radiosity of the drive, else the visible area of
+the observed surface and the foils. `show_sight!` returns the [`sight_image`](@ref) shown;
+`clear_sight!` removes the overlay.
+"""
+function show_sight!(c::SceneCanvas, sess::DesignSession, id::AbstractString)
+    c.sight[] = String(id)
+    return _draw_sight!(c, sess)
+end
+
+function clear_sight!(c::SceneCanvas)
+    c.sight[] = nothing
+    c.sight_frame.visible[] = false
+    c.sight_image.visible[] = false
+    c.dirty[] = true
+    return c
+end
+
+function _draw_sight!(c::SceneCanvas, sess::DesignSession)
+    id = c.sight[]
+    f = sess.view.color[]
+    # the field of the body, else what the drive gives; nothing once the definition is gone
+    im = try
+        f in DRIVE_FIELDS ? sight_image(sess, id; field = f) : sight_image(sess, id)
+    catch err
+        err isa ArgumentError || rethrow()
+        try
+            sight_image(sess, id)
+        catch err2
+            err2 isa ArgumentError || rethrow()
+            clear_sight!(c)
+            return nothing
+        end
+    end
+    l, cam = im.line, im.camera
+    t = sess.target.target[]
+    # the outline: circles across the axis and generators along it
+    e1, e2 = cam.right, cam.up
+    circle(o, r) = [o + r * (cos(a) * e1 + sin(a) * e2) for a in range(0, 2π; length = 49)]
+    seg = Point3f[]
+    ring(o, r) = (q = circle(o, r); for k in 1:48 push!(seg, Point3f(q[k]...), Point3f(q[k+1]...)) end)
+    D = isfinite(l.distance) ? l.distance : Inf
+    reach = 3 * max(t.scale, l.radius)
+    L = min(D, reach)
+    rad(s) = l.radius + (isfinite(D) ? (l.end_radius - l.radius) * s / D : 0.0)
+    ring(l.center, l.radius)
+    ring(l.center + L * l.axis, rad(L))
+    D <= reach && l.end_radius == 0 &&
+        foreach(w -> push!(seg, Point3f((l.center + D * l.axis - 0.05 * l.radius * w)...),
+                           Point3f((l.center + D * l.axis + 0.05 * l.radius * w)...)), (e1, e2))
+    s0 = l.through ? -reach : 0.0
+    l.through && ring(l.center + s0 * l.axis, l.radius)
+    for a in range(0, 2π; length = 9)[1:8]
+        w = cos(a) * e1 + sin(a) * e2
+        push!(seg, Point3f((l.center + s0 * l.axis + l.radius * w)...), Point3f((l.center + L * l.axis + rad(L) * w)...))
+    end
+    _update!(c.sight_frame, seg; visible = true)
+    # the image in the plane of the center of the view, as the diagnostic sees it
+    vals = im.values
+    ny, nx = size(vals)
+    if im.field === :visible
+        col = x -> isnan(x) ? RGBAf(0, 0, 0, 0) : x > 0.5 ? SIGHT_SEEN : SIGHT_OTHER
+    else
+        # on the scale of the body when it shows the same field
+        fin = filter(isfinite, vals)
+        lo, hi = isempty(fin) ? (0.0, 1.0) : extrema(fin)
+        im.field === :laser && (lo = 0.0)
+        hi > lo || (hi = lo + 1)
+        f === im.field && ((lo, hi) = c.colorbar.limits[])
+        cmap = Makie.to_colormap(FIELD_COLORMAP)
+        col = x -> isfinite(x) ? (k = _cmap_color(cmap, (x - lo) / (hi - lo)); RGBAf(k.r, k.g, k.b, 0.8)) :
+                   RGBAf(0, 0, 0, 0)
+    end
+    # one square per pixel the line of sight meets, in its color (row 1 at the top)
+    w, h = cam.width / nx, cam.height / ny
+    corner(i, j) = l.center + (j - 1 - nx / 2) * w * e1 + (ny / 2 - i + 1) * h * e2
+    pts, cols = Point3f[], RGBAf[]
+    for j in 1:nx, i in 1:ny
+        x = vals[i, j]
+        isnan(x) && continue
+        a, b, cc, d = corner(i, j), corner(i, j + 1), corner(i + 1, j + 1), corner(i + 1, j)
+        append!(pts, Point3f.((a, b, cc, a, cc, d)))
+        k = col(x)
+        append!(cols, (k, k, k, k, k, k))
+    end
+    if isempty(pts)
+        _update!(c.sight_image, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
+    else
+        _update!(c.sight_image, pts, _faces(length(pts) ÷ 3); color = cols, visible = true)
+    end
+    c.dirty[] = true
+    return im
 end
 
 """

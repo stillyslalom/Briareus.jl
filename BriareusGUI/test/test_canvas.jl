@@ -104,6 +104,15 @@ const B = BriareusGUI
     sl = sight_line("nif_sxi_upper")
     B.look_from_sight!(sc, sl)
     @test B.normalize(sc.camera.eye - sc.camera.lookat) ≈ sl.axis && sc.camera.lookat ≈ sl.center
+    # and the image it sees is laid over the view: without a drive field on the body, the
+    # radiosity of the drive
+    im = B.show_sight!(sc, sess, "nif_sxi_upper")
+    @test im.field === :radiosity && sc.sight_image.visible[] && sc.sight_frame.visible[]
+    @test isequal(im.values, render(sess.target.target[], element_values(sess.drive.result[], :radiosity), im.camera))
+    @test length(sc.sight_image.color[]) == 6 * count(!isnan, im.values) && length(sc.sight_frame[1][]) == 2 * (2 * 48 + 8)
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    B.clear_sight!(sc)
+    @test !sc.sight_image.visible[] && !sc.sight_frame.visible[] && sc.sight[] === nothing
     # seen from outside, only the cells facing the eye are drawn; from inside, all of them
     clear = Makie.RGBAf(0, 0, 0, 0)
     cls = [Makie.RGBAf(Makie.RGBf(B._hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in gs.fills]

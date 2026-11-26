@@ -74,7 +74,7 @@ end
 """
     request_popup(key, path = "")
 
-Open a dialog or menu of the open window: `"retune"`, `"port"` or `"group"` (the
+Open a dialog or menu of the open window: `"retune"`, `"port"`, `"sight"` or `"group"` (the
 dialogs), `"diagnostics"` (the Diagnostics tab's list of instruments) and `"images"` (the
 Diagnostics tab on its imagers), `"topics"` or `"topics:<topic>"` (the Help window, see
 `br_help`; `"help"` opens it at the mouse and keys), `"rowmenu:<node id>"` (the model
@@ -1613,9 +1613,14 @@ function br_look_from_diagnostic(id)
         ids = [component_id(sess.target, r.part) for r in v.hardware]
         isempty(ids) ? select!(sess.view, "") : select!(sess.view, ids[1])
         foreach(i -> select_add!(sess.view, i), ids[2:end])
-        sess.status[] = v.text
+        # the outline of the view and the image it sees, laid over the CAD
+        im = show_sight!(sh.scene, sess, String(id))
+        seen = @sprintf("the observed surface and foils visible over %.3g mm²", im.visible_area)
+        sess.status[] = v.text * "; " * (im.field === :visible ? seen : "image of the " * lowercasefirst(replace(im.label, r" \([^)]*\)$" => "")) * ", " * seen)
     end
 end
+# Remove the view from a diagnostic laid over the 3D view.
+br_clear_sight() = _with_shell(sh -> clear_sight!(sh.scene))
 # Port angles of beam `i` of the table (0-based, as the dialog lists them), as text.
 function br_port_angles(i)
     sh = _SHELL[]
@@ -1636,7 +1641,7 @@ function _register_qml_functions()
     @qmlfunction br_select_range br_node_menu br_node_show br_node_include
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
-    @qmlfunction br_diagnostic_sights br_look_from_diagnostic
+    @qmlfunction br_diagnostic_sights br_look_from_diagnostic br_clear_sight
     @qmlfunction br_set_cluster br_rename_cluster br_split_quads br_merge_quads br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_new_target br_set_resolution br_edit_mesh

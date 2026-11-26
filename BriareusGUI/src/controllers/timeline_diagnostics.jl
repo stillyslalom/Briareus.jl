@@ -678,3 +678,67 @@ function look_from_diagnostic(sess::DesignSession, id::AbstractString)
     end
     return (; line = l, intrusions = rows, observed, hardware, text = String(take!(io)))
 end
+
+"""
+    sight_image(sess::DesignSession, id; field = nothing, pixels = 160)
+        -> (; line, camera, values, field, label, unit, visible_area)
+
+The picture of the target that diagnostic `id` sees, for the 3D view to lay over the CAD:
+an orthographic image (`Briareus.render`, `pixels` square) along the line of sight
+(`Briareus.sight_line`) over the field of view, or over 2.4 times the size of the target
+where the field is wider. `values` holds one value per pixel, row 1 at the top (the `up`
+of `camera`), `NaN` where the line of sight meets nothing.
+
+With `field` one of [`DRIVE_FIELDS`](@ref) (W/cm²), the values are that field of the
+latest drive on the target; without it, the radiosity of the drive (a synthetic x-ray
+image: the radiance of a diffuse surface is its radiosity over π) when the drive has a
+radiation solution. Without either, the image marks the visible area of the observed
+surface and the foils (value 1) against the other parts (value 0), and `field` is
+`:visible`. `visible_area` is the area (mm²) of the image covered by the observed
+surface and the foils, as projected along the line of sight, for every kind of image.
+A definition that gives no line of sight throws an `ArgumentError`.
+"""
+function sight_image(sess::DesignSession, id::AbstractString; field = nothing, pixels::Integer = 160)
+    l = _diagnostic_sight(sess, id)
+    l === nothing && throw(ArgumentError("diagnostic $id gives no line of sight"))
+    pixels >= 2 || throw(ArgumentError("pixels must be ≥ 2"))
+    t = sess.target.target[]
+    width = min(2 * l.radius, 2.4 * t.scale)
+    up = abs(l.axis[3]) < 0.95 ? Vec3(0.0, 0.0, 1.0) : Vec3(1.0, 0.0, 0.0)
+    cam = OrthoCamera(-l.axis; up, center = l.center, width, nx = pixels)
+    ts = sess.target
+    marked = Set(vcat(observed_components(ts, t), foil_components(ts, t)))
+    mask = Float64[t.components[t.elem_comp[e]].name in marked ? 1.0 : 0.0 for e in 1:nelements(t)]
+    seen = render(t, mask, cam)
+    visible_area = count(==(1.0), seen) * (width / pixels)^2
+    f = field === nothing ? :radiosity : Symbol(field)
+    vals = f in DRIVE_FIELDS ? _field_on_target(sess, f) : nothing
+    if vals === nothing || !any(isfinite, vals)
+        field === nothing || f === :visible ||
+            throw(ArgumentError("the drive gives no $f field on this target: run the drive first"))
+        return (; line = l, camera = cam, values = seen, field = :visible,
+                label = "visible area of the observed surface and foils", unit = "", visible_area)
+    end
+    img = render(t, vals, cam)
+    return (; line = l, camera = cam, values = img, field = f, label = DRIVE_FIELD_LABELS[f],
+            unit = "W/cm²", visible_area)
+end
+
+# Field `f` of the latest drive on every element of the target of the session, `NaN` on
+# elements outside the cavity of a drive on a cavity; `nothing` when the drive is of
+# another target.
+function _field_on_target(sess::DesignSession, f::Symbol)
+    t = sess.target.target[]
+    dr = sess.drive
+    res = dr.result[]
+    res === nothing && return nothing
+    s = res.evaluation.scenario
+    vals = element_values(res, f)
+    s.target === t && return vals
+    s === dr.scenario[] || return nothing
+    idx = dr.cavity_index[]
+    (idx !== nothing && dr.key[] !== nothing && dr.key[][1] === t) || return nothing
+    full = fill(NaN, nelements(t))
+    full[idx] = vals
+    return full
+end

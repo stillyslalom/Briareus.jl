@@ -81,7 +81,7 @@ ApplicationWindow {
         const key = popupRequest
         if (key === "") return
         // "window": no popup (an image of the toolbar)
-        const dialogs = { retune: retuneDialog, port: portDialog, transform: transformDialog }
+        const dialogs = { retune: retuneDialog, port: portDialog, sight: sightDialog, transform: transformDialog }
         if (key.startsWith("topics")) { helpTopics.openAt(key.substring(7)); openPopup = helpTopics }
         else if (key === "help") { helpTopics.openAt("start.keys"); openPopup = helpTopics }
         else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
@@ -275,6 +275,7 @@ ApplicationWindow {
             Action { text: "Fit selection"; onTriggered: Julia.br_fit_selection() }
             Action { text: "Look from port…"; onTriggered: portDialog.open() }
             Action { text: "Look from diagnostic…"; onTriggered: sightDialog.open() }
+            Action { text: "Clear diagnostic overlay"; onTriggered: Julia.br_clear_sight() }
             Action {
                 text: "Look along selected beam"
                 enabled: ["group", "quad", "beam"].indexOf(app.selKind) >= 0
@@ -824,7 +825,8 @@ ApplicationWindow {
                 visible: sightDialog.sights.length > 0
                 model: sightDialog.sights.map(s => s.split("\t")[1])
             }
-            Label { text: "Hardware within the target positioning error of the view is selected."
+            Label { text: "Hardware within the target positioning error of the view is selected,\n" +
+                          "and the image the diagnostic sees is laid over the 3D view."
                     opacity: 0.7; font.pixelSize: 11 }
         }
         onAccepted: if (sights.length > 0) Julia.br_look_from_diagnostic(sights[sightBox.currentIndex].split("\t")[0])

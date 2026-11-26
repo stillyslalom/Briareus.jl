@@ -488,8 +488,22 @@ The center canvas navigates as a CAD tool:
 The near and far planes follow the eye, so nothing is clipped however close the view.
 The View menu contains the standard views, a perspective or orthographic projection,
 turntable (z up) or free rotation, the cutaway, Look from port (the port of a beam or
-any θ, φ) and Save view as image. Switching the turntable back on levels a view that a
-free rotation rolled. Help ▸ Mouse and keys lists the bindings.
+any θ, φ), Look from diagnostic and Save view as image. Switching the turntable back on
+levels a view that a free rotation rolled. Help ▸ Mouse and keys lists the bindings.
+
+Look from diagnostic lists the diagnostics of the facility whose definitions give a line
+of sight (`sight_line`). The view turns to look along the chosen one from the instrument.
+The hardware that enters its volume within the target positioning error is selected and
+named in the status line, together with the observed parts. The outline of the volume is
+drawn: the field of view at the center of the view and the generators toward the optic,
+a cone to the pinhole or a cylinder. The image that the diagnostic sees (`sight_image`) is
+laid over the geometry in the plane through the center of the view, one square per pixel
+of an orthographic image along the line of sight. It shows the drive field that colors the
+body, on the scale of the body, or else the radiosity of the drive, a synthetic x-ray
+image. Without a drive, it marks where the observed surface and the foils are visible,
+and the status line gives that visible area as projected along the line of sight. A
+radiography line is drawn the same way, so its image is the silhouette of the parts that
+it crosses. View ▸ Clear diagnostic overlay removes the outline and the image.
 
 A placement triad is drawn on the selected part, piece or assembly, in the axes of the
 frame it is placed in (Properties ▸ *Placed in*). A drag on an arrow moves the part

@@ -392,6 +392,19 @@ end
     @test any(r -> r.part === :hohlraum && r.intrudes, v.intrusions) && Set(v.observed) == Set([:hohlraum, :capsule])
     @test isempty(v.hardware) && startswith(v.text, "looking from NIF SXI upper") &&
           occursin("observing ", v.text) && occursin("no other part within 0.025 mm", v.text)
+    # without a drive, the image is the visible area of the observed surface; with the
+    # hohlraum left out, the whole capsule is seen, a disk of its radius
+    im = sight_image(sess, "nif_sxi_upper")
+    @test im.field === :visible && any(==(1.0), im.values) && any(==(0.0), im.values) && size(im.values) == (160, 160)
+    @test_throws ArgumentError sight_image(sess, "nif_sxi_upper"; field = :radiosity)
+    set_excluded!(sess.target, :hohlraum, true)
+    t = sess.target.target[]
+    cv = [x for c in t.components if c.name === :capsule for x in c.mesh.vertices]
+    o = sum(cv) / length(cv)
+    rc = maximum(x -> sqrt(sum(abs2, x - o)), cv)
+    ic = sight_image(sess, "nif_sxi_upper"; pixels = 400)
+    @test abs(ic.visible_area / (π * rc^2) - 1) < 0.03
+    set_excluded!(sess.target, :hohlraum, false)
     # a shield across the view, 8 mm toward the instrument, enters it by 1 mm and more
     a = v.line.axis
     c = 8.0 * a
