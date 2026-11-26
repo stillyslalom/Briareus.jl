@@ -113,6 +113,7 @@ cp(joinpath(@__DIR__, "..", "BriareusGUI", "src", "qml", "icons", "briareus.svg"
             "Implosion metrics" => "reference/implosion.md",
             "Laser–plasma models" => "reference/lpi.md",
             "Shot review" => "reference/review.md",
+            "Outages and review packets" => "reference/outages.md",
             "Diagnostic definitions" => "reference/diagnostics.md",
             "Input and output" => "reference/io.md",
             "VisRad interchange" => "reference/visrad.md",
