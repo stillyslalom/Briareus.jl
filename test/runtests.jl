@@ -18,7 +18,7 @@ SHARD in ("", "1", "2", "3") || error("BRIAREUS_TEST_SHARD must be 1, 2 or 3, go
 # against linear propagation, a uniformly fine history; ~3 min at four threads). CI's
 # one-thread shards run them; local full runs skip them unless asked.
 const LONG_TESTS = get(ENV, "BRIAREUS_LONG_TESTS", "false") == "true"
-const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl",
+const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "step.jl", "partial_visibility.jl", "hmatrix.jl",
                                      "unconverted_history.jl",
                                      "inference.jl"))
 merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "halfraum.jl", "profiles.jl", "cavities.jl", "burnthrough.jl",
@@ -71,6 +71,7 @@ shard_include("burnthrough.jl")
 shard_include("meshops.jl")
 shard_include("stl.jl")
 shard_include("cadfit.jl")
+shard_include("step.jl")
 shard_include("uncertainty.jl")
 shard_include("results.jl")
 shard_include("retune.jl")

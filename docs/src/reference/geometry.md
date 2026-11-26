@@ -31,12 +31,20 @@ spheres, cones and tori fitted ([`fit_surfaces`](@ref)). Primitive components ca
 passed with the parts. [Radiation in an imported CAD hohlraum](@ref) walks through each
 step.
 
+STEP files keep the exact geometry that STL discards. [`read_step`](@ref) reads the
+solids of a STEP file through OpenCASCADE, meshes their faces and gives each plane,
+cylinder, cone, sphere and torus the surface stored in the file ([`StepSolid`](@ref),
+[`StepFace`](@ref)). [`step_components`](@ref) and [`cad_target`](@ref) then build the
+components with the exact surfaces, with no fit. The reader is a package extension that
+loads with the package Gmsh (`using Gmsh`). Gmsh is under the GPL, so it is not a
+dependency of Briareus and is installed separately (`using Pkg; Pkg.add("Gmsh")`).
+
 ```@docs
 Briareus
 ```
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/geometry.jl", "src/meshops.jl", "src/albedo.jl", "src/materials.jl", "src/target.jl", "src/targets.jl", "src/cadfit.jl"]
+Pages = ["src/geometry.jl", "src/meshops.jl", "src/albedo.jl", "src/materials.jl", "src/target.jl", "src/targets.jl", "src/cadfit.jl", "src/step.jl"]
 Private = false
 ```

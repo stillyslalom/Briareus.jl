@@ -1609,6 +1609,29 @@ fits below used the Briareus operator points with a free-form evaluator.
   the `SphereKeepOut` default only the capsule part (9 spherical components),
   `show` "10 parts (68 components)". So fitting costs nothing measurable here and cuts
   the flux error 5–10×. **H** (measured locally)
+- **STEP import (2026-11-26, local).** `read_step` (extension `BriareusGmshExt`, Gmsh
+  4.15 with OpenCASCADE 7.9) takes the type and parameters of each face from the B-rep,
+  so no fit is involved. On shapes written by the OpenCASCADE kernel of Gmsh, the
+  radii come back to 1e-12 relative and the mesh vertices lie within 1e-15 mm of the
+  surfaces; a cone half-angle is stored to 11 digits, which puts its apex 5 mm away to
+  1e-10 mm (test/step.jl). The meshing defaults are engineering choices, not facility
+  criteria: `size` 0.5 mm (the remesh size of the CAD notes above), one triangle per 30°
+  of turn on curved faces (`angle`), `minsize` = size/10, and sizes not carried from a
+  face edge into the faces beside it (Gmsh `Mesh.MeshSizeExtendFromBoundary` 0). With
+  sizes carried from the edges, which is the default of Gmsh, the 0.05 mm triangles of
+  0.25 mm fillets spread over the whole inner wall. On a thick hohlraum with filleted
+  inner corners (radii 2.9 and 3.2 mm, 10 mm long, 0.25 mm fillets, 1.6 mm entrance
+  holes): at `angle` 10 and carried sizes, 86,100 triangles, 63,138 of them on the inner
+  wall; at 10 without carrying, 20,258; at the defaults, 7,580 (2,094 on the two
+  fillets). The import at the defaults takes 0.19 s on 4 threads and gives 6 components,
+  the two tori among them. `fit_surfaces` on the same triangles written as binary STL
+  takes 0.52 s and finds the three cylinders (radii within 1e-7 mm), but neither
+  fillet torus, which stays flat. On the meshes with carried sizes (86,100 triangles at
+  `size` 0.5, 129,782 at 0.25) it took 10 and 6 s and split the fillets into about 290
+  and 110 small cylinders, cones and tori. A whole torus (R 2, r 0.5 mm, 12,328
+  triangles from the test shapes) is not found by `fit_surfaces` either, from exact
+  Float64 vertices: 25 small regions cover 427 of its triangles. **H** for the measurements, **M** for the defaults (engineering
+  choices).
 
 ### Result tables and fits
 

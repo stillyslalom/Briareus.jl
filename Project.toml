@@ -16,10 +16,17 @@ SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
+[weakdeps]
+Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
+
+[extensions]
+BriareusGmshExt = "Gmsh"
+
 [compat]
 Aqua = "0.8"
 Dates = "1.10"
 ForwardDiff = "0.10, 1"
+Gmsh = "0.3"
 JET = "0.9, 0.10, 0.11, 0.12, 0.13"
 JSON = "1"
 LinearAlgebra = "1.10"
@@ -36,9 +43,10 @@ julia = "1.10"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "JET", "Markdown", "Test"]
+test = ["Aqua", "Gmsh", "JET", "Markdown", "Test"]

@@ -24,6 +24,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 export CurvedSurface, SphereSurface, CylinderSurface, ConeSurface, TorusSurface, DiskSurface, surface_point, element_sector
 export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, connected_pieces, transform, translate, rotation_to,
        orient_mesh, coarsen_mesh, remesh_mesh, SurfaceRegion, fit_surfaces, curved_components,
+       StepFace, StepSolid, read_step, step_components,
        cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, icosphere_mesh,
        icosphere_frequency, rectangle_mesh, frustum_mesh
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
@@ -147,6 +148,7 @@ include("target.jl")
 include("targets.jl")
 include("material_library.jl")
 include("cadfit.jl")
+include("step.jl")
 include("beams.jl")
 include("pulses.jl")
 include("facilities.jl")

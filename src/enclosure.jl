@@ -388,7 +388,11 @@ A radiation-ready target from CAD meshes in one call. It does what the
 `name => mesh` pairs, the CAD parts (as `read_stl_solids` returns them), and
 `Component`s, taken as they are, such as primitives, apertures and parts prepared by
 hand. The components take part in the cavity selection but are not oriented, remeshed
-or fitted. The components of the target follow the order of `parts`.
+or fitted. `parts` may also contain solids read from STEP files ([`StepSolid`](@ref),
+from [`read_step`](@ref)). Each solid gives the components of
+[`step_components`](@ref), with its `material` and `two_sided` and the exact surfaces of
+its curved faces, and is not oriented again, remeshed or fitted. The components of the
+target follow the order of `parts`.
 
 Each CAD part becomes a component of `material` radiating from its front (from both
 sides when `two_sided`), through these steps:
@@ -452,6 +456,13 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
         if p isa Component
             push!(comps, p)
             push!(cad, false)
+        elseif p isa StepSolid
+            name = Symbol(p.name)
+            mat = _part_value(material, name, nothing)
+            mat isa Material || throw(ArgumentError("no material for CAD part $name"))
+            pcs = step_components(p, mat; two_sided = Bool(_part_value(two_sided, name, false)))
+            append!(comps, pcs)
+            append!(cad, falses(length(pcs)))
         elseif p isa Pair && last(p) isa Mesh
             name = Symbol(first(p))
             mat = _part_value(material, name, nothing)
@@ -460,7 +471,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
             push!(comps, Component(name, mesh, mat; two_sided = Bool(_part_value(two_sided, name, false))))
             push!(cad, true)
         else
-            throw(ArgumentError("a part must be a `name => mesh` pair or a Component, not a $(typeof(p))"))
+            throw(ArgumentError("a part must be a `name => mesh` pair, a StepSolid or a Component, not a $(typeof(p))"))
         end
     end
     isempty(comps) && throw(ArgumentError("no parts given"))

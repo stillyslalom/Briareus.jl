@@ -209,7 +209,7 @@ callout in the section states which).
   (2026-10-21)" (`VisRadProfile`: growth 0.67, measured plates, the faint wings); "CAD
   import, remeshing and surface fits" (bullets "Flat CAD elements", "Tori", "Cost of
   fitting faces of none of the kinds", "Fitting CAD by default", "Sampled visibility on
-  folded elements", "Parts of fitted CAD"); result tables; items to verify at work.
+  folded elements", "Parts of fitted CAD", "STEP import"); result tables; items to verify at work.
 
 **Radiation, meshes and scale**
 - Gold wall loss and thin-foil burnthrough (2026-10-16); Hohlraum mesh work-precision
@@ -298,6 +298,7 @@ callout in the section states which).
 | `hohlraum()` capsule mesh, `Target` visibility | `:compact`; `:centroid` (`:sampled` for CAD targets) | Default capsule mesh and visibility |
 | `Target`/`hohlraum()` `closed`, `cad_target`/`visrad_target` `closed` | `hohlraum()` true; others false (declared when apertures close the cavity) | Closure on bored, windowed and CAD cavities |
 | `curved_components` / CAD `fit` | fit on with `remesh`, `minfraction` 1e-3 | "Fitting CAD by default" (`minfraction`) and "Parts of fitted CAD" (fit on), under CAD import |
+| `read_step` meshing, `step_components` | `size` 0.5 mm, `angle` 30°, `minsize` size/10, no size carried from edges; `minfraction` 0 | "STEP import", under CAD import |
 | `LARGE_MODEL[]`, `HMATRIX_MODEL[]`, `HMATRIX_DEFAULTS` | 10,000; 15,000; `tol` 1e-6, η 1, leaf 48, maxrank 32 | Large radiation models; Hierarchical view factors; The H-matrix's N^1.5 remainder (`tol`) |
 | `nif_mband()` | outer 0.20, inner 0.042; materials Au and DU (its gold liner) | Spectral radiosity, M-band and a synthetic Dante §2; Per-cone M-band in the drive history (materials) |
 | `mband_albedo` α_M | 0.55, thermalized | Laser-spot spectrum (recalibration); Spectral radiosity, M-band and a synthetic Dante §2 (first calibration) |
