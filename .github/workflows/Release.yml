@@ -1,8 +1,10 @@
 # Relocatable `briareus` applications (dev/release/README.md): one PackageCompiler build
 # per platform, a smoke test of each as a user without Julia would run it, and the archive
 # as a workflow artifact. Signing runs only where its secrets are set; a release on GitHub
-# is drafted by hand from the artifacts. Compiling the system image took more than 14 GB
-# on Linux (dev/release/README.md), so the standard runners may run out of memory.
+# is drafted by hand from the artifacts. Compiling the system image was killed at 13.5 GB
+# of resident memory on Linux in every configuration tried, one code-generation thread and
+# no window included (dev/release/README.md), so the 16 GB and 7 GB standard runners are
+# likely to run out of memory: larger runners (32 GB) are the expected fix.
 name: Release
 on:
   push:

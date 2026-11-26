@@ -8,9 +8,9 @@
 #
 # `out` defaults to build/Briareus. `--cpu-target` replaces PackageCompiler's default
 # targets (a generic build with code for several x86 generations, which runs on any
-# machine of the architecture). The default needs about 14 GB of memory to compile the
-# system image on Linux x64; `--cpu-target=native` needs less and runs only on machines
-# like the one that built it. `--incremental` builds on the system image of the Julia
+# machine of the architecture); `--cpu-target=native` runs only on machines like the one
+# that built it. Compiling the system image takes more than 13.5 GB of memory on Linux x64
+# with any of these settings (README.md in this folder). `--incremental` builds on the system image of the Julia
 # that runs the build, which compiles less at once. The precompile run (precompile.jl) runs every headless
 # command on a starter design, and opens and closes the window unless --no-window is given
 # or no display is available (it needs an OpenGL context). Signing and installers are

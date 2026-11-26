@@ -38,10 +38,28 @@ days. It publishes nothing.
 
 ## What was measured
 
-No build has finished yet. The precompile run (every headless command and the window)
-completes, but compiling the system image ran out of memory on a Linux x64 machine with
-15 GB: with the default targets, with `--cpu-target=native`, and with `--cpu-target=native
---incremental`, each killed at about 14 GB. The standard GitHub runners have 16 GB
-(Linux and Windows) and 7 GB (macOS arm64), so the workflow is likely to need larger
-runners, or a system image that holds less of GLMakie and QML. Neither the archives
-nor `smoke.sh` on a built application have been run.
+No build has finished yet. The precompile run (every headless command, with and without
+the window) completes, but compiling the system image is killed for memory on a Linux
+x64 machine whose processes share a limit of about 14.5 GB. The table gives the runs of
+2026-11-26 (Julia 1.13.4, PackageCompiler 2.4.5), each killed by the kernel when the
+compiling process reached the limit, so the peaks are lower bounds:
+
+| Settings | Resident memory when killed |
+|---|---|
+| `JULIA_IMAGE_THREADS=1`, `--cpu-target=native` | 13.5 GB |
+| `JULIA_IMAGE_THREADS=1`, `--cpu-target=native --no-window` | 13.5 GB |
+| `JULIA_IMAGE_THREADS=1`, `--cpu-target=native --no-window --incremental` | 13.5 GB |
+| `JULIA_IMAGE_THREADS=1`, `--cpu-target=native --no-window`, `BRIAREUS_NO_WORKLOAD=true` | 13.6 GB |
+
+Earlier runs with the default targets, with `--cpu-target=native` and with
+`--cpu-target=native --incremental`, all with the default number of image threads, were
+killed at about 14 GB on the same machine. None of these settings brings the compile
+under the limit: one code-generation thread, leaving the window out of the precompile
+run, building on the system image of Julia, and skipping the precompile workload of
+Briareus. The memory is therefore taken by compiling the package stack itself
+(GLMakie, QML and their dependencies with Briareus), not by the choice of settings, and
+a build needs a machine with well over 14 GB, such as 32 GB. The standard GitHub runners
+have 16 GB (Linux and Windows) and 7 GB (macOS arm64), so the workflow needs larger
+runners. The other route is to ship Julia with a depot of package images (no custom
+system image), which builds in far less memory but starts more slowly. Neither the
+archives nor `smoke.sh` on a built application have been run.
