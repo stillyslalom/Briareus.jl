@@ -467,6 +467,29 @@ function set_talis_pinch!(tl::TaLISState, on::Bool)
 end
 
 """
+    disposition_label(sess, triangle) -> String
+
+What the 1ω check found at mesh triangle `triangle`, as the 3D view shows it under the
+pointer: the name of its component, then the clauses of [`disposition_info`](@ref), one
+per line. Empty outside a 1ω color mode ([`DISPOSITION_MODES`](@ref)) and without a
+disposition for the target.
+"""
+function disposition_label(sess, k::Integer)
+    info = _disposition_text(sess, k)
+    isempty(info) && return ""
+    t = sess.target.target[]
+    return String(t.components[t.tri_comp[k]].name) * "\n" * replace(info, "; " => "\n")
+end
+
+function _disposition_text(sess, k::Integer)
+    sess.view.color[] in DISPOSITION_MODES || return ""
+    t = sess.target.target[]
+    tl = sess.talis
+    (tl.inputs[] === nothing || !checkbounds(Bool, t.tri_comp, k)) && return ""
+    return disposition_info(tl, t, tl.inputs[][2], k)
+end
+
+"""
     pick_disposition!(sess, triangle) -> Bool
 
 With the target colored by a 1ω mode ([`DISPOSITION_MODES`](@ref)), put what the check
@@ -475,12 +498,9 @@ the name of its component. Returns whether it did: nothing happens in another co
 or without a disposition for the target.
 """
 function pick_disposition!(sess, k::Integer)
-    sess.view.color[] in DISPOSITION_MODES || return false
-    t = sess.target.target[]
-    tl = sess.talis
-    (tl.inputs[] === nothing || !checkbounds(Bool, t.tri_comp, k)) && return false
-    info = disposition_info(tl, t, tl.inputs[][2], k)
+    info = _disposition_text(sess, k)
     isempty(info) && return false
+    t = sess.target.target[]
     sess.status[] = String(t.components[t.tri_comp[k]].name) * ": " * info
     return true
 end

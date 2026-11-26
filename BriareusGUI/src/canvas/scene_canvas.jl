@@ -101,6 +101,8 @@ struct SceneCanvas
     sight::Base.RefValue{Any}                    # and the definition it is of (`nothing`: none)
     compare_ghost::Any                           # a reference design (`show_comparison!`): its parts
     compare_arrows::Any                          # that differ, and the shifts of the beam aims
+    hover_label::Any                             # the 1ω verdict of the facet under the pointer,
+    hover_tri::Base.RefValue{Int}                # and that facet (0: none)
 end
 
 """
@@ -158,6 +160,9 @@ function scene_canvas(sess::DesignSession)
                         visible = false)
     compare_ghost = mesh!(sc, tri...; color = COMPARE_GHOST, transparency = true, visible = false)
     compare_arrows = linesegments!(sc, _NOSEG3; color = COMPARE_ARROW, linewidth = 2.5, visible = false, overdraw = true)
+    hover_label = text!(sc, _NOPOINT3; text = [""], fontsize = 13, markerspace = :pixel, color = :black,
+                        glowcolor = RGBAf(1, 1, 1, 0.9), glowwidth = 4, align = (:left, :bottom), offset = (10, 6),
+                        visible = false, overdraw = true)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -168,7 +173,8 @@ function scene_canvas(sess::DesignSession)
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
                     Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines, corridor,
-                    Ref{Any}(nothing), sight_frame, sight_image, Ref{Any}(nothing), compare_ghost, compare_arrows)
+                    Ref{Any}(nothing), sight_frame, sight_image, Ref{Any}(nothing), compare_ghost, compare_arrows,
+                    hover_label, Ref(0))
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -177,7 +183,7 @@ function scene_canvas(sess::DesignSession)
     cam.handle_move = px -> _triad_move!(c, sess, px)
     cam.handle_release = px -> _triad_release!(c, sess, px)
     cam.handle_cancel = () -> _triad_cancel!(c, sess)
-    cam.hover = px -> _triad_hover!(c, sess, px)
+    cam.hover = px -> (_triad_hover!(c, sess, px); _disposition_hover!(c, sess, px))
     # The triad keeps its size on screen.
     # The session keeps the pose without notifying; the pose is saved but is not an edit.
     cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);
@@ -195,6 +201,7 @@ function scene_canvas(sess::DesignSession)
     # target.
     on(p -> _apply_camera!(c, p), v.camera)
     on(_ -> _draw_talis_focus!(c, sess), sess.talis.focus)
+    onany((_...) -> _disposition_hover!(c, sess, nothing), sess.target.target, sess.talis.disposition, v.color)
     onany((_...) -> _draw_corridor!(c, sess), sess.corridor.map, sess.talis.tight)
     onany((_...) -> c.sight[] === nothing || _draw_sight!(c, sess), sess.target.target, dr.result, v.color)
     onany((_...) -> v.color[] in DISPOSITION_MODES && _draw_body!(c, sess), sess.talis.disposition,
@@ -581,6 +588,29 @@ function _click!(c::SceneCanvas, sess::DesignSession, o, d, px)
     end
     c.dirty[] = true
     return nothing
+end
+
+# Pointer moved with no button held, in a 1ω color mode: label the facet under it with its
+# 1ω verdict (`disposition_label`), at the point hit; redrawn only when the facet changes.
+# Over a triad handle, a beam or a part left out of the calculations, or with `px ===
+# nothing` (the target, the disposition or the color mode changed), the label is hidden.
+function _disposition_hover!(c::SceneCanvas, sess::DesignSession, px)
+    k, at = 0, nothing
+    if px !== nothing && sess.view.color[] in DISPOSITION_MODES && c.triad_hover[] === nothing &&
+       _pick_beam(c, sess, px) === nothing
+        o, d = pixel_ray(c.camera, px)
+        τ, tri = _pick_surface(c, sess, o, d)
+        if tri != 0 && τ < _pick_ghost(sess, o, d)[1]
+            k, at = tri, Point3f((Makie.Vec3d(o...) + τ * Makie.Vec3d(d...))...)
+        end
+    end
+    k == c.hover_tri[] && return false
+    c.hover_tri[] = k
+    text = k == 0 ? "" : disposition_label(sess, k)
+    isempty(text) ? _update!(c.hover_label, _NOPOINT3; text = [""], visible = false) :
+                    _update!(c.hover_label, [at]; text = [text], visible = true)
+    c.dirty[] = true
+    return true
 end
 
 # On double click, fit the clicked component or beam, or the whole target on empty space.

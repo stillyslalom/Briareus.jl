@@ -785,7 +785,8 @@ The bottom panel has the following tabs.
   beam whose 1ω margin to the same part is below the tight threshold, which shows the
   beams that close in on a part without their whole 1ω volumes. In a 1ω color mode a
   click on a facet gives its verdict, margin, beamlet, radii and port angle in the status
-  line. With a 1ω row selected, the tab also draws the plane across the beamlet through
+  line, and the same verdict is labeled beside the pointer while it rests on a facet,
+  one clause per line. With a 1ω row selected, the tab also draws the plane across the beamlet through
   the hardware point ([`omega1_slice`](@ref)): the 10% contour, the worst-case square
   dashed, the cross-section of the hardware and the caliper with its length.
 - **Keep-out map:** the clearance page also draws the keep-outs of the shot on a sphere

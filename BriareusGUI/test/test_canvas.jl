@@ -90,8 +90,22 @@ const B = BriareusGUI
     tk = findfirst(==(:clear), sess.talis.disposition[].status)
     @test pick_disposition!(sess, tk) && startswith(sess.status[], String(sess.target.target[].components[sess.target.target[].tri_comp[tk]].name) * ": clear")
     @test !pick_disposition!(sess, 0)
+    # and the pointer over a facet labels it with that verdict, one clause per line
+    tt = sess.target.target[]
+    lab = disposition_label(sess, tk)
+    @test startswith(lab, String(tt.components[tt.tri_comp[tk]].name) * "\nclear")
+    onface(p) = (r = BriareusGUI.pixel_ray(sc.camera, p);
+                 BriareusGUI._pick_surface(sc, sess, r...)[2] != 0 && BriareusGUI._pick_beam(sc, sess, p) === nothing)
+    hp = first(p for p in ((Float64(x), Float64(y)) for x in 50:25:850, y in 50:25:750) if onface(p))
+    BriareusGUI.camera_move!(sc.camera, hp)
+    hk = sc.hover_tri[]
+    @test hk != 0 && sc.hover_label.visible[] && only(sc.hover_label.text[]) == disposition_label(sess, hk)
+    BriareusGUI.camera_move!(sc.camera, (-50.0, -50.0))
+    @test sc.hover_tri[] == 0 && !sc.hover_label.visible[]
+    BriareusGUI.camera_move!(sc.camera, hp)
     set_color!(sess, :component)
-    @test !pick_disposition!(sess, tk)
+    @test !pick_disposition!(sess, tk) && disposition_label(sess, tk) == ""
+    @test sc.hover_tri[] == 0 && !sc.hover_label.visible[]
     set_color!(sess, :omega1_disposition)
     clear_talis_focus!(sess.talis)
     @test !sc.focus_mesh.visible[] && !sc.focus_lines.visible[]
