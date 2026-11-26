@@ -75,6 +75,13 @@ ColumnLayout {
                             ctx.beginPath(); ctx.ellipse(p[0] - 0.55 * r, p[1] - 0.55 * r, 1.1 * r, 1.1 * r)
                             ctx.fillStyle = tierColor(m.beam); ctx.fill()
                         }
+                        if (m.badge !== "") {
+                            // the badge of its role, at the upper right
+                            ctx.font = "bold 8px sans-serif"
+                            ctx.lineWidth = 2.5; ctx.strokeStyle = "#FFFFFF"
+                            ctx.strokeText(m.badge, p[0] + 0.7 * r, p[1] - 0.7 * r)
+                            ctx.fillStyle = ink; ctx.fillText(m.badge, p[0] + 0.7 * r, p[1] - 0.7 * r)
+                        }
                     }
                 }
                 MouseArea {
@@ -92,11 +99,25 @@ ColumnLayout {
                     }
                     onClicked: (e) => { const m = hit(e.x, e.y); if (m) Julia.br_roe_pick(m.name) }
                     onPositionChanged: (e) => { const m = hit(e.x, e.y)
-                        hoverName.text = !m ? "" : m.beam === "none" || m.beam === m.tier ? m.name + ": " + m.tier
-                                         : m.name + ": " + m.tier + ", one of its beams " + m.beam }
+                        hoverName.text = !m ? "" : (m.beam === "none" || m.beam === m.tier ? m.name + ": " + m.tier
+                                         : m.name + ": " + m.tier + ", one of its beams " + m.beam) + ", role " + m.role }
                 }
             }
             Label { id: hoverName; text: ""; opacity: 0.8 }
+            Label {
+                // the key of the role badges
+                readonly property var pairs: {
+                    var seen = {}, out = []
+                    for (var i = 0; i < portCanvas.marks.length; i++) {
+                        var m = portCanvas.marks[i]
+                        if (m.badge !== "" && !seen[m.badge]) { seen[m.badge] = true; out.push(m.badge + " " + m.role) }
+                    }
+                    return out.sort()
+                }
+                visible: pairs.length > 0
+                text: "Roles: " + pairs.join(" · ")
+                opacity: 0.8; font.pixelSize: 11
+            }
             Label { text: "Center of a mark: the loss of one beam of the quad"; opacity: 0.8; font.pixelSize: 11
                     visible: portCanvas.marks.some(m => m.beam !== "none" && m.beam !== m.tier) }
         }

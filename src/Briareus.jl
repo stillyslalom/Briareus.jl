@@ -78,7 +78,7 @@ export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_
        roe_hotspot_velocity, roe_yield, roe_face_flux, roe_face_nonuniformity, roe_temperature,
        roe_flux_balance, roe_foil_irradiance, roe_foil_nonuniformity, roe_foil_centroid,
        roe_backlighter_signal, roe_illumination_rms, roe_corona_rms, roe_table, write_roe_csv,
-       roe_markdown, write_roe_markdown, port_map, port_map_svg, write_port_map_svg,
+       roe_markdown, write_roe_markdown, port_map, port_map_svg, write_port_map_svg, role_badges,
        Omega1Review, omega1_review, omega1_review_html, write_omega1_review, write_talis_json, roe_html,
        write_roe_json, write_roe_packet, roe_default_criteria
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments, read_stl, read_stl_solids, write_stl, write_results

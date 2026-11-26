@@ -71,8 +71,9 @@ end
 
 """
     port_map_svg(beams; by = :auto, tiers = nothing, values = nothing, notes = nothing,
-                 title = "", unit = "", size = 360, labels = :auto) -> String
-    port_map_svg(report::ROEReport, beams; kind = :auto, kwargs...) -> String
+                 badges = nothing, roles = nothing, title = "", unit = "", size = 360,
+                 labels = :auto) -> String
+    port_map_svg(report::ROEReport, beams; kind = :auto, badges = :auto, kwargs...) -> String
 
 A vector drawing (SVG) of the chamber port map ([`port_map`](@ref)): the upper hemisphere
 on the left disk and the lower hemisphere, seen from above, on the right disk, with rings
@@ -82,20 +83,26 @@ at polar angles of 30° and 60° from each pole and the equator on the rim.
 is gray), and `values` colors it on a ramp between the smallest and largest value, with
 `unit` in the legend. Both are a vector in the order of the marks or a dictionary by mark
 name, and a mark without an entry is gray. `notes`, in the same form, is text shown when
-the pointer rests on a mark. `labels` writes the name under each mark (`:auto`: for 80
-marks or fewer). `size` is the diameter of a disk in pixels.
+the pointer rests on a mark. `badges`, in the same form, is a short text written at the
+upper right of each mark, such as the role of its beams, and `roles` a dictionary from
+badge to the role that it stands for, listed under the disks. `labels` writes the name
+under each mark (`:auto`: for 80 marks or fewer). `size` is the diameter of a disk in
+pixels.
 
 With a rules-of-engagement report ([`ROEReport`](@ref)) and the beams of its scan, the
 marks are the units of the report (`kind = :quad` or `:beam`; `:auto` takes quads when the
 report has quad units), colored by tier, and each note gives the role, the decision and
-the binding criterion with its score. The text of the drawing is the same for the same
-input: coordinates are written with two decimals.
+the binding criterion with its score. With `badges = :auto`, each mark carries the badge
+of its role ([`role_badges`](@ref)) when the marks have more than one role, as for a drive
+and a backlighter, two halfraums or two foils; `true` writes them always and `false`
+never. The text of the drawing is the same for the same input: coordinates are written
+with two decimals.
 """
 function port_map_svg(beams::AbstractVector{<:Beam}; by::Symbol = :auto, kwargs...)
     return _port_map_svg(port_map(beams; by); kwargs...)
 end
 
-function port_map_svg(r::ROEReport, beams::AbstractVector{<:Beam}; kind::Symbol = :auto, kwargs...)
+function port_map_svg(r::ROEReport, beams::AbstractVector{<:Beam}; kind::Symbol = :auto, badges = :auto, kwargs...)
     kind in (:auto, :beam, :quad) || throw(ArgumentError("kind must be :auto, :beam or :quad"))
     length(beams) == length(r.beams) ||
         throw(ArgumentError("the report has $(length(r.beams)) beams and $(length(beams)) were given"))
@@ -110,16 +117,49 @@ function port_map_svg(r::ROEReport, beams::AbstractVector{<:Beam}; kind::Symbol 
                _roe_number(o.scores[o.binding]), " (green ≤ ", _roe_number(c.green), ", amber ≤ ",
                _roe_number(c.amber), ")")
     end
+    roles = Symbol[r.units[i].role for i in is]
+    show = badges === :auto ? length(unique(roles)) > 1 : Bool(badges)
+    if show
+        bs = role_badges(roles)
+        return _port_map_svg(marks; tiers = r.tiers[is], notes, badges = [bs[x] for x in roles],
+                             roles = Dict(v => k for (k, v) in bs), kwargs...)
+    end
     return _port_map_svg(marks; tiers = r.tiers[is], notes, kwargs...)
 end
 
-function _port_map_svg(marks; tiers = nothing, values = nothing, notes = nothing, title::AbstractString = "",
-                       unit::AbstractString = "", size::Integer = 360, labels = :auto)
+"""
+    role_badges(roles) -> Dict{Symbol,String}
+
+A short badge for each distinct role of `roles` (symbols, such as the parts that absorb
+the beams of a scan, [`roe_scan`](@ref)): the initials of the words of its name, split at
+`_`, in capitals and with the digits of a word kept, as `HW` for `:hohlraum_wall` and `F2`
+for `:foil_2`, at most four characters. A badge that two roles would share takes the
+order of the role among those roles, from 1, as a suffix.
+"""
+function role_badges(roles)
+    rs = unique(Symbol[Symbol(x) for x in roles])
+    initials(r) = first(join(uppercase(w[1:1]) * replace(w[2:end], r"[^0-9]" => "") for w in split(String(r), '_')
+                             if !isempty(w)), 4)
+    base = [initials(r) for r in rs]
+    out = Dict{Symbol,String}()
+    for (k, r) in enumerate(rs)
+        b = base[k]
+        if count(==(b), base) > 1
+            b *= string(count(==(b), base[1:k]))
+        end
+        out[r] = isempty(b) ? string(k) : b
+    end
+    return out
+end
+
+function _port_map_svg(marks; tiers = nothing, values = nothing, notes = nothing, badges = nothing, roles = nothing,
+                       title::AbstractString = "", unit::AbstractString = "", size::Integer = 360, labels = :auto)
     size >= 100 || throw(ArgumentError("size must be at least 100 pixels"))
     tiers === nothing || values === nothing || throw(ArgumentError("give tiers or values, not both"))
     ts = _port_lookup(tiers, marks, "tiers")
     vs = _port_lookup(values, marks, "values")
     ns = _port_lookup(notes, marks, "notes")
+    bs = _port_lookup(badges, marks, "badges")
     show_labels = labels === :auto ? length(marks) <= 80 : Bool(labels)
     R = size / 2
     pad, top, bottom = 48, 62, 44
@@ -182,7 +222,11 @@ function _port_map_svg(marks; tiers = nothing, values = nothing, notes = nothing
                 "</title><circle cx=\"", n(x), "\" cy=\"", n(y), "\" r=\"", n(rm), "\" fill=\"", fill(i),
                 "\" stroke=\"#222222\" stroke-width=\"0.8\"/>",
                 show_labels ? string("<text x=\"", n(x), "\" y=\"", n(y + rm + 9), "\" text-anchor=\"middle\" font-size=\"8\">",
-                                     _xml_escape(m.name), "</text>") : "", "</g>")
+                                     _xml_escape(m.name), "</text>") : "",
+                bs === nothing || bs[i] === nothing ? "" :
+                string("<text x=\"", n(x + 0.7rm), "\" y=\"", n(y - 0.7rm), "\" font-size=\"8\" font-weight=\"bold\" ",
+                       "stroke=\"#FFFFFF\" stroke-width=\"2.5\" paint-order=\"stroke\">", _xml_escape(string(bs[i])), "</text>"),
+                "</g>")
     end
     yl = H - 14
     if ts !== nothing
@@ -200,6 +244,10 @@ function _port_map_svg(marks; tiers = nothing, values = nothing, notes = nothing
         end
         println(io, "<text x=\"", pad + 166, "\" y=\"", yl, "\">", @sprintf("%.4g", lo), " to ", @sprintf("%.4g", hi),
                 isempty(unit) ? "" : " " * _xml_escape(unit), "</text>")
+    end
+    if roles !== nothing && !isempty(roles)
+        key = join((string(b, " ", r) for (b, r) in sort!(collect(roles); by = first)), " · ")
+        println(io, "<text x=\"", W - pad, "\" y=\"", yl, "\" text-anchor=\"end\">roles: ", _xml_escape(key), "</text>")
     end
     print(io, "</svg>\n")
     return String(take!(io))

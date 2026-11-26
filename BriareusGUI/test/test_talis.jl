@@ -465,6 +465,8 @@ end
     pd = roe_port_drawing(rs)
     @test startswith(pd, "[{\"name\":\"" * ms[1].name * "\",") && count("\"tier\":", pd) == length(ms) &&
           count("\"beam\":", pd) == length(ms)
+    # one role (every quad drives the hohlraum): no badges
+    @test length(unique(m.role for m in ms)) == 1 && all(m -> m.badge == "", ms) && occursin("\"badge\":\"\"", pd)
     # A hypothetical outage picked on the map: a pair of quads agrees with the linear pair
     # of the scan, and a third quad joins it.
     a, b, c = r.units[49].name, r.units[50].name, r.units[51].name

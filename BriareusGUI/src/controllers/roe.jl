@@ -118,7 +118,13 @@ function roe_marks(rs::ROEState)
         i = unit(name)
         return i !== nothing && any(j -> r.units[j].name in rs.picked[], within(i))
     end
-    return [(; m..., tier = tier(m.name), beam = beam_tier(m.name), picked = picked(m.name)) for m in port_map(beams; by)]
+    # the badge of the role of each mark, when the marks have more than one role
+    role(name) = (i = unit(name); i === nothing ? :none : r.units[i].role)
+    ms = port_map(beams; by)
+    roles = [role(m.name) for m in ms]
+    bs = length(unique(roles)) > 1 ? role_badges(roles) : Dict{Symbol,String}()
+    return [(; m..., tier = tier(m.name), beam = beam_tier(m.name), picked = picked(m.name), role = roles[k],
+             badge = get(bs, roles[k], "")) for (k, m) in enumerate(ms)]
 end
 
 """
@@ -127,13 +133,16 @@ end
 The port map of the Outages tab as the JSON text that its canvas draws: one entry per
 mark ([`roe_marks`](@ref)) with its `name`, its position `x`, `y` on the unit disk of its
 hemisphere, `upper` (whether it lies in the upper hemisphere), its `tier`, the tier
-`beam` of its single beams and whether it is `picked`. Empty before a scan.
+`beam` of its single beams, whether it is `picked`, and its `role` with the `badge` of the
+role (`Briareus.role_badges`, empty when every mark has the same role). Empty before a
+scan.
 """
 function roe_port_drawing(rs::ROEState)
     ms = roe_marks(rs)
     isempty(ms) && return ""
-    item(m) = @sprintf("{\"name\":\"%s\",\"x\":%.5f,\"y\":%.5f,\"upper\":%s,\"tier\":\"%s\",\"beam\":\"%s\",\"picked\":%s}",
-                       escape_string(m.name), m.x, m.y, m.hemisphere === :upper, m.tier, m.beam, m.picked)
+    item(m) = @sprintf("{\"name\":\"%s\",\"x\":%.5f,\"y\":%.5f,\"upper\":%s,\"tier\":\"%s\",\"beam\":\"%s\",\"picked\":%s,\"badge\":\"%s\",\"role\":\"%s\"}",
+                       escape_string(m.name), m.x, m.y, m.hemisphere === :upper, m.tier, m.beam, m.picked,
+                       escape_string(m.badge), escape_string(String(m.role)))
     return "[" * join((item(m) for m in ms), ",") * "]"
 end
 

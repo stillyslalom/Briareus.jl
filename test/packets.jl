@@ -90,6 +90,21 @@ end
     sb = port_map_svg(r, four; kind = :beam)
     @test count("<g class=\"port\"", sb) == 4 && occursin("Auto-Drop (4)", sb)
     @test_throws ArgumentError port_map_svg(r, four[1:3])
+    # role badges: none for one role unless asked, one per mark for two roles
+    @test !occursin("roles: ", sq) && occursin("roles: B backlighter", port_map_svg(r, four; badges = true))
+    rb = role_badges([:hohlraum_wall, :foil_1, :foil_2, :hohlraum_wall, :halfraum_a, :half_raum_a])
+    @test rb == Dict(:hohlraum_wall => "HW", :foil_1 => "F1", :foil_2 => "F2", :halfraum_a => "HA",
+                     :half_raum_a => "HRA")
+    @test role_badges([:capsule, :cbi_crystal_2]) == Dict(:capsule => "C", :cbi_crystal_2 => "CC2")
+    second = foil(:second, (0, 0, -40), (0, 0, -1); width = 6.0, n = 8, two_sided = false)
+    mixed = [four[1:2]; [Beam("B$i"; theta = 150.0, phi = φ, power = 2.0, spot = SuperGaussianSpot(0.4), quad = "QB",
+                              aim = (0, 0, -40)) for (i, φ) in ((3, 180.0), (4, 270.0))]]
+    r2 = roe_scan(Scenario(Target([main, second]), mixed), mixed, [roe_foil_irradiance(:backlighter; green = 0.3, amber = 0.6)])
+    @test [u.role for u in r2.units if u.kind === :quad] == [:backlighter, :second]
+    s2 = port_map_svg(r2, mixed)
+    @test _well_formed(s2) && count("font-weight=\"bold\" stroke=\"#FFFFFF\"", s2) == 2 &&
+          occursin("roles: B backlighter · S second", s2)
+    @test !occursin("roles: ", port_map_svg(r2, mixed; badges = false))
 end
 
 # The ids that the links of a page point to, and the ids the page has.
