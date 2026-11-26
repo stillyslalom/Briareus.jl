@@ -302,6 +302,22 @@
     es = estimate(icosphere_mesh(6.0; n = 4))
     @test all(0.8 * 6 < x[1] <= x[2] < 1.2 * 6 && x[4] < 0.1 for x in es)
     @test all(x -> x[1] == Inf && x[3] == 0, estimate(rectangle_mesh(4.0, 4.0; nu = 3, nv = 3)))
+    # A check fits only the triangles that it reaches, with the fits of the full estimate,
+    # and beams on several threads share them.
+    let tl = Target(Component(:c, icosphere_mesh(6.0; n = 4), gold()))
+        cxl = (; curv = Dict{Int,Briareus._LazyCurvature}(), curv_lock = ReentrantLock(),
+               geo = Dict(1 => Briareus._talis_samples(tl, 1, 0)))
+        lc = Briareus._component_curvature(tl, 1, cxl)
+        full = Briareus._mesh_curvature(cxl.geo[1].tris, tl.tri_normal; scale = tl.scale)
+        ks = 1:3:length(full)
+        got = Vector{NTuple{4,Float64}}(undef, length(ks))
+        Threads.@threads for i in eachindex(ks)
+            got[i] = lc[ks[i]]
+        end
+        @test got == full[ks]
+        @test count(k -> (@atomic lc.state[k]) == 0x02, eachindex(full)) == length(ks)
+        @test Briareus._component_curvature(tl, 1, cxl) === lc
+    end
 
     # NIF ignition-style "sombrero": an annular 1ω shield in the LEH plane around a
     # hohlraum. Flat, it mirrors each quad into the conjugate FOA of its hemisphere and

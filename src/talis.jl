@@ -383,7 +383,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           p0 = on.c0, q0 = on.h0,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
-          curvature, curv = Dict{Int,Vector{NTuple{4,Float64}}}(), curv_lock = ReentrantLock(),
+          curvature, curv = Dict{Int,_LazyCurvature}(), curv_lock = ReentrantLock(),
           ε = Float64(resolution), rtol = Float64(rtol),
           lip1 = _omega1_lipschitz(o1.c0, o1.h0, f1, lens_distance))
     out = [TaLISRow[] for _ in vb]
@@ -743,64 +743,102 @@ end
 # and the residual of the fit relative to the turn of the normals (0 for a flat triangle).
 function _mesh_curvature(tris::AbstractVector{NTuple{3,Vec3}}, normals::AbstractVector{Vec3};
                          crease::Real = 40.0, scale::Real = 1.0)
+    fan, q = _curvature_fan(tris, scale)
+    cosc = cosd(crease)
+    return [_triangle_curvature(tris, normals, fan, q, cosc, k) for k in eachindex(tris)]
+end
+
+_curvature_key(v, q) = (round(Int, v[1] / q), round(Int, v[2] / q), round(Int, v[3] / q))
+
+# The triangles around each vertex of a mesh, with their corner angles, keyed on the
+# vertex rounded to a grid of step `q` (returned beside the map).
+function _curvature_fan(tris::AbstractVector{NTuple{3,Vec3}}, scale::Real)
     q = 1e-7 * max(scale, 1.0)
-    key(v) = (round(Int, v[1] / q), round(Int, v[2] / q), round(Int, v[3] / q))
     fan = Dict{NTuple{3,Int},Vector{Tuple{Int,Float64}}}()      # vertex → (triangle, corner angle)
     for (k, tri) in enumerate(tris), i in 1:3
         a, b, c = tri[i], tri[mod1(i + 1, 3)], tri[mod1(i + 2, 3)]
         u, v = b - a, c - a
         lu, lv = norm(u), norm(v)
         (lu > 0 && lv > 0) || continue
-        push!(get!(() -> Tuple{Int,Float64}[], fan, key(a)), (k, acos(clamp(dot(u, v) / (lu * lv), -1.0, 1.0))))
+        push!(get!(() -> Tuple{Int,Float64}[], fan, _curvature_key(a, q)),
+              (k, acos(clamp(dot(u, v) / (lu * lv), -1.0, 1.0))))
     end
-    cosc = cosd(crease)
-    out = Vector{NTuple{4,Float64}}(undef, length(tris))
-    for (k, tri) in enumerate(tris)
-        n = normals[k]
-        vn = map(tri) do p
-            m = zero(Vec3)
-            for (j, w) in get(fan, key(p), Tuple{Int,Float64}[])
-                dot(normals[j], n) >= cosc && (m += w * normals[j])
-            end
-            nm = norm(m)
-            nm > 0 ? m / nm : n
-        end
-        spread = maximum(v -> acosd(clamp(dot(v, n), -1.0, 1.0)), vn)
-        e1, e2 = _ortho_basis(n)
-        # Least squares for the symmetric S = [a b; b c] with Δn = S Δp over the three edges,
-        # both in the tangent plane of the facet.
-        A = zeros(6, 3)
-        r = zeros(6)
-        for (row, (i, j)) in enumerate(((1, 2), (2, 3), (3, 1)))
-            dp, dn = tri[j] - tri[i], vn[j] - vn[i]
-            x, y = dot(dp, e1), dot(dp, e2)
-            A[2row-1, :] .= (x, y, 0.0)
-            A[2row, :] .= (0.0, x, y)
-            r[2row-1], r[2row] = dot(dn, e1), dot(dn, e2)
-        end
-        turn = norm(r)
-        if turn < 1e-9
-            out[k] = (Inf, Inf, spread, 0.0)
-            continue
-        end
-        s = A \ r
-        res = norm(A * s - r) / turn
-        tr, det = s[1] + s[3], s[1] * s[3] - s[2]^2
-        disc = sqrt(max(tr^2 / 4 - det, 0.0))
-        κ1, κ2 = abs(tr / 2 + disc), abs(tr / 2 - disc)
-        R1, R2 = minmax(1 / κ1, 1 / κ2)
-        out[k] = (R1, R2, spread, res)
-    end
-    return out
+    return fan, q
 end
 
-# The mesh curvature of the triangles of component `ci` (in the order of `cx.geo[ci].tris`),
-# computed once per check.
+# (R1, R2, spread, quality) of triangle `k`, as returned per triangle by `_mesh_curvature`.
+function _triangle_curvature(tris, normals, fan, q, cosc, k)
+    tri = tris[k]
+    n = normals[k]
+    vn = map(tri) do p
+        m = zero(Vec3)
+        for (j, w) in get(fan, _curvature_key(p, q), Tuple{Int,Float64}[])
+            dot(normals[j], n) >= cosc && (m += w * normals[j])
+        end
+        nm = norm(m)
+        nm > 0 ? m / nm : n
+    end
+    spread = maximum(v -> acosd(clamp(dot(v, n), -1.0, 1.0)), vn)
+    e1, e2 = _ortho_basis(n)
+    # Least squares for the symmetric S = [a b; b c] with Δn = S Δp over the three edges,
+    # both in the tangent plane of the facet.
+    A = zeros(6, 3)
+    r = zeros(6)
+    for (row, (i, j)) in enumerate(((1, 2), (2, 3), (3, 1)))
+        dp, dn = tri[j] - tri[i], vn[j] - vn[i]
+        x, y = dot(dp, e1), dot(dp, e2)
+        A[2row-1, :] .= (x, y, 0.0)
+        A[2row, :] .= (0.0, x, y)
+        r[2row-1], r[2row] = dot(dn, e1), dot(dn, e2)
+    end
+    turn = norm(r)
+    turn < 1e-9 && return (Inf, Inf, spread, 0.0)
+    s = A \ r
+    res = norm(A * s - r) / turn
+    tr, det = s[1] + s[3], s[1] * s[3] - s[2]^2
+    disc = sqrt(max(tr^2 / 4 - det, 0.0))
+    κ1, κ2 = abs(tr / 2 + disc), abs(tr / 2 - disc)
+    R1, R2 = minmax(1 / κ1, 1 / κ2)
+    return (R1, R2, spread, res)
+end
+
+# The mesh curvature of the triangles of one component (in the order of
+# `cx.geo[ci].tris`), fitted on first use of each triangle and shared by the beams of a
+# check: only the triangles in the footprints are reached, and the others are never
+# fitted. The vertex fan is built once. `state[k]` is 0 before the fit of triangle `k`, 1
+# while one thread fits it and 2 once `out[k]` holds it; a thread that finds 1 fits the
+# triangle for itself and stores nothing, so no lock is taken and no entry is written twice.
+struct _LazyCurvature
+    tris::Vector{NTuple{3,Vec3}}
+    normals::Vector{Vec3}
+    fan::Dict{NTuple{3,Int},Vector{Tuple{Int,Float64}}}
+    q::Float64
+    out::Vector{NTuple{4,Float64}}
+    state::AtomicMemory{UInt8}
+end
+
+function Base.getindex(c::_LazyCurvature, k::Integer)
+    (@atomic :acquire c.state[k]) == 0x02 && return c.out[k]
+    fit = _triangle_curvature(c.tris, c.normals, c.fan, c.q, cosd(40.0), k)
+    if (@atomicreplace :acquire_release :monotonic c.state[k] 0x00 => 0x01).success
+        c.out[k] = fit
+        @atomic :release c.state[k] = 0x02
+    end
+    return fit
+end
+
 function _component_curvature(t::Target, ci, cx)
     return lock(cx.curv_lock) do
         get!(cx.curv, ci) do
             ks = [k for k in eachindex(t.tri_area) if t.tri_comp[k] == ci && t.tri_area[k] > 0]
-            _mesh_curvature(cx.geo[ci].tris, t.tri_normal[ks]; scale = t.scale)
+            tris = cx.geo[ci].tris
+            fan, q = _curvature_fan(tris, t.scale)
+            n = length(tris)
+            state = AtomicMemory{UInt8}(undef, n)
+            for k in 1:n
+                @atomic :monotonic state[k] = 0x00
+            end
+            _LazyCurvature(tris, t.tri_normal[ks], fan, q, Vector{NTuple{4,Float64}}(undef, n), state)
         end
     end
 end
@@ -1205,7 +1243,7 @@ function omega1_disposition(t::Target, beams::AbstractVector{<:Beam}; components
                (; geo, ports, tolerance = Float64(tolerance), omega1_margin = Float64(omega1_margin),
                 reflection_angle = Float64(reflection_angle), cylinder_radius = Float64(cylinder_radius),
                 sphere_radius = Float64(sphere_radius), curvature,
-                curv = Dict{Int,Vector{NTuple{4,Float64}}}(), curv_lock = ReentrantLock(),
+                curv = Dict{Int,_LazyCurvature}(), curv_lock = ReentrantLock(),
                 ε = Float64(resolution), tight = Float64(tight_threshold), range = Float64(margin_range),
                 shadows, diagnostics = Set(dg), tri_of))
     nt = length(t.tri_area)
