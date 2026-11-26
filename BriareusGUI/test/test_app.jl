@@ -321,6 +321,27 @@ end
             @test mean_flux(m.evaluation) ≈ mean_flux(evaluate(s1.drive.scenario[], display_beams(s1.beams))) rtol = 1e-12
             @test session_state(m.session)["beams"] == session_state(s1)["beams"]
 
+            # the optimization saved in a design, run without a window for a few evaluations:
+            # the optimized session, its SST pointing and the summary carry the optimum
+            so = DesignSession(resolution = :coarse)
+            so.optimize.max_evaluations[] = 3
+            osrc = joinpath(dir, "opt.briar.toml")
+            save_session(osrc, so)
+            os = A.load_design(osrc)
+            start = copy(os.beams.beams[])
+            oo = A.optimize_command(os, joinpath(dir, "opt"); json = true)
+            @test basename.(oo.paths) == ["optimized.briar", "pointing.csv", "optimize.json"] && all(isfile, oo.paths)
+            @test oo.result.applied && os.optimize.max_evaluations[] == 3 && oo.result.value <= oo.result.initial_value
+            @test os.beams.beams[][oo.result.indices] == oo.result.beams && any(i -> os.beams.beams[][i].aim != start[i].aim, oo.result.indices)
+            back = A.load_design(oo.paths[1])
+            @test [b.aim for b in back.beams.beams[]] == [b.aim for b in os.beams.beams[]]
+            j = Briareus.JSON.parsefile(oo.paths[3])
+            @test j["value"] == oo.result.value && j["objective"] == String(os.optimize.objective[]) &&
+                  [Briareus.Vec3(x["aim_mm"]...) for x in j["beams"]] == [b.aim for b in oo.result.beams]
+            @test redirect_stdout(() -> A._main(["optimize", osrc, "--out", joinpath(dir, "cliopt")]), devnull) == 0 &&
+                  isfile(joinpath(dir, "cliopt", "optimized.briar")) && !isfile(joinpath(dir, "cliopt", "optimize.json"))
+            @test A.parse_command(["optimize", osrc, "--out", "o"]).command == "optimize"
+
             # a foil design with no hohlraum: criteria from the foil, on OMEGA beams, where
             # the TaLIS rules do not apply
             fsrc = joinpath(dir, "foil.briar.toml")
@@ -339,6 +360,15 @@ end
             @test vs.visrad_source[] == vrw || !isempty(vs.beams.beams[])
             vo = A.roe_command(vs, joinpath(dir, "vrwroe"))
             @test !isempty(vo.criteria) && isfile(joinpath(dir, "vrwroe", "roe.html"))
+            # an optimization that cannot run gives the reason of the Optimize page
+            msg = try
+                A.optimize_command(vs, joinpath(dir, "vrwopt"))
+                ""
+            catch err
+                err isa ArgumentError || rethrow()
+                err.msg
+            end
+            @test startswith(msg, "the optimization did not run: capsule symmetry needs a hohlraum with a capsule")
 
             # a script: Briareus and the controllers in scope, its arguments in ARGS
             script = joinpath(dir, "s.jl")

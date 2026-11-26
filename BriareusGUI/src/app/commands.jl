@@ -2,7 +2,8 @@
 # no window and no graphics context. Each command loads the design into a session as the
 # window does and calls one core function of Briareus on it, so a script gets the same
 # numbers from `Briareus.talis_check`, `Briareus.omega1_review`, `Briareus.roe_scan` and
-# `Briareus.design_diff`.
+# `Briareus.design_diff`. The optimization runs as the Optimize page of the window runs
+# it, with the settings saved in the design.
 
 "The results tabs that `briareus design.briar --tab <name>` opens."
 const TABS = ("beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "outages", "talis")
@@ -19,6 +20,9 @@ usage:
   briareus roe <design> --out dir/ [--json]   the beam rules of engagement: HTML, CSV, Markdown and port map
   briareus diff <reference> <design> --out dir/ [--json]
                                               what changed between two designs: parts, beams, TaLIS margins, physics
+  briareus optimize <design> --out dir/ [--json]
+                                              the optimization saved in the design: the optimized session, its
+                                              pointing as a VisRad SST file and, for a workspace, a copy of it
   briareus --shortcut                         add Briareus to the desktop and the applications menu
 <design> is a saved session (.briar, .briar.toml) or a VisRad workspace (.vrw).
 """
@@ -27,7 +31,7 @@ usage:
     parse_command(args) -> (; command, files, out, threshold, json, images, tab, rest)
 
 The arguments of the `briareus` command. `command` is `"run"`, `"talis"`, `"review-1w"`,
-`"roe"` or `"diff"`, or `""` for the window. `files` are the arguments that are not options,
+`"roe"`, `"diff"` or `"optimize"`, or `""` for the window. `files` are the arguments that are not options,
 `out`, `threshold` and `tab` the values of `--out`, `--threshold` and `--tab` (`nothing`
 when absent), `json` and `images` whether `--json` and `--images` were given, and `rest`
 every argument after the
@@ -35,7 +39,7 @@ script of `run`. An option without its value or a `--threshold` that is not a nu
 throws an `ArgumentError`.
 """
 function parse_command(args::AbstractVector{<:AbstractString})
-    command = !isempty(args) && args[1] in ("run", "talis", "review-1w", "roe", "diff") ? String(args[1]) : ""
+    command = !isempty(args) && args[1] in ("run", "talis", "review-1w", "roe", "diff", "optimize") ? String(args[1]) : ""
     as = command == "" ? collect(String, args) : collect(String, args[2:end])
     if command == "run"
         return (; command, files = first(as, 1), out = nothing, threshold = nothing, json = false, images = false,
@@ -222,6 +226,51 @@ function diff_command(a::DesignSession, b::DesignSession, out::AbstractString; n
     return (; diff, notes, paths = write_design_diff(out, diff; json, title))
 end
 
+"""
+    optimize_command(sess::DesignSession, out; json = false) -> (; result, paths)
+
+The `briareus optimize` command on a session: the drive of the design
+([`build_scenario!`](@ref)), the optimization of the enabled beams with the settings that
+the design saves (the objective, the free fields and their bounds, the weights and the
+keep-outs of the Optimize page, [`start_optimize!`](@ref)), and the optimum applied to
+the beams ([`accept_optimum!`](@ref)). Written into the folder `out`: the optimized
+session (`optimized.briar`), its pointing as a VisRad SST file (`pointing.csv`), a copy
+of the VisRad workspace with the optimized beams (`optimized.vrw`) when the design was
+imported from one, and with `json` a summary (`optimize.json`) of the objective before
+and after and the beams with their aims and powers. A design whose drive cannot be
+computed, or whose optimization cannot run or fails, throws an `ArgumentError` with the
+reason.
+"""
+function optimize_command(sess::DesignSession, out::AbstractString; json::Bool = false)
+    sess.spawn[] = false
+    build_scenario!(sess)
+    sess.drive.scenario[] === nothing && throw(ArgumentError("the drive could not be computed: " * sess.drive.status[]))
+    st = sess.optimize
+    st.result[] = nothing
+    start_optimize!(sess; spawn = false)
+    r = st.result[]
+    r === nothing && throw(ArgumentError("the optimization did not run: " * (isempty(st.error[]) ? st.status[] : st.error[])))
+    accept_optimum!(sess)
+    mkpath(out)
+    paths = String[save_session(joinpath(out, "optimized.briar"), sess), export_visrad_sst(sess.beams, joinpath(out, "pointing.csv"))]
+    isempty(sess.visrad_source[]) || push!(paths, export_visrad_workspace(sess, joinpath(out, "optimized.vrw")))
+    if json
+        num(x) = isfinite(x) ? repr(Float64(x)) : "null"
+        str(x) = "\"" * escape_string(string(x)) * "\""
+        beam(b) = "    {\"name\": " * str(b.name) * ", \"aim_mm\": [" * join((num(v) for v in b.aim), ", ") *
+                  "], \"power_TW\": " * num(b.power) * "}"
+        text = "{\n  \"objective\": " * str(st.objective[]) * ",\n  \"initial_value\": " * num(r.initial_value) *
+               ",\n  \"value\": " * num(r.value) * ",\n  \"evaluations\": " * string(r.evaluations) *
+               ",\n  \"iterations\": " * string(r.iterations) * ",\n  \"reason\": " * str(r.reason) *
+               ",\n  \"completed\": " * string(r.completed) * ",\n  \"status\": " * str(st.status[]) *
+               ",\n  \"beams\": [\n" * join((beam(b) for b in r.beams), ",\n") * "\n  ]\n}\n"
+        p = joinpath(out, "optimize.json")
+        write(p, text)
+        push!(paths, p)
+    end
+    return (; result = r, paths)
+end
+
 # Run a script as `briareus run` does: in a fresh module with Briareus and the
 # controllers in scope, and its arguments in `ARGS`.
 function run_script(path::AbstractString, args::AbstractVector{<:AbstractString} = String[])
@@ -270,6 +319,10 @@ function _run_command(c, io::IO = stdout)
         println(io, "TaLIS: ", n(:fail), " fail, ", n(:review), " review, ", n(:pass), " pass")
         foreach(p -> println(io, "wrote ", p), r.paths)
         return n(:fail) > 0 ? 2 : 0
+    elseif c.command == "optimize"
+        r = optimize_command(sess, c.out; c.json)
+        println(io, sess.optimize.status[])
+        foreach(p -> println(io, "wrote ", p), r.paths)
     elseif c.command == "review-1w"
         r = review_1w_command(sess, c.out; threshold = something(c.threshold, 1.0), c.json, c.images, title = "1ω review: " * name)
         println(io, r.review)

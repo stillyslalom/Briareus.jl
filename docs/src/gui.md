@@ -57,7 +57,7 @@ returns when the window closes. A shortcut has no terminal: its output goes to
 failure to start shows in the splash with the location of the log.
 
 `briareus design.briar --tab talis` opens the window on a results tab (`beams`, `drive`,
-`time`, `diagnostics`, `optimize`, `clearance`, `sweep` or `talis`), so a session written
+`time`, `diagnostics`, `optimize`, `clearance`, `sweep`, `outages` or `talis`), so a session written
 by a script is checked by eye in one step.
 
 The command also runs without a window. A design is a saved session or a VisRad
@@ -68,6 +68,7 @@ briareus talis design.vrw --out talis.csv --json       # the TaLIS checks; exit 
 briareus review-1w design.briar --out review/          # the 1ω review: HTML, CSV, one SVG slice per tight pair
 briareus roe design.briar --out roe/ --json            # the beam rules of engagement: HTML, CSV, Markdown, port map
 briareus diff reference.briar design.briar --out diff/ # what changed: parts, beams, TaLIS margins, physics
+briareus optimize design.briar --out opt/ --json       # the saved optimization: optimized session, SST pointing
 briareus run script.jl args...                         # a script with Briareus and the controllers loaded
 ```
 
@@ -81,7 +82,12 @@ that calls those functions gets the same numbers. `roe` scans the drive scenario
 design against the criteria that `Briareus.roe_default_criteria` selects from the
 observed part and the foils, lists them in the sheet, and applies to a design without a
 hohlraum. These thresholds are engineering defaults, and a shot sheet needs the criteria
-of the experiment, passed to `roe_scan` from a script. `diff` compares a design with a
+of the experiment, passed to `roe_scan` from a script. `optimize` runs the optimization
+of the Optimize page with the objective, free fields, bounds and keep-outs saved in the
+design, applies the optimum and writes the optimized session (`optimized.briar`), its
+pointing as a VisRad SST file and, for a design imported from a workspace, a copy of the
+workspace with the optimized beams. An optimization that cannot run gives the reason of
+the Optimize page. `diff` compares a design with a
 reference through `Briareus.design_diff`: parts and beams are matched by name, each
 design is checked with the TaLIS settings saved in it, and the page lists the rows that
 newly fail first. File ▸ Export Julia script writes the design as a script for
