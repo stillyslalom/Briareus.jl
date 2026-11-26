@@ -121,7 +121,8 @@ tightest first.
 
 The pictures need a graphics context of GLMakie, which cannot share a process with the
 window: this function serves the headless command and scripts, and it throws an
-`ArgumentError` while the window is open.
+`ArgumentError` while the window is open. The window grabs the same views from its 3D
+view instead (File ▸ Export 1ω review report).
 """
 function review_images(sess::DesignSession, review::Omega1Review; max_images::Integer = 24)
     _SHELL[] === nothing ||

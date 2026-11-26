@@ -153,6 +153,12 @@ function br_tick()
             request_close()
         end
     end
+    try
+        _review_grab_step!(sh)
+    catch err
+        _REVIEW_GRAB[] = nothing
+        sh.sess.status[] = "the 1ω review was not written: " * sprint(showerror, err)
+    end
     _CLOSE_REQUESTED[] && (_CLOSE_REQUESTED[] = false; return 2)
     while isready(sh.queue)
         f = take!(sh.queue)
@@ -1457,13 +1463,86 @@ br_tl_view(kind) = _with_shell(sh -> talis_view!(sh.sess, _sym(kind)))
 br_tl_start() = br_run_task("talis")
 br_tl_cancel() = _with_shell(sh -> cancel_talis!(sh.sess))
 br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(String(url))))
+# The 1ω review report of File ▸ Export: the review, and the Daylight view of each of its
+# approaches grabbed from the 3D view one tick after another (`_review_grab_step!`), as
+# `briareus review-1w --images` draws them offscreen; the report is written once the last
+# view is grabbed.
 function br_tl_review(url)
     _with_shell() do sh
         dir = _url_to_path(String(url))
-        r = review_1w_command(sh.sess, dir; threshold = sh.sess.talis.tight[], title = "1ω review")
-        sh.sess.status[] = string("wrote the 1ω review (", length(r.review.items), " approaches) to ", r.paths[1])
+        sess = sh.sess
+        inp = _talis_inputs(sess)
+        inp isa String && throw(ArgumentError(inp))
+        review = omega1_review(inp.target, inp.beams; threshold = sess.talis.tight[], inp.kw...)
+        if isempty(review.items)
+            paths = write_omega1_review(dir, review; title = "1ω review")
+            sess.status[] = string("wrote the 1ω review (no approach) to ", paths[1])
+            return
+        end
+        start_talis!(sess; spawn = false)
+        _REVIEW_GRAB[] = (; dir, review, pose = camera_pose(sh.scene.camera),
+                          images = Dict{Int,String}(), tmp = mktempdir(), state = Ref((:aim, 1, 0, 0.0)))
+        sess.status[] = "drawing the Daylight views of the 1ω review…"
     end
 end
+
+# The Daylight pictures of a 1ω review in progress (`br_tl_review`), or `nothing`.
+const _REVIEW_GRAB = Ref{Any}(nothing)
+const _REVIEW_PICTURES = 24          # at most, the tightest first, as `review_images` draws
+
+# One step of the grab sequence: aim the view at the next approach, let the canvas draw
+# it for a few ticks, have QML grab the canvas into a file, then read the file.
+function _review_grab_step!(sh)
+    g = _REVIEW_GRAB[]
+    g === nothing && return
+    sess = sh.sess
+    phase, i, n, t0 = g.state[]
+    items = g.review.items
+    if phase === :aim
+        sess.talis.running[] && return                   # the TaLIS check the views focus rows of
+        rows = talis_rows(sess.talis)
+        k = nothing
+        while i <= length(items) && length(g.images) < _REVIEW_PICTURES
+            it = items[i]
+            k = findfirst(x -> x.beam == it.row.beam && x.rule === it.row.rule && x.component === it.row.component, rows)
+            k === nothing || break
+            i += 1
+        end
+        if k === nothing || i > length(items) || length(g.images) >= _REVIEW_PICTURES
+            _REVIEW_GRAB[] = nothing
+            clear_talis_focus!(sess.talis)
+            _apply_camera!(sh.scene, g.pose)
+            sh.scene.dirty[] = true
+            paths = write_omega1_review(g.dir, g.review; title = "1ω review", images = g.images)
+            rm(g.tmp; recursive = true, force = true)
+            sess.status[] = string("wrote the 1ω review (", length(items), " approaches, ", length(g.images),
+                                   " Daylight views) to ", paths[1])
+            return
+        end
+        focus_talis_row!(sess.talis, k)
+        talis_view!(sess, :daylight)
+        sh.scene.dirty[] = true
+        g.state[] = (:wait, i, 0, time())
+    elseif phase === :wait
+        # a few frames for the canvas to draw the view
+        n < 4 && (sh.scene.dirty[] = true; g.state[] = (:wait, i, n + 1, t0); return)
+        path = joinpath(g.tmp, "view_$i.png")
+        _set!(sh, "canvasGrabPath", path)
+        g.state[] = (:grab, i, 0, time())
+    elseif phase === :grab
+        path = joinpath(g.tmp, "view_$i.png")
+        if isfile(path) && filesize(path) > 0 && time() - t0 > 0.3
+            g.images[i] = "data:image/png;base64," * base64encode(read(path))
+            sess.status[] = string("drawing the Daylight views of the 1ω review (", length(g.images), " of ",
+                                   min(length(items), _REVIEW_PICTURES), ")…")
+            g.state[] = (:aim, i + 1, 0, 0.0)
+        elseif time() - t0 > 10
+            g.state[] = (:aim, i + 1, 0, 0.0)            # no picture: go on without it
+        end
+    end
+    return
+end
+br_canvas_grab_started() = (sh = _SHELL[]; sh === nothing || _set!(sh, "canvasGrabPath", ""); nothing)
 br_cancel_all() = _with_shell(sh -> (cancel_optimize!(sh.sess); cancel_clearance!(sh.sess);
                                      cancel_talis!(sh.sess); cancel_sweep!(sh.sess)))
 # Viewer
@@ -1726,7 +1805,7 @@ function _register_qml_functions()
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel br_cm_show br_cm_radius br_roe_pick br_roe_clear br_cm_surface br_cm_shadows br_cm_edit br_cm_export
     @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
-    @qmlfunction br_tl_cancel br_tl_export br_tl_review br_cancel_all br_tl_tight br_tl_hide_curved br_tl_focus br_tl_view br_tl_pinch
+    @qmlfunction br_tl_cancel br_tl_export br_tl_review br_canvas_grab_started br_cancel_all br_tl_tight br_tl_hide_curved br_tl_focus br_tl_view br_tl_pinch
     @qmlfunction br_set_color br_beam_style br_beam_color br_roe_start br_beam_length br_set_cutaway br_show_off br_omega1_contour
     @qmlfunction br_cut_width br_cut_azimuth br_cut_toward_view br_cut_component
     @qmlfunction br_cut_kind br_cut_axis br_cut_range br_cut_plane br_cut_offset

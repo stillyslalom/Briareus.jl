@@ -961,6 +961,12 @@ ApplicationWindow {
                 Julia.br_grab_started()
                 body.grabToImage(function (img) { img.saveToFile(path) })
             }
+            // a picture of the 3D view for a report (the Daylight views of the 1ω review)
+            if (app.canvasGrabPath !== undefined && app.canvasGrabPath !== "") {
+                const cpath = app.canvasGrabPath
+                Julia.br_canvas_grab_started()
+                canvas.grabToImage(function (img) { img.saveToFile(cpath) })
+            }
             if (r === 2) {
                 win.close()
             } else {

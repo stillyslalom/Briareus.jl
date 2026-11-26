@@ -92,8 +92,8 @@ pixels.
 With a rules-of-engagement report ([`ROEReport`](@ref)) and the beams of its scan, the
 marks are the units of the report (`kind = :quad` or `:beam`; `:auto` takes quads when the
 report has quad units), colored by tier, and each note gives the role, the decision and
-the binding criterion with its score. With `badges = :auto`, each mark carries the badge
-of its role ([`role_badges`](@ref)) when the marks have more than one role, as for a drive
+the binding criterion with its score. With `badges = :auto`, each mark is drawn with the
+badge of its role ([`role_badges`](@ref)) when the marks have more than one role, as for a drive
 and a backlighter, two halfraums or two foils; `true` writes them always and `false`
 never. The text of the drawing is the same for the same input: coordinates are written
 with two decimals.
