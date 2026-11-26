@@ -161,6 +161,12 @@ _stands_alone(html) = count("<script>", html) == 1 && !occursin("<link", html) &
     @test count("<tr>", checks) == length(ref.rows) + 1
     @test all(x -> occursin(">" * Briareus._packet_mm(x.margin) * "</td>", checks), ref.rows)
     @test all(st -> count("class=\"chip $st\"", checks) == count(x -> x.status === st, ref.rows), (:fail, :review, :pass))
+    # the 1ω checks by part: one row per part, with the counts and the least margin
+    o1 = [x for x in ref.rows if x.rule in Briareus._OMEGA1_RULES]
+    bypart = split(split(html, "<table id=\"parts\"")[2], "</table>")[1]
+    @test count("<tr>", bypart) == length(unique(x.component for x in o1)) + 1
+    @test all(c -> occursin(">" * Briareus._packet_mm(minimum(x.margin for x in o1 if x.component === c && x.unit === :mm)) *
+                            "</td>", bypart), unique(x.component for x in o1 if x.unit === :mm))
     @test all(n -> occursin(Briareus._xml_escape(n), html), ref.notes) && occursin("out of scope: ", html)
     @test html == omega1_review_html(rv; title = "Review <A&B>") && !occursin("<img", html)
     h2 = omega1_review_html(rv; generated = "made on a <date>", images = Dict(1 => "data:image/png;base64,AAAA"))
@@ -209,6 +215,10 @@ end
     @test all(x -> occursin("<td>" * x.unit * "</td><td>" * string(x.kind) * "</td>", html), rows)
     @test all(x -> occursin(">" * Briareus._roe_number(x.score) * "</td>", html), rows)
     @test all(b -> occursin(Briareus._xml_escape(b.text), html), r.budgets)
+    # the summary by role: one row per role and kind, with the counts of each tier
+    roles = split(split(html, "<table id=\"roles\"")[2], "</table>")[1]
+    @test count("<tr>", roles) == length(unique((u.role, u.kind) for u in r.units)) + 1
+    @test occursin("<td>backlighter</td><td>beam</td>", roles)
     plain = roe_html(r)
     @test _well_formed(plain) && !occursin("Chamber port map", plain) && !occursin("<svg", plain)
 

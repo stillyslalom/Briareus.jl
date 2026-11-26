@@ -102,7 +102,8 @@ _packet_setting(v) = v isa AbstractVector || v isa Tuple ? join(v, " ") : string
     omega1_review_html(review; title = "1ω review", generated = nothing, images = Dict()) -> String
 
 The 1ω review ([`Omega1Review`](@ref)) as one self-contained HTML page: the counts of the
-check by rule and status, each failing or tight approach with the drawing of its slice
+check by rule and status, the 1ω checks of each part (counts by status and the least
+margin, with its beam), each failing or tight approach with the drawing of its slice
 ([`omega1_slice_svg`](@ref)) and its margin terms, the reflection records, the
 disposition of the hardware per component, every row of the check in a table that sorts
 on a click of a column head, and the settings and the checks that were not made. The
@@ -131,6 +132,20 @@ function omega1_review_html(r::Omega1Review; title::AbstractString = "1ω review
                 [[rule, talis_requirement(rule, s), _html_num(n(rule, :fail), string(n(rule, :fail))),
                   _html_num(n(rule, :review), string(n(rule, :review))),
                   _html_num(n(rule, :pass), string(n(rule, :pass)))] for rule in rules]; sortable = false)
+    if !isempty(o1)
+        println(io, "<h2>By part</h2>")
+        parts = unique(x.component for x in o1)
+        m(c, st) = count(x -> x.component === c && x.status === st, o1)
+        function least(c)
+            xs = [x for x in o1 if x.component === c && x.unit === :mm && isfinite(x.margin)]
+            isempty(xs) && return ("", "")
+            x = argmin(x -> x.margin, xs)
+            return (_html_num(x.margin, _packet_mm(x.margin)), x.beam)
+        end
+        _html_table(io, ["Part", "1ω fail", "1ω review", "1ω pass", "Least 1ω margin (mm)", "Beam"],
+                    [[c, _html_num(m(c, :fail), string(m(c, :fail))), _html_num(m(c, :review), string(m(c, :review))),
+                      _html_num(m(c, :pass), string(m(c, :pass))), least(c)...] for c in parts]; id = "parts")
+    end
 
     println(io, "<h2>Closest approaches</h2>")
     if isempty(r.items)
@@ -309,7 +324,9 @@ _roe_tier_rank(t::Symbol) = t === :red ? 0 : t === :amber ? 1 : 2
              generated = nothing) -> String
 
 The rules-of-engagement sheet of a report ([`ROEReport`](@ref)) as one self-contained
-HTML page: the criteria with their thresholds and nominal values, the chamber port map
+HTML page: the criteria with their thresholds and nominal values, a summary of each role
+and kind (the units in each tier, the green units that may drop together and the
+criterion that binds most of the units held back), the chamber port map
 colored by tier ([`port_map_svg`](@ref), drawn when the `beams` of the scan are given),
 and for each role the multiple-outage budget and a table of the units from critical to
 auto-drop with the binding criterion, its score against the thresholds, the scores on
@@ -334,6 +351,20 @@ function roe_html(r::ROEReport, beams::Union{Nothing,AbstractVector{<:Beam}} = n
                       _html_num(c.amber, _roe_number(c.amber)), c.label, _roe_number(v),
                       r.linear[j] ? "linear deposition" : "full evaluation"]
                  end for (c, v) in zip(r.criteria, r.baseline)]; sortable = false)
+    println(io, "<h2>Summary by role</h2>")
+    trows = Vector{Any}[]
+    for role in unique(u.role for u in r.units), kind in (:quad, :beam)
+        is = [i for i in eachindex(r.units) if r.units[i].role === role && r.units[i].kind === kind]
+        isempty(is) && continue
+        k(t) = (c = count(i -> r.tiers[i] === t, is); _html_num(c, string(c)))
+        held = [i for i in is if r.tiers[i] !== :green]
+        bind = isempty(held) ? "" :
+               string(r.criteria[argmax(c -> count(i -> r.singles[i].binding == c, held), eachindex(r.criteria))].name)
+        b = findfirst(b -> b.role === role && b.kind === kind, r.budgets)
+        push!(trows, [role, kind, k(:red), k(:amber), k(:green), b === nothing ? "" : string(r.budgets[b].limit), bind])
+    end
+    _html_table(io, ["Role", "Kind", "Critical", "Ask RI", "Auto-Drop", "Green units together", "Binding most often"],
+                trows; id = "roles")
     println(io, "<p class=\"note\">Critical units hold the shot, Ask RI units need approval before the drop, and ",
             "Auto-Drop units may drop without a request. A unit that is green alone is raised to Ask RI when a pair ",
             "with another green unit is critical.</p>")
@@ -360,6 +391,8 @@ function roe_html(r::ROEReport, beams::Union{Nothing,AbstractVector{<:Beam}} = n
                 print(io, "<li>Budget (", b.kind, "s): ", _xml_escape(b.text), ".")
                 isempty(b.exceptions) || print(io, " Pairs that leave green: ",
                                                _xml_escape(join((a * " + " * c for (a, c) in b.exceptions), ", ")), ".")
+                isempty(b.triple_exceptions) || print(io, " Triples that leave green: ",
+                                                      _xml_escape(join((join(t, " + ") for t in b.triple_exceptions), ", ")), ".")
                 println(io, "</li>")
             end
             println(io, "</ul>")
