@@ -100,8 +100,28 @@ const B = BriareusGUI
     show_corridor!(sess)
     gs = corridor_surface(sess.corridor.map[]; tight = sess.talis.tight[])
     @test sc.corridor.visible[] && length(sc.corridor[1][].position) == 3 * length(gs.faces)
-    cc = Set(sc.corridor.color[])
-    @test cc == Set(Makie.RGBAf(Makie.RGBf(B._hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in unique(gs.fills))
+    # seen from outside, only the cells facing the eye are drawn; from inside, all of them
+    clear = Makie.RGBAf(0, 0, 0, 0)
+    cls = [Makie.RGBAf(Makie.RGBf(B._hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in gs.fills]
+    o = Makie.Point3f(sess.corridor.map[].origin...)
+    ctr = [sum(Makie.Point3f(gs.vertices[i]...) for i in f) / 3 for f in gs.faces]    # as drawn, in Float32
+    sc.camera.ortho = false
+    B.orient_camera!(sc.camera, :iso)
+    B.fit_camera!(sc.camera, Makie.Vec3d(o...), sess.corridor.map[].radius)
+    eye = Makie.Point3f(sc.camera.eye...)
+    @test B.norm(eye - o) > sess.corridor.map[].radius
+    near = [B.dot(p - o, eye - p) > 0 for p in ctr]
+    @test 0 < count(near) < length(near) / 2 && sc.corridor.color[][3:3:end] == ifelse.(near, cls, clear)
+    # an orthographic view looks along one direction: half of the sphere faces it
+    sc.camera.ortho = true
+    sc.camera.on_change()
+    back = Makie.Point3f((sc.camera.eye - sc.camera.lookat)...)
+    near = [B.dot(p - o, back) > 0 for p in ctr]
+    @test sc.corridor.color[][3:3:end] == ifelse.(near, cls, clear)
+    sc.camera.ortho = false
+    sc.camera.eye = Makie.Vec3d(o...) + 0.1 * B.normalize(sc.camera.eye - Makie.Vec3d(o...))
+    sc.camera.on_change()
+    @test sc.corridor.color[][3:3:end] == cls
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
     show_corridor!(sess, false)
     @test !sc.corridor.visible[]

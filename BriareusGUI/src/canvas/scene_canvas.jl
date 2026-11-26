@@ -93,6 +93,7 @@ struct SceneCanvas
     focus_mesh::Any                              # the TaLIS row under inspection: the clearance
     focus_lines::Any                             # plane and reflection cone, and their lines
     corridor::Any                                # the keep-out map on its sphere (`show_corridor!`)
+    corridor_faces::Base.RefValue{Any}           # its triangles: (centers, outward normals, colors)
 end
 
 """
@@ -154,7 +155,8 @@ function scene_canvas(sess::DesignSession)
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
-                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines, corridor)
+                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines, corridor,
+                    Ref{Any}(nothing))
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -167,7 +169,7 @@ function scene_canvas(sess::DesignSession)
     # The triad keeps its size on screen.
     # The session keeps the pose without notifying; the pose is saved but is not an edit.
     cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);
-                           sess.view.camera.val = camera_pose(cam); c.dirty[] = true)
+                           _corridor_near_side!(c); sess.view.camera.val = camera_pose(cam); c.dirty[] = true)
     attach_cad_camera!(sc, cam)
     # Esc clears the selection (the canvas has the keyboard while the pointer is on it)
     on(sc, Makie.events(sc).keyboardbutton; priority = 90) do e
@@ -729,14 +731,42 @@ function _draw_corridor!(c::SceneCanvas, sess::DesignSession)
         g = corridor_surface(m; tight = sess.talis.tight[])
         col = [RGBAf(Makie.RGBf(_hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in 1:5]
         pts = Point3f[Point3f(g.vertices[i]...) for f in g.faces for i in f]
-        _update!(c.corridor, pts, _faces(length(g.faces)); color = repeat([col[k] for k in g.fills]; inner = 3),
-                 visible = true)
+        colors = repeat([col[k] for k in g.fills]; inner = 3)
+        c.corridor_faces[] = m.surface === :plane ? nothing :
+            (centers = [(pts[3i-2] + pts[3i-1] + pts[3i]) / 3 for i in eachindex(g.faces)],
+             origin = Point3f(m.origin...), radius = Float32(m.radius), colors)
+        _update!(c.corridor, pts, _faces(length(g.faces)); color = colors, visible = true)
     end
     _camera_bounds!(c, sess)
     # an eye inside the sphere sees none of it: step back to take the whole map in
     m === nothing || m.surface === :plane || norm(c.camera.eye - c.camera.lookat) > 1.5 * m.radius ||
         fit_camera!(c.camera, Makie.Vec3d(m.origin...), m.radius)
+    _corridor_near_side!(c)
     c.dirty[] = true
+    return c
+end
+
+# Only the side of a keep-out sphere that faces the eye is drawn. Drawn whole, the far
+# side shows through the faint open region of the near side, unlit and mixed with it:
+# seen from above, the open band about the equator then covers the south cap behind it,
+# and the lower half looks open. From inside the sphere, in perspective, every cell faces
+# the eye and all are drawn.
+function _corridor_near_side!(c::SceneCanvas)
+    f = c.corridor_faces[]
+    f === nothing && return c
+    eye = Point3f(c.camera.eye...)
+    # an orthographic view draws the whole scene, behind the eye too
+    inside = !c.camera.ortho && norm(eye - f.origin) <= f.radius
+    colors = copy(f.colors)
+    if !inside
+        clear = RGBAf(0, 0, 0, 0)
+        back = Point3f((c.camera.eye - c.camera.lookat)...)     # an orthographic view looks along it
+        for (i, p) in enumerate(f.centers)
+            dot(p - f.origin, c.camera.ortho ? back : eye - p) > 0 && continue
+            colors[3i-2] = colors[3i-1] = colors[3i] = clear
+        end
+    end
+    c.corridor.color[] = colors
     return c
 end
 
