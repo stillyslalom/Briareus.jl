@@ -3,3 +3,4 @@ Manifest.toml
 /docs/src/tutorials/
 /docs/src/assets/logo.svg
 *.log
+/build/

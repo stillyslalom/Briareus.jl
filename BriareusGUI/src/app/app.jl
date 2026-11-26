@@ -76,6 +76,22 @@ function _main(args)
     return 0
 end
 
+"""
+    julia_main() -> Cint
+
+The entry point of a compiled `briareus` (`dev/release/build.jl`, PackageCompiler's
+`create_app`): the `briareus` command on the arguments of the process, its exit code as
+a `Cint`. An error that the command does not catch is shown and gives 1.
+"""
+function julia_main()::Cint
+    try
+        return Cint(_main(ARGS))
+    catch err
+        Base.invokelatest(Base.display_error, err, catch_backtrace())
+        return Cint(1)
+    end
+end
+
 @static if isdefined(Base, Symbol("@main"))         # Julia 1.11; Pkg apps need 1.12
     function (@main)(args)
         return _main(args)
