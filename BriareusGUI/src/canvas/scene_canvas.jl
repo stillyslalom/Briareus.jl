@@ -24,6 +24,8 @@ const FIELD_COLORMAP = :inferno
 const HIGHLIGHT = RGBAf(0.1, 0.6, 1.0, 0.8)
 const GHOST = RGBAf(0.6, 0.6, 0.65, 0.18)       # components left out of the calculations
 const SWEEP_GHOST = RGBAf(0.9, 0.6, 0.0, 0.35)  # the moved parts at the selected sweep step
+const COMPARE_GHOST = RGBAf(0.55, 0.3, 0.75, 0.3)   # the differing parts of a reference design
+const COMPARE_ARROW = RGBAf(0.45, 0.15, 0.65, 1.0)  # and the shifts of its beam aims
 const BEAM_SELECTED = RGBAf(1.0, 0.95, 0.2, 1.0)
 const BEAM_OFF = RGBAf(0.5, 0.5, 0.5, 0.25)
 const VOLUME_ALPHA = 0.22f0
@@ -97,6 +99,8 @@ struct SceneCanvas
     sight_frame::Any                             # the view from a diagnostic (`show_sight!`): the
     sight_image::Any                             # outline of its volume and the image it sees,
     sight::Base.RefValue{Any}                    # and the definition it is of (`nothing`: none)
+    compare_ghost::Any                           # a reference design (`show_comparison!`): its parts
+    compare_arrows::Any                          # that differ, and the shifts of the beam aims
 end
 
 """
@@ -152,6 +156,8 @@ function scene_canvas(sess::DesignSession)
     sight_frame = linesegments!(sc, _NOSEG3; color = SIGHT_FRAME, linewidth = 1.5, visible = false, overdraw = true)
     sight_image = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), shading = Makie.NoShading, overdraw = true,
                         visible = false)
+    compare_ghost = mesh!(sc, tri...; color = COMPARE_GHOST, transparency = true, visible = false)
+    compare_arrows = linesegments!(sc, _NOSEG3; color = COMPARE_ARROW, linewidth = 2.5, visible = false, overdraw = true)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -162,7 +168,7 @@ function scene_canvas(sess::DesignSession)
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
                     Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing), focus_mesh, focus_lines, corridor,
-                    Ref{Any}(nothing), sight_frame, sight_image, Ref{Any}(nothing))
+                    Ref{Any}(nothing), sight_frame, sight_image, Ref{Any}(nothing), compare_ghost, compare_arrows)
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -397,6 +403,35 @@ function _draw_sight!(c::SceneCanvas, sess::DesignSession)
     end
     c.dirty[] = true
     return im
+end
+
+"""
+    show_comparison!(c::SceneCanvas, comparison) / clear_comparison!(c)
+
+Overlay a reference design on the 3D view ([`compare_design`](@ref)): its parts that
+moved, changed or are gone as translucent purple ghosts where the reference had them,
+and a purple line from the reference aim to the current aim of each beam whose aim
+moved, drawn over the geometry. `clear_comparison!` removes the overlay.
+"""
+function show_comparison!(c::SceneCanvas, cmp)
+    pts = Point3f[]
+    for comp in cmp.ghost, (i, j, k) in comp.mesh.triangles
+        vs = comp.mesh.vertices
+        push!(pts, Point3f(vs[i]...), Point3f(vs[j]...), Point3f(vs[k]...))
+    end
+    isempty(pts) ? _update!(c.compare_ghost, _NOTRI...; visible = false) :
+                   _update!(c.compare_ghost, pts, _faces(length(pts) ÷ 3); visible = true)
+    seg = Point3f[p for (a, b) in cmp.arrows for p in (Point3f(a...), Point3f(b...))]
+    isempty(seg) ? _update!(c.compare_arrows, _NOSEG3; visible = false) : _update!(c.compare_arrows, seg; visible = true)
+    c.dirty[] = true
+    return c
+end
+
+function clear_comparison!(c::SceneCanvas)
+    c.compare_ghost.visible[] = false
+    c.compare_arrows.visible[] = false
+    c.dirty[] = true
+    return c
 end
 
 """

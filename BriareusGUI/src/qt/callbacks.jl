@@ -1753,6 +1753,19 @@ function br_cad_prep_act(step)
     end
     return br_cad_prep(k)
 end
+# Compare the design with a saved design or VisRad workspace (File ▸ Compare with design):
+# the parts that differ as ghosts and the aim shifts in the 3D view, and the counts in the
+# status line (`briareus diff` writes the full page).
+function br_compare_design(url)
+    _with_shell() do sh
+        path = _url_to_path(String(url))
+        ref = load_design(path)
+        cmp = compare_design(sh.sess, ref)
+        show_comparison!(sh.scene, cmp)
+        sh.sess.status[] = cmp.text * " (" * basename(path) * ")"
+    end
+end
+br_clear_comparison() = _with_shell(sh -> clear_comparison!(sh.scene))
 # Remove the view from a diagnostic laid over the 3D view.
 br_clear_sight() = _with_shell(sh -> clear_sight!(sh.scene))
 # Port angles of beam `i` of the table (0-based, as the dialog lists them), as text.
@@ -1775,7 +1788,7 @@ function _register_qml_functions()
     @qmlfunction br_select_range br_node_menu br_node_show br_node_include
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
-    @qmlfunction br_diagnostic_sights br_look_from_diagnostic br_clear_sight br_cad_prep br_cad_prep_act
+    @qmlfunction br_diagnostic_sights br_look_from_diagnostic br_clear_sight br_cad_prep br_cad_prep_act br_compare_design br_clear_comparison
     @qmlfunction br_set_cluster br_rename_cluster br_split_quads br_merge_quads br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_new_target br_set_resolution br_edit_mesh

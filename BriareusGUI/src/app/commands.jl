@@ -338,3 +338,41 @@ function _run_command(c, io::IO = stdout)
     end
     return 0
 end
+
+"""
+    compare_design(sess::DesignSession, reference::DesignSession) -> (; diff, ghost, arrows, text)
+
+The design of `sess` against a `reference` design (a session loaded from a saved file or
+a VisRad workspace) for the 3D view to overlay: `diff`, the core `DesignDiff` of the
+parts, beams and, when the TaLIS rules apply to both designs, the TaLIS rows
+(`Briareus.design_diff`, the reference first); `ghost`, the components of the reference
+whose part moved, changed or is gone in `sess`, drawn where the reference had them;
+`arrows`, one pair (reference aim, current aim) per beam whose aim moved; and `text`, a
+line about the differences.
+"""
+function compare_design(sess::DesignSession, reference::DesignSession)
+    ta, tb = reference.target.target[], sess.target.target[]
+    ba, bb = active_beams(reference.beams), active_beams(sess.beams)
+    ia, ib = _talis_inputs(reference), _talis_inputs(sess)
+    reports = ia isa String || ib isa String ? nothing :
+              (talis_check(ia.target, ia.beams; ia.kw...), talis_check(ib.target, ib.beams; ib.kw...))
+    d = design_diff(ta, ba, tb, bb; names = ("reference", "current"), reports)
+    differ = Set(p.part for p in d.parts if p.status in (:moved, :changed, :removed))
+    ghost = Component[c for c in ta.components if c.part in differ && c.kind !== :aperture]
+    aims = Dict(b.name => Briareus.Vec3(b.aim) for b in bb)
+    arrows = Tuple{Briareus.Vec3,Briareus.Vec3}[]
+    for x in d.beams
+        (x.status === :changed && x.distance > 0 && haskey(aims, x.beam)) || continue
+        b = aims[x.beam]
+        push!(arrows, (b - x.aim_shift, b))
+    end
+    n(f) = count(f, d.parts)
+    io = IOBuffer()
+    @printf(io, "against the reference: %d parts moved, %d changed, %d removed, %d added; %d beams changed",
+            n(p -> p.status === :moved), n(p -> p.status === :changed), n(p -> p.status === :removed),
+            n(p -> p.status === :added), count(x -> x.status !== :same, d.beams))
+    isempty(d.talis) || @printf(io, "; TaLIS: %d newly failing, %d fixed, %d worse, %d improved",
+                                count(x -> x.change === :newly_failing, d.talis), count(x -> x.change === :fixed, d.talis),
+                                count(x -> x.change === :worse, d.talis), count(x -> x.change === :improved, d.talis))
+    return (; diff = d, ghost, arrows, text = String(take!(io)))
+end

@@ -91,7 +91,13 @@ workspace with the optimized beams. An optimization that cannot run gives the re
 the Optimize page. `diff` compares a design with a
 reference through `Briareus.design_diff`: parts and beams are matched by name, each
 design is checked with the TaLIS settings saved in it, and the page lists the rows that
-newly fail first. File ▸ Export Julia script writes the design as a script for
+newly fail first. In the window, File ▸ Compare with design loads a saved design or a
+VisRad workspace as the reference and overlays it on the 3D view: the parts that moved,
+changed or are gone are drawn as purple ghosts where the reference had them, and a
+purple line runs from the reference aim to the current aim of each beam that moved. The
+status line counts the changes and the TaLIS rows that newly fail, are fixed, are worse
+or are better, and View ▸ Clear design comparison removes the overlay. File ▸ Export
+Julia script writes the design as a script for
 `briareus run`: the state of the session as a literal, then the target, the enabled
 beams, the TaLIS check and the drive as values that a sweep or an optimization changes
 and evaluates again. The commands load the same

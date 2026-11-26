@@ -205,6 +205,7 @@ ApplicationWindow {
             Action { text: "Export target as STL…"; onTriggered: exportStlDialog.open() }
             Action { text: "Export Julia script…"; onTriggered: exportScriptDialog.open() }
             Action { text: "Export 1ω review report…"; onTriggered: reviewReportDialog.open() }
+            Action { text: "Compare with design…"; onTriggered: compareDialog.open() }
             MenuSeparator {}
             Action { text: "Save view as image…"; onTriggered: saveViewDialog.open() }
             MenuSeparator {}
@@ -283,6 +284,7 @@ ApplicationWindow {
             Action { text: "Look from port…"; onTriggered: portDialog.open() }
             Action { text: "Look from diagnostic…"; onTriggered: sightDialog.open() }
             Action { text: "Clear diagnostic overlay"; onTriggered: Julia.br_clear_sight() }
+            Action { text: "Clear design comparison"; onTriggered: Julia.br_clear_comparison() }
             Action {
                 text: "Look along selected beam"
                 enabled: ["group", "quad", "beam"].indexOf(app.selKind) >= 0
@@ -619,6 +621,12 @@ ApplicationWindow {
         defaultSuffix: "stl"
         nameFilters: ["STL mesh (*.stl)", "All files (*)"]
         onAccepted: Julia.br_export_stl(selectedFile.toString())
+    }
+    FileDialog {
+        id: compareDialog
+        title: "Compare with a saved design or VisRad workspace"
+        nameFilters: ["Designs (*.briar *.vrw)", "All files (*)"]
+        onAccepted: Julia.br_compare_design(selectedFile.toString())
     }
     FolderDialog {
         id: reviewReportDialog

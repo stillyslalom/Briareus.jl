@@ -528,3 +528,22 @@ end
     cam = sess.view.camera[]
     @test cam.ortho && collect(cam.lookat) ≈ collect((a.x_hw + a.x_beam) / 2)
 end
+
+@testset "a design compared with a reference (offscreen)" begin
+    ref = DesignSession(resolution = :coarse)
+    sess = DesignSession(resolution = :coarse)
+    @test edit_part!(sess.target, part_index(sess.target, :capsule), :z, "0.5")
+    cmp = B.compare_design(sess, ref)
+    moved = only(p for p in cmp.diff.parts if p.status !== :same)
+    @test moved.part === :capsule && moved.status === :moved && collect(moved.shift) ≈ [0, 0, 0.5]
+    @test [c.part for c in cmp.ghost] == [:capsule] && isempty(cmp.arrows)
+    @test startswith(cmp.text, "against the reference: 1 parts moved, 0 changed, 0 removed, 0 added; 0 beams changed")
+    # the reference capsule is drawn where it was, translucent
+    sc = B.scene_canvas(sess)
+    B.show_comparison!(sc, cmp)
+    rc = only(c for c in ref.target.target[].components if c.part === :capsule)
+    @test sc.compare_ghost.visible[] && length(sc.compare_ghost[1][].position) == 3 * length(rc.mesh.triangles)
+    @test !sc.compare_arrows.visible[] && !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    B.clear_comparison!(sc)
+    @test !sc.compare_ghost.visible[]
+end
