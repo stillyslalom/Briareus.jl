@@ -545,3 +545,22 @@ end
     @test first.(lint("n_e only")) == [:underscore]
     @test :intraword_asterisk in first.(lint("T*a and P*b"))
 end
+
+@testset "scripting reference for language models" begin
+    include(joinpath(DocRefs.ROOT, "dev", "llms.jl"))
+    page = read(joinpath(DocRefs.ROOT, "docs", "src", "llms.md"), String)
+    # llms.txt is the page without the links: `julia dev/llms.jl` writes it
+    @test read(joinpath(DocRefs.ROOT, "llms.txt"), String) == llms_text(page)
+    # every linked name is exported, so a renamed or removed name fails here
+    linked = unique!([Symbol(m.captures[1]) for m in eachmatch(r"\[`([^`\n]+)`\]\(@ref\)", page)])
+    @test length(linked) > 50
+    missing_names = [n for n in linked if !Base.isexported(Briareus, n)]
+    isempty(missing_names) || @warn "llms.md links names that Briareus does not export" missing_names
+    @test isempty(missing_names)
+    # every function called in the code of the page exists in Briareus or Base
+    code = join((m.captures[1] for m in eachmatch(r"```julia\n(.*?)```"s, page)), "\n")
+    called = unique!([Symbol(m.captures[1]) for m in eachmatch(r"(?<![.\w])([A-Za-z_][A-Za-z0-9_!]*)\(", code)])
+    unknown = [n for n in called if !(Base.isexported(Briareus, n) || isdefined(Base, n))]
+    isempty(unknown) || @warn "llms.md calls names that are not exported" unknown
+    @test isempty(unknown)
+end

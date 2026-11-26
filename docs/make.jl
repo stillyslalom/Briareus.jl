@@ -99,6 +99,7 @@ cp(joinpath(@__DIR__, "..", "BriareusGUI", "src", "qml", "icons", "briareus.svg"
             "Physics background" => "explanation/background.md",
             "For VisRad users" => "explanation/visrad.md",
             "Verification and validation" => "explanation/verification-validation.md",
+            "Scripting reference for language models" => "llms.md",
         ],
         "Reference" => [
             "Geometry and targets" => "reference/geometry.md",
