@@ -227,6 +227,23 @@ end
     # every pair green: two together
     rg = scan(count_c(2, 3))
     @test all(isempty, rg.caveats) && (b = only(rg.budgets); (b.safe, b.limit) == (6, 2))
+    @test isempty(rg.triples) && occursin("3 or more not scanned", only(rg.budgets).text)
+    # and with the triples scanned: the four triples of four green beams, each scored as
+    # the three beams dropped together
+    rt = scan(count_c(3, 4); triples = true)
+    @test length(rt.triples) == 4 && all(o -> o.scores == [3.0] && length(o.beams) == 3, rt.triples)
+    @test (b = only(rt.budgets); (b.triples, b.safe_triples, b.limit) == (4, 4, 3))
+    @test startswith(only(rt.budgets).text, "up to 3 green beams together (all 4 triples")
+    @test (b = only(scan(count_c(2, 3); triples = true).budgets); (b.triples, b.safe_triples, b.limit) == (4, 0, 2))
+    # one triple leaves green: an exception, and the other three allow three together
+    tri_c = ROECriterion(:tri, ev -> dropped(ev) == [1, 2, 3] ? 3.0 : 1.0; green = 2, amber = 4, measure = :value)
+    rte = scan([tri_c]; triples = true)
+    @test (b = only(rte.budgets); (b.safe_triples, b.limit, b.triple_exceptions) == (3, 3, [("B1", "B2", "B3")]))
+    @test occursin("Triples that leave green: B1 + B2 + B3.", roe_markdown(rte))
+    @test occursin("4 triples", sprint(show, rte))
+    # a role with a pair that leaves green scans no triples
+    @test isempty(scan([ROECriterion(:special, ev -> dropped(ev) == [1, 2] ? 3.0 : 1.0; green = 2, amber = 4,
+                                     measure = :value)]; triples = true).triples)
     # one red unit: its pairs are no worse than the unit and add no caveat
     w = [1.0, 1.0, 1.0, 5.0]
     rw = scan([ROECriterion(:weight, ev -> sum(w[dropped(ev)]; init = 0.0); green = 2, amber = 4.5, measure = :value)])

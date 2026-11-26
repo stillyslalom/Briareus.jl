@@ -10,7 +10,8 @@ review to readers without the package. The clearance and TaLIS checks that the 1
 outage is a set of beams at zero power with every other beam as planned, and each outage
 is scored against a list of criteria ([`ROECriterion`](@ref)), each a function of an
 evaluation with a green and an amber threshold. The scan covers every beam, every quad,
-pairs of them and pre-planned companion drops, and sorts each unit into a tier: green
+pairs of them, pre-planned companion drops and, when asked, triples of units that drop
+safely in pairs, and sorts each unit into a tier: green
 units may drop without a request, amber ones need approval, and red ones hold the shot.
 The physics lies in the criteria, so the same scan applies to a capsule in a hohlraum
 (`roe_drive`, `roe_mode`, `roe_hotspot_velocity`, `roe_yield`), a package face or the

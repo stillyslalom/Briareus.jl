@@ -393,7 +393,9 @@ function _roe_data(r::ROEReport, notes)
                   "companion" => row.companion, "companion_tier" => row.companion_tier, "caveats" => row.caveats)
              for row in roe_table(r)]
     budgets = [Dict("role" => b.role, "kind" => b.kind, "green" => b.green, "pairs" => b.pairs, "safe" => b.safe,
-                    "limit" => b.limit, "exceptions" => [[a, c] for (a, c) in b.exceptions], "text" => b.text)
+                    "triples" => b.triples, "safe_triples" => b.safe_triples, "limit" => b.limit,
+                    "exceptions" => [[a, c] for (a, c) in b.exceptions],
+                    "triple_exceptions" => [collect(t) for t in b.triple_exceptions], "text" => b.text)
                for b in r.budgets]
     counts = Dict(string(t) => count(==(t), r.tiers) for t in _ROE_TIERS)
     return Dict("criteria" => crit, "notes" => collect(notes), "counts" => counts, "units" => units, "budgets" => budgets)

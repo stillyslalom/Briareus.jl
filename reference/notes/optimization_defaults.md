@@ -1705,7 +1705,11 @@ each a function of an `Evaluation` with a green and an amber threshold.
 - The tier rules are also choices of this package. A unit has the tier of its single
   outage, a green unit whose pair with another green unit is red is raised to amber, and
   the budget of a role allows two green units together only when every scanned pair of
-  them stays green or the exceptions are listed. Three or more outages are not scanned.
+  them stays green or the exceptions are listed. With `triples = true` the scan adds the
+  triples of a role whose green units all drop in pairs, and the budget allows three
+  together when the triples stay green, with the exceptions listed. Four or more outages
+  are not scanned. The triples are opt-in because a role of g green units adds
+  g(g − 1)(g − 2)/6 outages.
 - `roe_default_criteria` selects a starting set from the design: observed elements whose
   area-weighted normals sum to less than 5% of their area count as a closed capsule and
   get drive, P2, P4 and hot-spot velocity, any other observed elements get the face

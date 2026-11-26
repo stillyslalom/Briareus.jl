@@ -115,12 +115,15 @@ end
 """
     ROEBudget
 
-The multiple-outage rule of one beam role, from the pair scan: `role`, `kind`, the number
-`green` of green units, the number `pairs` of scanned pairs of green units, the number
-`safe` of those pairs that stay green, `limit` (how many green units may drop together
-without a request: 0, 1 or 2), `exceptions` (the pairs of green units that leave green,
-by name) and `text`, the rule as a sentence. Three or more simultaneous outages are not
-scanned, so `limit` is at most 2.
+The multiple-outage rule of one beam role, from the pair and triple scans: `role`,
+`kind`, the number `green` of green units, the number `pairs` of scanned pairs of green
+units, the number `safe` of those pairs that stay green, the number `triples` of scanned
+triples of green units and the number `safe_triples` of those that stay green, `limit`
+(how many green units may drop together without a request: 0 to 3), `exceptions` and
+`triple_exceptions` (the pairs and triples of green units that leave green, by name) and
+`text`, the rule as a sentence. Triples are scanned only with `triples = true` in
+[`roe_scan`](@ref), and four or more simultaneous outages are not scanned, so `limit` is
+at most 3.
 """
 struct ROEBudget
     role::Symbol
@@ -128,8 +131,11 @@ struct ROEBudget
     green::Int
     pairs::Int
     safe::Int
+    triples::Int
+    safe_triples::Int
     limit::Int
     exceptions::Vector{Tuple{String,String}}
+    triple_exceptions::Vector{NTuple{3,String}}
     text::String
 end
 
@@ -144,7 +150,8 @@ The result of [`roe_scan`](@ref), with fields:
 - `beams`, the beam names;
 - `units`, the droppable beams and quads ([`ROEUnit`](@ref));
 - `singles`, the outage of each unit alone ([`ROEOutage`](@ref)), in the order of `units`;
-- `pairs`, the scanned outages of two units;
+- `pairs`, the scanned outages of two units, and `triples`, those of three units (empty
+  unless the scan was asked for them);
 - `companions`, per unit the outage of the unit together with its companion, or `nothing`;
 - `tiers`, the tier of each unit: the tier of its single outage, raised from green to
   amber when a pair with another green unit is red;
@@ -163,6 +170,7 @@ struct ROEReport
     baseline::Vector{Any}
     singles::Vector{ROEOutage}
     pairs::Vector{ROEOutage}
+    triples::Vector{ROEOutage}
     companions::Vector{Union{Nothing,ROEOutage}}
     tiers::Vector{Symbol}
     caveats::Vector{Vector{Int}}
@@ -176,7 +184,9 @@ function Base.show(io::IO, r::ROEReport)
         print(io, "; ", count(u -> u.kind === k, r.units), " ", k, "s: ", n(k, :red), " red, ",
               n(k, :amber), " amber, ", n(k, :green), " green")
     end
-    print(io, "; ", length(r.pairs), " pairs)")
+    print(io, "; ", length(r.pairs), " pairs")
+    isempty(r.triples) || print(io, ", ", length(r.triples), " triples")
+    print(io, ")")
 end
 
 # One case of a scan: a scenario with the beams of its epoch, the nominal evaluation and
@@ -403,8 +413,8 @@ _roe_cases(c) = [Symbol(first(p)) => last(p) for p in c]
 """
     roe_scan(scenario, beams, criteria; kwargs...) -> ROEReport
     roe_scan(cases, criteria; units = :auto, pairs = :auto, pair_scope = :all,
-             extra_pairs = (), roles = :part, companions = nothing, axis = (0, 0, 1),
-             stands_for = nothing, method = :auto)
+             extra_pairs = (), triples = false, roles = :part, companions = nothing,
+             axis = (0, 0, 1), stands_for = nothing, method = :auto)
 
 Beam rules of engagement: scores the loss of every beam, every quad and pairs of them
 against `criteria` (a vector of [`ROECriterion`](@ref)) and sorts each beam and quad into
@@ -435,6 +445,10 @@ repointing and no power change). The scan covers:
   quad pairs when the beams form quads and the beam pairs otherwise. `pair_scope` keeps
   `:all` pairs, those `:within` one role or those `:across` roles. `extra_pairs` adds
   pairs of unit names;
+- with `triples = true`, the triples of green units of one role and kind in a role whose
+  green units may all drop in pairs (every pair of them scanned and green), so that the
+  budget can allow a third drop. A role of `g` green units adds `g(g - 1)(g - 2)/6`
+  outages, about 20,000 for 50 units;
 - with `companions`, each unit together with its companion, a pre-planned second drop
   meant to restore the balance. `:opposite` pairs a unit with the unit of the same kind
   and role whose mean port direction is nearest the antipode, `:mirror` with the one nearest the
@@ -465,7 +479,8 @@ The tier of a unit is the tier of its single outage. A green unit whose pair wit
 another green unit is red is raised to amber, because a drop without a request must stay
 safe after another such drop. The other pairs that are worse than both of their units
 are recorded as caveats, and the budget of each role ([`ROEBudget`](@ref)) gives the
-number of green units that may drop together.
+number of green units that may drop together: two when the pairs stay green, and three
+when the triples are scanned and stay green.
 
 The outages run on all threads, so the criteria must be safe to run concurrently.
 """
@@ -476,6 +491,7 @@ roe_scan(cases, criteria::AbstractVector{ROECriterion}; kwargs...) = _roe_scan(c
 Base.@nospecializeinfer function _roe_scan(@nospecialize(cases), criteria::AbstractVector{ROECriterion};
                                            units::Symbol = :auto, pairs::Symbol = :auto,
                                            pair_scope::Symbol = :all, @nospecialize(extra_pairs = ()),
+                                           triples::Bool = false,
                                            @nospecialize(roles = :part), @nospecialize(companions = nothing),
                                            axis = (0.0, 0.0, 1.0), @nospecialize(stands_for = nothing),
                                            method::Symbol = :auto)
@@ -586,8 +602,14 @@ Base.@nospecializeinfer function _roe_scan(@nospecialize(cases), criteria::Abstr
     companion = Union{Nothing,ROEOutage}[k == 0 ? nothing : out[k] for k in cslot]
     tiers, caveats = _roe_tiers(singles, pairouts)
     budgets = _roe_budgets(us, tiers, singles, pairouts)
+    triouts = ROEOutage[]
+    if triples
+        tlist = [(g, _roe_drop(us, g)...) for g in _roe_triple_sets(us, tiers, budgets)]
+        triouts = _roe_outages(cs, crit, case_of, base, tlist)
+        budgets = _roe_triple_budgets(budgets, us, tiers, triouts)
+    end
     return ROEReport(crit, [c.name for c in cs], [c.linear for c in cs], names, us, base, singles,
-                     pairouts, companion, tiers, caveats, budgets)
+                     pairouts, triouts, companion, tiers, caveats, budgets)
 end
 
 roe_scan(s::Scenario, beams::AbstractVector{<:Beam}, criteria::AbstractVector{ROECriterion}; kwargs...) =
@@ -605,8 +627,8 @@ dropped units lose the shares of their power that the units drop (all of it, exc
 the beam unit of a beam that stands for several), and the shares of units on one beam
 add up to at most all of it. Every case of a criterion is evaluated
 again in full, laser–plasma model included, so the result is that of a scan with
-`method = :full`. The scan covers single units and pairs; this function covers three or
-more units, or a pair that the scan left out.
+`method = :full`. The scan covers single units, pairs and, when asked, triples; this
+function covers any other set of units.
 
 The returned outage lists the dropped units and beams by their indices in the report.
 """
@@ -702,7 +724,42 @@ function _roe_budgets(us::Vector{ROEUnit}, tiers::Vector{Symbol}, singles::Vecto
         else
             2, "up to 2 green $word together, except $(length(ok) - safe) of $(length(ok)) pairs (3 or more not scanned)"
         end
-        push!(out, ROEBudget(role, kind, length(green), length(ok), safe, limit, exceptions, text))
+        push!(out, ROEBudget(role, kind, length(green), length(ok), safe, 0, 0, limit, exceptions,
+                             NTuple{3,String}[], text))
     end
     return out
+end
+
+# The triples of green units of each role and kind whose budget allows any two of them
+# together, with every pair scanned.
+function _roe_triple_sets(us::Vector{ROEUnit}, tiers::Vector{Symbol}, budgets::Vector{ROEBudget})
+    out = Vector{Int}[]
+    for b in budgets
+        (b.limit == 2 && b.safe == b.pairs == b.green * (b.green - 1) ÷ 2 && b.green >= 3) || continue
+        g = [i for i in eachindex(us) if us[i].kind === b.kind && us[i].role === b.role && tiers[i] === :green]
+        for x in 1:length(g), y in x+1:length(g), z in y+1:length(g)
+            push!(out, [g[x], g[y], g[z]])
+        end
+    end
+    return out
+end
+
+# The budgets with the triples: three green units together when the triples stay green.
+function _roe_triple_budgets(budgets::Vector{ROEBudget}, us::Vector{ROEUnit}, tiers::Vector{Symbol},
+                             triouts::Vector{ROEOutage})
+    return map(budgets) do b
+        ts = [o for o in triouts if all(i -> us[i].kind === b.kind && us[i].role === b.role, o.units)]
+        isempty(ts) && return b
+        n, safe = length(ts), count(o -> o.tier === :green, ts)
+        exc = [Tuple(us[i].name for i in o.units)::NTuple{3,String} for o in ts if o.tier !== :green]
+        word = string(b.kind, "s")
+        limit, text = if safe == n
+            3, "up to 3 green $word together (all $n triples stay green; 4 or more not scanned)"
+        elseif safe == 0
+            2, "up to 2 green $word together (all $(b.safe) pairs stay green; each of the $n triples leaves green)"
+        else
+            3, "up to 3 green $word together, except $(n - safe) of $n triples (4 or more not scanned)"
+        end
+        ROEBudget(b.role, b.kind, b.green, b.pairs, b.safe, n, safe, limit, b.exceptions, exc, text)
+    end
 end

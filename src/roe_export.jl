@@ -116,6 +116,8 @@ function roe_markdown(r::ROEReport; title::AbstractString = "Beam rules of engag
             println(io, "- Budget (", b.kind, "s): ", b.text, ".")
             isempty(b.exceptions) ||
                 println(io, "  Pairs that leave green: ", join((a * " + " * c for (a, c) in b.exceptions), ", "), ".")
+            isempty(b.triple_exceptions) ||
+                println(io, "  Triples that leave green: ", join((join(t, " + ") for t in b.triple_exceptions), ", "), ".")
         end
         println(io)
         println(io, "| Unit | Kind | Decision | Binding | Score | Green ≤ | Amber ≤ | ",
