@@ -88,7 +88,7 @@ include("controllers/placement_triad.jl")     # the 3D view's placement triad
 export display_number
 export import_visrad_workspace!, export_visrad_workspace, export_results, retune_pulses,
        visrad_parity, visrad_parity_rows, ROEState, roe_tiers, roe_beam_text, start_roe!, roe_stale,
-       roe_stands_for, roe_summary, roe_marks, roe_port_drawing, roe_outage_rows, roe_outage_text, pick_outage!, clear_outage!,
+       roe_stands_for, roe_summary, diagnostic_sights, look_from_diagnostic, roe_marks, roe_port_drawing, roe_outage_rows, roe_outage_text, pick_outage!, clear_outage!,
        retune_to_reference!, session_state, restore!, save_session, load_session!, session_script,
        write_session_script, cad_source, relink_cad!,
        reload_cad_sources!, EditHistory, record!, undo!,

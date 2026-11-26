@@ -611,3 +611,70 @@ function remove_diagnostic_folder!(sess::DesignSession, dir::AbstractString)
     refresh_diagnostics!(sess)
     return sess
 end
+
+"""
+    diagnostic_sights(sess::DesignSession) -> Vector{NamedTuple}
+
+The diagnostics that the 3D view can look from: one row `(; id, name)` per usable
+definition of the catalog ([`diagnostic_catalog`](@ref)) of the facility of the session
+([`diagnostic_here`](@ref)) whose definition gives a line of sight
+(`Briareus.sight_line`), sorted by name.
+"""
+function diagnostic_sights(sess::DesignSession)
+    out = NamedTuple{(:id, :name),Tuple{String,String}}[]
+    for r in diagnostic_catalog(sess)
+        (r.usable && diagnostic_here(sess, r.facility)) || continue
+        _diagnostic_sight(sess, r.id) === nothing || push!(out, (; id = String(r.id), name = String(r.name)))
+    end
+    return sort!(out; by = r -> (r.name, r.id))
+end
+
+# The line of sight of definition `id` of the session, or `nothing` when it gives none.
+function _diagnostic_sight(sess::DesignSession, id::AbstractString)
+    def = _definition(sess, id)
+    def === nothing && return nothing
+    try
+        return sight_line(def)
+    catch e
+        e isa ArgumentError || rethrow()
+        return nothing
+    end
+end
+
+"""
+    look_from_diagnostic(sess::DesignSession, id) -> (; line, intrusions, observed, hardware, text)
+
+What the view from diagnostic `id` shows: its line of sight `line`
+(`Briareus.sight_line`), the parts of the target that enter its volume within the target
+positioning error of the clearance check (`Briareus.sight_intrusions`, one row per part,
+the closest first), the `observed` parts whose bounding box holds the center of the
+view, `hardware`, the other parts that enter the view, and a line about them. A
+definition that gives no line of sight throws an `ArgumentError`.
+"""
+function look_from_diagnostic(sess::DesignSession, id::AbstractString)
+    l = _diagnostic_sight(sess, id)
+    l === nothing && throw(ArgumentError("diagnostic $id gives no line of sight"))
+    t = sess.target.target[]
+    tol = sess.review.errors[][:target_offset]
+    rows = sight_intrusions(t, l; tolerance = tol)
+    function holds(p)
+        vs = [v for c in t.components if c.part === p for v in c.mesh.vertices]
+        return !isempty(vs) && all(k -> minimum(v[k] for v in vs) <= l.center[k] <= maximum(v[k] for v in vs), 1:3)
+    end
+    observed = Symbol[r.part for r in rows if holds(r.part)]
+    hardware = [r for r in rows if r.intrudes && !(r.part in observed)]
+    io = IOBuffer()
+    @printf(io, "looking from %s (field of view %g mm", l.name, 2 * l.radius)
+    isfinite(l.distance) && @printf(io, ", pinhole at %g mm", l.distance)
+    print(io, "): ")
+    isempty(observed) || print(io, "observing ", join(observed, ", "), "; ")
+    if isempty(hardware)
+        print(io, "no other part within ", tol, " mm of the view")
+        rest = [r for r in rows if !(r.part in observed)]
+        isempty(rest) || @printf(io, " (nearest %s, %.3g mm)", rest[1].part, rest[1].margin)
+    else
+        print(io, join((@sprintf("%s (%.3g mm)", r.part, r.margin) for r in hardware), ", "),
+              length(hardware) == 1 ? " enters" : " enter", " the view within ", tol, " mm")
+    end
+    return (; line = l, intrusions = rows, observed, hardware, text = String(take!(io)))
+end

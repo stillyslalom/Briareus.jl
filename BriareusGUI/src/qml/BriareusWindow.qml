@@ -274,6 +274,7 @@ ApplicationWindow {
             Action { text: "Fit all"; onTriggered: Julia.br_fit_all() }
             Action { text: "Fit selection"; onTriggered: Julia.br_fit_selection() }
             Action { text: "Look from port…"; onTriggered: portDialog.open() }
+            Action { text: "Look from diagnostic…"; onTriggered: sightDialog.open() }
             Action {
                 text: "Look along selected beam"
                 enabled: ["group", "quad", "beam"].indexOf(app.selKind) >= 0
@@ -805,6 +806,28 @@ ApplicationWindow {
             TextField { id: portPhi; text: "0"; Layout.preferredWidth: 100 }
         }
         onAccepted: Julia.br_look_from_port(portTheta.text, portPhi.text)
+    }
+    // the view along a diagnostic line of sight, with the parts that enter it selected
+    Dialog {
+        id: sightDialog
+        title: "Look from diagnostic"
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        property var sights: []
+        onAboutToShow: sights = Julia.br_diagnostic_sights()
+        ColumnLayout {
+            Label { text: sightDialog.sights.length === 0 ? "No diagnostic of this facility gives a line of sight"
+                                                          : "Diagnostic" }
+            ComboBox {
+                id: sightBox
+                Layout.preferredWidth: 320
+                visible: sightDialog.sights.length > 0
+                model: sightDialog.sights.map(s => s.split("\t")[1])
+            }
+            Label { text: "Hardware within the target positioning error of the view is selected."
+                    opacity: 0.7; font.pixelSize: 11 }
+        }
+        onAccepted: if (sights.length > 0) Julia.br_look_from_diagnostic(sights[sightBox.currentIndex].split("\t")[0])
     }
     // the directories diagnostic definitions are read from (saved for later sessions)
     // and the problems found in their definitions (check_diagnostics)

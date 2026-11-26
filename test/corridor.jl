@@ -113,6 +113,23 @@
     @test sight_distance(sx, 1626.7 * sx.axis + 5.0 * normalize(cross(sx.axis, Vec3(1, 0, 0)))) ≈
           (5.0 - 0.0125) * slant
 
+    # The parts that enter a line of sight along z of radius 1 mm, against closed forms:
+    # a plate beside the cylinder 0.5 mm from its side, a plate across it (deepest on the
+    # axis, 1 mm inside) and a plate behind the plane of the center (3 mm from it).
+    up = SightLine("up", 0, 0; field_of_view = 2.0)
+    side = foil(:side, (2.5, 0.0, 5.0), (0, 0, 1); width = 2.0, n = 4)
+    across = foil(:across, (0.0, 0.0, 5.0), (0, 0, 1); width = 4.0, n = 4)
+    behind = foil(:behind, (0.0, 0.0, -3.0), (0, 0, 1); width = 4.0, n = 4)
+    tp = Target([side, across, behind])
+    si = sight_intrusions(tp, up)
+    h = 0.1                                     # the default spacing, a tenth of the radius
+    @test [r.part for r in si] == [:across, :side, :behind] && [r.intrudes for r in si] == [true, false, false]
+    @test all(r -> 0 <= r.margin - Dict(:across => -1.0, :side => 0.5, :behind => 3.0)[r.part] <= 2h / 3, si)
+    @test [r.intrudes for r in sight_intrusions(tp, up; tolerance = 0.6)] == [true, true, false]
+    fine = sight_intrusions(tp, up; spacing = 0.01)
+    @test all(r -> 0 <= r.margin - Dict(:across => -1.0, :side => 0.5, :behind => 3.0)[r.part] <= 0.01, fine)
+    @test_throws ArgumentError sight_intrusions(tp, up; spacing = 0.0)
+
     # drawings: plain text, the same for the same map, one legend entry per fill
     svg = corridor_map_svg(mx)
     @test startswith(svg, "<svg") && endswith(svg, "</svg>\n") && svg == corridor_map_svg(mx)

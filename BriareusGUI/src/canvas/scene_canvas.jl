@@ -271,6 +271,23 @@ function look_from_port!(c::SceneCanvas, sess::DesignSession, θ::Real, φ::Real
 end
 
 """
+    look_from_sight!(c::SceneCanvas, line::SightLine; radius = 2 * line.radius)
+
+Look along a diagnostic line of sight from the side of the instrument toward the center of
+its view, fitted to a sphere of `radius` (mm, at least 1 mm) about that center: by
+default twice the radius of the view, the field of view and its surroundings.
+"""
+function look_from_sight!(c::SceneCanvas, l::SightLine; radius::Real = 2 * l.radius)
+    k = -l.axis
+    up = abs(k[3]) < 0.95 ? Makie.Vec3d(0, 0, 1) : Makie.Vec3d(1, 0, 0)
+    cam = c.camera
+    cam.lookat = Makie.Vec3d(l.center...)
+    orient_camera!(cam, Makie.Vec3d(k...), up)
+    fit_camera!(cam, Makie.Vec3d(l.center...), max(Float64(radius), 1.0))
+    return c
+end
+
+"""
     set_projection!(c::SceneCanvas, ortho::Bool) / set_turntable!(c, on::Bool)
 
 The projection (orthographic or perspective) and the rotation mode. Switching the

@@ -100,6 +100,10 @@ const B = BriareusGUI
     show_corridor!(sess)
     gs = corridor_surface(sess.corridor.map[]; tight = sess.talis.tight[])
     @test sc.corridor.visible[] && length(sc.corridor[1][].position) == 3 * length(gs.faces)
+    # the view from a diagnostic looks from the instrument toward the center of its view
+    sl = sight_line("nif_sxi_upper")
+    B.look_from_sight!(sc, sl)
+    @test B.normalize(sc.camera.eye - sc.camera.lookat) ≈ sl.axis && sc.camera.lookat ≈ sl.center
     # seen from outside, only the cells facing the eye are drawn; from inside, all of them
     clear = Makie.RGBAf(0, 0, 0, 0)
     cls = [Makie.RGBAf(Makie.RGBf(B._hexcolor(CORRIDOR_COLORS[k])), CORRIDOR_OPACITY[k]) for k in gs.fills]

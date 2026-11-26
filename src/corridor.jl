@@ -278,6 +278,55 @@ function _corridor_axes(n::Vec3)
 end
 
 """
+    sight_intrusions(target, line::SightLine; tolerance = 0.0, spacing = nothing)
+        -> Vector{NamedTuple}
+
+The parts of `target` that enter the volume of a diagnostic line of sight
+([`SightLine`](@ref)): one row per part, `(; part, margin, intrudes)`, sorted by
+`margin`. `margin` is the least signed distance (mm, [`sight_distance`](@ref)) from the
+surface of the part to the surface of the volume, negative inside, and `intrudes` is
+whether it is below `tolerance`, such as the target positioning tolerance. Apertures
+are left out (they are transparent). The volume starts at the plane through the center
+of the view, so a part that the diagnostic observes intrudes where it reaches toward the
+instrument. The margin is found by splitting each triangle into four until its edges
+are at most `spacing` long (by default a tenth of the radius of the view, at least
+0.01 mm), measuring at the centroid of each piece. A piece is split only while some
+point of it could lie closer than the least margin found so far, which is exact because
+the signed distance changes by at most the distance moved. The margin overstates the
+exact one by at most the distance from a point of the closest piece to its centroid,
+two thirds of its longest edge.
+"""
+function sight_intrusions(t::Target, l::SightLine; tolerance::Real = 0.0, spacing = nothing)
+    h = spacing === nothing ? max(0.01, l.radius / 10) : Float64(spacing)
+    h > 0 || throw(ArgumentError("spacing must be > 0 mm"))
+    best = Dict{Symbol,Float64}()
+    for p in parts(t)
+        any(c -> c.part === p && c.kind !== :aperture, t.components) && (best[p] = Inf)
+    end
+    stack = NTuple{3,Vec3}[]
+    for k in eachindex(t.tri_v0)
+        c = t.components[t.tri_comp[k]]
+        c.kind === :aperture && continue
+        v0 = t.tri_v0[k]
+        push!(stack, (v0, v0 + t.tri_e1[k], v0 + t.tri_e2[k]))
+        m = best[c.part]
+        while !isempty(stack)
+            a, b, d = pop!(stack)
+            g = (a + b + d) / 3
+            sd = sight_distance(l, g)
+            m = min(m, sd)
+            sd - max(norm(g - a), norm(g - b), norm(g - d)) < m || continue
+            max(norm(b - a), norm(d - b), norm(a - d)) > h || continue
+            ab, bd, da = (a + b) / 2, (b + d) / 2, (d + a) / 2
+            push!(stack, (a, ab, da), (ab, b, bd), (da, bd, d), (ab, bd, da))
+        end
+        best[c.part] = m
+    end
+    rows = [(; part = p, margin = m, intrudes = m < tolerance) for (p, m) in best]
+    return sort!(rows; by = r -> (r.margin, r.part))
+end
+
+"""
     corridor_map(beams; radius, center = (0, 0, 0), axis = (0, 0, 1), ntheta = 90, nphi = 180, kwargs...)
     corridor_map(beams; plane = (point, normal), extent, n = 121, kwargs...) -> CorridorMap
 

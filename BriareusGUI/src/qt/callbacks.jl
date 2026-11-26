@@ -1595,6 +1595,27 @@ function br_look_from_port(theta, phi)
         sh.sess.status[] = @sprintf("looking from the port at θ = %g°, φ = %g°", θ, φ)
     end
 end
+# The diagnostics the view can look from, as "id<TAB>name" (the dialog's list).
+function br_diagnostic_sights()
+    sh = _SHELL[]
+    sh === nothing && return String[]
+    return String[r.id * "\t" * r.name for r in diagnostic_sights(sh.sess)]
+end
+# The view from a diagnostic: along its line of sight, the hardware that enters its view
+# selected, and named in the status line with the observed parts.
+function br_look_from_diagnostic(id)
+    _with_shell() do sh
+        sess = sh.sess
+        v = look_from_diagnostic(sess, String(id))
+        _show_scene!(sh)
+        # the field of view, or the target where the field is wider than it
+        look_from_sight!(sh.scene, v.line; radius = min(2 * v.line.radius, 1.2 * sess.target.target[].scale))
+        ids = [component_id(sess.target, r.part) for r in v.hardware]
+        isempty(ids) ? select!(sess.view, "") : select!(sess.view, ids[1])
+        foreach(i -> select_add!(sess.view, i), ids[2:end])
+        sess.status[] = v.text
+    end
+end
 # Port angles of beam `i` of the table (0-based, as the dialog lists them), as text.
 function br_port_angles(i)
     sh = _SHELL[]
@@ -1615,6 +1636,7 @@ function _register_qml_functions()
     @qmlfunction br_select_range br_node_menu br_node_show br_node_include
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
+    @qmlfunction br_diagnostic_sights br_look_from_diagnostic
     @qmlfunction br_set_cluster br_rename_cluster br_split_quads br_merge_quads br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_new_target br_set_resolution br_edit_mesh

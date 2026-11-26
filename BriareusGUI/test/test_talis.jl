@@ -379,6 +379,30 @@ end
     show_corridor!(sess, false)
 end
 
+@testset "the view from a diagnostic (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    ds = diagnostic_sights(sess)
+    ids = [d.id for d in ds]
+    @test "nif_dante1" in ids && "nif_sxi_upper" in ids && !("omega_dante" in ids) && issorted([d.name for d in ds])
+    v = look_from_diagnostic(sess, "nif_sxi_upper")
+    @test v.line == sight_line("nif_sxi_upper")
+    @test v.intrusions == sight_intrusions(sess.target.target[], v.line; tolerance = 0.025)
+    # the hohlraum and capsule hold the center of the view and are observed; nothing else
+    # enters it
+    @test any(r -> r.part === :hohlraum && r.intrudes, v.intrusions) && Set(v.observed) == Set([:hohlraum, :capsule])
+    @test isempty(v.hardware) && startswith(v.text, "looking from NIF SXI upper") &&
+          occursin("observing ", v.text) && occursin("no other part within 0.025 mm", v.text)
+    # a shield across the view, 8 mm toward the instrument, enters it by 1 mm and more
+    a = v.line.axis
+    c = 8.0 * a
+    add_part!(sess.target, :disk; name = :shield, two_sided = true, x = c[1], y = c[2], z = c[3],
+              theta = acosd(a[3]), phi = atand(a[2], a[1]), r1 = 1.0)
+    w = look_from_diagnostic(sess, "nif_sxi_upper")
+    @test [r.part for r in w.hardware] == [:shield] && w.hardware[1].margin < -1.0 &&
+          occursin("shield (", w.text) && occursin(" enters the view within 0.025 mm", w.text)
+    @test_throws ArgumentError look_from_diagnostic(sess, "nif_inflight_radiography")
+end
+
 @testset "beam rules of engagement (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     rs = sess.roe

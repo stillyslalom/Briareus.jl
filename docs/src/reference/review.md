@@ -44,6 +44,8 @@ or a plane and gives the margin of each sample to the 3ω envelopes, the 1ω foo
 the lines of sight of the diagnostics ([`SightLine`](@ref), [`sight_line`](@ref)), so the
 open region shows where new hardware may be placed. [`corridor_margin`](@ref) gives the
 margins of one point, and [`write_corridor_map_svg`](@ref) draws the map.
+[`sight_intrusions`](@ref) gives the margin of each part of a target to the volume of
+one line of sight, for the hardware that enters the view of a diagnostic.
 [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency
