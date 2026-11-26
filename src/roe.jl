@@ -74,14 +74,20 @@ _roe_tier(c::ROECriterion, score::Float64) =
     ROEUnit
 
 A droppable unit of a rules-of-engagement scan: `name`, `kind` (`:beam` or `:quad`),
-`beams` (indices into the beam list of the scan) and `role`.
+`beams` (indices into the beam list of the scan), `role` and `share`, the fraction of the
+power of those beams that the unit drops. The share is 1 except for one facility beam of
+a beam that stands for several (`stands_for` of [`roe_scan`](@ref)), such as one beam of
+a NIF quad held as one beam, which drops a quarter of it.
 """
 struct ROEUnit
     name::String
     kind::Symbol
     beams::Vector{Int}
     role::Symbol
+    share::Float64
 end
+
+ROEUnit(name, kind, beams, role) = ROEUnit(name, kind, beams, role, 1.0)
 
 """
     ROEOutage
@@ -89,7 +95,8 @@ end
 The result of one outage of a rules-of-engagement scan, with fields:
 
 - `units`, the indices of the dropped units in `report.units`;
-- `beams`, the indices of the beams at zero power;
+- `beams`, the indices of the beams that lose power, and `shares`, the fraction of the
+  power that each of them loses (1 for a beam at zero power);
 - `scores` and `tiers`, one per criterion of the scan;
 - `tier`, the worst of `tiers`;
 - `binding`, the index of the criterion that sets `tier`, the one farthest past its
@@ -98,6 +105,7 @@ The result of one outage of a rules-of-engagement scan, with fields:
 struct ROEOutage
     units::Vector{Int}
     beams::Vector{Int}
+    shares::Vector{Float64}
     scores::Vector{Float64}
     tiers::Vector{Symbol}
     tier::Symbol
@@ -206,24 +214,31 @@ function _roe_case(name::Symbol, s::Scenario, beams, method::Symbol)
     return _ROECase(name, s, bs, eff, nominal, E, L, linear)
 end
 
-# The evaluation of a case with the beams `drop` at zero power. On the linear path the
-# deposition is the nominal one less the columns of the dropped beams, floored at zero
-# where the difference of rounded sums would leave a negative power. Otherwise the shot
-# is evaluated again, laser–plasma model included.
-function _roe_evaluation(c::_ROECase, drop::Vector{Int})
+# The evaluation of a case with the beams `drop` less the fractions `share` of their
+# power (1: at zero power). On the linear path the deposition is the nominal one less
+# those fractions of the columns of the dropped beams, floored at zero where the
+# difference of rounded sums would leave a negative power. Otherwise the shot is
+# evaluated again, laser–plasma model included.
+_roe_left(p, share) = share == 1 ? zero(p) : p * (1 - share)
+function _roe_evaluation(c::_ROECase, drop::Vector{Int}, share::Vector{Float64})
     beams = copy(c.beams)
-    for b in drop
-        beams[b] = remake(beams[b]; power = 0.0)
+    for (b, f) in zip(drop, share)
+        beams[b] = remake(beams[b]; power = _roe_left(beams[b].power, f))
     end
     c.linear || return evaluate(c.scenario, beams)
     eff = copy(c.effective)
     d0 = c.nominal.deposition
     E, L, per_beam = copy(d0.element), copy(d0.backside), copy(d0.per_beam)
-    for b in drop
-        eff[b] = remake(eff[b]; power = 0.0)
-        E .-= @view c.element[:, b]
-        L .-= @view c.backside[:, b]
-        per_beam[b] = 0.0
+    for (b, f) in zip(drop, share)
+        eff[b] = remake(eff[b]; power = _roe_left(eff[b].power, f))
+        if f == 1
+            E .-= @view c.element[:, b]
+            L .-= @view c.backside[:, b]
+        else
+            E .-= f .* @view c.element[:, b]
+            L .-= f .* @view c.backside[:, b]
+        end
+        per_beam[b] = _roe_left(per_beam[b], f)
     end
     E .= max.(E, 0.0)
     L .= max.(L, 0.0)
@@ -232,18 +247,18 @@ function _roe_evaluation(c::_ROECase, drop::Vector{Int})
 end
 
 function _roe_outage(cases::Vector{_ROECase}, criteria::Vector{ROECriterion}, case_of::Vector{Int},
-                     base::Vector{Any}, units::Vector{Int}, beams::Vector{Int})
+                     base::Vector{Any}, units::Vector{Int}, beams::Vector{Int}, share::Vector{Float64})
     evs = Vector{Union{Nothing,Evaluation}}(nothing, length(cases))
     scores = Vector{Float64}(undef, length(criteria))
     for (k, c) in enumerate(criteria)
         j = case_of[k]
-        evs[j] === nothing && (evs[j] = _roe_evaluation(cases[j], beams))
+        evs[j] === nothing && (evs[j] = _roe_evaluation(cases[j], beams, share))
         scores[k] = _roe_score(c, c.f(evs[j]::Evaluation), base[k])
     end
-    return _roe_result(criteria, units, beams, scores)
+    return _roe_result(criteria, units, beams, share, scores)
 end
 
-function _roe_result(criteria::Vector{ROECriterion}, units, beams, scores::Vector{Float64})
+function _roe_result(criteria::Vector{ROECriterion}, units, beams, share, scores::Vector{Float64})
     tiers = Symbol[_roe_tier(c, s) for (c, s) in zip(criteria, scores)]
     binding, worst = 0, (0, -Inf)
     for (k, c) in enumerate(criteria)
@@ -252,15 +267,15 @@ function _roe_result(criteria::Vector{ROECriterion}, units, beams, scores::Vecto
         key > worst && ((binding, worst) = (k, key))
     end
     tier = isempty(tiers) ? :green : _ROE_TIERS[maximum(_roe_rank, tiers)]
-    return ROEOutage(collect(Int, units), collect(Int, beams), scores, tiers, tier, binding)
+    return ROEOutage(collect(Int, units), collect(Int, beams), collect(Float64, share), scores, tiers, tier, binding)
 end
 
 # This function is the barrier for the threaded loop over outages.
 function _roe_outages(cases::Vector{_ROECase}, criteria::Vector{ROECriterion}, case_of::Vector{Int},
-                      base::Vector{Any}, list::Vector{Tuple{Vector{Int},Vector{Int}}})
+                      base::Vector{Any}, list::Vector{Tuple{Vector{Int},Vector{Int},Vector{Float64}}})
     out = Vector{ROEOutage}(undef, length(list))
     Threads.@threads for i in eachindex(list)
-        out[i] = _roe_outage(cases, criteria, case_of, base, list[i][1], list[i][2])
+        out[i] = _roe_outage(cases, criteria, case_of, base, list[i]...)
     end
     return out
 end
@@ -319,6 +334,34 @@ function _roe_mode(v::Vector{Symbol})
     return best
 end
 
+# The beams that the units `idx` drop together and the share of each, by beam index.
+function _roe_drop(us::Vector{ROEUnit}, idx)
+    bs, fs = Int[], Float64[]
+    for i in idx
+        append!(bs, us[i].beams)
+        append!(fs, fill(us[i].share, length(us[i].beams)))
+    end
+    p = sortperm(bs)
+    return bs[p], fs[p]
+end
+
+# The number of facility beams that each beam stands for (`stands_for` of `roe_scan`).
+function _roe_stands_for(@nospecialize(stands_for), beams::Vector{Beam{Float64}})
+    stands_for === nothing && return ones(Int, length(beams))
+    n = if stands_for isa AbstractDict
+        names = Set(b.name for b in beams)
+        for k in keys(stands_for)
+            String(k) in names || throw(ArgumentError("stands_for names the unknown beam $k"))
+        end
+        d = Dict(String(k) => v for (k, v) in stands_for)
+        Int[get(d, b.name, 1) for b in beams]
+    else
+        Int[stands_for(b) for b in beams]
+    end
+    all(>=(1), n) || throw(ArgumentError("a beam stands for at least one facility beam"))
+    return n
+end
+
 # The companion of each unit as a unit index, or 0.
 function _roe_companions(@nospecialize(companions), units::Vector{ROEUnit}, ports::Vector{Vec3}, axis::Vec3)
     comp = zeros(Int, length(units))
@@ -361,7 +404,7 @@ _roe_cases(c) = [Symbol(first(p)) => last(p) for p in c]
     roe_scan(scenario, beams, criteria; kwargs...) -> ROEReport
     roe_scan(cases, criteria; units = :auto, pairs = :auto, pair_scope = :all,
              extra_pairs = (), roles = :part, companions = nothing, axis = (0, 0, 1),
-             method = :auto)
+             stands_for = nothing, method = :auto)
 
 Beam rules of engagement: scores the loss of every beam, every quad and pairs of them
 against `criteria` (a vector of [`ROECriterion`](@ref)) and sorts each beam and quad into
@@ -381,7 +424,13 @@ An outage is a set of beams at zero power, with every other beam as planned (no
 repointing and no power change). The scan covers:
 
 - each beam with power, and each quad (`beam.quad`) of more than one beam, as selected
-  by `units`: `:auto` for both, `:beams` or `:quads`;
+  by `units`: `:auto` for both, `:beams` or `:quads`. A beam that stands for several
+  facility beams, by `stands_for` (a dictionary from beam name to count, or a function
+  of the beam), is a quad unit named by its quad (by the beam when `beam.quad` is
+  empty), and its beam unit, named such as `"Q31B (1 of 4)"`, drops one of those beams
+  as that fraction of its power: a NIF quad held as one beam (`nif_quads`) stands for 4.
+  The beams of a quad leave from ports within a few degrees of the quad port, so this
+  beam unit approximates the loss of each of them by a share of the quad;
 - pairs of units, by `pairs`: `:quads`, `:beams`, `:both` or `:none`, and `:auto` for the
   quad pairs when the beams form quads and the beam pairs otherwise. `pair_scope` keeps
   `:all` pairs, those `:within` one role or those `:across` roles. `extra_pairs` adds
@@ -428,7 +477,8 @@ Base.@nospecializeinfer function _roe_scan(@nospecialize(cases), criteria::Abstr
                                            units::Symbol = :auto, pairs::Symbol = :auto,
                                            pair_scope::Symbol = :all, @nospecialize(extra_pairs = ()),
                                            @nospecialize(roles = :part), @nospecialize(companions = nothing),
-                                           axis = (0.0, 0.0, 1.0), method::Symbol = :auto)
+                                           axis = (0.0, 0.0, 1.0), @nospecialize(stands_for = nothing),
+                                           method::Symbol = :auto)
     units in (:auto, :beams, :quads) || throw(ArgumentError("units must be :auto, :beams or :quads"))
     pairs in (:auto, :quads, :beams, :both, :none) ||
         throw(ArgumentError("pairs must be :auto, :quads, :beams, :both or :none"))
@@ -461,21 +511,36 @@ Base.@nospecializeinfer function _roe_scan(@nospecialize(cases), criteria::Abstr
     base = Any[c.f(cs[j].nominal) for (c, j) in zip(crit, case_of)]
 
     # The units: beams with power in some case, and quads of more than one such beam.
+    # A beam that stands for several facility beams is a quad, and its beam unit drops
+    # one of them.
     nb = length(names)
     active = [b for b in 1:nb if any(c -> c.beams[b].power > 0, cs)]
     isempty(active) && throw(ArgumentError("no beam has power"))
     role = _roe_roles(roles, cs, names)
+    held = _roe_stands_for(stands_for, cs[1].beams)
     us = ROEUnit[]
-    units === :quads || append!(us, (ROEUnit(names[b], :beam, [b], role[b]) for b in active))
+    if units !== :quads
+        for b in active
+            n = held[b]
+            push!(us, n == 1 ? ROEUnit(names[b], :beam, [b], role[b]) :
+                      ROEUnit(string(names[b], " (1 of ", n, ")"), :beam, [b], role[b], 1 / n))
+        end
+    end
     quads = String[]
     for b in active
         q = cs[1].beams[b].quad
-        isempty(q) || q in quads || push!(quads, q)
+        held[b] == 1 && !isempty(q) && !(q in quads) && push!(quads, q)
     end
     nquad = 0
     if units !== :beams
+        for b in active
+            held[b] > 1 || continue
+            q = cs[1].beams[b].quad
+            push!(us, ROEUnit(isempty(q) ? names[b] : String(q), :quad, [b], role[b]))
+            nquad += 1
+        end
         for q in quads
-            bs = [b for b in active if cs[1].beams[b].quad == q]
+            bs = [b for b in active if held[b] == 1 && cs[1].beams[b].quad == q]
             length(bs) > 1 || continue
             push!(us, ROEUnit(q, :quad, bs, _roe_mode(role[bs])))
             nquad += 1
@@ -486,14 +551,14 @@ Base.@nospecializeinfer function _roe_scan(@nospecialize(cases), criteria::Abstr
 
     kinds = pairs === :none ? Symbol[] : pairs === :both ? [:beam, :quad] :
             pairs === :auto ? [nquad > 0 ? :quad : :beam] : [pairs === :quads ? :quad : :beam]
-    list = Tuple{Vector{Int},Vector{Int}}[([i], u.beams) for (i, u) in enumerate(us)]
+    list = Tuple{Vector{Int},Vector{Int},Vector{Float64}}[([i], _roe_drop(us, (i,))...) for i in eachindex(us)]
     npair = 0
     seen = Set{Tuple{Int,Int}}()
     function add_pair(i, j)
         (i, j) = minmax(i, j)
         (i == j || (i, j) in seen || !isempty(intersect(us[i].beams, us[j].beams))) && return
         push!(seen, (i, j))
-        push!(list, ([i, j], sort!(vcat(us[i].beams, us[j].beams))))
+        push!(list, ([i, j], _roe_drop(us, (i, j))...))
         npair += 1
     end
     for i in eachindex(us), j in i+1:length(us)
@@ -511,7 +576,7 @@ Base.@nospecializeinfer function _roe_scan(@nospecialize(cases), criteria::Abstr
     for (i, j) in enumerate(comp)
         j == 0 && continue
         isempty(intersect(us[i].beams, us[j].beams)) || continue
-        push!(list, ([i, j], sort!(vcat(us[i].beams, us[j].beams))))
+        push!(list, ([i, j], _roe_drop(us, (i, j))...))
         cslot[i] = length(list)
     end
 
@@ -536,7 +601,9 @@ A hypothetical outage of any number of units, scored against the criteria and th
 baseline of `report` (from [`roe_scan`](@ref) on the same `scenario` and `beams`, or the
 same `cases`). `drop` lists the names of units of the report (beams and quads) and of
 beams of the report that are not units, such as beams with no power. The beams of the
-dropped units go to zero power together, and every case of a criterion is evaluated
+dropped units lose the shares of their power that the units drop (all of it, except for
+the beam unit of a beam that stands for several), and the shares of units on one beam
+add up to at most all of it. Every case of a criterion is evaluated
 again in full, laser–plasma model included, so the result is that of a scan with
 `method = :full`. The scan covers single units and pairs; this function covers three or
 more units, or a pair that the scan left out.
@@ -551,22 +618,25 @@ function roe_outage(r::ROEReport, @nospecialize(cases), @nospecialize(drop))
     cs = _roe_cases(cases)
     Symbol[first(p) for p in cs] == r.cases ||
         throw(ArgumentError("the cases must be those of the report, " * join((":" * String(c) for c in r.cases), ", ")))
-    units, bs = Int[], Int[]
-    for n in drop
-        name = String(n)
+    units = Int[]
+    share = Dict{Int,Float64}()
+    for name in unique(String(n) for n in drop)
         i = findfirst(u -> u.name == name, r.units)
         if i === nothing
             b = findfirst(==(name), r.beams)
             b === nothing && throw(ArgumentError("$name is neither a unit nor a beam of the report"))
-            push!(bs, b)
+            share[b] = 1.0
         else
             push!(units, i)
-            append!(bs, r.units[i].beams)
+            for b in r.units[i].beams
+                share[b] = min(1.0, get(share, b, 0.0) + r.units[i].share)
+            end
         end
     end
-    isempty(bs) && throw(ArgumentError("an outage drops at least one beam"))
+    isempty(share) && throw(ArgumentError("an outage drops at least one beam"))
     sort!(unique!(units))
-    sort!(unique!(bs))
+    bs = sort!(collect(keys(share)))
+    fs = Float64[share[b] for b in bs]
     evs = Vector{Union{Nothing,Evaluation}}(nothing, length(cs))
     function ev(j)
         evs[j] === nothing || return evs[j]::Evaluation
@@ -576,8 +646,8 @@ function roe_outage(r::ROEReport, @nospecialize(cases), @nospecialize(drop))
         b2 = collect(Beam{Float64}, sb[2])
         String[b.name for b in b2] == r.beams ||
             throw(ArgumentError("case :$(first(cs[j])) has other beams than the report"))
-        for b in bs
-            b2[b] = remake(b2[b]; power = 0.0)
+        for (b, f) in zip(bs, fs)
+            b2[b] = remake(b2[b]; power = _roe_left(b2[b].power, f))
         end
         return evs[j] = evaluate(sb[1], b2)
     end
@@ -586,7 +656,7 @@ function roe_outage(r::ROEReport, @nospecialize(cases), @nospecialize(drop))
         j = c.case === :default ? 1 : findfirst(==(c.case), r.cases)
         scores[k] = _roe_score(c, c.f(ev(j)), r.baseline[k])
     end
-    return _roe_result(r.criteria, units, bs, scores)
+    return _roe_result(r.criteria, units, bs, fs, scores)
 end
 
 # The final tier of each unit and its pair caveats.

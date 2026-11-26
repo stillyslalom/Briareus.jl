@@ -273,7 +273,7 @@ end
             @test [c.name for c in ro.criteria] == [:drive, :P2, :P4, :hotspot_velocity]
             @test basename.(ro.paths) == ["roe.html", "roe.csv", "roe.md", "ports.svg", "roe.json"]
             sc = sess.drive.scenario[]
-            direct = roe_scan(sc, display_beams(sess.beams), ro.criteria)
+            direct = roe_scan(sc, display_beams(sess.beams), ro.criteria; stands_for = roe_stands_for(sess.beams))
             @test ro.report.tiers == direct.tiers && [o.scores for o in ro.report.singles] == [o.scores for o in direct.singles]
             @test occursin("close on themselves", ro.notes[1]) && occursin(ro.notes[1], read(ro.paths[1], String))
 

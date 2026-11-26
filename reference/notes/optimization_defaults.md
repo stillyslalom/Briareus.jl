@@ -1722,3 +1722,17 @@ each a function of an `Evaluation` with a green and an amber threshold.
 - Measured on four threads, 192 NIF beams on a hohlraum of 1,428 elements with five
   capsule criteria: the tables and the 240 single outages of beams and quads take 0.19 s,
   and the 1,128 quad pairs add 0.05 s. The 48 quads evaluated in full take 2.2 s.
+- A NIF quad held as one beam (`nif_quads`, the window's default preset) stands for its
+  four beams (`stands_for` of `roe_scan`, set by `roe_stands_for` in the window and the
+  `briareus roe` command). Its quad unit drops the whole beam, and its beam unit drops a
+  quarter of its power, an approximation that puts the four beams at the quad port and
+  shares one aim. The beams of a quad leave from ports within a few degrees of the quad
+  port, and their mean direction matches it to 0.004°. Checked against an independent
+  split: a beam that stands for four scores as four beams of a quarter of its power
+  from its port, to 1e-12 relative, linear and in full. On the coarse NIF quad preset
+  with the default criteria, the sheet before this change had 48 units, all quads
+  labeled as beams and all red. After it, it has 48 quads, all red (155 to 255 km/s),
+  and 48 single beams, all amber (38 to 62 km/s), each bound by the hot-spot velocity.
+  Confidence **M** for the per-beam scores: each beam of a quad comes from the quad port
+  here, which misplaces the mode-1 direction of one beam by up to the few degrees
+  between the ports.

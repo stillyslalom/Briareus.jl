@@ -261,6 +261,32 @@ end
     rq = roe_scan(s4, four, [rel]; pairs = :none)
     oq = roe_outage(rq, [:default => (s4, four)], ["QA", "B3"])
     @test oq.beams == [1, 2, 3] && oq.units == sort([_roe_unit(rq, "QA"), _roe_unit(rq, "B3")]) && oq.scores == [0.75]
+    # A beam that stands for four facility beams scores as four beams of a quarter of its
+    # power from its port: its beam unit as one of them, its quad unit as all four.
+    requad(b, q; name = b.name, power = b.power) =
+        Beam{Float64}(name, b.port, b.aim, power, b.defocus, b.spot, b.fnumber, b.group, q, b.wavelength, b.dlambda)
+    q1 = requad(four[1], "")
+    held = [q1; four[3:4]]
+    split = [[requad(q1, "QS"; name = "S$k", power = q1.power / 4) for k in 1:4]; four[3:4]]
+    crit = [roe_foil_irradiance(:backlighter)]
+    sheld = Scenario(t, held)
+    rh = roe_scan(sheld, held, crit; stands_for = Dict("B1" => 4), pairs = :none)
+    rs = roe_scan(Scenario(t, split), split, crit; pairs = :none)
+    @test [(u.name, u.kind, u.beams, u.share) for u in rh.units] ==
+          [("B1 (1 of 4)", :beam, [1], 0.25), ("B3", :beam, [2], 1.0), ("B4", :beam, [3], 1.0),
+           ("B1", :quad, [1], 1.0), ("QB", :quad, [2, 3], 1.0)]
+    one, quad = rh.singles[1], rh.singles[4]
+    @test one.beams == [1] && one.shares == [0.25] && quad.shares == [1.0]
+    @test isapprox(one.scores[1], rs.singles[_roe_unit(rs, "S1")].scores[1]; rtol = 1e-12) &&
+          isapprox(quad.scores[1], rs.singles[_roe_unit(rs, "QS")].scores[1]; rtol = 1e-12)
+    # in full, and as a hypothetical outage of two of its beams
+    rhf = roe_scan(sheld, held, crit; stands_for = b -> b.name == "B1" ? 4 : 1, pairs = :none, method = :full)
+    @test isapprox(rhf.singles[1].scores[1], one.scores[1]; rtol = 1e-12)
+    two = roe_outage(rh, sheld, held, ["B1 (1 of 4)", "B3", "B1 (1 of 4)"])
+    @test two.shares == [0.25, 1.0] &&
+          isapprox(two.scores[1], roe_outage(rs, Scenario(t, split), split, ["S2", "B3"]).scores[1]; rtol = 1e-12)
+    @test_throws ArgumentError roe_scan(sheld, held, crit; stands_for = Dict("B9" => 4))
+    @test_throws ArgumentError roe_scan(sheld, held, crit; stands_for = b -> 0)
     @test_throws ArgumentError roe_outage(rq, s4, four, ["B9"])
     @test_throws ArgumentError roe_outage(rq, s4, four, String[])
     @test_throws ArgumentError roe_outage(rq, [:other => (s4, four)], ["B1"])

@@ -386,32 +386,43 @@ end
     start_roe!(sess)
     r = rs.report[]
     @test r !== nothing && sess.view.beam_color[] === :roe && !roe_stale(sess)
-    # the scan is the core scan of the scenario of the session with the default criteria
+    # the scan is the core scan of the scenario of the session with the default criteria,
+    # each quad of the preset standing for its four beams: a unit for the quad and one
+    # for a quarter of it
     sc = sess.drive.scenario[]
     beams = display_beams(sess.beams)
-    direct = roe_scan(sc, beams, roe_default_criteria(sc, beams).criteria)
+    held = roe_stands_for(sess.beams)
+    @test length(held) == 48 && all(==(4), values(held))
+    direct = roe_scan(sc, beams, roe_default_criteria(sc, beams).criteria; stands_for = held)
     @test r.tiers == direct.tiers && [c.name for c in r.criteria] == [:drive, :P2, :P4, :hotspot_velocity]
+    @test count(u -> u.kind === :quad, r.units) == 48 && count(u -> u.kind === :beam && u.share == 0.25, r.units) == 48
+    @test r.units[1].name == r.beams[1] * " (1 of 4)" && r.units[49].name == r.beams[1]
+    # one beam of a quad is not critical where the loss of the quad is
+    @test all(==(:red), r.tiers[49:96]) && !any(==(:red), r.tiers[1:48])
+    @test occursin("48 single beams (one of four in a quad): 0 critical", rs.status[]) &&
+          occursin("48 quads: 48 critical", rs.status[])
     tiers = roe_tiers(rs)
-    @test Set(keys(tiers)) == Set(r.beams) && all(i -> tiers[r.units[i].name] === r.tiers[i], eachindex(r.units))
+    @test Set(keys(tiers)) == Set(r.beams) && all(i -> tiers[r.beams[i]] === r.tiers[i], 1:48)
     i = argmax([o.scores[o.binding] for o in r.singles])
     u, o = r.units[i], r.singles[i]
     text = roe_beam_text(rs, u.name)
     @test occursin(string(r.tiers[i]), text) && occursin(string(r.criteria[o.binding].name), text) && occursin("amber ≤", text)
     @test roe_beam_text(rs, "nonesuch") == ""
     @test occursin("units against drive", rs.status[]) && occursin("engineering defaults", rs.status[])
-    # The port map of the Outages tab, by beam (the quads of the preset are single beams),
-    # in the colors of the tiers.
+    # The port map of the Outages tab, by quad, in the colors of the tiers of the quads
+    # and of their single beams.
     ms = roe_marks(rs)
-    @test [m.name for m in ms] == r.beams && all(m -> m.tier === tiers[m.name] && !m.picked, ms)
+    @test [m.name for m in ms] == r.beams && all(m -> m.tier === :red && m.beam === tiers[m.name] && !m.picked, ms)
     pd = roe_port_drawing(rs)
-    @test startswith(pd, "[{\"name\":\"" * ms[1].name * "\",") && count("\"tier\":", pd) == length(ms)
-    # A hypothetical outage picked on the map: a pair agrees with the linear pair of the
-    # scan, and a third beam joins it.
-    a, b, c = r.units[1].name, r.units[2].name, r.units[3].name
+    @test startswith(pd, "[{\"name\":\"" * ms[1].name * "\",") && count("\"tier\":", pd) == length(ms) &&
+          count("\"beam\":", pd) == length(ms)
+    # A hypothetical outage picked on the map: a pair of quads agrees with the linear pair
+    # of the scan, and a third quad joins it.
+    a, b, c = r.units[49].name, r.units[50].name, r.units[51].name
     @test roe_outage_text(rs) == "" && isempty(roe_outage_rows(rs))
     pick_outage!(sess, a)
     pick_outage!(sess, b)
-    pair = only(p for p in r.pairs if Set(p.units) == Set((1, 2)))
+    pair = only(p for p in r.pairs if Set(p.units) == Set((49, 50)))
     @test rs.picked[] == [a, b] && isapprox(rs.outage[].scores, pair.scores; rtol = 1e-9)
     @test count(m -> m.picked, roe_marks(rs)) == 2
     pick_outage!(sess, c)
@@ -419,9 +430,14 @@ end
     @test o3.scores == roe_outage(r, sc, beams, [a, b, c]).scores && o3.beams == [1, 2, 3]
     rows = roe_outage_rows(rs)
     @test [x.criterion for x in rows] == ["drive", "P2", "P4", "hotspot_velocity"] && count(x -> x.binding, rows) == 1
-    @test startswith(roe_outage_text(rs), "outage of $a, $b, $c (3 beams): $(o3.tier), bound by ")
+    @test startswith(roe_outage_text(rs), "outage of $a, $b, $c (12 beams): $(o3.tier), bound by ")
     pick_outage!(sess, a)
     @test rs.picked[] == [b, c] && rs.outage[].beams == [2, 3]
+    # one beam of a quad, as a quarter of its power
+    clear_outage!(sess)
+    pick_outage!(sess, r.units[1].name)
+    @test rs.outage[].shares == [0.25] && startswith(roe_outage_text(rs), "outage of $(r.units[1].name) (1 beam): ")
+    @test [m.name for m in roe_marks(rs) if m.picked] == [r.beams[1]]
     @test_throws ArgumentError pick_outage!(sess, "nonesuch")
     clear_outage!(sess)
     @test isempty(rs.picked[]) && rs.outage[] === nothing

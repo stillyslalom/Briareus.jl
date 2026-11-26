@@ -1,5 +1,6 @@
 // The Outages tab shows the chamber port map of the last rules-of-engagement scan, each
-// quad (or beam) in the color of its tier. A click on a mark adds it to a hypothetical
+// quad (or beam) in the color of its tier, and a quad with single beams of another tier
+// with that tier in its center. A click on a mark adds it to a hypothetical
 // outage, or takes it out, and the table beside the map scores the units picked so far
 // together against every criterion of the scan.
 import QtQuick
@@ -70,6 +71,10 @@ ColumnLayout {
                         ctx.beginPath(); ctx.ellipse(p[0] - r, p[1] - r, 2 * r, 2 * r)
                         ctx.fillStyle = tierColor(m.tier); ctx.fill()
                         ctx.lineWidth = m.picked ? 3 : 0.5; ctx.strokeStyle = m.picked ? ink : "#000000"; ctx.stroke()
+                        if (m.beam !== "none" && m.beam !== m.tier) {
+                            ctx.beginPath(); ctx.ellipse(p[0] - 0.55 * r, p[1] - 0.55 * r, 1.1 * r, 1.1 * r)
+                            ctx.fillStyle = tierColor(m.beam); ctx.fill()
+                        }
                     }
                 }
                 MouseArea {
@@ -86,10 +91,14 @@ ColumnLayout {
                         return bd <= 2 * Math.max(4, Math.min(9, portCanvas.size / 40)) ? best : null
                     }
                     onClicked: (e) => { const m = hit(e.x, e.y); if (m) Julia.br_roe_pick(m.name) }
-                    onPositionChanged: (e) => { const m = hit(e.x, e.y); hoverName.text = m ? m.name + ": " + m.tier : "" }
+                    onPositionChanged: (e) => { const m = hit(e.x, e.y)
+                        hoverName.text = !m ? "" : m.beam === "none" || m.beam === m.tier ? m.name + ": " + m.tier
+                                         : m.name + ": " + m.tier + ", one of its beams " + m.beam }
                 }
             }
             Label { id: hoverName; text: ""; opacity: 0.8 }
+            Label { text: "Center of a mark: the loss of one beam of the quad"; opacity: 0.8; font.pixelSize: 11
+                    visible: portCanvas.marks.some(m => m.beam !== "none" && m.beam !== m.tier) }
         }
         ColumnLayout {
             Layout.fillWidth: true

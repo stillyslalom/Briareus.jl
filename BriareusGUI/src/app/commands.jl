@@ -172,8 +172,9 @@ end
 
 The `briareus roe` command on a session: the drive scenario of the session
 ([`build_scenario!`](@ref)), the criteria that `Briareus.roe_default_criteria` selects
-from it and the foils of the design, `Briareus.roe_scan` over the beams with power, and
-the packet written into the folder `out` (`Briareus.write_roe_packet`). `notes` gives
+from it and the foils of the design, `Briareus.roe_scan` over the beams with power (a NIF
+quad held as one beam stands for its four beams, [`roe_stands_for`](@ref)), and the
+packet written into the folder `out` (`Briareus.write_roe_packet`). `notes` gives
 the criteria used and why. A design whose scenario cannot be built, or whose beams land
 on nothing, throws an `ArgumentError`.
 """
@@ -187,7 +188,7 @@ function roe_command(sess::DesignSession, out::AbstractString; json::Bool = fals
     foils = [f for f in foil_names(sess.target) if f in parts(s.target)]
     choice = roe_default_criteria(s, beams; foils)
     isempty(choice.criteria) && throw(ArgumentError(join(choice.notes, " ")))
-    report = roe_scan(s, beams, choice.criteria)
+    report = roe_scan(s, beams, choice.criteria; stands_for = roe_stands_for(sess.beams))
     paths = write_roe_packet(out, report, beams; json, title, choice.notes)
     return (; report, choice.criteria, choice.notes, paths)
 end

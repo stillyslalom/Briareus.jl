@@ -299,16 +299,34 @@ function start_roe!(sess::DesignSession)
         rs.status[] = join(choice.notes, " ")
         return sess
     end
-    r = roe_scan(s, beams, choice.criteria)
-    rs.inputs[] = (sess.target.target[], beams, s)
+    held = roe_stands_for(sess.beams)
+    r = roe_scan(s, beams, choice.criteria; stands_for = held)
+    rs.inputs[] = (sess.target.target[], beams, s, held)
     _assign!(rs.picked, String[])
     rs.outage[] === nothing || (rs.outage[] = nothing)
     rs.report[] = r
-    n(t) = count(==(t), r.tiers)
-    rs.status[] = string(length(r.units), " units against ", join((c.name for c in r.criteria), ", "), ": ", n(:red),
-                         " critical, ", n(:amber), " need approval, ", n(:green), " may drop (engineering defaults)")
+    rs.status[] = roe_summary(r)
     _assign!(sess.view.beam_color, :roe)
     return sess
+end
+
+"""
+    roe_summary(report) -> String
+
+The line about a rules-of-engagement scan in the Outages tab: the criteria, and for
+quads and for beams the numbers of critical units, of units that need approval and of
+units that may drop. Beams that are a share of a quad held as one beam are counted as
+"one of four beams" ([`roe_stands_for`](@ref)).
+"""
+function roe_summary(r::ROEReport)
+    part(kind) = (is = [i for i in eachindex(r.units) if r.units[i].kind === kind];
+                  n(t) = count(i -> r.tiers[i] === t, is);
+                  word = kind === :quad ? "quads" : any(i -> r.units[i].share < 1, is) ? "single beams (one of four in a quad)" : "beams";
+                  isempty(is) ? nothing : string(length(is), " ", word, ": ", n(:red), " critical, ", n(:amber),
+                                                 " need approval, ", n(:green), " may drop"))
+    kinds = filter(!isnothing, [part(:beam), part(:quad)])
+    return string(length(r.units), " units against ", join((c.name for c in r.criteria), ", "), "; ",
+                  join(kinds, "; "), " (engineering defaults)")
 end
 
 """
