@@ -89,8 +89,8 @@ The names used are [`roe_default_criteria`](@ref), [`roe_scan`](@ref),
 [`roe_yield`](@ref), [`roe_face_flux`](@ref), [`roe_face_nonuniformity`](@ref),
 [`roe_temperature`](@ref), [`roe_flux_balance`](@ref), [`roe_foil_irradiance`](@ref),
 [`roe_foil_nonuniformity`](@ref), [`roe_foil_centroid`](@ref),
-[`roe_backlighter_signal`](@ref), [`roe_illumination_rms`](@ref) and
-[`roe_corona_rms`](@ref).
+[`roe_backlighter_signal`](@ref), [`roe_illumination_rms`](@ref),
+[`roe_corona_rms`](@ref) and [`roe_ablation_pressure`](@ref).
 
 A backlighter foil with no hohlraum, and direct drive on a sphere:
 

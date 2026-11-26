@@ -89,8 +89,8 @@ The names used are `roe_default_criteria`, `roe_scan`,
 `roe_yield`, `roe_face_flux`, `roe_face_nonuniformity`,
 `roe_temperature`, `roe_flux_balance`, `roe_foil_irradiance`,
 `roe_foil_nonuniformity`, `roe_foil_centroid`,
-`roe_backlighter_signal`, `roe_illumination_rms` and
-`roe_corona_rms`.
+`roe_backlighter_signal`, `roe_illumination_rms`,
+`roe_corona_rms` and `roe_ablation_pressure`.
 
 A backlighter foil with no hohlraum, and direct drive on a sphere:
 

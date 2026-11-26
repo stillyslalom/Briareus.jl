@@ -1672,6 +1672,7 @@ each a function of an `Evaluation` with a green and an amber threshold.
 | `roe_foil_centroid` | shift, mm | 0.02 | 0.05 |
 | `roe_backlighter_signal` | fractional loss of He-α photons | 0.10 | 0.25 |
 | `roe_illumination_rms`, `roe_corona_rms` | rise of the RMS over the mean | 0.02 | 0.05 |
+| `roe_ablation_pressure` | rise of σ₂, the RMS of the pressure proxy over its mean | 0.008 | 0.02 |
 
 - Every built-in scores the change that the outage makes to the full shot, so a nominal
   asymmetry is not charged to each outage (`measure = :value` on the velocity and the two
@@ -1696,6 +1697,11 @@ each a function of an `Evaluation` with a green and an amber threshold.
   also hide the size of a large outage, which still ranks the units. The docstring of
   `roe_hotspot_velocity` states the range, and an amber threshold above 0.75 times
   `per_percent` would need a saturation model first.
+- **Ablation-pressure criterion (2026-11-26).** `roe_ablation_pressure` scores the rise
+  of σ₂, the RMS (1 ≤ l ≤ 30) of the Barlow 2024 pressure proxy over its mean. Its
+  thresholds are those of `roe_corona_rms` times 0.38, the ratio σ₂/σ₁ of the proxy to
+  the absorbed intensity on the OMEGA case of the direct-drive notes, rounded up to 0.008
+  and 0.02. No facility tolerance on σ₂ was found. Confidence **L**.
 - The tier rules are also choices of this package. A unit has the tier of its single
   outage, a green unit whose pair with another green unit is red is raised to amber, and
   the budget of a role allows two green units together only when every scanned pair of

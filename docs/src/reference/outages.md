@@ -17,7 +17,7 @@ The physics lies in the criteria, so the same scan applies to a capsule in a hoh
 wall of one cavity (`roe_face_flux`, `roe_face_nonuniformity`, `roe_temperature`,
 `roe_flux_balance`), a backlighter foil (`roe_foil_irradiance`, `roe_foil_nonuniformity`,
 `roe_foil_centroid`, `roe_backlighter_signal`) and direct drive (`roe_illumination_rms`,
-`roe_corona_rms`), and any other function of an evaluation enters as a criterion of the
+`roe_corona_rms`, `roe_ablation_pressure`), and any other function of an evaluation enters as a criterion of the
 same kind. Several cases in one scan cover the epochs of a pulse and several observed
 faces. The default thresholds of the built-in criteria are engineering defaults.
 A beam that stands for several facility beams, such as a NIF quad held as one beam, is

@@ -359,4 +359,15 @@ end
     rc = roe_scan(s3, three, [roe_corona_rms(op; lmax = 4)]; pairs = :none)
     σc(drop) = mode_rms(deposit(op, _roe_dropped(three, drop)).ylm, 4)
     @test all(isapprox(o.scores[1], σc(o.beams) - σc(Int[]); rtol = 1e-9, atol = 1e-12) for o in rc.singles)
+    # The ablation-pressure proxy on the corona of all 60 beams, in shells, against the
+    # proxy of the deposition with the beam off.
+    rcrit = 0.40
+    ops = CoronaOperator(prof, beams; ncone = 1, lmax = 8,
+                         shells = [0.32; rcrit .+ 0.08 .* (-0.5:0.5:2); 1.52])
+    rp = roe_scan(s, beams, [roe_ablation_pressure(ops; lmax = 8)]; units = :beams, pairs = :none)
+    σp(drop) = mode_rms(ablation_pressure_proxy(ops, deposit(ops, _roe_dropped(beams, drop)); lmax = 8), 8)
+    @test all(isapprox(o.scores[1], σp(o.beams) - σp(Int[]); rtol = 1e-8, atol = 1e-12) for o in rp.singles[[1, 30, 60]])
+    @test rp.baseline[1] ≈ σp(Int[]) rtol = 1e-10
+    @test all(o -> o.scores[1] > 0, rp.singles)
+    @test_throws ArgumentError roe_ablation_pressure(op)
 end

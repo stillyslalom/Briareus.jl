@@ -263,3 +263,30 @@ function roe_corona_rms(op::CoronaOperator; lmax::Integer = op.lmax, green::Real
     f = ev -> mode_rms(deposit(op, ev.effective).ylm, lmax)
     return ROECriterion(name, f; green, amber, measure, case, label = "of mean")
 end
+
+"""
+    roe_ablation_pressure(op::CoronaOperator; lmax = 30, green = 0.008, amber = 0.02,
+                          measure = :rise, name = :ablation_pressure_rms,
+                          case = :default) -> ROECriterion
+
+RMS nonuniformity `mode_rms` (1 ≤ l ≤ `lmax`) of the ablation-pressure proxy of Barlow et
+al. ([`ablation_pressure_proxy`](@ref), their σ₂ at `lmax = 30`) from the corona
+deposition of `op`, which must have `shells`, for direct drive. The corona deposition is
+computed again for every outage from the effective beams. With `measure = :rise` the score
+is the increase over the full shot, and with `:value` the nonuniformity with the outage.
+An outage that leaves part of the sphere unlit makes the proxy undefined, and the scan
+raises the `ArgumentError` of the proxy.
+
+The thresholds are engineering defaults and not facility criteria: those of
+[`roe_corona_rms`](@ref) scaled by 0.38, the ratio of the pressure nonuniformity to the
+nonuniformity of the absorbed intensity on an OMEGA case (research notes), and rounded.
+"""
+function roe_ablation_pressure(op::CoronaOperator; lmax::Integer = 30, green::Real = 0.008,
+                               amber::Real = 0.02, measure::Symbol = :rise,
+                               name = :ablation_pressure_rms, case::Symbol = :default)
+    isempty(op.shells) &&
+        throw(ArgumentError("the operator has no shells: build it with CoronaOperator(...; shells)"))
+    0 <= lmax <= op.lmax || throw(ArgumentError("need 0 ≤ lmax ≤ op.lmax = $(op.lmax)"))
+    f = ev -> mode_rms(ablation_pressure_proxy(op, deposit(op, ev.effective); lmax), lmax)
+    return ROECriterion(name, f; green, amber, measure, case, label = "of mean")
+end
