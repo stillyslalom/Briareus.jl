@@ -1697,6 +1697,20 @@ each a function of an `Evaluation` with a green and an amber threshold.
   also hide the size of a large outage, which still ranks the units. The docstring of
   `roe_hotspot_velocity` states the range, and an amber threshold above 0.75 times
   `per_percent` would need a saturation model first.
+- **No crystal (Bragg) throughput criterion (2026-11-26).** A CBI criterion would score
+  the loss of photons reflected into the detector, the He-α photons of
+  `roe_backlighter_signal` times the solid angle of the crystal from the source, the
+  integrated reflectivity of the crystal at the line energy and the filter
+  transmissions. The loss is the same fraction as that of `roe_backlighter_signal` as
+  long as the source stays inside the acceptance of the crystal, so a throughput
+  criterion adds information only through the rocking curve: the shift of the source
+  centroid (`roe_foil_centroid`) against the angular acceptance of the crystal. That
+  needs the crystal cut and its rocking-curve width at the line, the Bragg angle and the
+  geometry of the crystal and detector. None of these is in the repository
+  (`data/diagnostics` holds no crystal definition), and no public, citable reflectivity
+  table was added, so the criterion is left out. With them, the throughput is the
+  He-α signal times the rocking-curve transmission at the angle that the centroid shift
+  makes, and it would enter as an `ROECriterion` of that function.
 - **Ablation-pressure criterion (2026-11-26).** `roe_ablation_pressure` scores the rise
   of σ₂, the RMS (1 ≤ l ≤ 30) of the Barlow 2024 pressure proxy over its mean. Its
   thresholds are those of `roe_corona_rms` times 0.38, the ratio σ₂/σ₁ of the proxy to
