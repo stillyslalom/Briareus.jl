@@ -9,12 +9,15 @@
 # `out` defaults to build/Briareus. `--cpu-target` replaces PackageCompiler's default
 # targets (a generic build with code for several x86 generations, which runs on any
 # machine of the architecture); `--cpu-target=native` runs only on machines like the one
-# that built it. Compiling the system image takes more than 13.5 GB of memory on Linux x64
-# with any of these settings (README.md in this folder). `--incremental` builds on the system image of the Julia
-# that runs the build, which compiles less at once. The precompile run (precompile.jl) runs every headless
-# command on a starter design, and opens and closes the window unless --no-window is given
-# or no display is available (it needs an OpenGL context). Signing and installers are
-# separate steps (README.md in this folder).
+# that built it. `--incremental` builds on the system image of the Julia that runs the
+# build. The system image is compiled without debug information (`-g0`): with it, the
+# compile ran out of memory at 13.5 GB on Linux x64, and without it the compile peaks at
+# 12.6 GB (README.md in this folder). The environment variable BRIAREUS_SYSIMAGE_ARGS
+# replaces these flags of the compiling process, for example to measure another choice.
+# The precompile run (precompile.jl) runs every headless command on a starter design, and
+# opens and closes the window unless --no-window is given or no display is available (it
+# needs an OpenGL context). Signing and installers are separate steps (README.md in this
+# folder).
 
 using PackageCompiler
 
@@ -34,6 +37,8 @@ try
     cpu = [a[length("--cpu-target=")+1:end] for a in ARGS if startswith(a, "--cpu-target=")]
     kw = isempty(cpu) ? (;) : (; cpu_target = only(cpu))
     "--incremental" in ARGS && (kw = (; kw..., incremental = true))
+    sysargs = String.(split(get(ENV, "BRIAREUS_SYSIMAGE_ARGS", "-g0")))
+    kw = (; kw..., sysimage_build_args = Cmd(sysargs))
     t = @elapsed create_app(GUI, OUT; kw...,
                             executables = ["briareus" => "julia_main"],
                             precompile_execution_file = joinpath(@__DIR__, "precompile.jl"),

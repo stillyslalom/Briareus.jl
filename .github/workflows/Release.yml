@@ -1,10 +1,12 @@
 # Relocatable `briareus` applications (dev/release/README.md): one PackageCompiler build
 # per platform, a smoke test of each as a user without Julia would run it, and the archive
 # as a workflow artifact. Signing runs only where its secrets are set; a release on GitHub
-# is drafted by hand from the artifacts. Compiling the system image was killed at 13.5 GB
-# of resident memory on Linux in every configuration tried, one code-generation thread and
-# no window included (dev/release/README.md), so the 16 GB and 7 GB standard runners are
-# likely to run out of memory: larger runners (32 GB) are the expected fix.
+# is drafted by hand from the artifacts. Compiling the system image without debug
+# information peaked at 12.6 GB of resident memory on Linux with one code-generation
+# thread, native CPU code and no window in the precompile run (dev/release/README.md).
+# The builds here compile for the default CPU targets and trace the window, which adds
+# code, so the 16 GB Linux and Windows runners may still run out; the 7 GB macOS arm64
+# runner needs a larger runner.
 name: Release
 on:
   push:
@@ -49,6 +51,7 @@ jobs:
       - name: Build
         env:
           JULIA_NUM_THREADS: '4'
+          JULIA_IMAGE_THREADS: '1'
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -s '-screen 0 1600x1000x24' julia --project=dev/release dev/release/build.jl build/Briareus

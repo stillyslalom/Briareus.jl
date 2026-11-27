@@ -14,6 +14,9 @@ exe="$app/bin/briareus"
 here="$(cd "$(dirname "$0")" && pwd)"
 export JULIA_DEPOT_PATH="$work/depot"
 export PATH="$app/bin:/usr/bin:/bin"
+# QML creates a Qt application as the system image loads, which stops the process on a
+# Linux machine without a display unless Qt draws offscreen.
+if [ "$(uname)" = Linux ] && [ -z "${DISPLAY:-}" ]; then export QT_QPA_PLATFORM=offscreen; fi
 timed() { local t0=$SECONDS s=0; "$@" || s=$?; echo "  $(( SECONDS - t0 )) s: ${*:2}"; return $s; }
 timed "$exe" --help > /dev/null
 timed "$exe" run "$here/fixture.jl" "$work/design.briar"
